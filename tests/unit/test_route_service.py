@@ -16,7 +16,11 @@ class FakeGraphHopperClient(GraphHopperClient):
         self.path = path
 
     async def route(
-        self, points: tuple[Coordinate, ...], profile: str = "hike"
+        self,
+        points: tuple[Coordinate, ...],
+        profile: str = "hike",
+        *,
+        pass_through: bool = False,
     ) -> GraphHopperPath:
         return self.path
 

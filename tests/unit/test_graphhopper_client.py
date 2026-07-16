@@ -45,6 +45,26 @@ def info_payload(encoded_values: list[str]) -> dict[str, object]:
     }
 
 
+def round_trip_payload() -> dict[str, object]:
+    path = {
+        "distance": 10_000.0,
+        "time": 7_200_000,
+        "points": {
+            "type": "LineString",
+            "coordinates": [[2.09, 48.87], [2.12, 48.89], [2.09, 48.87]],
+        },
+        "snapped_waypoints": {
+            "type": "LineString",
+            "coordinates": [
+                [2.09, 48.87],
+                [2.12, 48.89],
+                [2.09, 48.87],
+            ],
+        },
+    }
+    return {"paths": [path]}
+
+
 def requested_details(request: httpx.Request) -> list[str]:
     payload: object = json.loads(request.read())
     if not isinstance(payload, dict):
@@ -98,6 +118,65 @@ async def test_route_sends_lon_lat_and_parses_response() -> None:
     assert path.duration_ms == 456789
     assert path.ascend_m == 12.0
     assert path.details["surface"][0].value == "PAVED"
+
+
+@pytest.mark.asyncio
+async def test_generated_route_sets_pass_through_without_changing_default() -> None:
+    bodies: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/info":
+            return httpx.Response(200, json=info_payload([]))
+        bodies.append(request.read().decode())
+        return httpx.Response(200, json=route_payload())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = GraphHopperClient("http://test", client=http_client)
+        points = (Coordinate(lat=48.87, lon=2.09), Coordinate(lat=48.89, lon=2.11))
+        await client.route(points)
+        await client.route(points, pass_through=True)
+
+    assert '"pass_through"' not in bodies[0]
+    assert '"pass_through":true' in bodies[1]
+
+
+@pytest.mark.asyncio
+async def test_round_trip_request_uses_local_post_parameters() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["method"] = request.method
+        captured["path"] = request.url.path
+        captured["body"] = request.read().decode()
+        return httpx.Response(200, json=round_trip_payload())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        path = await GraphHopperClient("http://test", client=http_client).round_trip(
+            Coordinate(lat=48.87, lon=2.09), 10_000, 42
+        )
+
+    assert captured["method"] == "POST"
+    assert captured["path"] == "/route"
+    body = str(captured["body"])
+    assert '"points":[[2.09,48.87]]' in body
+    assert '"algorithm":"round_trip"' in body
+    assert '"round_trip.distance":10000' in body
+    assert '"round_trip.seed":42' in body
+    assert '"points_encoded":false' in body
+    assert path.geometry[0] == path.geometry[-1]
+    assert path.details == {}
+
+
+@pytest.mark.asyncio
+async def test_round_trip_uses_existing_error_mapping() -> None:
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(400, json={"message": "round trip failed"})
+    )
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        with pytest.raises(RoutingPointError):
+            await GraphHopperClient("http://test", client=http_client).round_trip(
+                Coordinate(lat=48.87, lon=2.09), 10_000, 42
+            )
 
 
 @pytest.mark.asyncio

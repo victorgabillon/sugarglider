@@ -27,6 +27,8 @@ services:
     environment:
       GRAPHHOPPER_URL: http://graphhopper:8989
       GRAPHHOPPER_TIMEOUT_SECONDS: "60"
+      SUGARGLIDER_GENERATION_MAX_EVALUATIONS: "48"
+      SUGARGLIDER_GENERATION_MAX_OPTIONAL_SNAP_DISPLACEMENT_M: "300"
     depends_on:
       graphhopper:
         condition: service_healthy
@@ -41,4 +43,3 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-

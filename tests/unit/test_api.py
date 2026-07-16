@@ -8,7 +8,12 @@ import pytest_asyncio
 from fastapi import FastAPI
 
 from sugarglider.api.main import create_app
+from sugarglider.domain.generation import (
+    RouteGenerationRequest,
+    RouteGenerationResult,
+)
 from sugarglider.domain.models import RouteRequest, RouteResult
+from sugarglider.generation.service import RouteGenerationService
 from sugarglider.routing.graphhopper import (
     RoutingPointError,
     RoutingTimeoutError,
@@ -37,14 +42,32 @@ class FakeRouteService(RouteService):
         return self.is_ready
 
 
+class FakeGenerationService(RouteGenerationService):
+    def __init__(self, result: RouteGenerationResult) -> None:
+        self.result = result
+
+    async def generate(self, request: RouteGenerationRequest) -> RouteGenerationResult:
+        return self.result
+
+
 @pytest.fixture
 def fake_service(route_result: RouteResult) -> FakeRouteService:
     return FakeRouteService(route_result)
 
 
 @pytest.fixture
-def app(fake_service: FakeRouteService) -> FastAPI:
-    return create_app(fake_service)
+def fake_generation_service(
+    generation_result: RouteGenerationResult,
+) -> FakeGenerationService:
+    return FakeGenerationService(generation_result)
+
+
+@pytest.fixture
+def app(
+    fake_service: FakeRouteService,
+    fake_generation_service: FakeGenerationService,
+) -> FastAPI:
+    return create_app(fake_service, fake_generation_service)
 
 
 @pytest_asyncio.fixture
@@ -61,6 +84,18 @@ def request_body() -> dict[str, object]:
     return {
         "name": "API route",
         "points": [{"lat": 48.87, "lon": 2.09}, {"lat": 48.88, "lon": 2.1}],
+    }
+
+
+def generation_request_body() -> dict[str, object]:
+    return {
+        "name": "Generated API route",
+        "points": [{"lat": 48.87, "lon": 2.09}, {"lat": 48.88, "lon": 2.1}],
+        "target_distance_m": 3_000,
+        "tolerance_m": 500,
+        "candidate_count": 1,
+        "seed": 42,
+        "close_loop": True,
     }
 
 
@@ -125,6 +160,89 @@ async def test_gpx_route(client: httpx.AsyncClient) -> None:
     assert b"<trk>" in response.content
     assert b"<rte>" not in response.content
     assert b"analysis" not in response.content
+
+
+@pytest.mark.asyncio
+async def test_successful_generation_json(client: httpx.AsyncClient) -> None:
+    response = await client.post("/v1/routes/generate", json=generation_request_body())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["baseline"]["summary"]["distance_m"] == 2500.5
+    assert len(body["candidates"]) == 1
+    assert body["search"]["status"] == "within_tolerance"
+
+
+@pytest.mark.asyncio
+async def test_successful_generation_gpx_is_track_only(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.post(
+        "/v1/routes/generate/gpx", json=generation_request_body()
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/gpx+xml"
+    assert b"<trk>" in response.content
+    assert b"<rte>" not in response.content
+    assert b"analysis" not in response.content
+
+
+@pytest.mark.asyncio
+async def test_infeasible_generation_json_returns_baseline(
+    client: httpx.AsyncClient,
+    fake_generation_service: FakeGenerationService,
+) -> None:
+    fake_generation_service.result = fake_generation_service.result.model_copy(
+        update={
+            "candidates": (),
+            "search": fake_generation_service.result.search.model_copy(
+                update={"status": "infeasible"}
+            ),
+        }
+    )
+    response = await client.post("/v1/routes/generate", json=generation_request_body())
+    assert response.status_code == 200
+    assert response.json()["search"]["status"] == "infeasible"
+    assert response.json()["candidates"] == []
+
+
+@pytest.mark.asyncio
+async def test_infeasible_generation_gpx_is_structured_422(
+    client: httpx.AsyncClient,
+    fake_generation_service: FakeGenerationService,
+) -> None:
+    fake_generation_service.result = fake_generation_service.result.model_copy(
+        update={
+            "candidates": (),
+            "search": fake_generation_service.result.search.model_copy(
+                update={"status": "infeasible"}
+            ),
+        }
+    )
+    response = await client.post(
+        "/v1/routes/generate/gpx", json=generation_request_body()
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "target_distance_infeasible"
+
+
+@pytest.mark.asyncio
+async def test_no_candidate_generation_gpx_is_structured_422(
+    client: httpx.AsyncClient,
+    fake_generation_service: FakeGenerationService,
+) -> None:
+    fake_generation_service.result = fake_generation_service.result.model_copy(
+        update={
+            "candidates": (),
+            "search": fake_generation_service.result.search.model_copy(
+                update={"status": "best_effort"}
+            ),
+        }
+    )
+    response = await client.post(
+        "/v1/routes/generate/gpx", json=generation_request_body()
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "route_generation_no_candidate"
 
 
 @pytest.mark.asyncio

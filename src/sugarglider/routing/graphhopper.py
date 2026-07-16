@@ -11,6 +11,24 @@ from sugarglider.domain.models import (
     GeoJsonPosition,
     PathDetailSegment,
 )
+from sugarglider.routing.backend import RoutedPath
+from sugarglider.routing.errors import (
+    RoutingError,
+    RoutingPointError,
+    RoutingTimeoutError,
+    RoutingUnavailableError,
+    RoutingUpstreamError,
+)
+
+__all__ = [
+    "GraphHopperClient",
+    "GraphHopperPath",
+    "RoutingError",
+    "RoutingPointError",
+    "RoutingTimeoutError",
+    "RoutingUnavailableError",
+    "RoutingUpstreamError",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -33,47 +51,7 @@ OPTIONAL_DETAILS = (
 REQUESTED_DETAILS = (*BUILTIN_DETAILS, *OPTIONAL_DETAILS)
 
 
-class RoutingError(Exception):
-    """Base class for expected routing failures."""
-
-
-class RoutingUnavailableError(RoutingError):
-    """GraphHopper could not be reached."""
-
-
-class RoutingTimeoutError(RoutingError):
-    """GraphHopper exceeded the configured timeout."""
-
-
-class RoutingPointError(RoutingError):
-    """One or more user points could not be routed."""
-
-
-class RoutingUpstreamError(RoutingError):
-    """GraphHopper returned an invalid or unexpected response."""
-
-
-class GraphHopperPath:
-    """Parsed first path from a GraphHopper response."""
-
-    def __init__(
-        self,
-        *,
-        distance_m: float,
-        duration_ms: int,
-        ascend_m: float | None,
-        descend_m: float | None,
-        geometry: tuple[GeoJsonPosition, ...],
-        snapped_points: tuple[GeoJsonPosition, ...] | None,
-        details: dict[str, tuple[PathDetailSegment, ...]],
-    ) -> None:
-        self.distance_m = distance_m
-        self.duration_ms = duration_ms
-        self.ascend_m = ascend_m
-        self.descend_m = descend_m
-        self.geometry = geometry
-        self.snapped_points = snapped_points
-        self.details = details
+GraphHopperPath = RoutedPath
 
 
 class GraphHopperClient:
@@ -112,8 +90,12 @@ class GraphHopperClient:
         return False
 
     async def route(
-        self, points: tuple[Coordinate, ...], profile: str = "hike"
-    ) -> GraphHopperPath:
+        self,
+        points: tuple[Coordinate, ...],
+        profile: str = "hike",
+        *,
+        pass_through: bool = False,
+    ) -> RoutedPath:
         """Route ordered points, preserving GraphHopper's GeoJSON coordinate order."""
         requested_details = list(await self._details_for_route())
         payload: JsonObject = {
@@ -126,6 +108,8 @@ class GraphHopperClient:
             "snap_preventions": ["motorway", "trunk", "ferry"],
             "details": requested_details,
         }
+        if pass_through:
+            payload["pass_through"] = True
         while True:
             try:
                 response = await self._request("POST", "/route", json=payload)
@@ -155,7 +139,29 @@ class GraphHopperClient:
                     raise
                 payload["details"] = requested_details
                 self._supported_details = tuple(requested_details)
-        return self._parse_route(response, len(points))
+        return self._parse_route(response, expected_snapped_point_count=len(points))
+
+    async def round_trip(
+        self,
+        start: Coordinate,
+        distance_m: float,
+        seed: int,
+        profile: str = "hike",
+    ) -> RoutedPath:
+        """Ask the local GraphHopper instance for one graph-valid proposal loop."""
+        payload: JsonObject = {
+            "points": [[start.lon, start.lat]],
+            "profile": profile,
+            "algorithm": "round_trip",
+            "round_trip.distance": distance_m,
+            "round_trip.seed": seed,
+            "points_encoded": False,
+            "instructions": False,
+            "calc_points": True,
+            "elevation": False,
+        }
+        response = await self._request("POST", "/route", json=payload)
+        return self._parse_route(response, expected_snapped_point_count=None)
 
     async def _details_for_route(self) -> tuple[str, ...]:
         if self._supported_details is not None:
@@ -226,8 +232,10 @@ class GraphHopperClient:
         raise RoutingUpstreamError("GraphHopper returned an unexpected HTTP status")
 
     def _parse_route(
-        self, response: httpx.Response, point_count: int
-    ) -> GraphHopperPath:
+        self,
+        response: httpx.Response,
+        expected_snapped_point_count: int | None,
+    ) -> RoutedPath:
         payload = self._json_object(response)
         paths = payload.get("paths")
         if not isinstance(paths, list) or not paths:
@@ -249,12 +257,16 @@ class GraphHopperClient:
             if snapped_object is not None
             else None
         )
-        if snapped is not None and len(snapped) != point_count:
+        if (
+            snapped is not None
+            and expected_snapped_point_count is not None
+            and len(snapped) != expected_snapped_point_count
+        ):
             raise RoutingUpstreamError(
                 "GraphHopper returned incomplete snapped waypoints"
             )
 
-        return GraphHopperPath(
+        return RoutedPath(
             distance_m=distance,
             duration_ms=duration,
             ascend_m=ascend,

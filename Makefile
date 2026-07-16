@@ -1,4 +1,4 @@
-.PHONY: install format lint typecheck test check download-osm up down logs smoke report
+.PHONY: install format lint typecheck test check download-osm up down logs smoke report generate
 
 install:
 	uv sync
@@ -36,3 +36,6 @@ smoke:
 
 report:
 	./scripts/report_marly.sh
+
+generate:
+	./scripts/generate_marly.sh

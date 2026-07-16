@@ -7,6 +7,10 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from sugarglider.generation.service import (
+    RouteGenerationNoCandidateError,
+    TargetDistanceInfeasibleError,
+)
 from sugarglider.routing.graphhopper import (
     RoutingPointError,
     RoutingTimeoutError,
@@ -23,6 +27,16 @@ class PublicError:
 
 
 ERRORS: dict[type[Exception], PublicError] = {
+    TargetDistanceInfeasibleError: PublicError(
+        422,
+        "target_distance_infeasible",
+        "The mandatory route is already longer than the target tolerance.",
+    ),
+    RouteGenerationNoCandidateError: PublicError(
+        422,
+        "route_generation_no_candidate",
+        "No graph-valid generated route candidate was found.",
+    ),
     RoutingPointError: PublicError(
         400,
         "routing_point_not_found",
