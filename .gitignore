@@ -20,6 +20,7 @@ data/osm/*
 !data/osm/.gitkeep
 data/graph-cache/*
 !data/graph-cache/.gitkeep
+*.gpx
 
 # IDE
 .idea/

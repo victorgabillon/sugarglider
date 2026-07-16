@@ -1,0 +1,43 @@
+graphhopper:
+  datareader.file: /data/osm/ile-de-france-latest.osm.pbf
+  graph.location: /data/graph-cache
+
+  profiles:
+    - name: hike
+      custom_model_files: [hike.json]
+
+  # Landmark preparation keeps the custom hiking profile flexible for later PRs.
+  profiles_ch: []
+  profiles_lm:
+    - profile: hike
+
+  # hike.json requirements plus the path details exposed by PR1.
+  graph.encoded_values: >-
+    foot_access,foot_priority,foot_network,foot_average_speed,foot_road_access,
+    hike_rating,road_class,road_environment,surface,smoothness,track_type,osm_way_id
+
+  graph.elevation.provider: noop
+  prepare.min_network_size: 200
+  prepare.subnetworks.threads: 1
+  routing.max_visited_nodes: 1000000
+  routing.timeout_ms: 300000
+  import.osm.ignored_highways: ''
+
+server:
+  application_connectors:
+    - type: http
+      port: 8989
+      bind_host: 0.0.0.0
+  admin_connectors:
+    - type: http
+      port: 8990
+      bind_host: 0.0.0.0
+  request_log:
+    appenders: []
+
+logging:
+  level: INFO
+  appenders:
+    - type: console
+      time_zone: UTC
+
