@@ -1,0 +1,44 @@
+services:
+  graphhopper:
+    build:
+      context: infrastructure/graphhopper
+      args:
+        GRAPHHOPPER_VERSION: "11.0"
+    ports:
+      - "8989:8989"
+    environment:
+      JAVA_OPTS: ${JAVA_OPTS:--Xms1g -Xmx4g}
+    volumes:
+      - ./data/osm:/data/osm:ro
+      - ./data/graph-cache:/data/graph-cache
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8989/info"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 5m
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      GRAPHHOPPER_URL: http://graphhopper:8989
+      GRAPHHOPPER_TIMEOUT_SECONDS: "60"
+    depends_on:
+      graphhopper:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
