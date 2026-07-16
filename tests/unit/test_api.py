@@ -110,6 +110,8 @@ async def test_json_route(client: httpx.AsyncClient) -> None:
     assert body["name"] == "API route"
     assert body["geometry"][0] == [2.096667, 48.871389]
     assert body["summary"]["distance_m"] == 2500.5
+    assert body["analysis"]["route_distance_m"] == 2500.5
+    assert body["analysis"]["unknown_surface"]["share"] == 1.0
 
 
 @pytest.mark.asyncio
@@ -122,6 +124,7 @@ async def test_gpx_route(client: httpx.AsyncClient) -> None:
     )
     assert b"<trk>" in response.content
     assert b"<rte>" not in response.content
+    assert b"analysis" not in response.content
 
 
 @pytest.mark.asyncio

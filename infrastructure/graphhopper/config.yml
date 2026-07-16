@@ -13,7 +13,7 @@ graphhopper:
 
   # hike.json requirements plus the path details exposed by PR1.
   graph.encoded_values: >-
-    foot_access,foot_priority,foot_network,foot_average_speed,foot_road_access,
+    foot_access,foot_priority,foot_network,foot_average_speed,foot_road_access,car_access,
     hike_rating,road_class,road_environment,surface,smoothness,track_type,osm_way_id
 
   graph.elevation.provider: noop
@@ -40,4 +40,3 @@ logging:
   appenders:
     - type: console
       time_zone: UTC
-

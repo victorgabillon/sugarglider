@@ -4,10 +4,12 @@ from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
+from sugarglider.domain.analysis import DetailValue, RouteAnalysis
+
 Latitude = Annotated[float, Field(ge=-90, le=90)]
 Longitude = Annotated[float, Field(ge=-180, le=180)]
 GeoJsonPosition = tuple[Longitude, Latitude]
-PathDetailValue = str | int | float | bool | None
+PathDetailValue = DetailValue
 
 
 class ImmutableModel(BaseModel):
@@ -83,3 +85,4 @@ class RouteResult(ImmutableModel):
     geometry: tuple[GeoJsonPosition, ...]
     snapped_points: tuple[GeoJsonPosition, ...] | None = None
     path_details: dict[str, tuple[PathDetailSegment, ...]] = Field(default_factory=dict)
+    analysis: RouteAnalysis

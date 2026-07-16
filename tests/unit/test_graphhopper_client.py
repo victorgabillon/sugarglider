@@ -1,5 +1,8 @@
 """GraphHopper HTTP adapter tests using an in-memory transport."""
 
+import json
+from typing import cast
+
 import httpx
 import pytest
 
@@ -34,11 +37,44 @@ def route_payload(*, include_details: bool = True) -> dict[str, object]:
     return {"paths": [path]}
 
 
+def info_payload(encoded_values: list[str]) -> dict[str, object]:
+    return {
+        "profiles": [{"name": "hike"}],
+        "encoded_values": encoded_values,
+        "elevation": False,
+    }
+
+
+def requested_details(request: httpx.Request) -> list[str]:
+    payload: object = json.loads(request.read())
+    if not isinstance(payload, dict):
+        raise AssertionError("route request is not an object")
+    details = payload.get("details")
+    if not isinstance(details, list) or not all(
+        isinstance(detail, str) for detail in details
+    ):
+        raise AssertionError("route request has invalid details")
+    return cast(list[str], details)
+
+
 @pytest.mark.asyncio
 async def test_route_sends_lon_lat_and_parses_response() -> None:
     captured: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/info":
+            return httpx.Response(
+                200,
+                json=info_payload(
+                    [
+                        "surface",
+                        "foot_network",
+                        "foot_priority",
+                        "foot_road_access",
+                        "car_access",
+                    ]
+                ),
+            )
         payload = request.read().decode()
         captured["body"] = payload
         return httpx.Response(200, json=route_payload())
@@ -53,6 +89,10 @@ async def test_route_sends_lon_lat_and_parses_response() -> None:
     assert '"points":[[2.09,48.87],[2.11,48.89]]' in body
     assert '"profile":"hike"' in body
     assert '"points_encoded":false' in body
+    assert '"foot_network"' in body
+    assert '"foot_priority"' in body
+    assert '"foot_road_access"' in body
+    assert '"car_access"' in body
     assert path.geometry == ((2.09, 48.87), (2.10, 48.88), (2.11, 48.89))
     assert path.distance_m == 1234.5
     assert path.duration_ms == 456789
@@ -73,25 +113,56 @@ async def test_missing_details_are_tolerated() -> None:
 
 
 @pytest.mark.asyncio
-async def test_unsupported_optional_details_are_retried_without_details() -> None:
-    requests = 0
+async def test_unsupported_optional_detail_retry_retains_other_details() -> None:
+    route_requests = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal requests
-        requests += 1
-        if requests == 1:
+        nonlocal route_requests
+        if request.url.path == "/info":
+            return httpx.Response(200, json={"profiles": [{"name": "hike"}]})
+        route_requests += 1
+        if route_requests == 1:
             return httpx.Response(
                 400, json={"message": "Unknown path detail: smoothness"}
             )
-        assert b'"details"' not in request.read()
+        details = requested_details(request)
+        assert "smoothness" not in details
+        assert "edge_id" in details
+        assert "surface" in details
         return httpx.Response(200, json=route_payload(include_details=False))
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         path = await GraphHopperClient("http://test", client=http_client).route(
             (Coordinate(lat=48, lon=2), Coordinate(lat=49, lon=3))
         )
-    assert requests == 2
+    assert route_requests == 2
     assert path.details == {}
+
+
+@pytest.mark.asyncio
+async def test_info_excludes_unsupported_optional_details_and_is_cached() -> None:
+    info_requests = 0
+    captured_details: list[list[str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal info_requests
+        if request.url.path == "/info":
+            info_requests += 1
+            return httpx.Response(200, json=info_payload(["surface", "car_access"]))
+        captured_details.append(requested_details(request))
+        return httpx.Response(200, json=route_payload())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = GraphHopperClient("http://test", client=http_client)
+        points = (Coordinate(lat=48, lon=2), Coordinate(lat=49, lon=3))
+        await client.route(points)
+        await client.route(points)
+
+    assert info_requests == 1
+    assert captured_details == [
+        ["edge_id", "surface", "car_access"],
+        ["edge_id", "surface", "car_access"],
+    ]
 
 
 @pytest.mark.asyncio
@@ -174,3 +245,32 @@ async def test_readiness_requires_hike_profile() -> None:
     )
     async with httpx.AsyncClient(transport=transport) as http_client:
         assert await GraphHopperClient("http://test", client=http_client).is_ready()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "invalid_segments",
+    [
+        [[0, 0, 1]],
+        [[1, 0, 1]],
+        [[0, 3, 1]],
+        [[0, 2, 1], [1, 2, 2]],
+    ],
+)
+async def test_malformed_detail_intervals_are_rejected(
+    invalid_segments: list[list[object]],
+) -> None:
+    payload = route_payload()
+    paths = cast(list[dict[str, object]], payload["paths"])
+    paths[0]["details"] = {"edge_id": invalid_segments}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/info":
+            return httpx.Response(200, json=info_payload([]))
+        return httpx.Response(200, json=payload)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        with pytest.raises(RoutingUpstreamError):
+            await GraphHopperClient("http://test", client=http_client).route(
+                (Coordinate(lat=48, lon=2), Coordinate(lat=49, lon=3))
+            )
