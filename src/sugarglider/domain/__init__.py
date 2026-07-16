@@ -1,5 +1,12 @@
 """Domain models."""
 
+from sugarglider.domain.analysis import (
+    DetailBreakdown,
+    DetailBucket,
+    DistanceMetric,
+    RepetitionAnalysis,
+    RouteAnalysis,
+)
 from sugarglider.domain.models import (
     Coordinate,
     PathDetailSegment,
@@ -10,7 +17,12 @@ from sugarglider.domain.models import (
 
 __all__ = [
     "Coordinate",
+    "DetailBreakdown",
+    "DetailBucket",
+    "DistanceMetric",
     "PathDetailSegment",
+    "RepetitionAnalysis",
+    "RouteAnalysis",
     "RouteRequest",
     "RouteResult",
     "RouteSummary",

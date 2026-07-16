@@ -4,17 +4,18 @@ Sugarglider is an open-source trail-running route generator in development. The
 long-term product will combine required waypoints, target distance, trail and nature
 preferences, popularity signals, access rules, and limits on repeated sections.
 
-This first PR is intentionally narrower: it accepts ordered latitude/longitude
-anchors, asks a self-hosted GraphHopper 11.0 instance to snap and route them along
-real OpenStreetMap edges, returns typed route geometry and metrics, and exports that
-geometry as one clean GPX 1.1 track.
+The implemented PR1 and PR2 scope accepts ordered latitude/longitude anchors, asks
+a self-hosted GraphHopper 11.0 instance to snap and route them along real
+OpenStreetMap edges, analyzes the routed edges using GraphHopper path details, and
+exports the geometry as one clean GPX 1.1 track.
 
-## PR1 scope and architecture
+## Current scope and architecture
 
 ```text
 client -> FastAPI -> RouteService -> typed GraphHopper HTTP adapter
-                    |                    |
-                    +-> GPX writer       +-> GraphHopper 11 / OSM graph
+                    |       |              |
+                    |       +-> analyzer   +-> GraphHopper 11 / OSM graph
+                    +-> GPX writer
 ```
 
 The public API uses named `lat` and `lon` fields. The adapter converts anchors to
@@ -23,10 +24,16 @@ order in routed responses. The GPX writer then emits the final routed coordinate
 `lat` and `lon` trackpoint attributes. It never draws, interpolates, or falls back to
 straight lines.
 
-PR1 does not optimise anchor order, generate waypoints, target a requested route
-length, score popularity, map-match uploaded GPX files, or provide a frontend or
-database. The Marly example is only an ordered-anchor routing integration example;
-it is not the final desirable 41 km route.
+The analyzer uses standard-library haversine distances for every geometry edge and
+normalizes them to GraphHopper's authoritative route distance. Raw path-detail
+breakdowns remain available alongside explainable derived metrics. It does not
+produce an arbitrary composite quality score.
+
+The current implementation does not optimise anchor order, generate waypoints,
+target a requested route length, score popularity, analyze nature areas, enable
+elevation, map-match uploaded GPX files, or provide a frontend or database. The
+Marly example is only an ordered-anchor routing integration example; it is not the
+final desirable 41 km route.
 
 ## Prerequisites
 
@@ -92,9 +99,63 @@ at `http://localhost:8989` and the API at `http://localhost:8000`.
 - `GET /health` checks only that the FastAPI process is alive.
 - `GET /ready` checks GraphHopper `/info` and requires its `hike` profile.
 - `POST /v1/routes` returns routed GeoJSON-order coordinates, summary metrics,
-  snapped anchors when supplied, and selected path details.
+  snapped anchors, raw path details, and typed route analysis.
 - `POST /v1/routes/gpx` computes the same route and returns a downloadable GPX
   containing exactly one track and one segment.
+
+### Route-analysis metrics
+
+Every share is relative to the complete GraphHopper route distance:
+
+- `paved`, `unpaved`, and `unknown_surface` partition the whole route. Unknown
+  includes absent surface coverage, explicit nulls, missing/other values, and future
+  unrecognized values.
+- `trail_like` measures edges whose road class is track, path, footway, bridleway,
+  steps, or pedestrian.
+- `official_hiking_network` measures edges explicitly tagged with international,
+  national, regional, or local foot-network membership.
+- `major_road` measures travel on motorway, trunk, primary, secondary, or tertiary
+  classified edges. It is not traffic measurement and does not measure proximity to
+  a nearby road.
+- `car_accessible` requires an explicit `car_access=true`; missing access data is
+  not assumed true.
+- `repetition` counts distinct GraphHopper edge IDs used in multiple traversal runs
+  and measures only later runs as repeated distance. Its coverage and warnings must
+  be considered because repetition cannot be inferred when `edge_id` is absent.
+- `detail_breakdowns` reports explicit values and coverage for every returned path
+  detail. Explicit null is a bucket; uncovered geometry is not invented as a value.
+
+For example, the JSON response includes this shape (values are illustrative):
+
+```json
+{
+  "analysis": {
+    "route_distance_m": 22515.9,
+    "geometry_distance_m": 22480.1,
+    "distance_scale_factor": 1.00159,
+    "paved": {"distance_m": 7000.0, "share": 0.31},
+    "unpaved": {"distance_m": 13000.0, "share": 0.58},
+    "unknown_surface": {"distance_m": 2515.9, "share": 0.11},
+    "trail_like": {"distance_m": 15000.0, "share": 0.67},
+    "official_hiking_network": {"distance_m": 9000.0, "share": 0.40},
+    "major_road": {"distance_m": 500.0, "share": 0.02},
+    "car_accessible": {"distance_m": 6000.0, "share": 0.27},
+    "repetition": {
+      "edge_id_coverage": {"distance_m": 22000.0, "share": 0.977},
+      "available": true,
+      "unique_edge_count": 180,
+      "traversed_edge_run_count": 187,
+      "repeated_edge_count": 5,
+      "repeated_distance": {"distance_m": 650.0, "share": 0.029}
+    },
+    "warnings": ["edge_id_coverage_incomplete"]
+  }
+}
+```
+
+Percentages depend on the completeness and accuracy of OSM tags exposed through
+GraphHopper. Missing coverage is retained in breakdown coverage, unknown-surface
+distance, and deterministic warnings rather than guessed.
 
 Route the Marly request as JSON:
 
@@ -122,6 +183,17 @@ make smoke
 ./scripts/smoke_marly.sh ./marly.gpx
 ```
 
+Generate a saved JSON response and print a compact Marly analysis report:
+
+```sh
+make report
+# Custom destination:
+./scripts/report_marly.sh ./marly-analysis.json
+```
+
+The reporting script uses Python rather than `jq` and prints all derived percentages,
+repeated-edge distance, edge-ID coverage, and warnings.
+
 After the stack is healthy, opt into the live integration test with:
 
 ```sh
@@ -145,9 +217,10 @@ conditions, and on-the-ground signage before use.
 
 ## Current limitations and future work
 
-Ordered anchors are mandatory and are visited as provided. Elevation is disabled,
-so GPX trackpoints contain no invented elevations or timestamps. Popularity and
-route-quality optimisation are not implemented. Future PRs can add candidate
-waypoint generation and scoring, followed no earlier than PR3 by target-distance
-and route-quality optimisation, while retaining the external routing adapter and
-single-track GPX boundary established here.
+Ordered anchors are mandatory and are visited as provided. Analysis describes the
+already-routed result; it does not generate alternatives or decide which route is
+best. Elevation is disabled, so GPX trackpoints contain no invented elevations or
+timestamps, and GPX files contain no analysis extensions. Nature, popularity,
+target-distance optimization, and a deliberately designed route-quality objective
+remain future work. Future PRs can build those features while retaining the typed
+routing adapter, normalized edge metrics, and single-track GPX boundary.

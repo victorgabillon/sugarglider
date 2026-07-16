@@ -16,16 +16,21 @@ logger = logging.getLogger(__name__)
 
 type JsonObject = dict[str, object]
 
-REQUESTED_DETAILS = (
-    "edge_id",
+BUILTIN_DETAILS = ("edge_id",)
+OPTIONAL_DETAILS = (
+    "osm_way_id",
     "road_class",
     "road_environment",
     "surface",
     "smoothness",
     "track_type",
     "hike_rating",
-    "osm_way_id",
+    "foot_network",
+    "foot_priority",
+    "foot_road_access",
+    "car_access",
 )
+REQUESTED_DETAILS = (*BUILTIN_DETAILS, *OPTIONAL_DETAILS)
 
 
 class RoutingError(Exception):
@@ -83,6 +88,7 @@ class GraphHopperClient:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout_seconds
         self._client = client
+        self._supported_details: tuple[str, ...] | None = None
 
     async def info(self) -> JsonObject:
         """Return validated-enough server information for readiness checks."""
@@ -91,6 +97,7 @@ class GraphHopperClient:
         profiles = payload.get("profiles")
         if not isinstance(profiles, Sequence) or isinstance(profiles, str):
             raise RoutingUpstreamError("GraphHopper /info omitted profiles")
+        self._cache_supported_details(payload)
         return payload
 
     async def is_ready(self, profile: str = "hike") -> bool:
@@ -108,6 +115,7 @@ class GraphHopperClient:
         self, points: tuple[Coordinate, ...], profile: str = "hike"
     ) -> GraphHopperPath:
         """Route ordered points, preserving GraphHopper's GeoJSON coordinate order."""
+        requested_details = list(await self._details_for_route())
         payload: JsonObject = {
             "points": [[point.lon, point.lat] for point in points],
             "profile": profile,
@@ -116,19 +124,67 @@ class GraphHopperClient:
             "calc_points": True,
             "elevation": False,
             "snap_preventions": ["motorway", "trunk", "ferry"],
-            "details": list(REQUESTED_DETAILS),
+            "details": requested_details,
         }
-        try:
-            response = await self._request("POST", "/route", json=payload)
-        except RoutingPointError as exc:
-            # Encoded values vary with a self-hosted import. Optional path details
-            # must never make an otherwise valid route fail completely.
-            message = str(exc).lower()
-            if not any(term in message for term in ("detail", "encoded value")):
-                raise
-            payload.pop("details")
-            response = await self._request("POST", "/route", json=payload)
+        while True:
+            try:
+                response = await self._request("POST", "/route", json=payload)
+                break
+            except RoutingPointError as exc:
+                # Older or differently imported graphs can advertise imperfectly.
+                # Remove only the named unsupported value, retaining edge_id and
+                # every other useful detail whenever possible.
+                message = str(exc).lower()
+                if not any(term in message for term in ("detail", "encoded value")):
+                    raise
+                unsupported = next(
+                    (
+                        detail
+                        for detail in requested_details
+                        if detail.lower() in message
+                    ),
+                    None,
+                )
+                if unsupported is not None:
+                    requested_details.remove(unsupported)
+                elif requested_details != list(BUILTIN_DETAILS):
+                    requested_details = list(BUILTIN_DETAILS)
+                elif requested_details:
+                    requested_details = []
+                else:
+                    raise
+                payload["details"] = requested_details
+                self._supported_details = tuple(requested_details)
         return self._parse_route(response, len(points))
+
+    async def _details_for_route(self) -> tuple[str, ...]:
+        if self._supported_details is not None:
+            return self._supported_details
+        try:
+            await self.info()
+        except RoutingError:
+            # Detail discovery is an optimization, not a routing prerequisite.
+            self._supported_details = REQUESTED_DETAILS
+        if self._supported_details is None:
+            self._supported_details = REQUESTED_DETAILS
+        return self._supported_details
+
+    def _cache_supported_details(self, payload: JsonObject) -> None:
+        encoded_values = payload.get("encoded_values")
+        supported: set[str]
+        if isinstance(encoded_values, Mapping):
+            supported = {key for key in encoded_values if isinstance(key, str)}
+        elif isinstance(encoded_values, Sequence) and not isinstance(
+            encoded_values, str
+        ):
+            supported = {value for value in encoded_values if isinstance(value, str)}
+        else:
+            self._supported_details = REQUESTED_DETAILS
+            return
+        self._supported_details = (
+            *BUILTIN_DETAILS,
+            *(detail for detail in OPTIONAL_DETAILS if detail in supported),
+        )
 
     async def _request(
         self, method: str, path: str, *, json: JsonObject | None = None
@@ -205,7 +261,7 @@ class GraphHopperClient:
             descend_m=descend,
             geometry=geometry,
             snapped_points=snapped,
-            details=self._parse_details(path.get("details")),
+            details=self._parse_details(path.get("details"), len(geometry)),
         )
 
     @staticmethod
@@ -241,13 +297,19 @@ class GraphHopperClient:
         return tuple(parsed)
 
     @classmethod
-    def _parse_details(cls, value: object) -> dict[str, tuple[PathDetailSegment, ...]]:
+    def _parse_details(
+        cls, value: object, geometry_length: int
+    ) -> dict[str, tuple[PathDetailSegment, ...]]:
         if value is None:
             return {}
         if not isinstance(value, Mapping):
             raise RoutingUpstreamError("GraphHopper path details were malformed")
         parsed: dict[str, tuple[PathDetailSegment, ...]] = {}
-        for key, segments in value.items():
+        if not all(isinstance(key, str) for key in value):
+            raise RoutingUpstreamError("GraphHopper path details were malformed")
+        keys = cast(list[str], sorted(value))
+        for key in keys:
+            segments = value[key]
             if not isinstance(key, str) or not isinstance(segments, list):
                 raise RoutingUpstreamError("GraphHopper path details were malformed")
             parsed_segments: list[PathDetailSegment] = []
@@ -261,13 +323,31 @@ class GraphHopperClient:
                     raise RoutingUpstreamError(
                         "GraphHopper path detail value was malformed"
                     )
+                from_index = cls._integer(segment[0], "detail start")
+                to_index = cls._integer(segment[1], "detail end")
+                if from_index < 0 or to_index <= from_index:
+                    raise RoutingUpstreamError(
+                        "GraphHopper path detail interval was invalid"
+                    )
+                if to_index >= geometry_length:
+                    raise RoutingUpstreamError(
+                        "GraphHopper path detail interval exceeded geometry"
+                    )
                 parsed_segments.append(
                     PathDetailSegment(
-                        from_index=cls._integer(segment[0], "detail start"),
-                        to_index=cls._integer(segment[1], "detail end"),
+                        from_index=from_index,
+                        to_index=to_index,
                         value=detail_value,
                     )
                 )
+            parsed_segments.sort(key=lambda item: (item.from_index, item.to_index))
+            for previous, current in zip(
+                parsed_segments, parsed_segments[1:], strict=False
+            ):
+                if current.from_index < previous.to_index:
+                    raise RoutingUpstreamError(
+                        "GraphHopper path detail intervals overlapped"
+                    )
             parsed[key] = tuple(parsed_segments)
         return parsed
 

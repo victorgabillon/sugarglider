@@ -2,6 +2,7 @@
 
 import pytest
 
+from sugarglider.analysis.route import RouteAnalyzer
 from sugarglider.domain.models import RouteResult, RouteSummary
 
 
@@ -21,4 +22,5 @@ def route_result() -> RouteResult:
         ),
         geometry=geometry,
         snapped_points=(geometry[0], geometry[-1]),
+        analysis=RouteAnalyzer().analyze(geometry, 2500.5, {}),
     )
