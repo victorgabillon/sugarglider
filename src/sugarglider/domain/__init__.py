@@ -7,6 +7,13 @@ from sugarglider.domain.analysis import (
     RepetitionAnalysis,
     RouteAnalysis,
 )
+from sugarglider.domain.generation import (
+    CandidateScore,
+    GeneratedCandidate,
+    RouteGenerationRequest,
+    RouteGenerationResult,
+    SearchSummary,
+)
 from sugarglider.domain.models import (
     Coordinate,
     PathDetailSegment,
@@ -17,13 +24,18 @@ from sugarglider.domain.models import (
 
 __all__ = [
     "Coordinate",
+    "CandidateScore",
     "DetailBreakdown",
     "DetailBucket",
     "DistanceMetric",
+    "GeneratedCandidate",
     "PathDetailSegment",
     "RepetitionAnalysis",
     "RouteAnalysis",
+    "RouteGenerationRequest",
+    "RouteGenerationResult",
     "RouteRequest",
     "RouteResult",
     "RouteSummary",
+    "SearchSummary",
 ]

@@ -6,8 +6,19 @@ from fastapi import APIRouter, Body
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 
-from sugarglider.api.dependencies import RouteServiceDependency
+from sugarglider.api.dependencies import (
+    GenerationServiceDependency,
+    RouteServiceDependency,
+)
+from sugarglider.domain.generation import (
+    RouteGenerationRequest,
+    RouteGenerationResult,
+)
 from sugarglider.domain.models import RouteRequest, RouteResult
+from sugarglider.generation.service import (
+    RouteGenerationNoCandidateError,
+    TargetDistanceInfeasibleError,
+)
 from sugarglider.gpx.writer import gpx_filename, write_gpx
 from sugarglider.routing.graphhopper import RoutingError, RoutingUnavailableError
 
@@ -55,6 +66,35 @@ async def create_route_gpx(
     filename = gpx_filename(result.name)
     return Response(
         content=write_gpx(result),
+        media_type="application/gpx+xml",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/v1/routes/generate", response_model=RouteGenerationResult)
+async def generate_route(
+    request: Annotated[RouteGenerationRequest, Body()],
+    service: GenerationServiceDependency,
+) -> RouteGenerationResult:
+    """Return a baseline and ranked target-distance candidates."""
+    return await service.generate(request)
+
+
+@router.post("/v1/routes/generate/gpx", response_class=Response)
+async def generate_route_gpx(
+    request: Annotated[RouteGenerationRequest, Body()],
+    service: GenerationServiceDependency,
+) -> Response:
+    """Generate and export the best candidate as a clean GPX track."""
+    result = await service.generate(request)
+    if result.search.status == "infeasible":
+        raise TargetDistanceInfeasibleError
+    if not result.candidates:
+        raise RouteGenerationNoCandidateError
+    best = result.candidates[0].route
+    filename = gpx_filename(best.name)
+    return Response(
+        content=write_gpx(best),
         media_type="application/gpx+xml",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
