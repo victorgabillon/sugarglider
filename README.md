@@ -1,3 +1,15 @@
+<p align="center">
+  <img
+    src="assets/brand/sugarglider-banner.png"
+    alt="Sugarglider — trail-running route generation"
+    width="100%"
+  />
+</p>
+
+<p align="center">
+  <strong>Generate trail-running routes from required places and a target distance.</strong>
+</p>
+
 # Sugarglider
 
 Sugarglider is an open-source trail-running route generator in development. The
@@ -224,3 +236,13 @@ timestamps, and GPX files contain no analysis extensions. Nature, popularity,
 target-distance optimization, and a deliberately designed route-quality objective
 remain future work. Future PRs can build those features while retaining the typed
 routing adapter, normalized edge metrics, and single-track GPX boundary.
+
+---
+
+<p align="center">
+  <img
+    src="assets/brand/sugarglider-flying-map.png"
+    alt="Sugarglider exploring a trail map"
+    width="360"
+  />
+</p>
