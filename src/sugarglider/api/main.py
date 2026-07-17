@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from sugarglider.api.errors import install_error_handlers
 from sugarglider.api.routes import router
 from sugarglider.config import Settings
+from sugarglider.generation.low_overlap import LowOverlapSettings
 from sugarglider.generation.service import RouteGenerationService
 from sugarglider.routing.graphhopper import GraphHopperClient
 from sugarglider.routing.result import RouteResultFactory
@@ -44,6 +45,14 @@ def create_app(
                 max_evaluations=settings.generation_max_evaluations,
                 max_optional_snap_displacement_m=(
                     settings.generation_max_optional_snap_displacement_m
+                ),
+                low_overlap_settings=LowOverlapSettings(
+                    max_paths=settings.low_overlap_max_paths,
+                    max_weight_factor=settings.low_overlap_max_weight_factor,
+                    max_share_factor=settings.low_overlap_max_share_factor,
+                    beam_width=settings.low_overlap_beam_width,
+                    max_leg_requests=settings.low_overlap_max_leg_requests,
+                    source_count=settings.low_overlap_source_count,
                 ),
             )
             yield

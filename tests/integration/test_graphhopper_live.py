@@ -160,20 +160,70 @@ async def test_live_marly_all_pois_optimized_loop() -> None:
         )
     )
     assert request.required_point_count == 23
+    assert request.path_selection_mode == "low_overlap"
+    shortest_request = request.model_copy(update={"path_selection_mode": "shortest"})
     base_url = os.getenv("GRAPHHOPPER_URL", "http://localhost:8989")
     async with httpx.AsyncClient() as http_client:
-        result = await RouteGenerationService(
-            GraphHopperClient(base_url, client=http_client), max_evaluations=48
-        ).generate(request)
+        backend = GraphHopperClient(base_url, client=http_client)
+        service = RouteGenerationService(backend, max_evaluations=48)
+        standard_result = await service.generate(shortest_request)
+        result = await service.generate(request)
 
+    assert standard_result.candidates
     assert result.candidates
     assert result.search.evaluated_candidate_count <= result.search.search_budget
+    assert (
+        result.search.alternative_leg_request_count
+        <= result.search.low_overlap_request_budget
+    )
     best = result.candidates[0]
-    indices = [visit.original_index for visit in best.required_point_order]
-    assert indices[0] == 0
-    assert sorted(indices) == list(range(23))
-    assert len(indices) == len(set(indices))
-    assert 39_000 <= best.route.summary.distance_m <= 43_000
+    for candidate in (*standard_result.candidates, *result.candidates):
+        indices = [visit.original_index for visit in candidate.required_point_order]
+        assert indices[0] == 0
+        assert sorted(indices) == list(range(23))
+        assert len(indices) == len(set(indices))
+        assert (
+            candidate.routing_points[0] == candidate.required_point_order[0].coordinate
+        )
+        assert len(candidate.routing_points) == 23 + len(candidate.optional_points)
+        assert candidate.route.snapped_points is not None
+        assert len(candidate.route.snapped_points) == len(candidate.routing_points) + 1
+    refined = tuple(
+        candidate
+        for candidate in result.candidates
+        if candidate.construction == "alternative_leg_beam"
+    )
+    standard_control = next(
+        candidate
+        for candidate in result.candidates
+        if candidate.construction != "alternative_leg_beam"
+    )
+    assert standard_control.signature in {
+        candidate.signature for candidate in standard_result.candidates
+    }
+    if best.construction == "alternative_leg_beam":
+        assert 39_000 <= best.route.summary.distance_m <= 43_000
+        assert (
+            best.route.analysis.repetition.repeated_distance.share
+            < standard_control.route.analysis.repetition.repeated_distance.share
+        )
+        assert (
+            best.route.analysis.immediate_backtrack.share
+            <= standard_control.route.analysis.immediate_backtrack.share
+        )
+    else:
+        assert "low_overlap_no_natural_improvement" in result.search.warnings
+    if not refined:
+        assert "low_overlap_no_complete_candidate" in result.search.warnings
+    pre_repeated = result.search.pre_low_overlap_repeated_share
+    best_repeated = result.search.best_low_overlap_repeated_share
+    assert pre_repeated is not None
+    assert best_repeated is not None
+    assert (
+        best_repeated < pre_repeated
+        or "low_overlap_no_repetition_improvement" in result.search.warnings
+        or "low_overlap_no_complete_candidate" in result.search.warnings
+    )
     assert (
         result.search.best_order_repeated_share
         < result.search.fixed_order_repeated_share
@@ -196,6 +246,9 @@ async def test_live_marly_all_pois_optimized_loop() -> None:
             required_index += 1
     assert required_index == 23
     assert haversine_distance_m(snapped[0], snapped[-1]) < 500
+    assert best.route.analysis.repetition.edge_id_coverage.share > 0.8
+    assert 0 <= best.route.analysis.immediate_backtrack.share <= 1
+    assert best.route.path_details
 
     root = ElementTree.fromstring(write_gpx(best.route))
     namespace = {"g": GPX_NAMESPACE}

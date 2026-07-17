@@ -77,6 +77,16 @@ def requested_details(request: httpx.Request) -> list[str]:
     return cast(list[str], details)
 
 
+def alternative_payload(edge_ids: tuple[int, ...]) -> dict[str, object]:
+    paths: list[dict[str, object]] = []
+    for edge_id in edge_ids:
+        payload = route_payload()
+        path = cast(list[dict[str, object]], payload["paths"])[0]
+        path["details"] = {"edge_id": [[0, 2, edge_id]], "surface": [[0, 2, "PAVED"]]}
+        paths.append(path)
+    return {"paths": paths}
+
+
 @pytest.mark.asyncio
 async def test_route_sends_lon_lat_and_parses_response() -> None:
     captured: dict[str, object] = {}
@@ -138,6 +148,142 @@ async def test_generated_route_sets_pass_through_without_changing_default() -> N
 
     assert '"pass_through"' not in bodies[0]
     assert '"pass_through":true' in bodies[1]
+
+
+@pytest.mark.asyncio
+async def test_alternatives_post_full_parameters_and_parse_all_distinct_paths() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/info":
+            return httpx.Response(200, json={"profiles": [{"name": "hike"}]})
+        captured["method"] = request.method
+        captured["payload"] = json.loads(request.read())
+        return httpx.Response(200, json=alternative_payload((7, 8, 7)))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        alternatives = await GraphHopperClient(
+            "http://test", client=http_client
+        ).alternative_routes(
+            Coordinate(lat=48.87, lon=2.09),
+            Coordinate(lat=48.89, lon=2.11),
+            max_paths=3,
+            max_weight_factor=1.6,
+            max_share_factor=0.5,
+        )
+
+    payload = cast(dict[str, object], captured["payload"])
+    assert captured["method"] == "POST"
+    assert payload["points"] == [[2.09, 48.87], [2.11, 48.89]]
+    assert payload["algorithm"] == "alternative_route"
+    assert payload["alternative_route.max_paths"] == 3
+    assert payload["alternative_route.max_weight_factor"] == 1.6
+    assert payload["alternative_route.max_share_factor"] == 0.5
+    assert payload["details"] == list(
+        (
+            "edge_id",
+            "osm_way_id",
+            "road_class",
+            "road_environment",
+            "surface",
+            "smoothness",
+            "track_type",
+            "hike_rating",
+            "foot_network",
+            "foot_priority",
+            "foot_road_access",
+            "car_access",
+        )
+    )
+    assert [path.details["edge_id"][0].value for path in alternatives] == [7, 8]
+
+
+@pytest.mark.asyncio
+async def test_malformed_later_alternative_rejects_complete_response() -> None:
+    payload = alternative_payload((7, 8))
+    paths = cast(list[dict[str, object]], payload["paths"])
+    paths[1]["points"] = {"type": "LineString", "coordinates": []}
+    transport = httpx.MockTransport(lambda _request: httpx.Response(200, json=payload))
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        with pytest.raises(RoutingUpstreamError):
+            await GraphHopperClient(
+                "http://test", client=http_client
+            ).alternative_routes(
+                Coordinate(lat=48.87, lon=2.09),
+                Coordinate(lat=48.89, lon=2.11),
+            )
+
+
+@pytest.mark.asyncio
+async def test_alternative_requires_exactly_two_snapped_endpoints() -> None:
+    payload = alternative_payload((7,))
+    path = cast(list[dict[str, object]], payload["paths"])[0]
+    path.pop("snapped_waypoints")
+    transport = httpx.MockTransport(lambda _request: httpx.Response(200, json=payload))
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        with pytest.raises(RoutingUpstreamError, match="snapped waypoints"):
+            await GraphHopperClient(
+                "http://test", client=http_client
+            ).alternative_routes(
+                Coordinate(lat=48.87, lon=2.09),
+                Coordinate(lat=48.89, lon=2.11),
+            )
+
+
+@pytest.mark.asyncio
+async def test_alternative_unsupported_detail_retries_complete_request() -> None:
+    requests: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/info":
+            return httpx.Response(200, json={"profiles": [{"name": "hike"}]})
+        requests.append(cast(dict[str, object], json.loads(request.read())))
+        if len(requests) == 1:
+            return httpx.Response(
+                400, json={"message": "Unknown path detail: smoothness"}
+            )
+        return httpx.Response(200, json=alternative_payload((7, 8)))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        alternatives = await GraphHopperClient(
+            "http://test", client=http_client
+        ).alternative_routes(
+            Coordinate(lat=48.87, lon=2.09),
+            Coordinate(lat=48.89, lon=2.11),
+        )
+    assert len(alternatives) == 2
+    assert requests[0]["points"] == requests[1]["points"]
+    assert "smoothness" not in cast(list[str], requests[1]["details"])
+
+
+@pytest.mark.asyncio
+async def test_alternative_timeout_uses_existing_error_mapping() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("slow", request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        with pytest.raises(RoutingTimeoutError):
+            await GraphHopperClient(
+                "http://test", client=http_client
+            ).alternative_routes(
+                Coordinate(lat=48.87, lon=2.09),
+                Coordinate(lat=48.89, lon=2.11),
+            )
+
+
+@pytest.mark.asyncio
+async def test_alternative_http_unavailability_uses_existing_error_mapping() -> None:
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(503, json={"message": "unavailable"})
+    )
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        with pytest.raises(RoutingUnavailableError):
+            await GraphHopperClient(
+                "http://test", client=http_client
+            ).alternative_routes(
+                Coordinate(lat=48.87, lon=2.09),
+                Coordinate(lat=48.89, lon=2.11),
+            )
 
 
 @pytest.mark.asyncio

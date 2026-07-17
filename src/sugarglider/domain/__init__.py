@@ -8,8 +8,10 @@ from sugarglider.domain.analysis import (
     RouteAnalysis,
 )
 from sugarglider.domain.generation import (
+    CandidateConstruction,
     CandidateScore,
     GeneratedCandidate,
+    PathSelectionMode,
     RequiredPointVisit,
     RouteGenerationRequest,
     RouteGenerationResult,
@@ -26,10 +28,12 @@ from sugarglider.domain.models import (
 __all__ = [
     "Coordinate",
     "CandidateScore",
+    "CandidateConstruction",
     "DetailBreakdown",
     "DetailBucket",
     "DistanceMetric",
     "GeneratedCandidate",
+    "PathSelectionMode",
     "PathDetailSegment",
     "RepetitionAnalysis",
     "RequiredPointVisit",

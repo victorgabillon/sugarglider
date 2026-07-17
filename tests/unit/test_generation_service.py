@@ -6,9 +6,14 @@ import pytest
 
 from sugarglider.domain.generation import RouteGenerationRequest
 from sugarglider.domain.models import Coordinate, PathDetailSegment
+from sugarglider.generation.low_overlap import LowOverlapSettings
 from sugarglider.generation.service import RouteGenerationService
 from sugarglider.routing.backend import RoutedPath
-from sugarglider.routing.graphhopper import RoutingPointError
+from sugarglider.routing.graphhopper import (
+    RoutingPointError,
+    RoutingTimeoutError,
+    RoutingUnavailableError,
+)
 
 
 class FakeRoutingBackend:
@@ -34,6 +39,7 @@ class FakeRoutingBackend:
         self.candidate_route_calls = 0
         self.candidate_sequences: list[tuple[Coordinate, ...]] = []
         self.pass_through_values: list[bool] = []
+        self.alternative_route_calls = 0
 
     async def route(
         self,
@@ -88,6 +94,25 @@ class FakeRoutingBackend:
             geometry=geometry,
             snapped_points=((start.lon, start.lat),),
             details={},
+        )
+
+    async def alternative_routes(
+        self,
+        start: Coordinate,
+        end: Coordinate,
+        profile: str = "hike",
+        *,
+        max_paths: int = 3,
+        max_weight_factor: float = 1.6,
+        max_share_factor: float = 0.5,
+    ) -> tuple[RoutedPath, ...]:
+        self.alternative_route_calls += 1
+        return (
+            self._path(
+                (start, end),
+                1_000,
+                edge_offset=50_000 + self.alternative_route_calls * 10,
+            ),
         )
 
     @staticmethod
@@ -257,6 +282,190 @@ class SequencedOrderRoutingBackend(FakeRoutingBackend):
         return path
 
 
+class LowOverlapRoutingBackend(FakeRoutingBackend):
+    """Expose a repeated standard loop and distinct graph-routed leg alternatives."""
+
+    def __init__(self, *, alternative_error: Exception | None = None) -> None:
+        super().__init__(baseline_distance_m=41_000)
+        self.alternative_error = alternative_error
+        self.alternative_legs: list[tuple[Coordinate, Coordinate]] = []
+
+    async def route(
+        self,
+        points: tuple[Coordinate, ...],
+        profile: str = "hike",
+        *,
+        pass_through: bool = False,
+    ) -> RoutedPath:
+        path = self._path(points, 41_000, edge_offset=1)
+        return RoutedPath(
+            distance_m=path.distance_m,
+            duration_ms=path.duration_ms,
+            ascend_m=path.ascend_m,
+            descend_m=path.descend_m,
+            geometry=path.geometry,
+            snapped_points=path.snapped_points,
+            details={
+                **path.details,
+                "edge_id": tuple(
+                    PathDetailSegment(
+                        from_index=index,
+                        to_index=index + 1,
+                        value=1,
+                    )
+                    for index in range(len(path.geometry) - 1)
+                ),
+            },
+        )
+
+    async def alternative_routes(
+        self,
+        start: Coordinate,
+        end: Coordinate,
+        profile: str = "hike",
+        *,
+        max_paths: int = 3,
+        max_weight_factor: float = 1.6,
+        max_share_factor: float = 0.5,
+    ) -> tuple[RoutedPath, ...]:
+        self.alternative_route_calls += 1
+        self.alternative_legs.append((start, end))
+        if self.alternative_error is not None:
+            raise self.alternative_error
+        return (
+            self._path((start, end), 20_500, edge_offset=1),
+            self._path(
+                (start, end),
+                20_500,
+                edge_offset=100 + self.alternative_route_calls,
+            ),
+        )
+
+
+class TradeoffLowOverlapRoutingBackend(LowOverlapRoutingBackend):
+    """Lower repetition only by introducing immediate reversal."""
+
+    async def route(
+        self,
+        points: tuple[Coordinate, ...],
+        profile: str = "hike",
+        *,
+        pass_through: bool = False,
+    ) -> RoutedPath:
+        start = (points[0].lon, points[0].lat)
+        required = (points[1].lon, points[1].lat)
+        outward_midpoint = (
+            (start[0] + required[0]) / 2,
+            (start[1] + required[1]) / 2,
+        )
+        return_midpoint = (required[0] + 0.02, start[1] + 0.02)
+        geometry = (start, outward_midpoint, required, return_midpoint, start)
+        return RoutedPath(
+            distance_m=41_000,
+            duration_ms=1,
+            ascend_m=None,
+            descend_m=None,
+            geometry=geometry,
+            snapped_points=tuple((point.lon, point.lat) for point in points),
+            details={
+                "edge_id": tuple(
+                    PathDetailSegment(
+                        from_index=index,
+                        to_index=index + 1,
+                        value=edge_id,
+                    )
+                    for index, edge_id in enumerate((1, 2, 1, 2))
+                )
+            },
+        )
+
+    async def alternative_routes(
+        self,
+        start: Coordinate,
+        end: Coordinate,
+        profile: str = "hike",
+        *,
+        max_paths: int = 3,
+        max_weight_factor: float = 1.6,
+        max_share_factor: float = 0.5,
+    ) -> tuple[RoutedPath, ...]:
+        self.alternative_route_calls += 1
+        self.alternative_legs.append((start, end))
+        midpoint = (
+            (start.lon + end.lon) / 2,
+            (start.lat + end.lat) / 2,
+        )
+        edge_ids = (10, 11) if self.alternative_route_calls == 1 else (11, 12)
+        geometry = ((start.lon, start.lat), midpoint, (end.lon, end.lat))
+        return (
+            RoutedPath(
+                distance_m=20_500,
+                duration_ms=1,
+                ascend_m=None,
+                descend_m=None,
+                geometry=geometry,
+                snapped_points=((start.lon, start.lat), (end.lon, end.lat)),
+                details={
+                    "edge_id": tuple(
+                        PathDetailSegment(
+                            from_index=index,
+                            to_index=index + 1,
+                            value=edge_id,
+                        )
+                        for index, edge_id in enumerate(edge_ids)
+                    )
+                },
+            ),
+        )
+
+
+class BacktrackingOnlyTradeoffBackend(LowOverlapRoutingBackend):
+    """Lower backtracking only by accepting more total repeated edges."""
+
+    async def alternative_routes(
+        self,
+        start: Coordinate,
+        end: Coordinate,
+        profile: str = "hike",
+        *,
+        max_paths: int = 3,
+        max_weight_factor: float = 1.6,
+        max_share_factor: float = 0.5,
+    ) -> tuple[RoutedPath, ...]:
+        self.alternative_route_calls += 1
+        self.alternative_legs.append((start, end))
+        direction = 1 if self.alternative_route_calls == 1 else -1
+        mid_lon = (start.lon + end.lon) / 2
+        mid_lat = (start.lat + end.lat) / 2
+        geometry = (
+            (start.lon, start.lat),
+            (start.lon + 0.02 * direction, start.lat),
+            (mid_lon, mid_lat + 0.02 * direction),
+            (end.lon - 0.02 * direction, end.lat),
+            (end.lon, end.lat),
+        )
+        return (
+            RoutedPath(
+                distance_m=20_500,
+                duration_ms=1,
+                ascend_m=None,
+                descend_m=None,
+                geometry=geometry,
+                snapped_points=((start.lon, start.lat), (end.lon, end.lat)),
+                details={
+                    "edge_id": tuple(
+                        PathDetailSegment(
+                            from_index=index,
+                            to_index=index + 1,
+                            value=edge_id,
+                        )
+                        for index, edge_id in enumerate((1, 2, 1, 2))
+                    )
+                },
+            ),
+        )
+
+
 def generation_request(
     *, target: float = 41_000, tolerance: float = 2_000, candidates: int = 3
 ) -> RouteGenerationRequest:
@@ -299,6 +508,21 @@ async def test_baseline_above_target_is_infeasible_with_useful_baseline() -> Non
     assert result.candidates == ()
     assert result.search.warnings == ("mandatory_route_exceeds_target_tolerance",)
     assert backend.round_trip_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_infeasible_low_overlap_request_keeps_metrics_unknown() -> None:
+    request = generation_request().model_copy(
+        update={"path_selection_mode": "low_overlap"}
+    )
+    result = await RouteGenerationService(
+        FakeRoutingBackend(baseline_distance_m=44_000)
+    ).generate(request)
+    assert result.search.status == "infeasible"
+    assert result.search.low_overlap_requested
+    assert result.search.low_overlap_request_budget == 48
+    assert result.search.pre_low_overlap_repeated_share is None
+    assert result.search.best_low_overlap_repeated_share is None
 
 
 @pytest.mark.asyncio
@@ -347,6 +571,10 @@ async def test_generated_input_count_excludes_internal_waypoints() -> None:
     assert generated.route.snapped_points is not None
     assert len(generated.route.snapped_points) > request.required_point_count
     assert generated.route.summary.input_point_count == 2
+    assert generated.construction == "round_trip_detour"
+    assert generated.routing_points[0] == request.supplied_required_points[0]
+    assert generated.routing_points[-1] != generated.routing_points[0]
+    assert all(point in generated.routing_points for point in generated.optional_points)
 
 
 @pytest.mark.asyncio
@@ -447,12 +675,30 @@ async def test_fixed_inputs_are_byte_deterministic() -> None:
 
 
 @pytest.mark.asyncio
+async def test_explicit_shortest_mode_matches_omitted_default() -> None:
+    default = generation_request()
+    explicit = default.model_copy(update={"path_selection_mode": "shortest"})
+    first = await RouteGenerationService(
+        FakeRoutingBackend(), max_evaluations=6
+    ).generate(default)
+    second = await RouteGenerationService(
+        FakeRoutingBackend(), max_evaluations=6
+    ).generate(explicit)
+    assert first.model_dump_json() == second.model_dump_json()
+
+
+@pytest.mark.asyncio
 async def test_fixed_mode_does_not_evaluate_alternative_orders() -> None:
     result = await RouteGenerationService(
         FakeRoutingBackend(), max_evaluations=2
     ).generate(generation_request())
     assert result.search.evaluated_order_count == 0
     assert result.candidates[0].required_point_order[0].original_index == 0
+    assert not result.search.low_overlap_requested
+    assert result.search.pre_low_overlap_repeated_share is None
+    assert result.search.best_low_overlap_repeated_share is None
+    assert result.search.pre_low_overlap_backtrack_share is None
+    assert result.search.best_low_overlap_backtrack_share is None
 
 
 @pytest.mark.asyncio
@@ -564,3 +810,189 @@ async def test_malformed_snap_order_counters_are_mutually_exclusive() -> None:
     result = await RouteGenerationService(backend).generate(optimized_order_request())
     assert result.search.successful_order_count == 0
     assert result.search.evaluated_order_count == result.search.rejected_order_count
+
+
+@pytest.mark.asyncio
+async def test_low_overlap_refines_exact_routing_points_after_standard_search() -> None:
+    backend = LowOverlapRoutingBackend()
+    request = generation_request(candidates=3).model_copy(
+        update={"path_selection_mode": "low_overlap"}
+    )
+    result = await RouteGenerationService(backend).generate(request)
+
+    assert result.candidates[0].construction == "alternative_leg_beam"
+    assert (
+        result.candidates[0].required_point_order
+        == result.candidates[-1].required_point_order
+    )
+    assert any(
+        candidate.construction == "direct_order" for candidate in result.candidates
+    )
+    expected_points = request.supplied_required_points
+    assert all(
+        candidate.routing_points == expected_points for candidate in result.candidates
+    )
+    assert backend.alternative_legs == [
+        (expected_points[0], expected_points[1]),
+        (expected_points[1], expected_points[0]),
+    ]
+    assert result.search.evaluated_candidate_count == 0
+    assert result.search.alternative_leg_request_count == 2
+    assert result.search.alternative_path_count == 4
+    assert result.search.low_overlap_refined_source_count == 1
+    assert result.search.low_overlap_candidate_count > 0
+    assert result.search.pre_low_overlap_repeated_share == pytest.approx(0.5)
+    assert result.search.best_low_overlap_repeated_share == 0
+    assert result.search.low_overlap_requested
+
+
+@pytest.mark.asyncio
+async def test_expected_leg_failure_keeps_standard_candidate() -> None:
+    backend = LowOverlapRoutingBackend(
+        alternative_error=RoutingPointError("leg failed")
+    )
+    request = generation_request().model_copy(
+        update={"path_selection_mode": "low_overlap"}
+    )
+    result = await RouteGenerationService(backend).generate(request)
+    assert result.candidates
+    assert all(
+        candidate.construction == "direct_order" for candidate in result.candidates
+    )
+    assert "low_overlap_no_complete_candidate" in result.search.warnings
+    assert result.search.pre_low_overlap_repeated_share is not None
+    assert (
+        result.search.best_low_overlap_repeated_share
+        == result.search.pre_low_overlap_repeated_share
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [RoutingTimeoutError("timed out"), RoutingUnavailableError("offline")],
+)
+async def test_global_leg_failure_still_propagates(error: Exception) -> None:
+    backend = LowOverlapRoutingBackend(alternative_error=error)
+    request = generation_request().model_copy(
+        update={"path_selection_mode": "low_overlap"}
+    )
+    with pytest.raises(type(error)):
+        await RouteGenerationService(backend).generate(request)
+
+
+@pytest.mark.asyncio
+async def test_low_overlap_leg_budget_is_separate_and_strict() -> None:
+    backend = LowOverlapRoutingBackend()
+    request = generation_request().model_copy(
+        update={"path_selection_mode": "low_overlap"}
+    )
+    result = await RouteGenerationService(
+        backend,
+        low_overlap_settings=LowOverlapSettings(max_leg_requests=1),
+    ).generate(request)
+    assert backend.alternative_route_calls == 1
+    assert result.search.evaluated_candidate_count == 0
+    assert result.search.alternative_leg_request_count == 1
+    assert result.search.low_overlap_budget_exhausted
+    assert "low_overlap_leg_budget_exhausted" in result.search.warnings
+
+
+@pytest.mark.asyncio
+async def test_low_overlap_generation_serialization_is_deterministic() -> None:
+    request = generation_request(candidates=3).model_copy(
+        update={"path_selection_mode": "low_overlap"}
+    )
+    first = await RouteGenerationService(LowOverlapRoutingBackend()).generate(request)
+    second = await RouteGenerationService(LowOverlapRoutingBackend()).generate(request)
+    assert first.model_dump_json() == second.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_repetition_only_tradeoff_does_not_become_recommended() -> None:
+    request = generation_request(candidates=3).model_copy(
+        update={"path_selection_mode": "low_overlap"}
+    )
+    result = await RouteGenerationService(TradeoffLowOverlapRoutingBackend()).generate(
+        request
+    )
+    standard = result.candidates[0]
+    refined = next(
+        candidate
+        for candidate in result.candidates
+        if candidate.construction == "alternative_leg_beam"
+    )
+    assert standard.construction == "direct_order"
+    assert (
+        refined.route.analysis.repetition.repeated_distance.share
+        < standard.route.analysis.repetition.repeated_distance.share
+    )
+    assert (
+        refined.route.analysis.immediate_backtrack.share
+        > standard.route.analysis.immediate_backtrack.share
+    )
+    assert "low_overlap_no_natural_improvement" in result.search.warnings
+    assert "low_overlap_no_repetition_improvement" not in result.search.warnings
+
+
+@pytest.mark.asyncio
+async def test_backtracking_only_tradeoff_is_retained_but_not_recommended() -> None:
+    request = generation_request(candidates=3).model_copy(
+        update={"path_selection_mode": "low_overlap"}
+    )
+    result = await RouteGenerationService(BacktrackingOnlyTradeoffBackend()).generate(
+        request
+    )
+    standard = result.candidates[0]
+    refined = next(
+        candidate
+        for candidate in result.candidates
+        if candidate.construction == "alternative_leg_beam"
+    )
+    assert standard.construction == "direct_order"
+    assert (
+        refined.route.analysis.immediate_backtrack.share
+        < standard.route.analysis.immediate_backtrack.share
+    )
+    assert (
+        refined.route.analysis.repetition.repeated_distance.share
+        > standard.route.analysis.repetition.repeated_distance.share
+    )
+    assert "low_overlap_no_natural_improvement" in result.search.warnings
+    assert "low_overlap_no_repetition_improvement" in result.search.warnings
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("candidate_count", [1, 2, 3, 5])
+async def test_low_overlap_retention_keeps_only_one_standard_control(
+    candidate_count: int,
+) -> None:
+    request = generation_request(candidates=candidate_count).model_copy(
+        update={"path_selection_mode": "low_overlap"}
+    )
+    result = await RouteGenerationService(LowOverlapRoutingBackend()).generate(request)
+    assert result.candidates[0].construction == "alternative_leg_beam"
+    controls = [
+        candidate
+        for candidate in result.candidates
+        if candidate.construction != "alternative_leg_beam"
+    ]
+    assert len(controls) == (0 if candidate_count == 1 else 1)
+    assert len(result.candidates) <= candidate_count
+    assert "candidate_diversity_relaxed" not in result.search.warnings
+
+
+@pytest.mark.asyncio
+async def test_low_overlap_without_standard_candidate_keeps_metrics_unknown() -> None:
+    request = generation_request().model_copy(
+        update={"path_selection_mode": "low_overlap"}
+    )
+    result = await RouteGenerationService(
+        FakeRoutingBackend(fail_proposals=True)
+    ).generate(request)
+    assert result.candidates == ()
+    assert result.search.low_overlap_requested
+    assert result.search.pre_low_overlap_repeated_share is None
+    assert result.search.best_low_overlap_repeated_share is None
+    assert result.search.pre_low_overlap_backtrack_share is None
+    assert result.search.best_low_overlap_backtrack_share is None

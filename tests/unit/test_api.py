@@ -172,6 +172,12 @@ async def test_successful_generation_json(client: httpx.AsyncClient) -> None:
     assert body["baseline"]["summary"]["distance_m"] == 2500.5
     assert len(body["candidates"]) == 1
     assert body["search"]["status"] == "within_tolerance"
+    assert body["candidates"][0]["construction"] == "alternative_leg_beam"
+    assert len(body["candidates"][0]["routing_points"]) == 2
+    assert body["search"]["alternative_leg_request_count"] == 0
+    assert body["search"]["low_overlap_requested"] is False
+    assert body["search"]["pre_low_overlap_repeated_share"] is None
+    assert body["search"]["best_low_overlap_repeated_share"] is None
     assert [
         visit["original_index"]
         for visit in body["candidates"][0]["required_point_order"]
@@ -208,6 +214,30 @@ async def test_invalid_generation_order_mode_is_structured_validation(
 ) -> None:
     body = generation_request_body()
     body["point_order_mode"] = "fastest"
+    response = await client.post("/v1/routes/generate", json=body)
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_request"
+
+
+@pytest.mark.asyncio
+async def test_generation_request_accepts_low_overlap_mode(
+    client: httpx.AsyncClient,
+    fake_generation_service: FakeGenerationService,
+) -> None:
+    body = generation_request_body()
+    body["path_selection_mode"] = "low_overlap"
+    response = await client.post("/v1/routes/generate", json=body)
+    assert response.status_code == 200
+    assert fake_generation_service.last_request is not None
+    assert fake_generation_service.last_request.path_selection_mode == "low_overlap"
+
+
+@pytest.mark.asyncio
+async def test_invalid_path_selection_mode_is_structured_validation(
+    client: httpx.AsyncClient,
+) -> None:
+    body = generation_request_body()
+    body["path_selection_mode"] = "magic"
     response = await client.post("/v1/routes/generate", json=body)
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "invalid_request"

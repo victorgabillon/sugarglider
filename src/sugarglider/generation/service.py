@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 from sugarglider.analysis.route import haversine_distance_m
 from sugarglider.domain.generation import (
+    CandidateConstruction,
     GeneratedCandidate,
     GenerationStatus,
     RequiredPointVisit,
@@ -17,13 +18,23 @@ from sugarglider.generation.geometry import (
     point_sequence_key,
     sample_optional_points,
 )
+from sugarglider.generation.low_overlap import (
+    LowOverlapBeamSearch,
+    LowOverlapSettings,
+)
 from sugarglider.generation.ordering import (
     MAX_ORDER_PROPOSALS,
     PointOrder,
     generate_order_proposals,
     ordered_closed_points,
 )
-from sugarglider.generation.scoring import rank_candidates, score_route
+from sugarglider.generation.scoring import (
+    NATURAL_IMPROVEMENT_EPSILON,
+    is_natural_improvement,
+    rank_candidates,
+    rank_low_overlap_candidates,
+    score_route,
+)
 from sugarglider.generation.signatures import (
     candidate_signature,
     select_diverse_candidates,
@@ -100,6 +111,27 @@ class _DetourDescriptor:
     proposal_distance_m: float
 
 
+@dataclass(frozen=True)
+class _LowOverlapSummary:
+    alternative_leg_request_count: int = 0
+    alternative_path_count: int = 0
+    refined_source_count: int = 0
+    candidate_count: int = 0
+    request_budget: int = 0
+    budget_exhausted: bool = False
+    pre_repeated_share: float | None = None
+    best_repeated_share: float | None = None
+    pre_backtrack_share: float | None = None
+    best_backtrack_share: float | None = None
+
+
+@dataclass(frozen=True)
+class _RefinedCandidate:
+    candidate: GeneratedCandidate
+    source: GeneratedCandidate
+    natural_improvement: bool
+
+
 class RouteGenerationService:
     """Coordinate a small sequential search over GraphHopper round-trip proposals."""
 
@@ -110,6 +142,7 @@ class RouteGenerationService:
         *,
         max_evaluations: int = 48,
         max_optional_snap_displacement_m: float = 300.0,
+        low_overlap_settings: LowOverlapSettings | None = None,
     ) -> None:
         if max_evaluations < 1:
             raise ValueError("generation search budget must be positive")
@@ -119,6 +152,7 @@ class RouteGenerationService:
         self._result_factory = result_factory or RouteResultFactory()
         self._max_evaluations = max_evaluations
         self._max_optional_snap_displacement_m = max_optional_snap_displacement_m
+        self._low_overlap_settings = low_overlap_settings or LowOverlapSettings()
 
     async def generate(self, request: RouteGenerationRequest) -> RouteGenerationResult:
         """Generate distinct candidates while preserving every mandatory point."""
@@ -169,6 +203,13 @@ class RouteGenerationService:
                     state,
                     status="infeasible",
                     warnings=("mandatory_route_exceeds_target_tolerance",),
+                    low_overlap=(
+                        _LowOverlapSummary(
+                            request_budget=(self._low_overlap_settings.max_leg_requests)
+                        )
+                        if request.path_selection_mode == "low_overlap"
+                        else None
+                    ),
                 ),
             )
 
@@ -185,6 +226,8 @@ class RouteGenerationService:
                     source.route,
                     (),
                     source.required_point_order,
+                    source.required_points[:-1],
+                    "direct_order",
                 )
                 drafts.append(order_candidate)
                 signatures.add(order_candidate.signature)
@@ -319,14 +362,31 @@ class RouteGenerationService:
                 >= baseline.analysis.immediate_backtrack.share
             ):
                 warnings.add("order_optimization_no_backtrack_improvement")
+        final_candidates = diversity.candidates
+        low_overlap_summary = _LowOverlapSummary()
+        if request.path_selection_mode == "low_overlap" and final_candidates:
+            (
+                final_candidates,
+                low_overlap_summary,
+                low_overlap_warnings,
+            ) = await self._refine_low_overlap(
+                request=request,
+                standard_candidates=final_candidates,
+            )
+            warnings.update(low_overlap_warnings)
+        elif request.path_selection_mode == "low_overlap":
+            low_overlap_summary = _LowOverlapSummary(
+                request_budget=self._low_overlap_settings.max_leg_requests
+            )
+            warnings.add("low_overlap_no_complete_candidate")
         status: GenerationStatus = (
             "within_tolerance"
-            if any(candidate.within_tolerance for candidate in diversity.candidates)
+            if any(candidate.within_tolerance for candidate in final_candidates)
             else "best_effort"
         )
         return RouteGenerationResult(
             baseline=baseline,
-            candidates=diversity.candidates,
+            candidates=final_candidates,
             search=self._summary(
                 request,
                 baseline,
@@ -334,6 +394,7 @@ class RouteGenerationService:
                 state,
                 status=status,
                 warnings=tuple(sorted(warnings)),
+                low_overlap=low_overlap_summary,
             ),
         )
 
@@ -403,6 +464,8 @@ class RouteGenerationService:
                     source.route,
                     (),
                     source.required_point_order,
+                    source.required_points[:-1],
+                    "direct_order",
                 )
                 for source in sources
             )
@@ -559,7 +622,14 @@ class RouteGenerationService:
         )
         if not cached:
             state.successful += 1
-        return self._candidate(request, route, optional_points, required_point_order)
+        return self._candidate(
+            request,
+            route,
+            optional_points,
+            required_point_order,
+            points[:-1],
+            "round_trip_detour",
+        )
 
     @staticmethod
     def _candidate(
@@ -567,6 +637,8 @@ class RouteGenerationService:
         route: RouteResult,
         optional_points: tuple[Coordinate, ...],
         required_point_order: tuple[RequiredPointVisit, ...],
+        routing_points: tuple[Coordinate, ...],
+        construction: CandidateConstruction,
     ) -> GeneratedCandidate:
         target_error = abs(route.summary.distance_m - request.target_distance_m)
         return GeneratedCandidate(
@@ -574,11 +646,168 @@ class RouteGenerationService:
             route=route,
             optional_points=optional_points,
             required_point_order=required_point_order,
+            routing_points=routing_points,
+            construction=construction,
             target_error_m=target_error,
             within_tolerance=target_error <= request.tolerance_m,
             score=score_route(route, request.target_distance_m),
             signature=candidate_signature(route),
         )
+
+    async def _refine_low_overlap(
+        self,
+        *,
+        request: RouteGenerationRequest,
+        standard_candidates: tuple[GeneratedCandidate, ...],
+    ) -> tuple[
+        tuple[GeneratedCandidate, ...],
+        _LowOverlapSummary,
+        tuple[str, ...],
+    ]:
+        """Refine selected standard candidates using one cached leg-search budget."""
+        sources = tuple(
+            sorted(
+                standard_candidates,
+                key=lambda candidate: (
+                    0 if candidate.within_tolerance else 1,
+                    candidate.route.analysis.repetition.repeated_distance.share,
+                    candidate.route.analysis.immediate_backtrack.share,
+                    candidate.target_error_m,
+                    candidate.signature,
+                ),
+            )[: self._low_overlap_settings.source_count]
+        )
+        pre = sources[0]
+        search = LowOverlapBeamSearch(
+            self._backend,
+            self._result_factory,
+            self._low_overlap_settings,
+        )
+        refined_entries: list[_RefinedCandidate] = []
+        refined_signatures: set[str] = {
+            candidate.signature for candidate in standard_candidates
+        }
+        warnings: set[str] = set()
+        refined_source_count = 0
+        for source in sources:
+            try:
+                result = await search.assemble(
+                    name=request.name,
+                    routing_points=source.routing_points,
+                    profile=request.profile,
+                    target_distance_m=request.target_distance_m,
+                    input_point_count=request.required_point_count,
+                )
+            except RoutingPointError:
+                continue
+            warnings.update(result.warnings)
+            if result.states:
+                refined_source_count += 1
+            for state in result.states:
+                route = self._result_factory.create(
+                    name=request.name,
+                    path=state.composed_path,
+                    input_point_count=request.required_point_count,
+                )
+                candidate = self._candidate(
+                    request,
+                    route,
+                    source.optional_points,
+                    source.required_point_order,
+                    source.routing_points,
+                    "alternative_leg_beam",
+                )
+                if candidate.signature in refined_signatures:
+                    continue
+                refined_signatures.add(candidate.signature)
+                refined_entries.append(
+                    _RefinedCandidate(
+                        candidate=candidate,
+                        source=source,
+                        natural_improvement=is_natural_improvement(candidate, source),
+                    )
+                )
+
+        if search.budget_exhausted:
+            warnings.add("low_overlap_leg_budget_exhausted")
+        refined = tuple(entry.candidate for entry in refined_entries)
+        best_refined = rank_low_overlap_candidates(refined)[0] if refined else None
+        if best_refined is None:
+            warnings.add("low_overlap_no_complete_candidate")
+            best_repeated_share = pre.route.analysis.repetition.repeated_distance.share
+            best_backtrack_share = pre.route.analysis.immediate_backtrack.share
+        else:
+            best_repeated_share = (
+                best_refined.route.analysis.repetition.repeated_distance.share
+            )
+            best_backtrack_share = best_refined.route.analysis.immediate_backtrack.share
+        if refined_entries and not any(
+            entry.natural_improvement for entry in refined_entries
+        ):
+            warnings.add("low_overlap_no_natural_improvement")
+        if refined_entries and not any(
+            entry.candidate.route.analysis.repetition.repeated_distance.share
+            < entry.source.route.analysis.repetition.repeated_distance.share
+            - NATURAL_IMPROVEMENT_EPSILON
+            for entry in refined_entries
+        ):
+            warnings.add("low_overlap_no_repetition_improvement")
+
+        natural_within_tolerance = tuple(
+            entry.candidate
+            for entry in refined_entries
+            if entry.natural_improvement and entry.candidate.within_tolerance
+        )
+        recommended = (
+            rank_low_overlap_candidates(natural_within_tolerance)[0]
+            if natural_within_tolerance
+            else pre
+        )
+
+        combined = tuple((*standard_candidates, *refined))
+        ranked = rank_low_overlap_candidates(combined)
+        diversity = select_diverse_candidates(ranked, request.candidate_count)
+        selected: list[GeneratedCandidate] = []
+        selected_signatures: set[str] = set()
+
+        def retain(candidate: GeneratedCandidate | None) -> None:
+            if (
+                candidate is not None
+                and len(selected) < request.candidate_count
+                and candidate.signature not in selected_signatures
+            ):
+                selected.append(candidate)
+                selected_signatures.add(candidate.signature)
+
+        retain(recommended)
+        if request.candidate_count >= 2:
+            retain(pre)
+        for candidate in diversity.candidates:
+            retain(candidate)
+        for candidate in ranked:
+            retain(candidate)
+        selected = [
+            candidate.model_copy(update={"rank": rank})
+            for rank, candidate in enumerate(selected, start=1)
+        ]
+        if diversity.low_edge_coverage:
+            warnings.add("edge_id_coverage_too_low_for_diversity")
+        if diversity.relaxed:
+            warnings.add("candidate_diversity_relaxed")
+
+        summary = _LowOverlapSummary(
+            alternative_leg_request_count=search.request_count,
+            alternative_path_count=search.alternative_path_count,
+            refined_source_count=refined_source_count,
+            candidate_count=len(refined_entries),
+            request_budget=self._low_overlap_settings.max_leg_requests,
+            budget_exhausted=search.budget_exhausted,
+            pre_repeated_share=(pre.route.analysis.repetition.repeated_distance.share),
+            best_repeated_share=best_repeated_share,
+            pre_backtrack_share=pre.route.analysis.immediate_backtrack.share,
+            best_backtrack_share=best_backtrack_share,
+        )
+        return tuple(selected), summary, tuple(sorted(warnings))
 
     @staticmethod
     def _unique_insertion_anchors(
@@ -625,12 +854,15 @@ class RouteGenerationService:
         *,
         status: GenerationStatus,
         warnings: tuple[str, ...],
+        low_overlap: _LowOverlapSummary | None = None,
     ) -> SearchSummary:
+        low_overlap_metrics = low_overlap or _LowOverlapSummary()
         return SearchSummary(
             status=status,
             target_distance_m=request.target_distance_m,
             tolerance_m=request.tolerance_m,
             baseline_distance_m=baseline.summary.distance_m,
+            best_order_distance_m=best_order.summary.distance_m,
             evaluated_candidate_count=state.evaluated,
             successful_candidate_count=state.successful,
             rejected_candidate_count=state.rejected,
@@ -646,6 +878,19 @@ class RouteGenerationService:
             ),
             fixed_order_backtrack_share=baseline.analysis.immediate_backtrack.share,
             best_order_backtrack_share=(best_order.analysis.immediate_backtrack.share),
+            alternative_leg_request_count=(
+                low_overlap_metrics.alternative_leg_request_count
+            ),
+            alternative_path_count=low_overlap_metrics.alternative_path_count,
+            low_overlap_refined_source_count=(low_overlap_metrics.refined_source_count),
+            low_overlap_candidate_count=low_overlap_metrics.candidate_count,
+            low_overlap_request_budget=low_overlap_metrics.request_budget,
+            low_overlap_budget_exhausted=low_overlap_metrics.budget_exhausted,
+            pre_low_overlap_repeated_share=low_overlap_metrics.pre_repeated_share,
+            best_low_overlap_repeated_share=low_overlap_metrics.best_repeated_share,
+            pre_low_overlap_backtrack_share=low_overlap_metrics.pre_backtrack_share,
+            best_low_overlap_backtrack_share=low_overlap_metrics.best_backtrack_share,
+            low_overlap_requested=request.path_selection_mode == "low_overlap",
             search_budget=state.search_budget,
             search_budget_exhausted=state.budget_exhausted,
             seed=request.seed,

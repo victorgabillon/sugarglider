@@ -2,6 +2,7 @@
 
 import logging
 from collections.abc import Mapping, Sequence
+from hashlib import sha256
 from typing import cast
 
 import httpx
@@ -110,36 +111,51 @@ class GraphHopperClient:
         }
         if pass_through:
             payload["pass_through"] = True
-        while True:
-            try:
-                response = await self._request("POST", "/route", json=payload)
-                break
-            except RoutingPointError as exc:
-                # Older or differently imported graphs can advertise imperfectly.
-                # Remove only the named unsupported value, retaining edge_id and
-                # every other useful detail whenever possible.
-                message = str(exc).lower()
-                if not any(term in message for term in ("detail", "encoded value")):
-                    raise
-                unsupported = next(
-                    (
-                        detail
-                        for detail in requested_details
-                        if detail.lower() in message
-                    ),
-                    None,
-                )
-                if unsupported is not None:
-                    requested_details.remove(unsupported)
-                elif requested_details != list(BUILTIN_DETAILS):
-                    requested_details = list(BUILTIN_DETAILS)
-                elif requested_details:
-                    requested_details = []
-                else:
-                    raise
-                payload["details"] = requested_details
-                self._supported_details = tuple(requested_details)
+        response = await self._request_with_detail_fallback(payload, requested_details)
         return self._parse_route(response, expected_snapped_point_count=len(points))
+
+    async def alternative_routes(
+        self,
+        start: Coordinate,
+        end: Coordinate,
+        profile: str = "hike",
+        *,
+        max_paths: int = 3,
+        max_weight_factor: float = 1.6,
+        max_share_factor: float = 0.5,
+    ) -> tuple[RoutedPath, ...]:
+        """Return distinct GraphHopper alternatives for exactly one routed leg."""
+        requested_details = list(await self._details_for_route())
+        payload: JsonObject = {
+            "points": [[start.lon, start.lat], [end.lon, end.lat]],
+            "profile": profile,
+            "algorithm": "alternative_route",
+            "alternative_route.max_paths": max_paths,
+            "alternative_route.max_weight_factor": max_weight_factor,
+            "alternative_route.max_share_factor": max_share_factor,
+            "points_encoded": False,
+            "instructions": False,
+            "calc_points": True,
+            "elevation": False,
+            "snap_preventions": ["motorway", "trunk", "ferry"],
+            "details": requested_details,
+        }
+        response = await self._request_with_detail_fallback(payload, requested_details)
+        alternatives = self._parse_routes(
+            response,
+            expected_snapped_point_count=2,
+            require_snapped_points=True,
+        )
+        distinct: list[RoutedPath] = []
+        signatures: set[str] = set()
+        for path in alternatives:
+            signature = self._path_signature(path)
+            if signature not in signatures:
+                signatures.add(signature)
+                distinct.append(path)
+        if not distinct:
+            raise RoutingUpstreamError("GraphHopper returned no distinct alternatives")
+        return tuple(distinct)
 
     async def round_trip(
         self,
@@ -174,6 +190,36 @@ class GraphHopperClient:
         if self._supported_details is None:
             self._supported_details = REQUESTED_DETAILS
         return self._supported_details
+
+    async def _request_with_detail_fallback(
+        self, payload: JsonObject, requested_details: list[str]
+    ) -> httpx.Response:
+        """Retry the complete request after removing unsupported path details."""
+        while True:
+            try:
+                return await self._request("POST", "/route", json=payload)
+            except RoutingPointError as exc:
+                message = str(exc).lower()
+                if not any(term in message for term in ("detail", "encoded value")):
+                    raise
+                unsupported = next(
+                    (
+                        detail
+                        for detail in requested_details
+                        if detail.lower() in message
+                    ),
+                    None,
+                )
+                if unsupported is not None:
+                    requested_details.remove(unsupported)
+                elif requested_details != list(BUILTIN_DETAILS):
+                    requested_details[:] = BUILTIN_DETAILS
+                elif requested_details:
+                    requested_details.clear()
+                else:
+                    raise
+                payload["details"] = requested_details.copy()
+                self._supported_details = tuple(requested_details)
 
     def _cache_supported_details(self, payload: JsonObject) -> None:
         encoded_values = payload.get("encoded_values")
@@ -240,7 +286,39 @@ class GraphHopperClient:
         paths = payload.get("paths")
         if not isinstance(paths, list) or not paths:
             raise RoutingUpstreamError("GraphHopper response contained no paths")
-        path = paths[0]
+        return self._parse_path(
+            paths[0],
+            expected_snapped_point_count=expected_snapped_point_count,
+            require_snapped_points=False,
+        )
+
+    def _parse_routes(
+        self,
+        response: httpx.Response,
+        *,
+        expected_snapped_point_count: int | None,
+        require_snapped_points: bool,
+    ) -> tuple[RoutedPath, ...]:
+        payload = self._json_object(response)
+        paths = payload.get("paths")
+        if not isinstance(paths, list) or not paths:
+            raise RoutingUpstreamError("GraphHopper response contained no paths")
+        return tuple(
+            self._parse_path(
+                path,
+                expected_snapped_point_count=expected_snapped_point_count,
+                require_snapped_points=require_snapped_points,
+            )
+            for path in paths
+        )
+
+    def _parse_path(
+        self,
+        path: object,
+        *,
+        expected_snapped_point_count: int | None,
+        require_snapped_points: bool,
+    ) -> RoutedPath:
         if not isinstance(path, Mapping):
             raise RoutingUpstreamError("GraphHopper path was malformed")
 
@@ -257,6 +335,8 @@ class GraphHopperClient:
             if snapped_object is not None
             else None
         )
+        if require_snapped_points and snapped is None:
+            raise RoutingUpstreamError("GraphHopper path omitted snapped waypoints")
         if (
             snapped is not None
             and expected_snapped_point_count is not None
@@ -275,6 +355,22 @@ class GraphHopperClient:
             snapped_points=snapped,
             details=self._parse_details(path.get("details"), len(geometry)),
         )
+
+    @staticmethod
+    def _path_signature(path: RoutedPath) -> str:
+        edge_segments = path.details.get("edge_id", ())
+        edge_values = tuple(
+            segment.value
+            for segment in edge_segments
+            if isinstance(segment.value, int) and not isinstance(segment.value, bool)
+        )
+        if edge_values:
+            source = "edges:" + ",".join(str(value) for value in edge_values)
+        else:
+            source = "geometry:" + ";".join(
+                f"{lon:.6f},{lat:.6f}" for lon, lat in path.geometry
+            )
+        return sha256(source.encode()).hexdigest()
 
     @staticmethod
     def _json_object(response: httpx.Response) -> JsonObject:
