@@ -5,10 +5,11 @@ import pytest
 from sugarglider.analysis.route import RouteAnalyzer
 from sugarglider.domain.generation import (
     GeneratedCandidate,
+    RequiredPointVisit,
     RouteGenerationResult,
     SearchSummary,
 )
-from sugarglider.domain.models import RouteResult, RouteSummary
+from sugarglider.domain.models import Coordinate, RouteResult, RouteSummary
 from sugarglider.generation.scoring import score_route
 
 
@@ -39,6 +40,16 @@ def generation_result(route_result: RouteResult) -> RouteGenerationResult:
         rank=1,
         route=route_result,
         optional_points=(),
+        required_point_order=(
+            RequiredPointVisit(
+                original_index=0,
+                coordinate=Coordinate(lat=48.871389, lon=2.096667),
+            ),
+            RequiredPointVisit(
+                original_index=1,
+                coordinate=Coordinate(lat=48.871454, lon=2.124421),
+            ),
+        ),
         target_error_m=499.5,
         within_tolerance=True,
         score=score_route(route_result, 3_000),
@@ -56,6 +67,13 @@ def generation_result(route_result: RouteResult) -> RouteGenerationResult:
             successful_candidate_count=0,
             rejected_candidate_count=0,
             round_trip_proposal_count=0,
+            evaluated_order_count=0,
+            successful_order_count=0,
+            rejected_order_count=0,
+            fixed_order_repeated_share=0,
+            best_order_repeated_share=0,
+            fixed_order_backtrack_share=0,
+            best_order_backtrack_share=0,
             search_budget=48,
             search_budget_exhausted=False,
             seed=42,

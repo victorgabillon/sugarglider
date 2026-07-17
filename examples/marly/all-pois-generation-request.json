@@ -1,0 +1,127 @@
+{
+  "name": "Marly 41 km — all original GPX POIs",
+  "points": [
+    {
+      "lat": 48.867778,
+      "lon": 2.051111,
+      "name": "Gare de Saint-Nom-la-Bretèche"
+    },
+    {
+      "lat": 48.8715,
+      "lon": 2.043,
+      "name": "Croix Saint-Michel"
+    },
+    {
+      "lat": 48.887496,
+      "lon": 2.034384,
+      "name": "Abbaye de Joyenval"
+    },
+    {
+      "lat": 48.89081,
+      "lon": 2.02153,
+      "name": "Entrée du Désert de Retz"
+    },
+    {
+      "lat": 48.889861,
+      "lon": 2.044635,
+      "name": "Étoile de Montaigu"
+    },
+    {
+      "lat": 48.8848,
+      "lon": 2.0402,
+      "name": "Étoile des Chasseurs"
+    },
+    {
+      "lat": 48.8562,
+      "lon": 2.083,
+      "name": "Étoile du Compas"
+    },
+    {
+      "lat": 48.8512,
+      "lon": 2.0915,
+      "name": "Lisière du Trou d'Enfer — rester hors domaine"
+    },
+    {
+      "lat": 48.864,
+      "lon": 2.074,
+      "name": "Étoile Douteuse"
+    },
+    {
+      "lat": 48.861,
+      "lon": 2.071,
+      "name": "Batterie de l'Auberderie"
+    },
+    {
+      "lat": 48.871389,
+      "lon": 2.096667,
+      "name": "Gare de Marly-le-Roi"
+    },
+    {
+      "lat": 48.8667,
+      "lon": 2.0954,
+      "name": "Église Saint-Vigor / Vieux Marly"
+    },
+    {
+      "lat": 48.862484,
+      "lon": 2.099204,
+      "name": "Abreuvoir de Marly"
+    },
+    {
+      "lat": 48.863976,
+      "lon": 2.103777,
+      "name": "Grille du Cœur-Volant"
+    },
+    {
+      "lat": 48.871454,
+      "lon": 2.124421,
+      "name": "Machine de Marly"
+    },
+    {
+      "lat": 48.8644,
+      "lon": 2.1135,
+      "name": "Tour du Levant"
+    },
+    {
+      "lat": 48.86156,
+      "lon": 2.10833,
+      "name": "Aqueduc de Louveciennes — milieu"
+    },
+    {
+      "lat": 48.8587,
+      "lon": 2.104,
+      "name": "Tour du Jongleur"
+    },
+    {
+      "lat": 48.854245,
+      "lon": 2.107372,
+      "name": "Entrée sud du Domaine"
+    },
+    {
+      "lat": 48.8588,
+      "lon": 2.1017,
+      "name": "Grand Miroir"
+    },
+    {
+      "lat": 48.862849,
+      "lon": 2.099448,
+      "name": "Emplacement du château de Marly"
+    },
+    {
+      "lat": 48.8597,
+      "lon": 2.095,
+      "name": "Tapis Vert haut"
+    },
+    {
+      "lat": 48.8698,
+      "lon": 2.0745,
+      "name": "Batterie du Champ de Mars"
+    }
+  ],
+  "target_distance_m": 41000,
+  "tolerance_m": 2000,
+  "candidate_count": 3,
+  "seed": 42,
+  "close_loop": true,
+  "point_order_mode": "optimize_loop",
+  "profile": "hike"
+}

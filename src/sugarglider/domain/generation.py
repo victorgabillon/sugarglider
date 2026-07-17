@@ -7,22 +7,26 @@ from pydantic import Field, PrivateAttr, model_validator
 from sugarglider.domain.models import Coordinate, ImmutableModel, RouteResult
 
 GenerationStatus = Literal["within_tolerance", "best_effort", "infeasible"]
+PointOrderMode = Literal["fixed", "optimize_loop"]
 NonNegativeFloat = Annotated[float, Field(ge=0)]
 NonNegativeInt = Annotated[int, Field(ge=0)]
+Share = Annotated[float, Field(ge=0, le=1)]
 
 
 class RouteGenerationRequest(ImmutableModel):
     """Ordered mandatory anchors and bounded deterministic search parameters."""
 
     name: str = "Sugarglider generated route"
-    points: Annotated[list[Coordinate], Field(min_length=2, max_length=20)]
+    points: Annotated[list[Coordinate], Field(min_length=2, max_length=30)]
     target_distance_m: Annotated[float, Field(ge=1_000, le=200_000)]
     tolerance_m: Annotated[float, Field(ge=100, le=10_000)] = 2_000
     candidate_count: Annotated[int, Field(ge=1, le=5)] = 3
     seed: int = 0
     close_loop: bool = True
     profile: Literal["hike"] = "hike"
+    point_order_mode: PointOrderMode = "fixed"
     _required_point_count: int = PrivateAttr()
+    _supplied_points: tuple[Coordinate, ...] = PrivateAttr()
 
     @model_validator(mode="after")
     def validate_and_close_required_points(self) -> Self:
@@ -30,6 +34,7 @@ class RouteGenerationRequest(ImmutableModel):
         if not self.close_loop:
             raise ValueError("PR3 route generation requires close_loop=true")
         self._required_point_count = len(self.points)
+        self._supplied_points = tuple(self.points)
         for previous, current in zip(self.points, self.points[1:], strict=False):
             if (previous.lat, previous.lon) == (current.lat, current.lon):
                 raise ValueError(
@@ -45,6 +50,24 @@ class RouteGenerationRequest(ImmutableModel):
     def required_point_count(self) -> int:
         """Number of points supplied by the caller before automatic closure."""
         return self._required_point_count
+
+    @property
+    def supplied_required_points(self) -> tuple[Coordinate, ...]:
+        """Caller-supplied mandatory points without a closing duplicate."""
+        points = self._supplied_points
+        if len(points) > 1 and (points[0].lat, points[0].lon) == (
+            points[-1].lat,
+            points[-1].lon,
+        ):
+            return points[:-1]
+        return points
+
+
+class RequiredPointVisit(ImmutableModel):
+    """One mandatory visit with its stable index in the original request."""
+
+    original_index: NonNegativeInt
+    coordinate: Coordinate
 
 
 class CandidateScore(ImmutableModel):
@@ -66,6 +89,7 @@ class GeneratedCandidate(ImmutableModel):
     rank: Annotated[int, Field(ge=1)]
     route: RouteResult
     optional_points: tuple[Coordinate, ...]
+    required_point_order: tuple[RequiredPointVisit, ...]
     target_error_m: NonNegativeFloat
     within_tolerance: bool
     score: CandidateScore
@@ -83,6 +107,13 @@ class SearchSummary(ImmutableModel):
     successful_candidate_count: NonNegativeInt
     rejected_candidate_count: NonNegativeInt
     round_trip_proposal_count: NonNegativeInt
+    evaluated_order_count: NonNegativeInt
+    successful_order_count: NonNegativeInt
+    rejected_order_count: NonNegativeInt
+    fixed_order_repeated_share: Share
+    best_order_repeated_share: Share
+    fixed_order_backtrack_share: Share
+    best_order_backtrack_share: Share
     search_budget: Annotated[int, Field(ge=1)]
     search_budget_exhausted: bool
     seed: int

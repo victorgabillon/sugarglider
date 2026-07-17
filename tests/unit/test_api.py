@@ -45,8 +45,10 @@ class FakeRouteService(RouteService):
 class FakeGenerationService(RouteGenerationService):
     def __init__(self, result: RouteGenerationResult) -> None:
         self.result = result
+        self.last_request: RouteGenerationRequest | None = None
 
     async def generate(self, request: RouteGenerationRequest) -> RouteGenerationResult:
+        self.last_request = request
         return self.result
 
 
@@ -170,6 +172,45 @@ async def test_successful_generation_json(client: httpx.AsyncClient) -> None:
     assert body["baseline"]["summary"]["distance_m"] == 2500.5
     assert len(body["candidates"]) == 1
     assert body["search"]["status"] == "within_tolerance"
+    assert [
+        visit["original_index"]
+        for visit in body["candidates"][0]["required_point_order"]
+    ] == [0, 1]
+
+
+@pytest.mark.asyncio
+async def test_generation_request_defaults_to_fixed_order(
+    client: httpx.AsyncClient,
+    fake_generation_service: FakeGenerationService,
+) -> None:
+    response = await client.post("/v1/routes/generate", json=generation_request_body())
+    assert response.status_code == 200
+    assert fake_generation_service.last_request is not None
+    assert fake_generation_service.last_request.point_order_mode == "fixed"
+
+
+@pytest.mark.asyncio
+async def test_generation_request_accepts_optimized_loop_order(
+    client: httpx.AsyncClient,
+    fake_generation_service: FakeGenerationService,
+) -> None:
+    body = generation_request_body()
+    body["point_order_mode"] = "optimize_loop"
+    response = await client.post("/v1/routes/generate", json=body)
+    assert response.status_code == 200
+    assert fake_generation_service.last_request is not None
+    assert fake_generation_service.last_request.point_order_mode == "optimize_loop"
+
+
+@pytest.mark.asyncio
+async def test_invalid_generation_order_mode_is_structured_validation(
+    client: httpx.AsyncClient,
+) -> None:
+    body = generation_request_body()
+    body["point_order_mode"] = "fastest"
+    response = await client.post("/v1/routes/generate", json=body)
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_request"
 
 
 @pytest.mark.asyncio

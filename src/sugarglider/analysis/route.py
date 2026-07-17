@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from itertools import pairwise
 from math import asin, cos, isfinite, radians, sin, sqrt
 
+from sugarglider.analysis.backtracking import (
+    MIN_BACKTRACK_EDGE_ID_COVERAGE,
+    DirectedEdgeTraversal,
+    measure_immediate_backtracking,
+)
 from sugarglider.domain.analysis import (
     DetailBreakdown,
     DetailBucket,
@@ -137,20 +142,34 @@ class RouteAnalyzer:
         unknown_surface_distance = sum(
             edge.distance_m for edge in edges if not self._is_classified_surface(edge)
         )
-        warnings = tuple(
-            sorted(
-                f"{detail}_coverage_incomplete"
-                for detail in DERIVED_DETAIL_NAMES
-                if any(
-                    not (
-                        self._known_edge_id(edge) is not None
-                        if detail == "edge_id"
-                        else edge.detail(detail)[0]
-                    )
-                    for edge in edges
+        backtracking = measure_immediate_backtracking(
+            tuple(
+                DirectedEdgeTraversal(
+                    edge_id=self._known_edge_id(edge),
+                    start=edge.start,
+                    end=edge.end,
+                    distance_m=edge.distance_m,
                 )
+                for edge in edges
             )
         )
+        backtrack_coverage = self._metric(
+            backtracking.known_edge_distance_m, route_distance_m
+        )
+        warnings = {
+            f"{detail}_coverage_incomplete"
+            for detail in DERIVED_DETAIL_NAMES
+            if any(
+                not (
+                    self._known_edge_id(edge) is not None
+                    if detail == "edge_id"
+                    else edge.detail(detail)[0]
+                )
+                for edge in edges
+            )
+        }
+        if backtrack_coverage.share < MIN_BACKTRACK_EDGE_ID_COVERAGE:
+            warnings.add("backtrack_edge_id_coverage_insufficient")
 
         return RouteAnalysis(
             route_distance_m=route_distance_m,
@@ -183,7 +202,11 @@ class RouteAnalyzer:
                 route_distance_m,
             ),
             repetition=self._repetition(edges, route_distance_m),
-            warnings=warnings,
+            immediate_backtrack=self._metric(
+                backtracking.immediate_backtrack_distance_m, route_distance_m
+            ),
+            backtrack_edge_id_coverage=backtrack_coverage,
+            warnings=tuple(sorted(warnings)),
         )
 
     @classmethod
