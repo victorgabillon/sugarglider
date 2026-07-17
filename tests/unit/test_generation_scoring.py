@@ -5,7 +5,12 @@ import pytest
 from sugarglider.domain.analysis import DistanceMetric
 from sugarglider.domain.generation import GeneratedCandidate
 from sugarglider.domain.models import RouteResult
-from sugarglider.generation.scoring import rank_candidates, score_route
+from sugarglider.generation.scoring import (
+    is_natural_improvement,
+    rank_candidates,
+    rank_low_overlap_candidates,
+    score_route,
+)
 
 
 def route_with_metrics(route: RouteResult, distance_m: float) -> RouteResult:
@@ -50,6 +55,8 @@ def candidate(
         route=route,
         optional_points=(),
         required_point_order=(),
+        routing_points=(),
+        construction="direct_order",
         target_error_m=error,
         within_tolerance=within,
         score=score,
@@ -156,4 +163,127 @@ def test_distance_pressure_leads_backtracking_outside_tolerance(
     assert [item.signature for item in rank_candidates((far, close))] == [
         "close",
         "far",
+    ]
+
+
+def test_low_overlap_ranking_keeps_better_standard_repetition_first(
+    route_result: RouteResult,
+) -> None:
+    base = route_with_metrics(route_result, 1_000.0)
+    better = base.model_copy(
+        update={
+            "analysis": base.analysis.model_copy(
+                update={
+                    "repetition": base.analysis.repetition.model_copy(
+                        update={
+                            "repeated_distance": DistanceMetric(
+                                distance_m=100, share=0.1
+                            )
+                        }
+                    )
+                }
+            )
+        }
+    )
+    worse = base.model_copy(
+        update={
+            "analysis": base.analysis.model_copy(
+                update={
+                    "repetition": base.analysis.repetition.model_copy(
+                        update={
+                            "repeated_distance": DistanceMetric(
+                                distance_m=300, share=0.3
+                            )
+                        }
+                    )
+                }
+            )
+        }
+    )
+    standard = candidate(better, error=100, within=True, signature="standard")
+    refined = candidate(worse, error=0, within=True, signature="refined")
+    assert [
+        item.signature for item in rank_low_overlap_candidates((refined, standard))
+    ] == ["standard", "refined"]
+
+
+def candidate_with_overlap(
+    route_result: RouteResult,
+    *,
+    repetition: float,
+    backtrack: float,
+    signature: str,
+) -> GeneratedCandidate:
+    route = route_with_metrics(route_result, 1_000.0)
+    analysis = route.analysis.model_copy(
+        update={
+            "repetition": route.analysis.repetition.model_copy(
+                update={
+                    "repeated_distance": DistanceMetric(
+                        distance_m=1_000 * repetition,
+                        share=repetition,
+                    )
+                }
+            ),
+            "immediate_backtrack": DistanceMetric(
+                distance_m=1_000 * backtrack,
+                share=backtrack,
+            ),
+        }
+    )
+    return candidate(
+        route.model_copy(update={"analysis": analysis}),
+        error=0,
+        within=True,
+        signature=signature,
+    )
+
+
+@pytest.mark.parametrize("backtrack", [0.1, 0.05])
+def test_lower_repetition_with_equal_or_lower_backtracking_is_natural(
+    route_result: RouteResult, backtrack: float
+) -> None:
+    source = candidate_with_overlap(
+        route_result, repetition=0.3, backtrack=0.1, signature="source"
+    )
+    refined = candidate_with_overlap(
+        route_result,
+        repetition=0.2,
+        backtrack=backtrack,
+        signature="refined",
+    )
+    assert is_natural_improvement(refined, source)
+
+
+@pytest.mark.parametrize(
+    ("repetition", "backtrack"),
+    [(0.2, 0.11), (0.31, 0.05)],
+)
+def test_one_metric_tradeoff_is_not_a_natural_improvement(
+    route_result: RouteResult, repetition: float, backtrack: float
+) -> None:
+    source = candidate_with_overlap(
+        route_result, repetition=0.3, backtrack=0.1, signature="source"
+    )
+    refined = candidate_with_overlap(
+        route_result,
+        repetition=repetition,
+        backtrack=backtrack,
+        signature="refined",
+    )
+    assert not is_natural_improvement(refined, source)
+
+
+def test_natural_improvement_ties_remain_signature_deterministic(
+    route_result: RouteResult,
+) -> None:
+    left = candidate_with_overlap(
+        route_result, repetition=0.2, backtrack=0.1, signature="a"
+    )
+    right = candidate_with_overlap(
+        route_result, repetition=0.2, backtrack=0.1, signature="b"
+    )
+    assert [item.signature for item in rank_low_overlap_candidates((right, left))] == [
+        "a",
+        "b",
     ]

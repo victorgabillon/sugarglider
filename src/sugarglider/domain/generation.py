@@ -8,6 +8,12 @@ from sugarglider.domain.models import Coordinate, ImmutableModel, RouteResult
 
 GenerationStatus = Literal["within_tolerance", "best_effort", "infeasible"]
 PointOrderMode = Literal["fixed", "optimize_loop"]
+PathSelectionMode = Literal["shortest", "low_overlap"]
+CandidateConstruction = Literal[
+    "direct_order",
+    "round_trip_detour",
+    "alternative_leg_beam",
+]
 NonNegativeFloat = Annotated[float, Field(ge=0)]
 NonNegativeInt = Annotated[int, Field(ge=0)]
 Share = Annotated[float, Field(ge=0, le=1)]
@@ -25,6 +31,7 @@ class RouteGenerationRequest(ImmutableModel):
     close_loop: bool = True
     profile: Literal["hike"] = "hike"
     point_order_mode: PointOrderMode = "fixed"
+    path_selection_mode: PathSelectionMode = "shortest"
     _required_point_count: int = PrivateAttr()
     _supplied_points: tuple[Coordinate, ...] = PrivateAttr()
 
@@ -90,6 +97,8 @@ class GeneratedCandidate(ImmutableModel):
     route: RouteResult
     optional_points: tuple[Coordinate, ...]
     required_point_order: tuple[RequiredPointVisit, ...]
+    routing_points: tuple[Coordinate, ...]
+    construction: CandidateConstruction
     target_error_m: NonNegativeFloat
     within_tolerance: bool
     score: CandidateScore
@@ -103,6 +112,7 @@ class SearchSummary(ImmutableModel):
     target_distance_m: NonNegativeFloat
     tolerance_m: NonNegativeFloat
     baseline_distance_m: NonNegativeFloat
+    best_order_distance_m: NonNegativeFloat
     evaluated_candidate_count: NonNegativeInt
     successful_candidate_count: NonNegativeInt
     rejected_candidate_count: NonNegativeInt
@@ -114,6 +124,17 @@ class SearchSummary(ImmutableModel):
     best_order_repeated_share: Share
     fixed_order_backtrack_share: Share
     best_order_backtrack_share: Share
+    alternative_leg_request_count: NonNegativeInt = 0
+    alternative_path_count: NonNegativeInt = 0
+    low_overlap_refined_source_count: NonNegativeInt = 0
+    low_overlap_candidate_count: NonNegativeInt = 0
+    low_overlap_request_budget: NonNegativeInt = 0
+    low_overlap_budget_exhausted: bool = False
+    low_overlap_requested: bool
+    pre_low_overlap_repeated_share: Share | None
+    best_low_overlap_repeated_share: Share | None
+    pre_low_overlap_backtrack_share: Share | None
+    best_low_overlap_backtrack_share: Share | None
     search_budget: Annotated[int, Field(ge=1)]
     search_budget_exhausted: bool
     seed: int

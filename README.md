@@ -16,7 +16,7 @@ Sugarglider is an open-source trail-running route generator in development. The
 long-term product will combine required waypoints, target distance, trail and nature
 preferences, popularity signals, access rules, and limits on repeated sections.
 
-The implemented PR1–PR4 scope accepts mandatory latitude/longitude anchors, asks a
+The implemented PR1–PR5 scope accepts mandatory latitude/longitude anchors, asks a
 self-hosted GraphHopper 11.0 instance to route them along real OpenStreetMap edges,
 analyzes the routed edges, and can search for several closed-loop candidates near a
 target distance. Any selected geometry exports as one clean GPX 1.1 track.
@@ -27,7 +27,8 @@ target distance. Any selected geometry exports as one clean GPX 1.1 track.
 client -> FastAPI -> RouteService -----------> routing backend -> GraphHopper / OSM
                     RouteGenerationService --+       |
                        |                              +-> routed path details
-                       +-> sampling, analysis, score, diversity
+                       +-> sampling, ordering, low-overlap beam search
+                       +-> analysis, score, diversity
                     GPX writer
 ```
 
@@ -132,6 +133,24 @@ other points become reorderable.
 `target_distance_m` accepts 1–200 km, tolerance accepts 0.1–10 km, and one to five
 candidates can be requested.
 
+Path selection defaults to `path_selection_mode="shortest"`, which preserves the
+PR4 result and ranking. Explicit `path_selection_mode="low_overlap"` first runs the
+same standard generation, then refines up to two selected candidates. For every
+consecutive pair in a candidate's exact routing-point sequence, GraphHopper returns
+up to three graph-valid alternatives. A deterministic beam of at most 12 partial
+routes composes those legs and analyzes repeated edge IDs across the complete route.
+The separate default alternative-leg request budget is 48; identical leg requests
+are cached across refinement sources.
+
+Low-overlap recommendation still requires target tolerance first. A refined route
+may outrank its standard source only when it lowers total repeated-edge share without
+increasing immediate backtracking. Qualifying routes then rank by repetition,
+backtracking, the existing PR3 score, target error, and stable signature. A route
+that trades lower repetition for more obvious out-and-back traversal may still be
+returned for comparison, but it is not recommended ahead of its source. One standard
+candidate is retained as the public control. This optimization changes path
+selection for an already chosen point order; it does not reorder mandatory POIs.
+
 Optimized mode evaluates at most 16 unique order proposals: original order,
 clockwise and counter-clockwise angular sweeps, nearest-neighbour cycles, angular
 cuts, and bounded 2-opt refinements. This is a deterministic geometric heuristic,
@@ -186,7 +205,22 @@ candidate count requires relaxed diversity.
 
 Every candidate exposes `required_point_order`, retaining original request indices
 and coordinates. It includes the fixed start once and excludes automatic closure.
-For optimized requests, `baseline` is deliberately the original fixed-order route.
+It also exposes immutable `routing_points`, containing the exact required and
+generated points in construction order without the automatic closing duplicate,
+and a `construction` value: `direct_order`, `round_trip_detour`, or
+`alternative_leg_beam`. For optimized requests, `baseline` is deliberately the
+original fixed-order route.
+
+Low-overlap optimization uses exact GraphHopper edge IDs. It cannot recognize nearby
+parallel corridors as overlap, does not guarantee zero repetition, and cannot avoid
+retracing forced by dead-end POIs. Dynamic history-dependent Java edge penalties,
+custom GraphHopper plugins, and exact simple-cycle solving remain future work. The
+GUI and nature/land-cover scoring also remain future work.
+
+`SearchSummary.low_overlap_requested` distinguishes a search that did not run from
+one that found perfect zero overlap. The pre/refined repetition and backtracking
+shares are therefore `null` in shortest mode or when no standard source exists,
+rather than using a misleading zero.
 
 Generate the Marly 41 km example as JSON:
 

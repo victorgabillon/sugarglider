@@ -17,12 +17,22 @@
   deterministic heuristics rather than exact exponential TSP.
 - Generation must be deterministic for a fixed graph, seed, request, and settings;
   every search must enforce a strict full-route evaluation budget.
+- Low-overlap generation must run after standard generation, preserve its exact
+  routing-point sequence, and account alternative-leg requests in a separate strict
+  cached budget.
+- Alternative-leg assembly must compose only continuous GraphHopper geometry and
+  snapped endpoints, and must keep a bounded deterministic beam with low-overlap,
+  low-backtracking, progress, and all-primary-path representatives.
 - Never use Euclidean or straight-line route fallback: all candidate and exported
   geometry must come from the routing backend.
 - Target distance remains the primary generation objective; PR3's fixed score must
   keep tolerance status ahead of secondary route-quality metrics.
 - Immediate backtracking and total repetition are distinct metrics; incomplete
   edge-ID coverage must remain visible, and dead-end POIs may force retracing.
+- Low-overlap scoring uses exact repeated edge IDs. It does not infer overlap between
+  nearby parallel corridors and does not promise a repetition-free route.
+- A refined route may be recommended ahead of its standard source only when it
+  lowers repetition without increasing immediate backtracking.
 - GPX files contain no route-analysis extensions.
 - Generated GPX remains exactly one track and one segment, never a GPX route.
 - Nature, popularity signals, and the web GUI remain future work.

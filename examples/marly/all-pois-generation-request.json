@@ -123,5 +123,6 @@
   "seed": 42,
   "close_loop": true,
   "point_order_mode": "optimize_loop",
+  "path_selection_mode": "low_overlap",
   "profile": "hike"
 }

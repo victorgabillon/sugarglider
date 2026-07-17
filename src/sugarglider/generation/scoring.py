@@ -18,6 +18,7 @@ class ScoringWeights:
 
 
 PR3_SCORING_WEIGHTS = ScoringWeights()
+NATURAL_IMPROVEMENT_EPSILON = 1e-12
 
 
 def score_route(
@@ -96,4 +97,42 @@ def rank_candidates(
     return tuple(
         candidate.model_copy(update={"rank": rank})
         for rank, candidate in enumerate(ordered, start=1)
+    )
+
+
+def rank_low_overlap_candidates(
+    candidates: tuple[GeneratedCandidate, ...],
+) -> tuple[GeneratedCandidate, ...]:
+    """Rank tolerance first, then exact repeated distance and backtracking."""
+    ordered = sorted(
+        candidates,
+        key=lambda candidate: (
+            0 if candidate.within_tolerance else 1,
+            candidate.route.analysis.repetition.repeated_distance.share,
+            candidate.route.analysis.immediate_backtrack.share,
+            candidate.score.total,
+            candidate.target_error_m,
+            candidate.signature,
+        ),
+    )
+    return tuple(
+        candidate.model_copy(update={"rank": rank})
+        for rank, candidate in enumerate(ordered, start=1)
+    )
+
+
+def is_natural_improvement(
+    refined: GeneratedCandidate,
+    source: GeneratedCandidate,
+    *,
+    epsilon: float = NATURAL_IMPROVEMENT_EPSILON,
+) -> bool:
+    """Return whether refinement lowers repetition without raising backtracking."""
+    refined_repetition = refined.route.analysis.repetition.repeated_distance.share
+    source_repetition = source.route.analysis.repetition.repeated_distance.share
+    refined_backtrack = refined.route.analysis.immediate_backtrack.share
+    source_backtrack = source.route.analysis.immediate_backtrack.share
+    return (
+        refined_repetition < source_repetition - epsilon
+        and refined_backtrack <= source_backtrack + epsilon
     )

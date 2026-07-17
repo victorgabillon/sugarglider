@@ -38,3 +38,14 @@ class RoutingBackend(Protocol):
         seed: int,
         profile: str = "hike",
     ) -> RoutedPath: ...
+
+    async def alternative_routes(
+        self,
+        start: Coordinate,
+        end: Coordinate,
+        profile: str = "hike",
+        *,
+        max_paths: int = 3,
+        max_weight_factor: float = 1.6,
+        max_share_factor: float = 0.5,
+    ) -> tuple[RoutedPath, ...]: ...
