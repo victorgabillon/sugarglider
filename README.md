@@ -16,7 +16,7 @@ Sugarglider is an open-source trail-running route generator in development. The
 long-term product will combine required waypoints, target distance, trail and nature
 preferences, popularity signals, access rules, and limits on repeated sections.
 
-The implemented PR1–PR3 scope accepts ordered latitude/longitude anchors, asks a
+The implemented PR1–PR4 scope accepts mandatory latitude/longitude anchors, asks a
 self-hosted GraphHopper 11.0 instance to route them along real OpenStreetMap edges,
 analyzes the routed edges, and can search for several closed-loop candidates near a
 target distance. Any selected geometry exports as one clean GPX 1.1 track.
@@ -42,11 +42,12 @@ normalizes them to GraphHopper's authoritative route distance. Raw path-detail
 breakdowns remain available alongside explainable derived metrics. Generation uses
 a fixed, documented PR3 score; ordinary route analysis does not assign a score.
 
-Required-anchor order is fixed. Generation automatically closes the sequence, asks
-GraphHopper for deterministic round-trip detour proposals, samples those proposal
-geometries at cumulative-distance positions, inserts them between required anchors,
-and reroutes the complete sequence. Proposal coordinates never become route lines:
-only final GraphHopper geometry is returned.
+Generation defaults to fixed required-anchor order. An explicit optimized-loop mode
+keeps the first point fixed while proposing deterministic visit orders for every
+other mandatory point. Generation then closes the sequence, asks GraphHopper for
+round-trip detour proposals, samples those proposal geometries at cumulative-distance
+positions, and reroutes the complete sequence. Proposal coordinates never become
+route lines: only final GraphHopper geometry is returned.
 
 ## Prerequisites
 
@@ -122,14 +123,25 @@ at `http://localhost:8989` and the API at `http://localhost:8000`.
 
 ### Target-distance generation
 
-Generation supports closed loops only. Supply at least two and at most 20 required
+Generation supports closed loops only. Supply at least two and at most 30 required
 points without manually repeating the start; Sugarglider appends the start without
-mutating the caller's list. Every required point remains mandatory and ordered.
+mutating the caller's list. Every required point remains mandatory. The default
+`point_order_mode="fixed"` retains input order. With
+`point_order_mode="optimize_loop"`, the first point remains start/end while all
+other points become reorderable.
 `target_distance_m` accepts 1–200 km, tolerance accepts 0.1–10 km, and one to five
 candidates can be requested.
 
-The search is deliberately small and deterministic for a fixed graph, request,
-seed, and settings. It tries round-trip proposal factors `0.60`, `0.80`, `1.00`,
+Optimized mode evaluates at most 16 unique order proposals: original order,
+clockwise and counter-clockwise angular sweeps, nearest-neighbour cycles, angular
+cuts, and bounded 2-opt refinements. This is a deterministic geometric heuristic,
+not exact TSP. At most three routed orders continue into detour generation, and all
+order and detour evaluations share one full-route budget. Retention always protects
+the best below-target order so it can be lengthened, even when longer mandatory
+routes rank better as final candidates.
+
+The detour search is deliberately small and deterministic for a fixed graph,
+request, seed, and settings. It tries factors `0.60`, `0.80`, `1.00`,
 `1.20`, and `1.45` at each distinct required anchor, samples positions near 25%,
 50%, and 75% of each proposal, and performs at most one refinement for a few close
 candidates. Full routes use `pass_through=true`; optional points whose snapped
@@ -142,11 +154,17 @@ Search statuses mean:
 
 - `within_tolerance`: at least one returned candidate meets the requested tolerance;
 - `best_effort`: candidates exist, but none meets it;
-- `infeasible`: the known required-anchor baseline already exceeds target plus
-  tolerance, so the JSON result contains that baseline and no candidates.
+- `infeasible`: every successfully routed mandatory order exceeds target plus
+  tolerance. The JSON result still contains the original fixed-order baseline.
 
-Within-tolerance candidates always rank before candidates outside tolerance. PR3
-then minimizes this fixed, initial heuristic:
+Order counters exclude that fixed baseline. Every attempted non-baseline order is
+classified exactly once as either a successful distinct source or a rejected
+routing, snapped-waypoint, or duplicate-signature result.
+
+Within-tolerance candidates always rank before candidates outside tolerance. Among
+within-tolerance routes, ranking minimizes immediate backtracking, then total
+repetition, the PR3 total score, absolute target error, and stable signature.
+Outside tolerance, distance error retains strong pressure. The fixed PR3 score is:
 
 ```text
 10.00 × distance error ratio
@@ -165,6 +183,10 @@ as automatically poor trail. Stable SHA-256 signatures deduplicate candidates,
 using edge runs when coverage is high and six-decimal geometry otherwise. A simple
 edge-ID-set Jaccard filter prefers distinct routes and reports when low coverage or
 candidate count requires relaxed diversity.
+
+Every candidate exposes `required_point_order`, retaining original request indices
+and coordinates. It includes the fixed start once and excludes automatic closure.
+For optimized requests, `baseline` is deliberately the original fixed-order route.
 
 Generate the Marly 41 km example as JSON:
 
@@ -191,6 +213,14 @@ make generate
 ./scripts/generate_marly.sh ./marly-generation.json ./marly-41km.gpx
 ```
 
+Generate and validate the 23-POI optimized Marly loop:
+
+```sh
+make generate-all-pois
+# Custom destinations:
+./scripts/generate_marly_all_pois.sh ./all-pois.json ./all-pois.gpx
+```
+
 Generation makes several local GraphHopper calls and is intended for interactive
 requests measured in seconds, not a high-throughput endpoint. The GPX endpoint
 repeats the search rather than persisting the JSON endpoint's result.
@@ -214,6 +244,11 @@ Every share is relative to the complete GraphHopper route distance:
 - `repetition` counts distinct GraphHopper edge IDs used in multiple traversal runs
   and measures only later runs as repeated distance. Its coverage and warnings must
   be considered because repetition cannot be inferred when `edge_id` is absent.
+- `immediate_backtrack` is narrower than total repetition. It counts only the
+  returning half of direction-reversed edge stacks such as `A → B → A`, retaining
+  up to 64 outward geometry-edge traversals. Longer spurs deterministically count
+  only their innermost 64 returning edges. `backtrack_edge_id_coverage` and warnings
+  expose uncertainty.
 - `detail_breakdowns` reports explicit values and coverage for every returned path
   detail. Explicit null is a bucket; uncovered geometry is not invented as a value.
 
@@ -309,17 +344,19 @@ conditions, and on-the-ground signage before use.
 
 ## Current limitations and future work
 
-Ordered anchors are mandatory and are visited as provided; their order is not
-optimized. PR3 is a bounded proposal search, not a globally optimal route solver,
-and its score is an explainable starting heuristic rather than a scientifically
-validated measure of route quality. Edge-ID diversity is set-based rather than
-distance-weighted. Elevation is disabled, so GPX trackpoints contain no invented
-elevations or timestamps, and GPX files contain no analysis extensions.
+All anchors remain mandatory. Fixed mode visits them as supplied; optimized mode
+keeps the start fixed and uses bounded deterministic ordering rather than a globally
+optimal solver. Exact POIs on dead-end paths can force unavoidable retracing. The
+score is an explainable starting heuristic rather than a scientifically validated
+measure of quality, and edge-ID diversity is set-based rather than distance-weighted.
+Elevation is disabled, so GPX trackpoints contain no invented elevations or
+timestamps, and GPX files contain no analysis extensions.
 
 Nature areas, land cover, popularity, uploaded activities, current closures, and
-real-world trail conditions are not modeled. OSM tags and access data may be absent
-or stale. Every generated route still requires visual inspection and validation
-against local access rules, signage, closures, and conditions on the ground.
+real-world trail conditions are not modeled, and there is no web GUI yet. OSM tags
+and access data may be absent or stale. Every generated route still requires visual
+inspection and validation against local access rules, signage, closures, and
+conditions on the ground.
 ---
 
 <p align="center">

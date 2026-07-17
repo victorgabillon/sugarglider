@@ -54,6 +54,7 @@ def candidate(route: RouteResult, signature: str | None = None) -> GeneratedCand
         rank=1,
         route=route,
         optional_points=(),
+        required_point_order=(),
         target_error_m=0,
         within_tolerance=True,
         score=score_route(route, route.summary.distance_m),

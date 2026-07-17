@@ -81,6 +81,8 @@ class RouteAnalysis(_ImmutableAnalysisModel):
     car_accessible: DistanceMetric
 
     repetition: RepetitionAnalysis
+    immediate_backtrack: DistanceMetric
+    backtrack_edge_id_coverage: DistanceMetric
     warnings: tuple[str, ...]
 
     @model_validator(mode="after")

@@ -10,6 +10,7 @@ from sugarglider.domain.analysis import (
 from sugarglider.domain.generation import (
     CandidateScore,
     GeneratedCandidate,
+    RequiredPointVisit,
     RouteGenerationRequest,
     RouteGenerationResult,
     SearchSummary,
@@ -31,6 +32,7 @@ __all__ = [
     "GeneratedCandidate",
     "PathDetailSegment",
     "RepetitionAnalysis",
+    "RequiredPointVisit",
     "RouteAnalysis",
     "RouteGenerationRequest",
     "RouteGenerationResult",

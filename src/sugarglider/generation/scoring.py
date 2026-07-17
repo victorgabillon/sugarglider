@@ -65,15 +65,33 @@ def score_route(
 def rank_candidates(
     candidates: tuple[GeneratedCandidate, ...],
 ) -> tuple[GeneratedCandidate, ...]:
-    """Rank tolerance first, then score, absolute error, and stable signature."""
-    ordered = sorted(
-        candidates,
-        key=lambda candidate: (
-            0 if candidate.within_tolerance else 1,
+    """Rank natural loops within tolerance and keep distance pressure outside it."""
+
+    def ranking_key(candidate: GeneratedCandidate) -> tuple[object, ...]:
+        backtrack = candidate.route.analysis.immediate_backtrack.share
+        repetition = candidate.route.analysis.repetition.repeated_distance.share
+        if candidate.within_tolerance:
+            return (
+                0,
+                backtrack,
+                repetition,
+                candidate.score.total,
+                candidate.target_error_m,
+                candidate.signature,
+            )
+        return (
+            1,
+            candidate.score.distance_error_ratio,
+            backtrack,
+            repetition,
             candidate.score.total,
             candidate.target_error_m,
             candidate.signature,
-        ),
+        )
+
+    ordered = sorted(
+        candidates,
+        key=ranking_key,
     )
     return tuple(
         candidate.model_copy(update={"rank": rank})

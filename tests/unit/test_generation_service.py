@@ -141,6 +141,122 @@ class FakeRoutingBackend:
         )
 
 
+class OrderAwareRoutingBackend(FakeRoutingBackend):
+    """Return a retracing fixed route and one signature for all reordered loops."""
+
+    def __init__(self) -> None:
+        super().__init__(baseline_distance_m=41_000)
+        self.order_sequences: list[tuple[str | None, ...]] = []
+
+    async def route(
+        self,
+        points: tuple[Coordinate, ...],
+        profile: str = "hike",
+        *,
+        pass_through: bool = False,
+    ) -> RoutedPath:
+        names = tuple(point.name for point in points[:-1])
+        self.order_sequences.append(names)
+        fixed = names == ("p0", "p1", "p2", "p3")
+        if not pass_through or fixed:
+            geometry = ((0.0, 0.0), (0.01, 0.0), (0.02, 0.0), (0.01, 0.0), (0.0, 0.0))
+            edge_ids = (1, 2, 2, 1)
+        else:
+            geometry = ((0.0, 0.0), (0.01, 0.0), (0.01, 0.01), (0.0, 0.01), (0.0, 0.0))
+            edge_ids = (10, 11, 12, 13)
+        return RoutedPath(
+            distance_m=41_000,
+            duration_ms=1,
+            ascend_m=None,
+            descend_m=None,
+            geometry=geometry,
+            snapped_points=tuple((point.lon, point.lat) for point in points),
+            details={
+                "edge_id": tuple(
+                    PathDetailSegment(
+                        from_index=index,
+                        to_index=index + 1,
+                        value=edge_id,
+                    )
+                    for index, edge_id in enumerate(edge_ids)
+                )
+            },
+        )
+
+
+class SequencedOrderRoutingBackend(FakeRoutingBackend):
+    """Return configured order distances and track which order receives detours."""
+
+    def __init__(
+        self,
+        *,
+        baseline_distance_m: float,
+        order_distances_m: tuple[float, ...],
+        fail_orders: bool = False,
+        malformed_orders: bool = False,
+    ) -> None:
+        super().__init__(baseline_distance_m=baseline_distance_m)
+        self.order_distances_m = order_distances_m
+        self.fail_orders = fail_orders
+        self.malformed_orders = malformed_orders
+        self.order_evaluations = 0
+        self.expandable_order: tuple[str, ...] | None = None
+        self.detour_orders: list[tuple[str, ...]] = []
+
+    async def route(
+        self,
+        points: tuple[Coordinate, ...],
+        profile: str = "hike",
+        *,
+        pass_through: bool = False,
+    ) -> RoutedPath:
+        if not pass_through:
+            return self._path(points, self.baseline_distance_m, edge_offset=1)
+        mandatory_names = tuple(
+            point.name or ""
+            for point in points
+            if point.name is not None and not point.name.startswith("Generated detour")
+        )[:-1]
+        has_optional_points = any(
+            point.name is not None and point.name.startswith("Generated detour")
+            for point in points
+        )
+        if has_optional_points:
+            self.detour_orders.append(mandatory_names)
+            return self._path(
+                points,
+                41_000,
+                edge_offset=10_000 + len(self.detour_orders) * 100,
+            )
+
+        self.order_evaluations += 1
+        if self.fail_orders:
+            raise RoutingPointError("order cannot be routed")
+        distance = (
+            self.order_distances_m[self.order_evaluations - 1]
+            if self.order_evaluations <= len(self.order_distances_m)
+            else 46_000 + self.order_evaluations * 100
+        )
+        if distance == 20_000:
+            self.expandable_order = mandatory_names
+        path = self._path(
+            points,
+            distance,
+            edge_offset=100 * self.order_evaluations,
+        )
+        if self.malformed_orders and path.snapped_points is not None:
+            return RoutedPath(
+                distance_m=path.distance_m,
+                duration_ms=path.duration_ms,
+                ascend_m=path.ascend_m,
+                descend_m=path.descend_m,
+                geometry=path.geometry,
+                snapped_points=path.snapped_points[:-1],
+                details=path.details,
+            )
+        return path
+
+
 def generation_request(
     *, target: float = 41_000, tolerance: float = 2_000, candidates: int = 3
 ) -> RouteGenerationRequest:
@@ -154,6 +270,23 @@ def generation_request(
         tolerance_m=tolerance,
         candidate_count=candidates,
         seed=42,
+    )
+
+
+def optimized_order_request() -> RouteGenerationRequest:
+    return RouteGenerationRequest(
+        name="Optimized order",
+        points=[
+            Coordinate(lat=0, lon=0, name="p0"),
+            Coordinate(lat=0, lon=2, name="p1"),
+            Coordinate(lat=1, lon=0, name="p2"),
+            Coordinate(lat=1, lon=2, name="p3"),
+        ],
+        target_distance_m=41_000,
+        tolerance_m=2_000,
+        candidate_count=3,
+        seed=42,
+        point_order_mode="optimize_loop",
     )
 
 
@@ -194,6 +327,10 @@ async def test_below_target_generates_routes_and_preserves_required_order() -> N
                 cursor += 1
         assert cursor == len(required)
         assert positions[0] == positions[-1]
+    assert all(
+        [visit.original_index for visit in candidate.required_point_order] == [0, 1]
+        for candidate in result.candidates
+    )
     assert result.search.evaluated_candidate_count <= 10
 
 
@@ -307,3 +444,123 @@ async def test_fixed_inputs_are_byte_deterministic() -> None:
         FakeRoutingBackend(), max_evaluations=6
     ).generate(request)
     assert first.model_dump_json() == second.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_fixed_mode_does_not_evaluate_alternative_orders() -> None:
+    result = await RouteGenerationService(
+        FakeRoutingBackend(), max_evaluations=2
+    ).generate(generation_request())
+    assert result.search.evaluated_order_count == 0
+    assert result.candidates[0].required_point_order[0].original_index == 0
+
+
+@pytest.mark.asyncio
+async def test_optimized_mode_preserves_all_indices_and_lowers_retracing() -> None:
+    result = await RouteGenerationService(OrderAwareRoutingBackend()).generate(
+        optimized_order_request()
+    )
+    for candidate in result.candidates:
+        indices = [visit.original_index for visit in candidate.required_point_order]
+        assert indices[0] == 0
+        assert sorted(indices) == [0, 1, 2, 3]
+        assert len(indices) == len(set(indices))
+    assert result.search.evaluated_order_count > 1
+    assert (
+        result.search.best_order_repeated_share
+        < result.search.fixed_order_repeated_share
+    )
+    assert (
+        result.search.best_order_backtrack_share
+        < result.search.fixed_order_backtrack_share
+    )
+
+
+@pytest.mark.asyncio
+async def test_optimized_order_search_respects_one_full_route_budget() -> None:
+    backend = OrderAwareRoutingBackend()
+    result = await RouteGenerationService(backend, max_evaluations=2).generate(
+        optimized_order_request()
+    )
+    assert result.search.evaluated_candidate_count == 2
+    assert result.search.evaluated_order_count == 2
+    assert result.search.search_budget_exhausted
+
+
+@pytest.mark.asyncio
+async def test_duplicate_optimized_routes_are_deduplicated_deterministically() -> None:
+    request = optimized_order_request()
+    first = await RouteGenerationService(OrderAwareRoutingBackend()).generate(request)
+    second = await RouteGenerationService(OrderAwareRoutingBackend()).generate(request)
+    assert len({candidate.signature for candidate in first.candidates}) == len(
+        first.candidates
+    )
+    assert first.search.rejected_order_count > 0
+    assert first.search.evaluated_order_count == (
+        first.search.successful_order_count + first.search.rejected_order_count
+    )
+    assert first.model_dump_json() == second.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_expandable_order_is_retained_before_infeasibility_pruning() -> None:
+    backend = SequencedOrderRoutingBackend(
+        baseline_distance_m=44_000,
+        order_distances_m=(45_000, 46_000, 20_000),
+    )
+    result = await RouteGenerationService(backend, max_evaluations=48).generate(
+        optimized_order_request()
+    )
+
+    assert result.search.status != "infeasible"
+    assert backend.expandable_order is not None
+    assert backend.round_trip_calls > 0
+    assert backend.expandable_order in backend.detour_orders
+    assert result.search.evaluated_candidate_count <= result.search.search_budget
+
+
+@pytest.mark.asyncio
+async def test_all_routed_orders_above_target_tolerance_remain_infeasible() -> None:
+    backend = SequencedOrderRoutingBackend(
+        baseline_distance_m=44_000,
+        order_distances_m=(45_000, 46_000, 47_000),
+    )
+    result = await RouteGenerationService(backend).generate(optimized_order_request())
+    assert result.search.status == "infeasible"
+    assert result.candidates == ()
+    assert backend.round_trip_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_distinct_order_counter_outcomes_are_mutually_exclusive() -> None:
+    backend = SequencedOrderRoutingBackend(
+        baseline_distance_m=41_000,
+        order_distances_m=(41_000,),
+    )
+    result = await RouteGenerationService(backend).generate(optimized_order_request())
+    assert result.search.rejected_order_count == 0
+    assert result.search.evaluated_order_count == result.search.successful_order_count
+
+
+@pytest.mark.asyncio
+async def test_routing_failure_order_counters_are_mutually_exclusive() -> None:
+    backend = SequencedOrderRoutingBackend(
+        baseline_distance_m=41_000,
+        order_distances_m=(),
+        fail_orders=True,
+    )
+    result = await RouteGenerationService(backend).generate(optimized_order_request())
+    assert result.search.successful_order_count == 0
+    assert result.search.evaluated_order_count == result.search.rejected_order_count
+
+
+@pytest.mark.asyncio
+async def test_malformed_snap_order_counters_are_mutually_exclusive() -> None:
+    backend = SequencedOrderRoutingBackend(
+        baseline_distance_m=41_000,
+        order_distances_m=(41_000,),
+        malformed_orders=True,
+    )
+    result = await RouteGenerationService(backend).generate(optimized_order_request())
+    assert result.search.successful_order_count == 0
+    assert result.search.evaluated_order_count == result.search.rejected_order_count

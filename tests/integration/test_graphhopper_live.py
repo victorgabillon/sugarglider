@@ -2,6 +2,7 @@
 
 import math
 import os
+from pathlib import Path
 from xml.etree import ElementTree
 
 import httpx
@@ -139,6 +140,62 @@ async def test_live_marly_target_distance_generation() -> None:
         assert all(
             metric.distance_m >= 0 and 0 <= metric.share <= 1 for metric in metrics
         )
+
+    root = ElementTree.fromstring(write_gpx(best.route))
+    namespace = {"g": GPX_NAMESPACE}
+    assert len(root.findall("g:trk", namespace)) == 1
+    assert len(root.findall("g:trk/g:trkseg", namespace)) == 1
+    assert len(root.findall("g:trk/g:trkseg/g:trkpt", namespace)) > 1
+    assert root.findall("g:rte", namespace) == []
+
+
+@pytest.mark.asyncio
+async def test_live_marly_all_pois_optimized_loop() -> None:
+    if os.getenv("RUN_GRAPHHOPPER_INTEGRATION") != "1":
+        pytest.skip("set RUN_GRAPHHOPPER_INTEGRATION=1 to use live GraphHopper")
+
+    request = RouteGenerationRequest.model_validate_json(
+        Path("examples/marly/all-pois-generation-request.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert request.required_point_count == 23
+    base_url = os.getenv("GRAPHHOPPER_URL", "http://localhost:8989")
+    async with httpx.AsyncClient() as http_client:
+        result = await RouteGenerationService(
+            GraphHopperClient(base_url, client=http_client), max_evaluations=48
+        ).generate(request)
+
+    assert result.candidates
+    assert result.search.evaluated_candidate_count <= result.search.search_budget
+    best = result.candidates[0]
+    indices = [visit.original_index for visit in best.required_point_order]
+    assert indices[0] == 0
+    assert sorted(indices) == list(range(23))
+    assert len(indices) == len(set(indices))
+    assert 39_000 <= best.route.summary.distance_m <= 43_000
+    assert (
+        result.search.best_order_repeated_share
+        < result.search.fixed_order_repeated_share
+        or "order_optimization_no_repetition_improvement" in result.search.warnings
+    )
+    assert (
+        result.search.best_order_backtrack_share
+        < result.search.fixed_order_backtrack_share
+        or "order_optimization_no_backtrack_improvement" in result.search.warnings
+    )
+
+    snapped = best.route.snapped_points
+    assert snapped is not None
+    required_index = 0
+    for snapped_point in snapped:
+        if required_index >= len(best.required_point_order):
+            break
+        required = best.required_point_order[required_index].coordinate
+        if haversine_distance_m((required.lon, required.lat), snapped_point) < 1_000:
+            required_index += 1
+    assert required_index == 23
+    assert haversine_distance_m(snapped[0], snapped[-1]) < 500
 
     root = ElementTree.fromstring(write_gpx(best.route))
     namespace = {"g": GPX_NAMESPACE}
