@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#173d32">
+    <title>Sugarglider — trail route planner</title>
+    <!-- MapLibre GL JS 4.7.1, BSD-3-Clause: https://maplibre.org/ -->
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+    <link rel="stylesheet" href="/static/styles.css">
+    <script defer src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script type="module" src="/static/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#planner">Skip to route planner</a>
+    <header class="topbar">
+      <div class="wordmark">Sugarglider <span>trail route planner</span></div>
+      <nav aria-label="File and generation actions">
+        <label class="button secondary" for="request-file">Import request JSON</label>
+        <input class="visually-hidden" id="request-file" type="file" accept="application/json,.json">
+        <label class="button secondary" for="gpx-file">Import GPX</label>
+        <input class="visually-hidden" id="gpx-file" type="file" accept="application/gpx+xml,.gpx">
+        <button class="button primary" id="generate-top" type="button">Generate</button>
+      </nav>
+    </header>
+
+    <div id="error-banner" class="banner error hidden" role="alert">
+      <span id="error-message"></span>
+      <details><summary>Diagnostic details</summary><pre id="error-details"></pre></details>
+      <button id="dismiss-error" type="button" aria-label="Dismiss error">×</button>
+    </div>
+    <div id="map-error" class="banner warning hidden" role="status"></div>
+
+    <main id="planner" class="planner">
+      <aside class="panel controls" aria-labelledby="controls-title">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Plan</p><h1 id="controls-title">Route controls</h1></div>
+          <button id="clear-results" class="text-button" type="button">Clear results</button>
+        </div>
+        <form id="route-form" novalidate>
+          <label>Route name<input id="route-name" name="name" value="Sugarglider route" maxlength="120" required></label>
+          <div class="field-pair">
+            <label>Target <span>km</span><input id="target-distance" type="number" min="1" max="200" step="0.1" value="20" required></label>
+            <label>Tolerance <span>km</span><input id="tolerance" type="number" min="0.1" max="10" step="0.1" value="2" required></label>
+          </div>
+          <div class="field-pair">
+            <label>Candidates<select id="candidate-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+            <label>Profile<select id="profile" disabled><option>hike</option></select></label>
+          </div>
+          <label>Mandatory-point order<select id="point-order-mode"><option value="fixed">Fixed input order</option><option value="optimize_loop">Optimize loop</option></select></label>
+          <label>Path selection<select id="path-selection-mode"><option value="shortest">Natural shortest paths</option><option value="low_overlap">Low-overlap alternatives</option></select></label>
+          <input id="seed" type="hidden" value="0">
+        </form>
+
+        <section class="poi-editor" aria-labelledby="poi-title">
+          <div class="section-heading"><h2 id="poi-title">Mandatory POIs</h2><span id="poi-count">0 / 30</span></div>
+          <p id="poi-validation" class="validation" role="status"></p>
+          <div id="poi-list" class="poi-list"></div>
+          <div class="button-row">
+            <button id="add-point-mode" class="button secondary" type="button" aria-pressed="false">Add point on map</button>
+            <button id="fit-points" class="button secondary" type="button">Fit points</button>
+            <button id="clear-points" class="text-button danger" type="button">Clear all</button>
+          </div>
+        </section>
+
+        <section id="gpx-summary" class="import-summary hidden" aria-labelledby="gpx-title">
+          <div class="section-heading"><h2 id="gpx-title">Imported GPX</h2><button id="clear-gpx" class="text-button" type="button">Clear</button></div>
+          <p id="gpx-details"></p>
+        </section>
+
+        <div class="generate-actions">
+          <button id="generate" class="button primary wide" type="button" disabled>Generate routes</button>
+          <button id="cancel" class="button danger hidden" type="button">Cancel</button>
+          <button id="copy-request" class="text-button" type="button">Copy request JSON</button>
+        </div>
+        <p id="request-status" class="status" aria-live="polite">Add at least two mandatory points.</p>
+      </aside>
+
+      <section class="map-panel" aria-labelledby="map-title">
+        <h2 id="map-title" class="visually-hidden">Interactive route map</h2>
+        <div id="map" role="application" aria-label="Interactive trail route map"></div>
+        <div class="map-tools">
+          <label><input id="show-all" type="checkbox" checked> Show all candidates</label>
+        </div>
+        <div class="legend" aria-label="Map legend">
+          <span><i class="line selected"></i>Selected route</span>
+          <span><i class="line alternative"></i>Alternative</span>
+          <span><i class="line repeated"></i>Repeated</span>
+          <span><i class="line backtrack"></i>Immediate out-and-back</span>
+          <span><i class="marker mandatory">1</i>Mandatory POI</span>
+          <span><i class="marker optional"></i>Generated optional point</span>
+          <span><i class="line imported"></i>Imported GPX</span>
+        </div>
+      </section>
+
+      <aside class="panel metrics" aria-labelledby="metrics-title">
+        <div class="panel-heading"><div><p class="eyebrow">Inspect</p><h2 id="metrics-title">Candidate metrics</h2></div></div>
+        <div id="metrics-empty" class="empty-state"><p>Generate a route to inspect its quality.</p></div>
+        <div id="metrics-content" class="hidden"></div>
+        <div class="export-actions">
+          <button id="download-gpx" class="button primary wide" type="button" disabled>Download selected GPX</button>
+        </div>
+      </aside>
+
+      <section class="candidate-strip" aria-labelledby="candidates-title">
+        <div class="section-heading"><h2 id="candidates-title">Candidates</h2><span id="search-summary"></span></div>
+        <div id="candidate-list" class="candidate-list"><p class="empty-copy">Returned routes will appear here in ranked order.</p></div>
+      </section>
+    </main>
+
+    <footer>Routes use OpenStreetMap data through your configured GraphHopper service. Map attribution must remain visible.</footer>
+  </body>
+</html>

@@ -60,3 +60,23 @@ class Settings(BaseSettings):
         int,
         Field(ge=1, le=3, validation_alias="SUGARGLIDER_LOW_OVERLAP_SOURCE_COUNT"),
     ] = 2
+    map_tile_url: Annotated[
+        str,
+        Field(min_length=1, validation_alias="SUGARGLIDER_MAP_TILE_URL"),
+    ] = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    map_attribution: Annotated[
+        str,
+        Field(min_length=1, validation_alias="SUGARGLIDER_MAP_ATTRIBUTION"),
+    ] = "© OpenStreetMap contributors"
+    map_initial_lat: Annotated[
+        float,
+        Field(ge=-90, le=90, validation_alias="SUGARGLIDER_MAP_INITIAL_LAT"),
+    ] = 48.87
+    map_initial_lon: Annotated[
+        float,
+        Field(ge=-180, le=180, validation_alias="SUGARGLIDER_MAP_INITIAL_LON"),
+    ] = 2.10
+    map_initial_zoom: Annotated[
+        float,
+        Field(ge=0, le=22, validation_alias="SUGARGLIDER_MAP_INITIAL_ZOOM"),
+    ] = 11.0

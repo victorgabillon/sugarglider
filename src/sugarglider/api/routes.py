@@ -6,10 +6,13 @@ from fastapi import APIRouter, Body
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 
+from sugarglider.analysis.route import RouteAnalysisError
+from sugarglider.analysis.visualization import build_route_visualization
 from sugarglider.api.dependencies import (
     GenerationServiceDependency,
     RouteServiceDependency,
 )
+from sugarglider.api.errors import RouteVisualizationError
 from sugarglider.domain.generation import (
     RouteGenerationRequest,
     RouteGenerationResult,
@@ -21,6 +24,7 @@ from sugarglider.generation.service import (
 )
 from sugarglider.gpx.writer import gpx_filename, write_gpx
 from sugarglider.routing.graphhopper import RoutingError, RoutingUnavailableError
+from sugarglider.web.models import RouteVisualization
 
 router = APIRouter()
 
@@ -69,6 +73,30 @@ async def create_route_gpx(
         media_type="application/gpx+xml",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/v1/routes/gpx/from-result", response_class=Response)
+async def create_route_gpx_from_result(
+    route: Annotated[RouteResult, Body()],
+) -> Response:
+    """Export an already generated immutable route without calling routing."""
+    filename = gpx_filename(route.name)
+    return Response(
+        content=write_gpx(route),
+        media_type="application/gpx+xml",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/v1/routes/visualization", response_model=RouteVisualization)
+async def visualize_route(
+    route: Annotated[RouteResult, Body()],
+) -> RouteVisualization:
+    """Return server-classified contiguous map sections for a route result."""
+    try:
+        return build_route_visualization(route)
+    except RouteAnalysisError as exc:
+        raise RouteVisualizationError from exc
 
 
 @router.post("/v1/routes/generate", response_model=RouteGenerationResult)
