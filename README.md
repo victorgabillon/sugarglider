@@ -16,20 +16,23 @@ Sugarglider is an open-source trail-running route generator in development. The
 long-term product will combine required waypoints, target distance, trail and nature
 preferences, popularity signals, access rules, and limits on repeated sections.
 
-The implemented PR1–PR5 scope accepts mandatory latitude/longitude anchors, asks a
+The implemented PR1–PR6 scope accepts mandatory latitude/longitude anchors, asks a
 self-hosted GraphHopper 11.0 instance to route them along real OpenStreetMap edges,
 analyzes the routed edges, and can search for several closed-loop candidates near a
-target distance. Any selected geometry exports as one clean GPX 1.1 track.
+target distance. A local browser interface supports planning, comparison, local GPX
+inspection, and clean GPX 1.1 export of an already selected candidate.
 
 ## Current scope and architecture
 
 ```text
-client -> FastAPI -> RouteService -----------> routing backend -> GraphHopper / OSM
+browser -> FastAPI -> RouteService ----------> routing backend -> GraphHopper / OSM
                     RouteGenerationService --+       |
                        |                              +-> routed path details
                        +-> sampling, ordering, low-overlap beam search
                        +-> analysis, score, diversity
-                    GPX writer
+                    visualization projection + GPX writer
+           |
+           +-> packaged HTML/CSS/ES modules -> MapLibre -> configured raster tiles
 ```
 
 The public API uses named `lat` and `lon` fields. The adapter converts anchors to
@@ -83,6 +86,52 @@ cp .env.example .env
 uv run uvicorn sugarglider.api.main:app --reload
 ```
 
+Then open `http://localhost:8000/`. The same FastAPI process serves both the API and
+the packaged browser application; no Node runtime or separate frontend server is
+used.
+
+## Web route planner
+
+The GUI supports a complete local planning workflow:
+
+1. Use **Import request JSON** to load a generation request such as
+   `examples/marly/all-pois-generation-request.json`, or enable **Add point on map**
+   and click once per mandatory place.
+2. Rename, edit, drag, remove, or reorder POIs. The first is the fixed loop
+   start/end; do not add a closing duplicate.
+3. Choose target and tolerance in kilometres, point ordering, candidate count, and
+   natural-shortest or low-overlap path selection, then generate.
+4. Select candidate cards or route lines to compare the server-returned ranking.
+   Orange dashed sections are repeated edge runs; stronger red dashes are immediate
+   stack-shaped out-and-back returns. The backend calculates both overlays using the
+   same semantics as route analysis.
+5. Download the selected candidate. This posts its existing immutable `RouteResult`
+   to `/v1/routes/gpx/from-result`; GraphHopper and generation are not called again.
+
+**Import GPX** reads a local GPX 1.1 file entirely in the browser. Tracks, segment
+breaks, optional waypoints, and a locally calculated approximate distance are shown
+without uploading the file. Imported GPX and generated candidates can coexist on
+the map.
+
+The basemap requires network access to the configured raster tile service and to
+the pinned MapLibre GL JS 4.7.1 CDN distribution. MapLibre GL JS is distributed
+under the BSD 3-Clause license. The default tiles are OpenStreetMap tiles and their
+visible contributor attribution must not be hidden. This application does not
+prefetch, bulk-download, or provide offline tiles.
+
+### Web configuration
+
+| Environment variable | Default | Purpose |
+| --- | --- | --- |
+| `SUGARGLIDER_MAP_TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Raster XYZ template |
+| `SUGARGLIDER_MAP_ATTRIBUTION` | `© OpenStreetMap contributors` | Visible map credit |
+| `SUGARGLIDER_MAP_INITIAL_LAT` | `48.87` | Initial center latitude |
+| `SUGARGLIDER_MAP_INITIAL_LON` | `2.10` | Initial center longitude |
+| `SUGARGLIDER_MAP_INITIAL_ZOOM` | `11.0` | Initial regional zoom (0–22) |
+
+These validated values are exposed to the browser by `GET /v1/ui/config`. Tile
+templates and attribution are deployment configuration, not frontend constants.
+
 ## Map data and Docker startup
 
 Download the Geofabrik Île-de-France PBF explicitly:
@@ -121,6 +170,11 @@ at `http://localhost:8989` and the API at `http://localhost:8000`.
   and bounded-search diagnostics.
 - `POST /v1/routes/generate/gpx` repeats the deterministic search and exports its
   best candidate as the same clean, track-only GPX format.
+- `POST /v1/routes/gpx/from-result` exports a posted `RouteResult` without routing or
+  generation.
+- `POST /v1/routes/visualization` returns contiguous typed GeoJSON sections marked
+  normal, repeated, or immediate-backtrack for map rendering.
+- `GET /v1/ui/config` returns validated browser map configuration.
 
 ### Target-distance generation
 
@@ -214,8 +268,8 @@ original fixed-order route.
 Low-overlap optimization uses exact GraphHopper edge IDs. It cannot recognize nearby
 parallel corridors as overlap, does not guarantee zero repetition, and cannot avoid
 retracing forced by dead-end POIs. Dynamic history-dependent Java edge penalties,
-custom GraphHopper plugins, and exact simple-cycle solving remain future work. The
-GUI and nature/land-cover scoring also remain future work.
+custom GraphHopper plugins, and exact simple-cycle solving remain future work.
+Nature/land-cover scoring also remains future work.
 
 `SearchSummary.low_overlap_requested` distinguishes a search that did not run from
 one that found perfect zero overlap. The pre/refined repetition and backtracking
@@ -387,10 +441,24 @@ Elevation is disabled, so GPX trackpoints contain no invented elevations or
 timestamps, and GPX files contain no analysis extensions.
 
 Nature areas, land cover, popularity, uploaded activities, current closures, and
-real-world trail conditions are not modeled, and there is no web GUI yet. OSM tags
-and access data may be absent or stale. Every generated route still requires visual
-inspection and validation against local access rules, signage, closures, and
-conditions on the ground.
+real-world trail conditions are not modeled. There is no geocoding, persistence,
+account system, elevation profile, or offline map. OSM tags and access data may be
+absent or stale. Every generated route still requires visual inspection and
+validation against local access rules, signage, closures, and conditions on the
+ground.
+
+### Manual browser-test checklist
+
+- [ ] Open `/`; confirm the map and visible attribution load.
+- [ ] Import the 23-POI Marly JSON; confirm list and marker order match.
+- [ ] Drag a marker and confirm its coordinate inputs update.
+- [ ] Generate candidates in shortest and low-overlap modes.
+- [ ] Select cards and map lines; compare metrics with generation JSON.
+- [ ] Confirm repeated and immediate-backtrack styles are distinct.
+- [ ] Import a multi-segment GPX; confirm no line joins segment breaks.
+- [ ] Download selected GPX and confirm no second generation request occurs.
+- [ ] Check the downloaded track in gpx.studio.
+- [ ] Check narrow responsive layout and keyboard navigation.
 ---
 
 <p align="center">

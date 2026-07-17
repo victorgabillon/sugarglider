@@ -35,5 +35,14 @@
   lowers repetition without increasing immediate backtracking.
 - GPX files contain no route-analysis extensions.
 - Generated GPX remains exactly one track and one segment, never a GPX route.
-- Nature, popularity signals, and the web GUI remain future work.
+- The browser frontend must use the backend visualization projection rather than
+  duplicate repetition, backtracking, routing, or scoring semantics in JavaScript.
+- Browser GPX inspection is local-only. Preserve track-segment breaks and never
+  invent straight connections between separate segments.
+- Selected-candidate GPX export must serialize the already returned `RouteResult`;
+  it must not rerun generation or routing.
+- Map attribution must remain visible. Do not bulk-download, prefetch, or cache map
+  tiles, and do not add offline map behavior.
+- Never commit generated GPX files or browser validation screenshots.
+- Nature and popularity signals remain future work.
 - Never commit PBF map data, GraphHopper caches, secrets, or generated GPX files.

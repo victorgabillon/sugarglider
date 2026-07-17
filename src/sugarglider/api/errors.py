@@ -19,6 +19,10 @@ from sugarglider.routing.graphhopper import (
 )
 
 
+class RouteVisualizationError(ValueError):
+    """A posted route cannot be projected into valid map sections."""
+
+
 @dataclass(frozen=True)
 class PublicError:
     status_code: int
@@ -27,6 +31,11 @@ class PublicError:
 
 
 ERRORS: dict[type[Exception], PublicError] = {
+    RouteVisualizationError: PublicError(
+        422,
+        "route_visualization_invalid",
+        "The route result cannot be projected for visualization.",
+    ),
     TargetDistanceInfeasibleError: PublicError(
         422,
         "target_distance_infeasible",

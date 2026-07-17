@@ -49,23 +49,43 @@ def measure_immediate_backtracking(
     At most the most recent ``maximum_spur_edges`` outward traversals are retained,
     so longer spurs deterministically count only that innermost returning depth.
     """
+    returning = classify_immediate_backtracking(
+        traversals, maximum_spur_edges=maximum_spur_edges
+    )
+    known_distance = sum(
+        traversal.distance_m
+        for traversal in traversals
+        if traversal.edge_id is not None
+    )
+    backtrack_distance = sum(
+        traversal.distance_m
+        for traversal, is_returning in zip(traversals, returning, strict=True)
+        if is_returning
+    )
+
+    return BacktrackMeasurement(backtrack_distance, known_distance)
+
+
+def classify_immediate_backtracking(
+    traversals: tuple[DirectedEdgeTraversal, ...],
+    *,
+    maximum_spur_edges: int = MAX_BACKTRACK_SPUR_EDGES,
+) -> tuple[bool, ...]:
+    """Mark returning traversals using the public metric's bounded stack rules."""
     if maximum_spur_edges < 1:
         raise ValueError("maximum backtrack spur depth must be positive")
 
     stack: list[DirectedEdgeTraversal] = []
-    known_distance = 0.0
-    backtrack_distance = 0.0
-    for traversal in traversals:
+    returning = [False] * len(traversals)
+    for index, traversal in enumerate(traversals):
         if traversal.edge_id is None:
             stack.clear()
             continue
-        known_distance += traversal.distance_m
         if stack and reversed_traversal(stack[-1], traversal):
-            backtrack_distance += traversal.distance_m
+            returning[index] = True
             stack.pop()
             continue
         stack.append(traversal)
         if len(stack) > maximum_spur_edges:
             del stack[0]
-
-    return BacktrackMeasurement(backtrack_distance, known_distance)
+    return tuple(returning)
