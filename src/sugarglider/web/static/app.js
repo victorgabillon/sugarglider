@@ -26,6 +26,7 @@ function updateOptionsFromControls() {
     seed: Number(byId("seed").value),
     pointOrderMode: byId("point-order-mode").value,
     pathSelectionMode: byId("path-selection-mode").value,
+    naturePreference: byId("nature-preference").value,
   };
 }
 
@@ -37,6 +38,7 @@ function updateControlsFromOptions() {
   byId("seed").value = state.options.seed;
   byId("point-order-mode").value = state.options.pointOrderMode;
   byId("path-selection-mode").value = state.options.pathSelectionMode;
+  byId("nature-preference").value = state.options.naturePreference;
 }
 
 function pointValidation() {
@@ -104,7 +106,7 @@ function renderMapData() {
   renderOptionalMarkers(candidate?.optional_points ?? []);
   renderImportedGpx(state.importedGpx);
   renderCandidates(state.generationResult?.candidates ?? [], state.selectedSignature, state.showAllCandidates, selectCandidate);
-  renderVisualization(candidate ? state.visualizationCache.get(candidate.signature) ?? null : null);
+  renderVisualization(candidate ? state.visualizationCache.get(candidate.signature) ?? null : null, state.showNatureContext);
 }
 
 function candidateBadges(candidate, search) {
@@ -123,18 +125,51 @@ function renderCandidatesPanel() {
   container.innerHTML = "";
   result.candidates.forEach((candidate) => {
     const analysis = candidate.route.analysis;
+    const nature = analysis.nature;
     const nonImmediate = Math.max(analysis.repetition.repeated_distance.distance_m - analysis.immediate_backtrack.distance_m, 0);
     const card = document.createElement("button");
     card.type = "button";
     card.className = "candidate-card";
     card.setAttribute("aria-pressed", String(candidate.signature === state.selectedSignature));
-    card.innerHTML = `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><p>${candidateBadges(candidate, result.search)}</p><p class="eyebrow">${escapeHtml(constructionLabel(candidate.construction))}</p>${metricRows([["Target error", formatDistance(candidate.target_error_m)], ["Repeated", `${formatDistance(analysis.repetition.repeated_distance.distance_m)} · ${formatPercent(analysis.repetition.repeated_distance.share)}`], ["Immediate return", `${formatDistance(analysis.immediate_backtrack.distance_m)} · ${formatPercent(analysis.immediate_backtrack.share)}`], ["Other repetition", formatDistance(nonImmediate)], ["Paved", formatPercent(analysis.paved.share)], ["Trail-like", formatPercent(analysis.trail_like.share)], ["Major road", formatPercent(analysis.major_road.share)]])}`;
+    const natureValue = (metric) => nature ? `${formatDistance(metric.distance_m)} · ${formatPercent(metric.share)}` : "not evaluated";
+    card.innerHTML = `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><p>${candidateBadges(candidate, result.search)}</p><p class="eyebrow">${escapeHtml(constructionLabel(candidate.construction))}</p>${metricRows([["Target error", formatDistance(candidate.target_error_m)], ["Repeated", `${formatDistance(analysis.repetition.repeated_distance.distance_m)} · ${formatPercent(analysis.repetition.repeated_distance.share)}`], ["Immediate return", `${formatDistance(analysis.immediate_backtrack.distance_m)} · ${formatPercent(analysis.immediate_backtrack.share)}`], ["Other repetition", formatDistance(nonImmediate)], ["Nature score", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated"], ["Woodland", natureValue(nature?.woodland)], ["Open natural", natureValue(nature?.open_natural)], ["Agriculture", natureValue(nature?.agriculture)], ["Urban", natureValue(nature?.urban)], ["Park/protected", natureValue(nature?.park_or_protected)], [`Within ${state.config?.nature_water_buffer_m ?? 100} m of mapped water`, natureValue(nature?.near_water)], ["Unknown land cover", nature ? formatPercent(nature.unknown_landcover.share) : "not evaluated"], ["Paved", formatPercent(analysis.paved.share)], ["Trail-like", formatPercent(analysis.trail_like.share)], ["Major road", formatPercent(analysis.major_road.share)]])}`;
     card.addEventListener("click", () => selectCandidate(candidate.signature));
     container.append(card);
   });
 }
 
 function section(title, rows) { return `<section><h3>${escapeHtml(title)}</h3>${metricRows(rows)}</section>`; }
+
+function natureSection(nature, search) {
+  if (!nature) {
+    return section("Mapped nature context", [["Index available", search.nature_index_available ? "Yes" : "No"], ["Nature analysis", "not evaluated"]]) + '<p class="context-note">Nature metrics are not zero: they were not evaluated because the local OSM nature index or analysis was unavailable.</p>';
+  }
+  const breakdown = nature.score_breakdown;
+  const component = (value) => `${value.points >= 0 ? "+" : ""}${value.points.toFixed(1)} points · weight ${value.weight.toFixed(2)} × ${formatPercent(value.share)}`;
+  const waterBuffer = state.config?.nature_water_buffer_m ?? 100;
+  const warnings = nature.warnings.map((warning) => friendlyLabel(warning)).join("; ") || "None";
+  return section("Mapped nature context", [
+    ["Nature score", `${nature.nature_score.toFixed(1)} / 100`],
+    ["Base score", breakdown.base_score.toFixed(1)],
+    ["Woodland reward", component(breakdown.woodland_reward)],
+    ["Open-natural reward", component(breakdown.open_natural_reward)],
+    ["Agriculture reward", component(breakdown.agriculture_reward)],
+    ["Park/protected reward", component(breakdown.park_or_protected_reward)],
+    ["Near-water reward", component(breakdown.near_water_reward)],
+    ["Urban penalty", component(breakdown.urban_penalty)],
+    ["Unknown penalty", component(breakdown.unknown_penalty)],
+    ["Woodland", `${formatDistance(nature.woodland.distance_m)} · ${formatPercent(nature.woodland.share)}`],
+    ["Open natural", `${formatDistance(nature.open_natural.distance_m)} · ${formatPercent(nature.open_natural.share)}`],
+    ["Agriculture", `${formatDistance(nature.agriculture.distance_m)} · ${formatPercent(nature.agriculture.share)}`],
+    ["Water crossing", `${formatDistance(nature.water_crossing.distance_m)} · ${formatPercent(nature.water_crossing.share)}`],
+    ["Urban/developed", `${formatDistance(nature.urban.distance_m)} · ${formatPercent(nature.urban.share)}`],
+    ["Unknown land cover", `${formatDistance(nature.unknown_landcover.distance_m)} · ${formatPercent(nature.unknown_landcover.share)}`],
+    ["Park or protected", `${formatDistance(nature.park_or_protected.distance_m)} · ${formatPercent(nature.park_or_protected.share)}`],
+    [`Within ${waterBuffer} m of mapped water`, `${formatDistance(nature.near_water.distance_m)} · ${formatPercent(nature.near_water.share)}`],
+    ["Nature warnings", warnings],
+    ["Index features", formatCount(nature.index_feature_count)],
+  ]) + '<p class="context-note">Derived from local OpenStreetMap polygons. Unknown means unmapped or outside the index. Near water describes proximity to mapped water, not a water view. Protected-area tags do not guarantee public access. The score describes mapped environmental context—not beauty, biodiversity, accessibility, or safety.</p>';
+}
 
 function renderMetrics() {
   const candidate = selectedCandidate();
@@ -147,9 +182,9 @@ function renderMetrics() {
   const search = result.search;
   const otherRepeated = Math.max(analysis.repetition.repeated_distance.distance_m - analysis.immediate_backtrack.distance_m, 0);
   const nullable = (value, formatter = formatPercent) => value === null || value === undefined ? "Not evaluated" : formatter(value);
-  const warningCodes = [...new Set([...search.warnings, ...analysis.warnings])];
+  const warningCodes = [...new Set([...search.warnings, ...analysis.warnings, ...(analysis.nature?.warnings ?? [])])];
   const warnings = warningCodes.map((warning) => `<li>${escapeHtml(friendlyLabel(warning))}</li>`).join("") || "<li>No route or search warnings.</li>";
-  byId("metrics-content").innerHTML = section("Route", [["Distance", formatDistance(candidate.route.summary.distance_m)], ["Target", formatDistance(search.target_distance_m)], ["Target error", formatDistance(candidate.target_error_m)], ["Tolerance", formatDistance(search.tolerance_m)], ["Construction", constructionLabel(candidate.construction)], ["Mandatory POIs", candidate.route.summary.input_point_count], ["Routing points", candidate.routing_points.length]]) + section("Natural loop quality", [["Total repeated", `${formatDistance(analysis.repetition.repeated_distance.distance_m)} · ${formatPercent(analysis.repetition.repeated_distance.share)}`], ["Immediate backtracking", `${formatDistance(analysis.immediate_backtrack.distance_m)} · ${formatPercent(analysis.immediate_backtrack.share)}`], ["Non-immediate repeated", formatDistance(otherRepeated)], ["Repeated edge-ID coverage", formatPercent(analysis.repetition.edge_id_coverage.share)], ["Backtracking coverage", formatPercent(analysis.backtrack_edge_id_coverage.share)]]) + section("Trail quality", [["Paved", `${formatDistance(analysis.paved.distance_m)} · ${formatPercent(analysis.paved.share)}`], ["Unpaved", `${formatDistance(analysis.unpaved.distance_m)} · ${formatPercent(analysis.unpaved.share)}`], ["Unknown surface", `${formatDistance(analysis.unknown_surface.distance_m)} · ${formatPercent(analysis.unknown_surface.share)}`], ["Trail-like", formatPercent(analysis.trail_like.share)], ["Official hiking network", formatPercent(analysis.official_hiking_network.share)], ["Major roads", formatPercent(analysis.major_road.share)], ["Car-accessible", formatDistance(analysis.car_accessible.distance_m)]]) + section("Search diagnostics", [["Status", friendlyLabel(search.status)], ["Full-route evaluations", `${formatCount(search.evaluated_candidate_count)} / ${formatCount(search.search_budget)}`], ["Mandatory-order evaluations", search.evaluated_order_count], ["Alternative-leg requests", `${search.alternative_leg_request_count} / ${search.low_overlap_request_budget}`], ["Alternative paths", search.alternative_path_count], ["Refined sources", search.low_overlap_refined_source_count], ["Low-overlap candidates", search.low_overlap_candidate_count], ["Leg budget exhausted", search.low_overlap_budget_exhausted ? "Yes" : "No"], ["Pre-refinement repetition", nullable(search.pre_low_overlap_repeated_share)], ["Best low-overlap repetition", nullable(search.best_low_overlap_repeated_share)], ["Pre-refinement backtracking", nullable(search.pre_low_overlap_backtrack_share)], ["Best low-overlap backtracking", nullable(search.best_low_overlap_backtrack_share)]]) + `<section><h3>Warnings</h3><ul class="warning-list">${warnings}</ul><details><summary>Raw warning codes</summary><pre>${escapeHtml(JSON.stringify({ search: search.warnings, route: analysis.warnings }, null, 2))}</pre></details></section>`;
+  byId("metrics-content").innerHTML = section("Route", [["Distance", formatDistance(candidate.route.summary.distance_m)], ["Target", formatDistance(search.target_distance_m)], ["Target error", formatDistance(candidate.target_error_m)], ["Tolerance", formatDistance(search.tolerance_m)], ["Construction", constructionLabel(candidate.construction)], ["Mandatory POIs", candidate.route.summary.input_point_count], ["Routing points", candidate.routing_points.length]]) + section("Natural loop quality", [["Total repeated", `${formatDistance(analysis.repetition.repeated_distance.distance_m)} · ${formatPercent(analysis.repetition.repeated_distance.share)}`], ["Immediate backtracking", `${formatDistance(analysis.immediate_backtrack.distance_m)} · ${formatPercent(analysis.immediate_backtrack.share)}`], ["Non-immediate repeated", formatDistance(otherRepeated)], ["Repeated edge-ID coverage", formatPercent(analysis.repetition.edge_id_coverage.share)], ["Backtracking coverage", formatPercent(analysis.backtrack_edge_id_coverage.share)]]) + section("Trail quality", [["Paved", `${formatDistance(analysis.paved.distance_m)} · ${formatPercent(analysis.paved.share)}`], ["Unpaved", `${formatDistance(analysis.unpaved.distance_m)} · ${formatPercent(analysis.unpaved.share)}`], ["Unknown surface", `${formatDistance(analysis.unknown_surface.distance_m)} · ${formatPercent(analysis.unknown_surface.share)}`], ["Trail-like", formatPercent(analysis.trail_like.share)], ["Official hiking network", formatPercent(analysis.official_hiking_network.share)], ["Major roads", formatPercent(analysis.major_road.share)], ["Car-accessible", formatDistance(analysis.car_accessible.distance_m)]]) + natureSection(analysis.nature, search) + section("Search diagnostics", [["Status", friendlyLabel(search.status)], ["Nature preference requested", search.nature_requested ? "Yes" : "No"], ["Nature index available", search.nature_index_available ? "Yes" : "No"], ["Nature index features", nullable(search.nature_index_feature_count, formatCount)], ["Recommended nature score", nullable(search.recommended_nature_score, (value) => `${Number(value).toFixed(1)} / 100`)], ["Best available nature score", nullable(search.best_available_nature_score, (value) => `${Number(value).toFixed(1)} / 100`)], ["Full-route evaluations", `${formatCount(search.evaluated_candidate_count)} / ${formatCount(search.search_budget)}`], ["Mandatory-order evaluations", search.evaluated_order_count], ["Alternative-leg requests", `${search.alternative_leg_request_count} / ${search.low_overlap_request_budget}`], ["Alternative paths", search.alternative_path_count], ["Refined sources", search.low_overlap_refined_source_count], ["Low-overlap candidates", search.low_overlap_candidate_count], ["Leg budget exhausted", search.low_overlap_budget_exhausted ? "Yes" : "No"], ["Pre-refinement repetition", nullable(search.pre_low_overlap_repeated_share)], ["Best low-overlap repetition", nullable(search.best_low_overlap_repeated_share)], ["Pre-refinement backtracking", nullable(search.pre_low_overlap_backtrack_share)], ["Best low-overlap backtracking", nullable(search.best_low_overlap_backtrack_share)]]) + `<section><h3>Warnings</h3><ul class="warning-list">${warnings}</ul><details><summary>Raw warning codes</summary><pre>${escapeHtml(JSON.stringify({ search: search.warnings, route: analysis.warnings, nature: analysis.nature?.warnings ?? [] }, null, 2))}</pre></details></section>`;
 }
 
 function renderStatus() {
@@ -186,7 +221,7 @@ async function selectCandidate(signature) {
       if (!state.generationResult?.candidates.some((current) => current.signature === signature)) return;
       state.visualizationCache.set(signature, visualization);
     }
-    if (state.selectedSignature === signature) renderVisualization(visualization);
+    if (state.selectedSignature === signature) renderVisualization(visualization, state.showNatureContext);
   } catch (error) { handleError(error, "Route highlighting failed."); }
 }
 
@@ -208,6 +243,7 @@ async function generate() {
   state.abortController = new AbortController();
   byId("request-status").textContent = "Generating routes… 0 s elapsed";
   elapsedTimer = window.setInterval(() => {
+    if (state.request.status !== "running" || state.request.startedAt === null) return;
     const seconds = Math.floor((Date.now() - state.request.startedAt) / 1000);
     byId("request-status").textContent = `Generating routes… ${seconds} s elapsed`;
   }, 1000);
@@ -251,7 +287,9 @@ function normalizeImportedRequest(value) {
   if (points.length > (state.config?.max_required_points ?? 30)) throw new Error("The request exceeds the 30-point limit.");
   const pointOrderMode = value.point_order_mode ?? "fixed";
   const pathSelectionMode = value.path_selection_mode ?? "shortest";
-  if (!["fixed", "optimize_loop"].includes(pointOrderMode) || !["shortest", "low_overlap"].includes(pathSelectionMode)) throw new Error("The request contains an unsupported generation mode.");
+  const requestedNaturePreference = value.nature_preference ?? "off";
+  if (!["fixed", "optimize_loop"].includes(pointOrderMode) || !["shortest", "low_overlap"].includes(pathSelectionMode) || !["off", "prefer"].includes(requestedNaturePreference)) throw new Error("The request contains an unsupported generation mode.");
+  const naturePreference = state.config?.nature_index_available ? requestedNaturePreference : "off";
   if (value.close_loop === false || (value.profile !== undefined && value.profile !== "hike")) throw new Error("Only closed-loop hike requests are supported.");
   const targetDistanceM = Number(value.target_distance_m);
   const toleranceM = Number(value.tolerance_m ?? 2000);
@@ -261,7 +299,7 @@ function normalizeImportedRequest(value) {
   if (!Number.isFinite(toleranceM) || toleranceM < 100 || toleranceM > 10000) throw new Error("Tolerance must be between 100 and 10,000 metres.");
   if (!Number.isInteger(candidateCount) || candidateCount < 1 || candidateCount > 5) throw new Error("Candidate count must be an integer from 1 to 5.");
   if (!Number.isInteger(seed)) throw new Error("Seed must be an integer.");
-  return { points, options: { name: typeof value.name === "string" ? value.name : "Sugarglider route", targetDistanceKm: targetDistanceM / 1000, toleranceKm: toleranceM / 1000, candidateCount, seed, pointOrderMode, pathSelectionMode } };
+  return { points, options: { name: typeof value.name === "string" ? value.name : "Sugarglider route", targetDistanceKm: targetDistanceM / 1000, toleranceKm: toleranceM / 1000, candidateCount, seed, pointOrderMode, pathSelectionMode, naturePreference } };
 }
 
 async function importRequest(file) {
@@ -305,6 +343,7 @@ function bindEvents() {
   byId("fit-points").addEventListener("click", () => fitCoordinates(state.points.map((point) => [point.lon, point.lat])));
   byId("clear-points").addEventListener("click", () => { if (state.points.length > 1 && !window.confirm("Remove all mandatory points and generated results?")) return; state.points = []; invalidateAndRender(); });
   byId("show-all").addEventListener("change", (event) => { state.showAllCandidates = event.target.checked; renderMapData(); });
+  byId("show-nature").addEventListener("change", (event) => { state.showNatureContext = event.target.checked; renderMapData(); });
   byId("download-gpx").addEventListener("click", downloadSelected);
   byId("copy-request").addEventListener("click", async () => { try { updateOptionsFromControls(); await navigator.clipboard.writeText(JSON.stringify(currentRequest(), null, 2)); byId("request-status").textContent = "Request JSON copied."; } catch (error) { showError("Could not copy request JSON.", error.message); } });
   window.addEventListener("resize", resizeMap);
@@ -314,6 +353,15 @@ async function start() {
   bindEvents();
   try {
     state.config = await getConfig();
+    const natureAvailable = Boolean(state.config.nature_index_available);
+    const preferOption = byId("nature-preference").querySelector('option[value="prefer"]');
+    preferOption.disabled = !natureAvailable;
+    if (!natureAvailable) state.options.naturePreference = "off";
+    updateControlsFromOptions();
+    byId("nature-availability").textContent = natureAvailable ? `Local OSM nature index available. Water proximity uses ${state.config.nature_water_buffer_m} m.` : "Local OSM nature index unavailable. Prefer mapped nature is disabled; routing still works.";
+    byId("show-nature").disabled = !natureAvailable;
+    state.showNatureContext = natureAvailable;
+    byId("show-nature").checked = natureAvailable;
     initializeMap(state.config, {
       onReady: () => { mapReady = true; renderMapData(); },
       onError: showMapError,

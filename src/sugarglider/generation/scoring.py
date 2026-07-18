@@ -2,7 +2,11 @@
 
 from dataclasses import dataclass
 
-from sugarglider.domain.generation import CandidateScore, GeneratedCandidate
+from sugarglider.domain.generation import (
+    CandidateScore,
+    GeneratedCandidate,
+    NaturePreference,
+)
 from sugarglider.domain.models import RouteResult
 
 
@@ -65,30 +69,59 @@ def score_route(
 
 def rank_candidates(
     candidates: tuple[GeneratedCandidate, ...],
+    nature_preference: NaturePreference = "off",
 ) -> tuple[GeneratedCandidate, ...]:
     """Rank natural loops within tolerance and keep distance pressure outside it."""
 
-    def ranking_key(candidate: GeneratedCandidate) -> tuple[object, ...]:
-        backtrack = candidate.route.analysis.immediate_backtrack.share
-        repetition = candidate.route.analysis.repetition.repeated_distance.share
-        if candidate.within_tolerance:
+    if nature_preference == "off":
+
+        def ranking_key(candidate: GeneratedCandidate) -> tuple[object, ...]:
+            backtrack = candidate.route.analysis.immediate_backtrack.share
+            repetition = candidate.route.analysis.repetition.repeated_distance.share
+            if candidate.within_tolerance:
+                return (
+                    0,
+                    backtrack,
+                    repetition,
+                    candidate.score.total,
+                    candidate.target_error_m,
+                    candidate.signature,
+                )
             return (
-                0,
+                1,
+                candidate.score.distance_error_ratio,
                 backtrack,
                 repetition,
                 candidate.score.total,
                 candidate.target_error_m,
                 candidate.signature,
             )
-        return (
-            1,
-            candidate.score.distance_error_ratio,
-            backtrack,
-            repetition,
-            candidate.score.total,
-            candidate.target_error_m,
-            candidate.signature,
-        )
+
+    else:
+
+        def ranking_key(candidate: GeneratedCandidate) -> tuple[object, ...]:
+            backtrack = candidate.route.analysis.immediate_backtrack.share
+            repetition = candidate.route.analysis.repetition.repeated_distance.share
+            nature = _nature_ranking_key(candidate)
+            if candidate.within_tolerance:
+                return (
+                    0,
+                    backtrack,
+                    repetition,
+                    nature,
+                    candidate.score.total,
+                    candidate.target_error_m,
+                    candidate.signature,
+                )
+            return (
+                1,
+                candidate.score.distance_error_ratio,
+                backtrack,
+                repetition,
+                nature,
+                candidate.score.total,
+                candidate.signature,
+            )
 
     ordered = sorted(
         candidates,
@@ -102,23 +135,51 @@ def rank_candidates(
 
 def rank_low_overlap_candidates(
     candidates: tuple[GeneratedCandidate, ...],
+    nature_preference: NaturePreference = "off",
 ) -> tuple[GeneratedCandidate, ...]:
     """Rank tolerance first, then exact repeated distance and backtracking."""
-    ordered = sorted(
-        candidates,
-        key=lambda candidate: (
-            0 if candidate.within_tolerance else 1,
-            candidate.route.analysis.repetition.repeated_distance.share,
-            candidate.route.analysis.immediate_backtrack.share,
-            candidate.score.total,
-            candidate.target_error_m,
-            candidate.signature,
-        ),
-    )
+    if nature_preference == "off":
+        ordered = sorted(
+            candidates,
+            key=lambda candidate: (
+                0 if candidate.within_tolerance else 1,
+                candidate.route.analysis.repetition.repeated_distance.share,
+                candidate.route.analysis.immediate_backtrack.share,
+                candidate.score.total,
+                candidate.target_error_m,
+                candidate.signature,
+            ),
+        )
+    else:
+        ordered = sorted(
+            candidates,
+            key=lambda candidate: (
+                0 if candidate.within_tolerance else 1,
+                (
+                    candidate.score.distance_error_ratio
+                    if not candidate.within_tolerance
+                    else 0.0
+                ),
+                candidate.route.analysis.immediate_backtrack.share,
+                candidate.route.analysis.repetition.repeated_distance.share,
+                _nature_ranking_key(candidate),
+                candidate.score.total,
+                candidate.target_error_m,
+                candidate.signature,
+            ),
+        )
     return tuple(
         candidate.model_copy(update={"rank": rank})
         for rank, candidate in enumerate(ordered, start=1)
     )
+
+
+def _nature_ranking_key(candidate: GeneratedCandidate) -> tuple[int, float]:
+    """Sort known scores high-to-low and keep unknown distinct from numeric zero."""
+    nature = candidate.route.analysis.nature
+    if nature is None:
+        return (1, 0.0)
+    return (0, -nature.nature_score)
 
 
 def is_natural_improvement(

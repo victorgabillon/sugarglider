@@ -49,6 +49,8 @@
           </div>
           <label>Mandatory-point order<select id="point-order-mode"><option value="fixed">Fixed input order</option><option value="optimize_loop">Optimize loop</option></select></label>
           <label>Path selection<select id="path-selection-mode"><option value="shortest">Natural shortest paths</option><option value="low_overlap">Low-overlap alternatives</option></select></label>
+          <label>Nature preference<select id="nature-preference"><option value="off">Off</option><option value="prefer">Prefer mapped nature</option></select></label>
+          <p id="nature-availability" class="field-help" role="status"></p>
           <input id="seed" type="hidden" value="0">
         </form>
 
@@ -81,6 +83,7 @@
         <div id="map" role="application" aria-label="Interactive trail route map"></div>
         <div class="map-tools">
           <label><input id="show-all" type="checkbox" checked> Show all candidates</label>
+          <label><input id="show-nature" type="checkbox"> Show nature context</label>
         </div>
         <div class="legend" aria-label="Map legend">
           <span><i class="line selected"></i>Selected route</span>
@@ -90,6 +93,12 @@
           <span><i class="marker mandatory">1</i>Mandatory POI</span>
           <span><i class="marker optional"></i>Generated optional point</span>
           <span><i class="line imported"></i>Imported GPX</span>
+          <span class="nature-legend"><i class="line woodland"></i>Woodland</span>
+          <span class="nature-legend"><i class="line open-natural"></i>Open natural</span>
+          <span class="nature-legend"><i class="line agriculture"></i>Agriculture</span>
+          <span class="nature-legend"><i class="line urban"></i>Urban/developed</span>
+          <span class="nature-legend"><i class="line water"></i>Water crossing</span>
+          <span class="nature-legend"><i class="line nature-unknown"></i>Unknown land cover</span>
         </div>
       </section>
 

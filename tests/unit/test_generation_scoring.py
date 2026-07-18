@@ -2,7 +2,7 @@
 
 import pytest
 
-from sugarglider.domain.analysis import DistanceMetric
+from sugarglider.domain.analysis import DistanceMetric, NatureAnalysis
 from sugarglider.domain.generation import GeneratedCandidate
 from sugarglider.domain.models import RouteResult
 from sugarglider.generation.scoring import (
@@ -11,6 +11,7 @@ from sugarglider.generation.scoring import (
     rank_low_overlap_candidates,
     score_route,
 )
+from sugarglider.nature.scoring import score_nature
 
 
 def route_with_metrics(route: RouteResult, distance_m: float) -> RouteResult:
@@ -61,6 +62,46 @@ def candidate(
         within_tolerance=within,
         score=score,
         signature=signature,
+    )
+
+
+def route_with_nature(route: RouteResult, woodland_share: float) -> RouteResult:
+    distance_m = route.summary.distance_m
+    unknown_share = 1 - woodland_share
+    breakdown = score_nature(
+        woodland_share=woodland_share,
+        open_natural_share=0,
+        agriculture_share=0,
+        park_or_protected_share=0,
+        near_water_share=0,
+        urban_share=0,
+        unknown_share=unknown_share,
+    )
+    zero = DistanceMetric(distance_m=0, share=0)
+    nature = NatureAnalysis(
+        available=True,
+        index_format_version=1,
+        index_feature_count=2,
+        woodland=DistanceMetric(
+            distance_m=distance_m * woodland_share,
+            share=woodland_share,
+        ),
+        open_natural=zero,
+        agriculture=zero,
+        water_crossing=zero,
+        urban=zero,
+        unknown_landcover=DistanceMetric(
+            distance_m=distance_m * unknown_share,
+            share=unknown_share,
+        ),
+        park_or_protected=zero,
+        near_water=zero,
+        nature_score=breakdown.final_score,
+        score_breakdown=breakdown,
+        warnings=(),
+    )
+    return route.model_copy(
+        update={"analysis": route.analysis.model_copy(update={"nature": nature})}
     )
 
 
@@ -287,3 +328,107 @@ def test_natural_improvement_ties_remain_signature_deterministic(
         "a",
         "b",
     ]
+
+
+def test_prefer_uses_nature_only_after_existing_hard_priorities(
+    route_result: RouteResult,
+) -> None:
+    base = route_with_metrics(route_result, 1_000)
+    low_nature = candidate(
+        route_with_nature(base, 0),
+        error=10,
+        within=True,
+        signature="low",
+        total_override=0,
+    )
+    high_nature = candidate(
+        route_with_nature(base, 1),
+        error=50,
+        within=True,
+        signature="high",
+        total_override=10,
+    )
+    assert [item.signature for item in rank_candidates((high_nature, low_nature))] == [
+        "low",
+        "high",
+    ]
+    assert [
+        item.signature for item in rank_candidates((high_nature, low_nature), "prefer")
+    ] == ["high", "low"]
+
+    worse_backtrack_route = high_nature.route.model_copy(
+        update={
+            "analysis": high_nature.route.analysis.model_copy(
+                update={
+                    "immediate_backtrack": DistanceMetric(
+                        distance_m=100,
+                        share=0.1,
+                    )
+                }
+            )
+        }
+    )
+    worse_backtrack = high_nature.model_copy(update={"route": worse_backtrack_route})
+    assert [
+        item.signature
+        for item in rank_candidates((worse_backtrack, low_nature), "prefer")
+    ][0] == "low"
+
+
+def test_known_nature_sorts_before_unknown_only_at_nature_position(
+    route_result: RouteResult,
+) -> None:
+    base = route_with_metrics(route_result, 1_000)
+    known = candidate(
+        route_with_nature(base, 0),
+        error=10,
+        within=True,
+        signature="known",
+        total_override=10,
+    )
+    unknown = candidate(
+        base,
+        error=10,
+        within=True,
+        signature="unknown",
+        total_override=0,
+    )
+    assert [item.signature for item in rank_candidates((unknown, known), "prefer")] == [
+        "known",
+        "unknown",
+    ]
+
+
+def test_prefer_keeps_distance_pressure_outside_tolerance(
+    route_result: RouteResult,
+) -> None:
+    close_route = route_with_nature(route_with_metrics(route_result, 1_100), 0)
+    far_route = route_with_nature(route_with_metrics(route_result, 1_500), 1)
+    close = candidate(close_route, error=100, within=False, signature="close")
+    far = candidate(far_route, error=500, within=False, signature="far")
+    assert [item.signature for item in rank_candidates((far, close), "prefer")] == [
+        "close",
+        "far",
+    ]
+
+
+def test_low_overlap_prefer_never_lets_nature_beat_backtracking_or_repetition(
+    route_result: RouteResult,
+) -> None:
+    low = candidate_with_overlap(
+        route_result,
+        repetition=0.1,
+        backtrack=0.05,
+        signature="low",
+    )
+    high = candidate_with_overlap(
+        route_result,
+        repetition=0.2,
+        backtrack=0.1,
+        signature="high",
+    )
+    low = low.model_copy(update={"route": route_with_nature(low.route, 0)})
+    high = high.model_copy(update={"route": route_with_nature(high.route, 1)})
+    assert [
+        item.signature for item in rank_low_overlap_candidates((high, low), "prefer")
+    ][0] == "low"

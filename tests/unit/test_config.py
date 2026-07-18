@@ -25,6 +25,24 @@ def test_map_setting_defaults() -> None:
     assert settings.map_initial_zoom == 11.0
 
 
+def test_nature_setting_defaults_and_environment_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    defaults = Settings()
+    assert defaults.nature_index_path is not None
+    assert defaults.nature_index_path.name == ("ile-de-france-nature-index.json.gz")
+    assert defaults.nature_water_buffer_m == 100
+    assert not defaults.nature_missing_index_warning
+    monkeypatch.setenv("SUGARGLIDER_NATURE_INDEX_PATH", "/tmp/local.json.gz")
+    monkeypatch.setenv("SUGARGLIDER_NATURE_WATER_BUFFER_M", "250")
+    monkeypatch.setenv("SUGARGLIDER_NATURE_MISSING_INDEX_WARNING", "true")
+    configured = Settings()
+    assert configured.nature_index_path is not None
+    assert configured.nature_index_path.name == "local.json.gz"
+    assert configured.nature_water_buffer_m == 250
+    assert configured.nature_missing_index_warning
+
+
 def test_map_environment_aliases(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SUGARGLIDER_MAP_TILE_URL", "https://map.example/{z}/{x}/{y}")
     monkeypatch.setenv("SUGARGLIDER_MAP_ATTRIBUTION", "Example attribution")
@@ -71,6 +89,8 @@ def test_invalid_low_overlap_settings_are_rejected(field: str, value: float) -> 
         ("map_initial_lon", 180.1),
         ("map_initial_zoom", -0.1),
         ("map_initial_zoom", 22.1),
+        ("nature_water_buffer_m", -0.1),
+        ("nature_water_buffer_m", 1000.1),
     ],
 )
 def test_invalid_map_settings_are_rejected(field: str, value: str | float) -> None:

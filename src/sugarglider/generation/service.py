@@ -2,11 +2,12 @@
 
 from dataclasses import dataclass, field
 
-from sugarglider.analysis.route import haversine_distance_m
+from sugarglider.analysis.route import RouteAnalyzer, haversine_distance_m
 from sugarglider.domain.generation import (
     CandidateConstruction,
     GeneratedCandidate,
     GenerationStatus,
+    NaturePreference,
     RequiredPointVisit,
     RouteGenerationRequest,
     RouteGenerationResult,
@@ -123,6 +124,9 @@ class _LowOverlapSummary:
     best_repeated_share: float | None = None
     pre_backtrack_share: float | None = None
     best_backtrack_share: float | None = None
+    nature_off_recommended_signature: str | None = None
+    nature_off_recommended_score: float | None = None
+    best_available_nature_score: float | None = None
 
 
 @dataclass(frozen=True)
@@ -140,9 +144,12 @@ class RouteGenerationService:
         backend: RoutingBackend,
         result_factory: RouteResultFactory | None = None,
         *,
+        structural_result_factory: RouteResultFactory | None = None,
         max_evaluations: int = 48,
         max_optional_snap_displacement_m: float = 300.0,
         low_overlap_settings: LowOverlapSettings | None = None,
+        nature_index_available: bool = False,
+        nature_index_feature_count: int | None = None,
     ) -> None:
         if max_evaluations < 1:
             raise ValueError("generation search budget must be positive")
@@ -150,12 +157,21 @@ class RouteGenerationService:
             raise ValueError("optional snap displacement must be non-negative")
         self._backend = backend
         self._result_factory = result_factory or RouteResultFactory()
+        self._structural_result_factory = (
+            structural_result_factory
+            if structural_result_factory is not None
+            else RouteResultFactory(RouteAnalyzer())
+        )
         self._max_evaluations = max_evaluations
         self._max_optional_snap_displacement_m = max_optional_snap_displacement_m
         self._low_overlap_settings = low_overlap_settings or LowOverlapSettings()
+        self._nature_index_available = nature_index_available
+        self._nature_index_feature_count = nature_index_feature_count
 
     async def generate(self, request: RouteGenerationRequest) -> RouteGenerationResult:
         """Generate distinct candidates while preserving every mandatory point."""
+        nature_preference = self._effective_nature_preference(request)
+        initial_warnings = self._nature_warnings(request)
         supplied_points = request.supplied_required_points
         fixed_order = tuple(range(len(supplied_points)))
         fixed_points = ordered_closed_points(supplied_points, fixed_order)
@@ -202,7 +218,21 @@ class RouteGenerationService:
                     best_order_source.route,
                     state,
                     status="infeasible",
-                    warnings=("mandatory_route_exceeds_target_tolerance",),
+                    warnings=tuple(
+                        sorted(
+                            {
+                                "mandatory_route_exceeds_target_tolerance",
+                                *initial_warnings,
+                                *(
+                                    ("nature_analysis_incomplete",)
+                                    if nature_preference == "prefer"
+                                    and baseline.analysis.nature is None
+                                    else ()
+                                ),
+                                *self._route_nature_warnings((baseline,)),
+                            }
+                        )
+                    ),
                     low_overlap=(
                         _LowOverlapSummary(
                             request_budget=(self._low_overlap_settings.max_leg_requests)
@@ -340,9 +370,26 @@ class RouteGenerationService:
             signatures.add(candidate.signature)
             drafts.append(candidate)
 
-        ranked = rank_candidates(tuple(drafts))
+        all_drafts = tuple(drafts)
+        off_ranked = rank_candidates(all_drafts, "off")
+        ranked = rank_candidates(all_drafts, nature_preference)
+        warnings: set[str] = set(initial_warnings)
+        if nature_preference == "prefer" and off_ranked:
+            preferred_score = self._nature_score(ranked[0])
+            off_score = self._nature_score(off_ranked[0])
+            if not self._nature_improves(preferred_score, off_score):
+                ranked = off_ranked
+                warnings.add("nature_no_candidate_improvement")
         diversity = select_diverse_candidates(ranked, request.candidate_count)
-        warnings: set[str] = set()
+        warnings.update(
+            self._route_nature_warnings(
+                (baseline, *(candidate.route for candidate in all_drafts))
+            )
+        )
+        if nature_preference == "prefer" and any(
+            candidate.route.analysis.nature is None for candidate in all_drafts
+        ):
+            warnings.add("nature_analysis_incomplete")
         if state.budget_exhausted:
             warnings.add("search_budget_exhausted")
         if diversity.low_edge_coverage and ranked:
@@ -372,6 +419,8 @@ class RouteGenerationService:
             ) = await self._refine_low_overlap(
                 request=request,
                 standard_candidates=final_candidates,
+                analyzed_candidates=all_drafts,
+                nature_preference=nature_preference,
             )
             warnings.update(low_overlap_warnings)
         elif request.path_selection_mode == "low_overlap":
@@ -395,6 +444,8 @@ class RouteGenerationService:
                 status=status,
                 warnings=tuple(sorted(warnings)),
                 low_overlap=low_overlap_summary,
+                candidates=final_candidates,
+                analyzed_candidates=all_drafts,
             ),
         )
 
@@ -659,13 +710,15 @@ class RouteGenerationService:
         *,
         request: RouteGenerationRequest,
         standard_candidates: tuple[GeneratedCandidate, ...],
+        analyzed_candidates: tuple[GeneratedCandidate, ...],
+        nature_preference: NaturePreference,
     ) -> tuple[
         tuple[GeneratedCandidate, ...],
         _LowOverlapSummary,
         tuple[str, ...],
     ]:
         """Refine selected standard candidates using one cached leg-search budget."""
-        sources = tuple(
+        existing_source_order = tuple(
             sorted(
                 standard_candidates,
                 key=lambda candidate: (
@@ -675,12 +728,19 @@ class RouteGenerationService:
                     candidate.target_error_m,
                     candidate.signature,
                 ),
-            )[: self._low_overlap_settings.source_count]
+            )
         )
+        if nature_preference == "off":
+            sources = existing_source_order[: self._low_overlap_settings.source_count]
+        else:
+            sources = self._nature_aware_refinement_sources(
+                existing_source_order,
+                analyzed_candidates,
+            )
         pre = sources[0]
         search = LowOverlapBeamSearch(
             self._backend,
-            self._result_factory,
+            self._structural_result_factory,
             self._low_overlap_settings,
         )
         refined_entries: list[_RefinedCandidate] = []
@@ -731,7 +791,11 @@ class RouteGenerationService:
         if search.budget_exhausted:
             warnings.add("low_overlap_leg_budget_exhausted")
         refined = tuple(entry.candidate for entry in refined_entries)
-        best_refined = rank_low_overlap_candidates(refined)[0] if refined else None
+        best_refined = (
+            rank_low_overlap_candidates(refined, nature_preference)[0]
+            if refined
+            else None
+        )
         if best_refined is None:
             warnings.add("low_overlap_no_complete_candidate")
             best_repeated_share = pre.route.analysis.repetition.repeated_distance.share
@@ -758,14 +822,25 @@ class RouteGenerationService:
             for entry in refined_entries
             if entry.natural_improvement and entry.candidate.within_tolerance
         )
-        recommended = (
-            rank_low_overlap_candidates(natural_within_tolerance)[0]
+        off_recommended = (
+            rank_low_overlap_candidates(natural_within_tolerance, "off")[0]
             if natural_within_tolerance
             else pre
         )
+        recommended = off_recommended
+        if nature_preference == "prefer" and natural_within_tolerance:
+            preferred = rank_low_overlap_candidates(
+                natural_within_tolerance, nature_preference
+            )[0]
+            if self._nature_improves(
+                self._nature_score(preferred), self._nature_score(off_recommended)
+            ):
+                recommended = preferred
+            else:
+                warnings.add("nature_no_candidate_improvement")
 
         combined = tuple((*standard_candidates, *refined))
-        ranked = rank_low_overlap_candidates(combined)
+        ranked = rank_low_overlap_candidates(combined, nature_preference)
         diversity = select_diverse_candidates(ranked, request.candidate_count)
         selected: list[GeneratedCandidate] = []
         selected_signatures: set[str] = set()
@@ -806,8 +881,58 @@ class RouteGenerationService:
             best_repeated_share=best_repeated_share,
             pre_backtrack_share=pre.route.analysis.immediate_backtrack.share,
             best_backtrack_share=best_backtrack_share,
+            nature_off_recommended_signature=off_recommended.signature,
+            nature_off_recommended_score=self._nature_score(off_recommended),
+            best_available_nature_score=self._best_nature_score(combined),
         )
         return tuple(selected), summary, tuple(sorted(warnings))
+
+    def _nature_aware_refinement_sources(
+        self,
+        existing_source_order: tuple[GeneratedCandidate, ...],
+        analyzed_candidates: tuple[GeneratedCandidate, ...],
+    ) -> tuple[GeneratedCandidate, ...]:
+        """Retain the PR5 source and add nature's best full-search draft."""
+        limit = self._low_overlap_settings.source_count
+        selected: list[GeneratedCandidate] = []
+        signatures: set[str] = set()
+
+        def retain(candidate: GeneratedCandidate | None) -> None:
+            if (
+                candidate is not None
+                and len(selected) < limit
+                and candidate.signature not in signatures
+            ):
+                selected.append(candidate)
+                signatures.add(candidate.signature)
+
+        retain(existing_source_order[0])
+        eligible = tuple(
+            candidate
+            for candidate in analyzed_candidates
+            if candidate.within_tolerance
+            and candidate.route.analysis.nature is not None
+        )
+        if not eligible:
+            eligible = tuple(
+                candidate
+                for candidate in analyzed_candidates
+                if candidate.route.analysis.nature is not None
+            )
+        best_nature = min(
+            eligible,
+            key=lambda candidate: (
+                -self._known_nature_score(candidate),
+                candidate.signature,
+            ),
+            default=None,
+        )
+        retain(best_nature)
+        for candidate in existing_source_order:
+            retain(candidate)
+        for candidate in analyzed_candidates:
+            retain(candidate)
+        return tuple(selected)
 
     @staticmethod
     def _unique_insertion_anchors(
@@ -845,8 +970,8 @@ class RouteGenerationService:
             + refinement_round * 1_000_000_007
         ) & 0x7FFF_FFFF
 
-    @staticmethod
     def _summary(
+        self,
         request: RouteGenerationRequest,
         baseline: RouteResult,
         best_order: RouteResult,
@@ -855,6 +980,8 @@ class RouteGenerationService:
         status: GenerationStatus,
         warnings: tuple[str, ...],
         low_overlap: _LowOverlapSummary | None = None,
+        candidates: tuple[GeneratedCandidate, ...] = (),
+        analyzed_candidates: tuple[GeneratedCandidate, ...] = (),
     ) -> SearchSummary:
         low_overlap_metrics = low_overlap or _LowOverlapSummary()
         return SearchSummary(
@@ -891,8 +1018,81 @@ class RouteGenerationService:
             pre_low_overlap_backtrack_share=low_overlap_metrics.pre_backtrack_share,
             best_low_overlap_backtrack_share=low_overlap_metrics.best_backtrack_share,
             low_overlap_requested=request.path_selection_mode == "low_overlap",
+            nature_requested=request.nature_preference == "prefer",
+            nature_index_available=self._nature_index_available,
+            nature_index_feature_count=self._nature_index_feature_count,
+            recommended_nature_score=(
+                self._nature_score(candidates[0]) if candidates else None
+            ),
+            best_available_nature_score=(
+                max(
+                    (
+                        score
+                        for score in (
+                            low_overlap_metrics.best_available_nature_score,
+                            self._best_nature_score(analyzed_candidates),
+                        )
+                        if score is not None
+                    ),
+                    default=None,
+                )
+            ),
             search_budget=state.search_budget,
             search_budget_exhausted=state.budget_exhausted,
             seed=request.seed,
             warnings=warnings,
         )
+
+    def _effective_nature_preference(
+        self, request: RouteGenerationRequest
+    ) -> NaturePreference:
+        if request.nature_preference == "prefer" and self._nature_index_available:
+            return "prefer"
+        return "off"
+
+    def _nature_warnings(self, request: RouteGenerationRequest) -> tuple[str, ...]:
+        if request.nature_preference == "prefer" and not self._nature_index_available:
+            return ("nature_index_unavailable",)
+        return ()
+
+    @staticmethod
+    def _route_nature_warnings(routes: tuple[RouteResult, ...]) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                {
+                    warning
+                    for route in routes
+                    if route.analysis.nature is not None
+                    for warning in route.analysis.nature.warnings
+                }
+            )
+        )
+
+    @staticmethod
+    def _nature_score(candidate: GeneratedCandidate) -> float | None:
+        nature = candidate.route.analysis.nature
+        return nature.nature_score if nature is not None else None
+
+    @staticmethod
+    def _known_nature_score(candidate: GeneratedCandidate) -> float:
+        nature = candidate.route.analysis.nature
+        if nature is None:
+            raise ValueError("candidate has no nature analysis")
+        return nature.nature_score
+
+    @classmethod
+    def _best_nature_score(
+        cls, candidates: tuple[GeneratedCandidate, ...]
+    ) -> float | None:
+        scores = tuple(
+            score
+            for candidate in candidates
+            if (score := cls._nature_score(candidate)) is not None
+        )
+        return max(scores, default=None)
+
+    @staticmethod
+    def _nature_improves(preferred: float | None, previous: float | None) -> bool:
+        if preferred is None:
+            return False
+        return previous is None or preferred > previous + NATURAL_IMPROVEMENT_EPSILON

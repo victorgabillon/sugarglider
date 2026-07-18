@@ -193,6 +193,31 @@ async def test_generation_request_defaults_to_fixed_order(
     assert response.status_code == 200
     assert fake_generation_service.last_request is not None
     assert fake_generation_service.last_request.point_order_mode == "fixed"
+    assert fake_generation_service.last_request.nature_preference == "off"
+
+
+@pytest.mark.asyncio
+async def test_generation_request_accepts_nature_preference(
+    client: httpx.AsyncClient,
+    fake_generation_service: FakeGenerationService,
+) -> None:
+    body = generation_request_body()
+    body["nature_preference"] = "prefer"
+    response = await client.post("/v1/routes/generate", json=body)
+    assert response.status_code == 200
+    assert fake_generation_service.last_request is not None
+    assert fake_generation_service.last_request.nature_preference == "prefer"
+
+
+@pytest.mark.asyncio
+async def test_invalid_nature_preference_is_structured_validation(
+    client: httpx.AsyncClient,
+) -> None:
+    body = generation_request_body()
+    body["nature_preference"] = "scenic"
+    response = await client.post("/v1/routes/generate", json=body)
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_request"
 
 
 @pytest.mark.asyncio

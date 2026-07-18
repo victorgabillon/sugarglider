@@ -15,6 +15,10 @@ const labels = {
   low_overlap_leg_budget_exhausted: "The alternative-leg request budget was exhausted.",
   low_overlap_no_complete_candidate: "No complete low-overlap assembly was available.",
   candidate_diversity_relaxed: "Candidate diversity was relaxed to fill the requested count.",
+  nature_index_unavailable: "Mapped nature was requested, but the local nature index is unavailable.",
+  nature_analysis_incomplete: "Mapped nature could not be evaluated for every candidate.",
+  nature_index_route_partly_outside: "Part of the route is outside the local nature index and remains unknown.",
+  nature_no_candidate_improvement: "No eligible candidate improved the mapped nature score; the original recommendation was preserved.",
 };
 
 export const friendlyLabel = (value) => labels[value] ?? value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());

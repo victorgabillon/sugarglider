@@ -124,5 +124,6 @@
   "close_loop": true,
   "point_order_mode": "optimize_loop",
   "path_selection_mode": "low_overlap",
+  "nature_preference": "prefer",
   "profile": "hike"
 }

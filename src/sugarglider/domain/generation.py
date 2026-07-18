@@ -9,6 +9,7 @@ from sugarglider.domain.models import Coordinate, ImmutableModel, RouteResult
 GenerationStatus = Literal["within_tolerance", "best_effort", "infeasible"]
 PointOrderMode = Literal["fixed", "optimize_loop"]
 PathSelectionMode = Literal["shortest", "low_overlap"]
+NaturePreference = Literal["off", "prefer"]
 CandidateConstruction = Literal[
     "direct_order",
     "round_trip_detour",
@@ -32,6 +33,7 @@ class RouteGenerationRequest(ImmutableModel):
     profile: Literal["hike"] = "hike"
     point_order_mode: PointOrderMode = "fixed"
     path_selection_mode: PathSelectionMode = "shortest"
+    nature_preference: NaturePreference = "off"
     _required_point_count: int = PrivateAttr()
     _supplied_points: tuple[Coordinate, ...] = PrivateAttr()
 
@@ -135,6 +137,11 @@ class SearchSummary(ImmutableModel):
     best_low_overlap_repeated_share: Share | None
     pre_low_overlap_backtrack_share: Share | None
     best_low_overlap_backtrack_share: Share | None
+    nature_requested: bool
+    nature_index_available: bool
+    nature_index_feature_count: NonNegativeInt | None
+    recommended_nature_score: Annotated[float, Field(ge=0, le=100)] | None
+    best_available_nature_score: Annotated[float, Field(ge=0, le=100)] | None
     search_budget: Annotated[int, Field(ge=1)]
     search_budget_exhausted: bool
     seed: int

@@ -110,7 +110,7 @@ export function renderCandidates(candidates, selectedSignature, showAll, onSelec
   });
 }
 
-export function renderVisualization(collection) {
+export function renderVisualization(collection, showNature = false) {
   if (!ready || !map) return;
   clearByPrefix("selected-section-");
   sourceData("selected-sections", collection ?? EMPTY_COLLECTION);
@@ -119,6 +119,26 @@ export function renderVisualization(collection) {
     repeated: { color: "#d97706", width: 7, dash: [2, 1.4] },
     immediate_backtrack: { color: "#bb2d2d", width: 9, dash: [1, 0.65] },
   };
+  if (showNature) {
+    const natureStyles = {
+      woodland: { color: "#32744d", dash: [1, 0] },
+      open_natural: { color: "#78a43b", dash: [3, 1.2] },
+      agriculture: { color: "#b59a48", dash: [1.2, 1.2] },
+      urban: { color: "#787878", dash: [2, 0.8] },
+      water: { color: "#2f84b7", dash: [3, 1] },
+      unknown: { color: "#b8afa4", dash: [0.6, 1.4] },
+    };
+    Object.entries(natureStyles).forEach(([natureClass, style]) => {
+      map.addLayer({
+        id: `selected-section-nature-${natureClass}`,
+        type: "line",
+        source: "selected-sections",
+        filter: ["==", ["get", "nature_class"], natureClass],
+        layout: { "line-cap": "butt", "line-join": "round" },
+        paint: { "line-color": style.color, "line-width": 16, "line-opacity": 0.72, "line-dasharray": style.dash },
+      });
+    });
+  }
   Object.entries(styles).forEach(([kind, style]) => {
     map.addLayer({
       id: `selected-section-${kind}`,

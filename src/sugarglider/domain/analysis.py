@@ -63,6 +63,59 @@ class RepetitionAnalysis(_ImmutableAnalysisModel):
     repeated_distance: DistanceMetric
 
 
+class NatureWeightedComponent(_ImmutableAnalysisModel):
+    """One public nature-score weight, input share, and signed score effect."""
+
+    weight: float
+    share: Share
+    points: float
+
+
+class NatureScoreBreakdown(_ImmutableAnalysisModel):
+    """Every component of the bounded explainable mapped-nature score."""
+
+    base_score: float
+    woodland_reward: NatureWeightedComponent
+    open_natural_reward: NatureWeightedComponent
+    agriculture_reward: NatureWeightedComponent
+    park_or_protected_reward: NatureWeightedComponent
+    near_water_reward: NatureWeightedComponent
+    urban_penalty: NatureWeightedComponent
+    unknown_penalty: NatureWeightedComponent
+    raw_score: float
+    final_score: Annotated[float, Field(ge=0, le=100)]
+
+
+class NatureAnalysis(_ImmutableAnalysisModel):
+    """Mapped OSM land-cover partition, overlays, and explainable score."""
+
+    available: bool
+    index_format_version: Annotated[int, Field(ge=1)]
+    index_feature_count: NonNegativeInt
+    woodland: DistanceMetric
+    open_natural: DistanceMetric
+    agriculture: DistanceMetric
+    water_crossing: DistanceMetric
+    urban: DistanceMetric
+    unknown_landcover: DistanceMetric
+    park_or_protected: DistanceMetric
+    near_water: DistanceMetric
+    nature_score: Annotated[float, Field(ge=0, le=100)]
+    score_breakdown: NatureScoreBreakdown
+    warnings: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def validate_score(self) -> Self:
+        if not isclose(
+            self.nature_score,
+            self.score_breakdown.final_score,
+            rel_tol=0,
+            abs_tol=1e-9,
+        ):
+            raise ValueError("nature score must match its public breakdown")
+        return self
+
+
 class RouteAnalysis(_ImmutableAnalysisModel):
     """Deterministic, raw route-quality measurements without a composite score."""
 
@@ -83,6 +136,7 @@ class RouteAnalysis(_ImmutableAnalysisModel):
     repetition: RepetitionAnalysis
     immediate_backtrack: DistanceMetric
     backtrack_edge_id_coverage: DistanceMetric
+    nature: NatureAnalysis | None = None
     warnings: tuple[str, ...]
 
     @model_validator(mode="after")
@@ -99,4 +153,23 @@ class RouteAnalysis(_ImmutableAnalysisModel):
             abs_tol=1e-6,
         ):
             raise ValueError("surface metrics must partition the route distance")
+        if self.nature is not None:
+            nature_partition = sum(
+                metric.distance_m
+                for metric in (
+                    self.nature.woodland,
+                    self.nature.open_natural,
+                    self.nature.agriculture,
+                    self.nature.water_crossing,
+                    self.nature.urban,
+                    self.nature.unknown_landcover,
+                )
+            )
+            if not isclose(
+                nature_partition,
+                self.route_distance_m,
+                rel_tol=1e-9,
+                abs_tol=1e-6,
+            ):
+                raise ValueError("nature primary metrics must partition route distance")
         return self

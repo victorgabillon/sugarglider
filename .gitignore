@@ -20,6 +20,11 @@ data/osm/*
 !data/osm/.gitkeep
 data/graph-cache/*
 !data/graph-cache/.gitkeep
+data/nature/*
+!data/nature/.gitkeep
+data/nature/*.json
+data/nature/*.json.gz
+data/nature/*.tmp
 *.gpx
 
 # IDE
