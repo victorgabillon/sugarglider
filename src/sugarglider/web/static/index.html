@@ -82,6 +82,24 @@
           </form>
         </details>
 
+        <details class="control-section places-controls" open>
+          <summary><span>Places</span><span id="places-count"></span></summary>
+          <p id="places-status" class="field-help places-status" role="status" aria-live="polite">Checking the local places index…</p>
+          <form id="places-filters">
+            <label class="check-control"><input id="place-scenic" type="checkbox" checked> Scenic places</label>
+            <label class="check-control"><input id="place-verified-water" type="checkbox" checked> Verified drinking water</label>
+            <label class="check-control"><input id="place-unknown-water" type="checkbox"> Fountains/taps — potability unknown</label>
+            <label class="check-control"><input id="place-broad" type="checkbox"> Broad tourist attractions</label>
+            <label class="check-control"><input id="place-restricted" type="checkbox"> Restricted access</label>
+            <details class="places-advanced">
+              <summary>Advanced debugging</summary>
+              <label class="check-control warning-control"><input id="place-private" type="checkbox"> Private places</label>
+              <label class="check-control warning-control"><input id="place-non-potable" type="checkbox"> Explicitly non-potable water</label>
+            </details>
+          </form>
+          <p class="field-help">Discovery only: shown places never alter mandatory points, generation, ranking, or GPX output.</p>
+        </details>
+
         <details class="control-section poi-editor" open>
           <summary><span>Required POIs</span><span id="poi-count">0 / 30</span></summary>
           <p id="poi-validation" class="validation" role="status"></p>
@@ -133,6 +151,9 @@
             <span><i class="marker start">1</i>Start/end</span>
             <span><i class="marker optional"></i>Generated point</span>
             <span><i class="marker waypoint"></i>GPX waypoint</span>
+            <span><i class="marker place-scenic">▲</i>Scenic place</span>
+            <span><i class="marker place-water">✓</i>Verified water</span>
+            <span><i class="marker place-unknown">?</i>Unknown potability</span>
             <span><i class="line imported"></i>Imported GPX</span>
             <span class="nature-legend"><i class="line woodland"></i>Woodland</span>
             <span class="nature-legend"><i class="line open-natural"></i>Open natural</span>

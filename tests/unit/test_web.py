@@ -297,6 +297,9 @@ async def test_ui_config_uses_injected_map_settings(
         "nature_water_buffer_m": 100.0,
         "nature_preference_values": ["off", "prefer"],
         "loop_geometry_preference_values": ["off", "prefer"],
+        "poi_index_available": False,
+        "poi_default_limit": 500,
+        "poi_max_limit": 1000,
     }
 
 
@@ -576,6 +579,77 @@ def test_frontend_exposes_loop_geometry_request_metrics_and_nulls() -> None:
     assert "natureSection(analysis.nature, search)" in app
     assert 'id="show-nature"' in html
     assert "/v1/nature/polygons" not in app
+
+
+def test_frontend_places_are_bounded_safe_and_separate_from_routing_state() -> None:
+    html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
+    app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
+    api = (STATIC_DIRECTORY / "api.js").read_text(encoding="utf-8")
+    state_code = (STATIC_DIRECTORY / "state.js").read_text(encoding="utf-8")
+    map_code = (STATIC_DIRECTORY / "map.js").read_text(encoding="utf-8")
+
+    for control in (
+        "place-scenic",
+        "place-verified-water",
+        "place-unknown-water",
+        "place-broad",
+        "place-restricted",
+        "place-private",
+        "place-non-potable",
+    ):
+        assert f'id="{control}"' in html
+    assert 'id="place-scenic" type="checkbox" checked' in html
+    assert 'id="place-verified-water" type="checkbox" checked' in html
+    assert 'id="place-unknown-water" type="checkbox">' in html
+    assert 'class="places-advanced"' in html
+    assert "never alter mandatory points, generation, ranking, or GPX" in html
+
+    assert 'fetch("/v1/pois/status"' in api
+    assert 'fetch("/v1/pois/search"' in api
+    assert "currentViewportBounds" in app
+    assert "window.setTimeout(() => fetchViewportPois" in app
+    assert "250" in app
+    assert "state.poiAbortController?.abort()" in app
+    assert "if (!filters.categories.length) return null" in app
+    assert "state.poiRequest.id !== id" in app
+    assert "response.truncated" in app
+    assert "zoom in to narrow the viewport" in app
+
+    assert "selectedPoiId: null" in state_code
+    assert "selectedPointIndex: null" in state_code
+    select_poi = app[
+        app.index("function selectPoi") : app.index("async function fetchViewportPois")
+    ]
+    assert "state.points" not in select_poi
+    assert "currentRequest" not in select_poi
+    assert "Add to route" not in html + app + map_code
+
+    assert "cluster: true" in map_code
+    assert "clusterRadius" in map_code
+    assert "map.getSource(POI_SOURCE).setData" in map_code
+    assert "poiCollection(features.filter" in map_code
+    assert "setDOMContent(poiPopupContent(feature))" in map_code
+    assert "document.createTextNode(value)" in map_code
+    assert (
+        'explanation.textContent = "Mapped in OpenStreetMap as drinking water."'
+        in map_code
+    )
+    assert (
+        'explanation.textContent = "Potability is not specified in the mapped data."'
+        in map_code
+    )
+    assert 'explanation.textContent = "Mapped as non-potable."' in map_code
+    assert "innerHTML" not in map_code[map_code.index("function poiPopupContent") :]
+    assert "new Blob([svgMarkup(body)]" in map_code
+    assert "image/svg+xml" in map_code
+    assert "icon CDN" not in map_code
+    assert "POI_SELECTED_SOURCE" in map_code
+    assert "moveRequiredLabelsToTop" in map_code
+
+    assert 'id="nature-preference"' in html
+    assert 'id="loop-geometry-preference"' in html
+    assert 'id="show-nature"' in html
+    assert 'id="show-all"' in html
 
 
 def test_frontend_uses_local_brand_identity_and_accessible_landmarks() -> None:

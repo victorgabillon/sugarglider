@@ -5,6 +5,25 @@ const REQUIRED_LABEL_LAYER = "required-point-labels-ordinary";
 const SELECTED_LABEL_LAYER = "required-point-labels-selected";
 const REQUIRED_PIN_URL = "/static/brand/sugarglider-map-pin.png";
 const EMPTY_COLLECTION = { type: "FeatureCollection", features: [] };
+const POI_SOURCE = "places-pois";
+const POI_SELECTED_SOURCE = "places-poi-selected-source";
+const POI_CLUSTER_LAYER = "places-poi-clusters";
+const POI_CLUSTER_COUNT_LAYER = "places-poi-cluster-count";
+const POI_MARKER_LAYER = "places-poi-markers";
+const POI_SELECTED_LAYER = "places-poi-selected";
+const POI_SELECTED_MARKER_LAYER = "places-poi-selected-marker";
+const POI_LABEL_LAYER = "places-poi-labels";
+const POI_SELECTED_LABEL_LAYER = "places-poi-selected-label";
+
+const POI_ICON_SVGS = {
+  "poi-viewpoint": '<path d="M6 36 20 14l8 12 6-8 8 18Z" fill="#fff"/><path d="m13 30 7-11 7 11" fill="none" stroke="#214b3b" stroke-width="3"/>',
+  "poi-historic": '<path d="M9 17h6v-5h6v5h6v-5h6v5h6v22H9Z" fill="#fff"/><path d="M18 39V28h12v11M9 21h30" fill="none" stroke="#6d4a2d" stroke-width="3"/>',
+  "poi-tower": '<path d="M19 10h10l-2 7 7 22H14l7-22Z" fill="#fff"/><path d="M16 24h16M13 39h22" fill="none" stroke="#3c5268" stroke-width="3"/>',
+  "poi-attraction": '<path d="m24 8 4.5 9.3 10.2 1.5-7.4 7.2 1.8 10.2L24 31.4l-9.1 4.8L16.7 26l-7.4-7.2 10.2-1.5Z" fill="#fff" stroke="#7b4d7f" stroke-width="2.5"/>',
+  "poi-water-verified": '<path d="M24 7c-2 6-11 14-11 23a11 11 0 0 0 22 0C35 21 26 13 24 7Z" fill="#fff"/><path d="m18 29 4 4 8-10" fill="none" stroke="#16729a" stroke-width="3.5"/>',
+  "poi-water-unknown": '<path d="M24 7c-2 6-11 14-11 23a11 11 0 0 0 22 0C35 21 26 13 24 7Z" fill="#fff"/><path d="M21 24c0-4 7-4 7 0 0 3-4 3-4 6m0 5h.01" fill="none" stroke="#9a6816" stroke-linecap="round" stroke-width="3.5"/>',
+  "poi-water-nonpotable": '<path d="M24 7c-2 6-11 14-11 23a11 11 0 0 0 22 0C35 21 26 13 24 7Z" fill="#fff"/><path d="m18 24 12 12m0-12L18 36" fill="none" stroke="#a73535" stroke-linecap="round" stroke-width="3.5"/>',
+};
 
 let map = null;
 let ready = false;
@@ -13,6 +32,9 @@ let optionalMarkers = [];
 let waypointMarkers = [];
 let candidateClickHandler = null;
 let requiredPointActivateHandler = null;
+let poiActivateHandler = null;
+let poiById = new Map();
+let poiPopup = null;
 
 export function initializeMap(config, handlers) {
   if (!window.maplibregl) {
@@ -44,12 +66,47 @@ export function initializeMap(config, handlers) {
     return false;
   }
   map.addControl(new window.maplibregl.NavigationControl(), "top-left");
-  map.on("load", () => { ready = true; handlers.onReady(); });
+  map.on("load", async () => {
+    try {
+      await installPoiImages();
+    } catch {
+      handlers.onError("Local place icons could not be prepared. Route controls remain available.");
+    }
+    ready = true;
+    handlers.onReady();
+    handlers.onViewportChange?.(currentViewportBounds());
+  });
+  map.on("moveend", () => {
+    if (ready) handlers.onViewportChange?.(currentViewportBounds());
+  });
   map.on("click", (event) => {
     const labelLayers = [SELECTED_LABEL_LAYER, REQUIRED_LABEL_LAYER].filter((id) => map.getLayer(id));
     const label = labelLayers.length ? map.queryRenderedFeatures(event.point, { layers: labelLayers })[0] : null;
     if (label?.properties?.source_index !== undefined) {
       requiredPointActivateHandler?.(Number(label.properties.source_index));
+      return;
+    }
+    const poiLayers = [POI_SELECTED_MARKER_LAYER, POI_MARKER_LAYER]
+      .filter((id) => map.getLayer(id));
+    const poi = poiLayers.length
+      ? map.queryRenderedFeatures(event.point, { layers: poiLayers })[0]
+      : null;
+    if (poi?.properties?.poi_id) {
+      const feature = poiById.get(poi.properties.poi_id);
+      if (feature) {
+        poiActivateHandler?.(feature.id);
+        showPoiPopup(feature);
+      }
+      return;
+    }
+    const cluster = map.getLayer(POI_CLUSTER_LAYER)
+      ? map.queryRenderedFeatures(event.point, { layers: [POI_CLUSTER_LAYER] })[0]
+      : null;
+    if (cluster?.properties?.cluster_id !== undefined) {
+      const source = map.getSource(POI_SOURCE);
+      source?.getClusterExpansionZoom(cluster.properties.cluster_id)
+        .then((zoom) => map.easeTo({ center: cluster.geometry.coordinates, zoom }))
+        .catch(() => {});
       return;
     }
     const candidateLayers = candidateLineLayerIds();
@@ -63,6 +120,8 @@ export function initializeMap(config, handlers) {
   map.on("mousemove", (event) => {
     const interactiveLayers = [
       ...candidateLineLayerIds(),
+      ...[POI_SELECTED_MARKER_LAYER, POI_MARKER_LAYER, POI_CLUSTER_LAYER]
+        .filter((id) => map.getLayer(id)),
       ...[SELECTED_LABEL_LAYER, REQUIRED_LABEL_LAYER].filter((id) => map.getLayer(id)),
     ];
     const interactive = interactiveLayers.length && map.queryRenderedFeatures(event.point, { layers: interactiveLayers }).length;
@@ -111,6 +170,282 @@ function moveRequiredLabelsToTop() {
   if (!map) return;
   if (map.getLayer(REQUIRED_LABEL_LAYER)) map.moveLayer(REQUIRED_LABEL_LAYER);
   if (map.getLayer(SELECTED_LABEL_LAYER)) map.moveLayer(SELECTED_LABEL_LAYER);
+}
+
+function svgMarkup(body) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="22" fill="#fffdf7" stroke="#214b3b" stroke-width="3"/>${body}</svg>`;
+}
+
+function loadSvgImage(body) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(new Blob([svgMarkup(body)], { type: "image/svg+xml" }));
+    const image = new Image(48, 48);
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = (error) => {
+      URL.revokeObjectURL(url);
+      reject(error);
+    };
+    image.src = url;
+  });
+}
+
+async function installPoiImages() {
+  for (const [name, body] of Object.entries(POI_ICON_SVGS)) {
+    if (!map.hasImage(name)) {
+      map.addImage(name, await loadSvgImage(body), { pixelRatio: 2 });
+    }
+  }
+}
+
+function firstRouteLayerId() {
+  return (map?.getStyle()?.layers ?? []).find((layer) => (
+    layer.id.startsWith("candidate-")
+    || layer.id.startsWith("selected-section-")
+    || layer.id.startsWith("imported-gpx-")
+  ))?.id;
+}
+
+function addPoiLayer(layer) {
+  if (!map.getLayer(layer.id)) map.addLayer(layer, firstRouteLayerId());
+}
+
+function ensurePoiLayers() {
+  if (!ready || !map) return;
+  if (!map.getSource(POI_SOURCE)) {
+    map.addSource(POI_SOURCE, {
+      type: "geojson",
+      data: EMPTY_COLLECTION,
+      cluster: true,
+      clusterMaxZoom: 13,
+      clusterRadius: 44,
+    });
+  }
+  if (!map.getSource(POI_SELECTED_SOURCE)) {
+    map.addSource(POI_SELECTED_SOURCE, { type: "geojson", data: EMPTY_COLLECTION });
+  }
+  addPoiLayer({
+    id: POI_CLUSTER_LAYER,
+    type: "circle",
+    source: POI_SOURCE,
+    filter: ["has", "point_count"],
+    paint: {
+      "circle-color": "#fff8df",
+      "circle-stroke-color": "#214b3b",
+      "circle-stroke-width": 3,
+      "circle-radius": ["step", ["get", "point_count"], 15, 25, 19, 100, 23],
+    },
+  });
+  addPoiLayer({
+    id: POI_CLUSTER_COUNT_LAYER,
+    type: "symbol",
+    source: POI_SOURCE,
+    filter: ["has", "point_count"],
+    layout: {
+      "text-field": ["get", "point_count_abbreviated"],
+      "text-font": ["Open Sans Semibold"],
+      "text-size": 11,
+    },
+    paint: { "text-color": "#214b3b" },
+  });
+  addPoiLayer({
+    id: POI_SELECTED_LAYER,
+    type: "circle",
+    source: POI_SELECTED_SOURCE,
+    paint: {
+      "circle-radius": 19,
+      "circle-color": "#fff",
+      "circle-opacity": .8,
+      "circle-stroke-color": "#d9582b",
+      "circle-stroke-width": 4,
+    },
+  });
+  addPoiLayer({
+    id: POI_MARKER_LAYER,
+    type: "symbol",
+    source: POI_SOURCE,
+    filter: ["!", ["has", "point_count"]],
+    layout: {
+      "icon-image": ["get", "icon_name"],
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 8, .75, 14, 1],
+      "icon-allow-overlap": false,
+      "icon-padding": 2,
+      "symbol-sort-key": ["case", ["get", "selected"], 0, 1],
+    },
+  });
+  addPoiLayer({
+    id: POI_SELECTED_MARKER_LAYER,
+    type: "symbol",
+    source: POI_SELECTED_SOURCE,
+    layout: {
+      "icon-image": ["get", "icon_name"],
+      "icon-size": 1.08,
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
+    },
+  });
+  addPoiLayer({
+    id: POI_LABEL_LAYER,
+    type: "symbol",
+    source: POI_SOURCE,
+    minzoom: 13,
+    filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "selected"], false]],
+    layout: {
+      "text-field": ["get", "display_name"],
+      "text-font": ["Open Sans Semibold"],
+      "text-size": 11,
+      "text-variable-anchor": ["top", "bottom", "left", "right"],
+      "text-radial-offset": 1.6,
+      "text-max-width": 13,
+      "text-allow-overlap": false,
+      "text-ignore-placement": false,
+    },
+    paint: { "text-color": "#26372f", "text-halo-color": "#fffef9", "text-halo-width": 2 },
+  });
+  addPoiLayer({
+    id: POI_SELECTED_LABEL_LAYER,
+    type: "symbol",
+    source: POI_SELECTED_SOURCE,
+    layout: {
+      "text-field": ["get", "display_name"],
+      "text-font": ["Open Sans Semibold"],
+      "text-size": 12,
+      "text-variable-anchor": ["top", "bottom", "left", "right"],
+      "text-radial-offset": 1.7,
+      "text-max-width": 14,
+      "text-allow-overlap": true,
+      "text-ignore-placement": true,
+    },
+    paint: { "text-color": "#153d2e", "text-halo-color": "#fffef9", "text-halo-width": 3 },
+  });
+}
+
+function poiIcon(feature) {
+  if (feature.potability === "verified") return "poi-water-verified";
+  if (feature.potability === "unknown") return "poi-water-unknown";
+  if (feature.potability === "non_potable") return "poi-water-nonpotable";
+  if (feature.category === "viewpoint") return "poi-viewpoint";
+  if (feature.category === "observation_tower") return "poi-tower";
+  if (feature.category === "tourism_attraction") return "poi-attraction";
+  return "poi-historic";
+}
+
+function poiCollection(features, selectedId) {
+  return {
+    type: "FeatureCollection",
+    features: features.map((feature) => ({
+      type: "Feature",
+      id: feature.id,
+      geometry: {
+        type: "Point",
+        coordinates: [feature.coordinate.lon, feature.coordinate.lat],
+      },
+      properties: {
+        poi_id: feature.id,
+        display_name: feature.display_name,
+        icon_name: poiIcon(feature),
+        selected: feature.id === selectedId,
+      },
+    })),
+  };
+}
+
+function selectedPoiCollection(features, selectedId) {
+  const selected = features.find((feature) => feature.id === selectedId);
+  return poiCollection(selected ? [selected] : [], selectedId);
+}
+
+function popupRow(content, label, value, prominent = false) {
+  if (!value) return;
+  const row = document.createElement("p");
+  if (prominent) row.className = "popup-status";
+  const heading = document.createElement("strong");
+  heading.textContent = `${label}: `;
+  row.append(heading, document.createTextNode(value));
+  content.append(row);
+}
+
+function poiPopupContent(feature) {
+  const content = document.createElement("div");
+  content.className = "point-popup place-popup";
+  const heading = document.createElement("h3");
+  heading.textContent = feature.display_name;
+  content.append(heading);
+  popupRow(content, "Category", feature.category.replaceAll("_", " "));
+  popupRow(content, "Potability", feature.potability.replaceAll("_", " "));
+  popupRow(
+    content,
+    "Access",
+    feature.access_status,
+    ["private", "restricted"].includes(feature.access_status),
+  );
+  const tags = Object.fromEntries(feature.tags ?? []);
+  popupRow(content, "Operator", tags.operator);
+  popupRow(content, "Opening hours", tags.opening_hours);
+  popupRow(content, "Seasonal", tags.seasonal);
+  popupRow(content, "Bottle filling", tags.bottle);
+  const explanation = document.createElement("p");
+  explanation.className = "place-explanation";
+  if (feature.potability === "verified") {
+    explanation.textContent = "Mapped in OpenStreetMap as drinking water.";
+  } else if (feature.potability === "unknown") {
+    explanation.textContent = "Potability is not specified in the mapped data.";
+  } else if (feature.potability === "non_potable") {
+    explanation.textContent = "Mapped as non-potable.";
+  } else {
+    explanation.textContent = "Mapped place information may be incomplete or out of date.";
+  }
+  content.append(explanation);
+  for (const warning of feature.warnings ?? []) {
+    const note = document.createElement("p");
+    note.className = "popup-warning";
+    note.textContent = warning.replaceAll("_", " ");
+    content.append(note);
+  }
+  popupRow(
+    content,
+    "Coordinates",
+    `${Number(feature.coordinate.lat).toFixed(6)}, ${Number(feature.coordinate.lon).toFixed(6)}`,
+  );
+  popupRow(content, "OSM object", `${feature.osm_type}/${feature.osm_id}`);
+  return content;
+}
+
+function showPoiPopup(feature) {
+  poiPopup?.remove();
+  poiPopup = new window.maplibregl.Popup({ offset: 24, closeButton: true })
+    .setLngLat([feature.coordinate.lon, feature.coordinate.lat])
+    .setDOMContent(poiPopupContent(feature))
+    .addTo(map);
+}
+
+export function renderPois(features, selectedId, onSelect) {
+  if (!ready || !map) return;
+  ensurePoiLayers();
+  poiById = new Map(features.map((feature) => [feature.id, feature]));
+  poiActivateHandler = onSelect;
+  map.getSource(POI_SOURCE).setData(
+    poiCollection(features.filter((feature) => feature.id !== selectedId), null),
+  );
+  map.getSource(POI_SELECTED_SOURCE).setData(selectedPoiCollection(features, selectedId));
+  if (selectedId === null || !poiById.has(selectedId)) {
+    poiPopup?.remove();
+    poiPopup = null;
+  }
+  moveRequiredLabelsToTop();
+}
+
+export function currentViewportBounds() {
+  if (!map) return null;
+  const bounds = map.getBounds();
+  return {
+    west: bounds.getWest(),
+    south: bounds.getSouth(),
+    east: bounds.getEast(),
+    north: bounds.getNorth(),
+  };
 }
 
 export function renderCandidates(candidates, selectedSignature, showAll, onSelect) {

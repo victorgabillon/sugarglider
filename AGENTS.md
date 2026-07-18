@@ -56,6 +56,15 @@
   validity, and PR5's repetition/backtracking promotion gate remains authoritative.
 - Nature indexes are generated data and must never be committed. GPX output remains
   free of nature-analysis extensions.
+- POI indexes must remain local, deterministic derivatives of the configured OSM
+  PBF; runtime code must query the startup-loaded STRtree and never parse the PBF or
+  call a hosted discovery service.
+- Scenic, verified-water, unknown-potability, and explicitly non-potable classes
+  must remain distinct. Private and non-potable features are indexed but hidden by
+  default, and mapped water never implies current quality or operation.
+- POI discovery is display-only. Selection and filters must never mutate mandatory
+  points, generation, ranking, route analysis, route geometry, or GPX output.
+- Generated POI indexes under `data/pois` must never be committed.
 - Loop geometry must use the shared local metric projection and normalized routed
   edges; GraphHopper distance remains authoritative for shares and compactness.
 - Loop-geometry metrics and penalties must remain explainable and separate from

@@ -25,6 +25,8 @@ data/nature/*
 data/nature/*.json
 data/nature/*.json.gz
 data/nature/*.tmp
+data/pois/*
+!data/pois/.gitkeep
 *.gpx
 
 # IDE

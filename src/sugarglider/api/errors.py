@@ -11,6 +11,7 @@ from sugarglider.generation.service import (
     RouteGenerationNoCandidateError,
     TargetDistanceInfeasibleError,
 )
+from sugarglider.pois.errors import PoiSearchLimitError
 from sugarglider.routing.graphhopper import (
     RoutingPointError,
     RoutingTimeoutError,
@@ -31,6 +32,11 @@ class PublicError:
 
 
 ERRORS: dict[type[Exception], PublicError] = {
+    PoiSearchLimitError: PublicError(
+        422,
+        "poi_limit_exceeded",
+        "The requested POI result limit exceeds the configured maximum.",
+    ),
     RouteVisualizationError: PublicError(
         422,
         "route_visualization_invalid",

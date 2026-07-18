@@ -16,13 +16,14 @@ Sugarglider is an open-source trail-running route generator in development. The
 long-term product will combine required waypoints, target distance, trail and nature
 preferences, popularity signals, access rules, and limits on repeated sections.
 
-The implemented PR1–PR9 scope accepts mandatory latitude/longitude anchors, asks a
+The implemented PR1–PR10 scope accepts mandatory latitude/longitude anchors, asks a
 self-hosted GraphHopper 11.0 instance to route them along real OpenStreetMap edges,
 analyzes the routed edges, and can search for several closed-loop candidates near a
 target distance. A local browser interface supports planning, comparison, local GPX
-inspection, mapped-nature comparison, synchronized named POI editing, and clean GPX
-1.1 export of an already selected candidate. Its browser interface uses the local
-Sugarglider identity and mascot pins without adding a frontend build system.
+inspection, mapped-nature comparison, synchronized named required-point editing,
+bounded scenic and hydration-place discovery, and clean GPX 1.1 export of an
+already selected candidate. Its browser interface uses the local Sugarglider
+identity and mascot pins without adding a frontend build system.
 
 ## Current scope and architecture
 
@@ -34,10 +35,10 @@ browser -> FastAPI -> RouteService ----------> routing backend -> GraphHopper / 
                        +-> graph + loop-geometry + optional nature analysis
                        +-> score, ranking, diversity
                     visualization projection + GPX writer
-                       |
-                       +-> one startup-loaded Shapely STRtree
-                                 ^
-local OSM PBF -> pyosmium index builder -> deterministic gzip JSON
+
+local OSM PBF -> nature builder -> deterministic polygons -> startup STRtree
+              -> POI builder ----> deterministic points ---> startup STRtree
+                                                           -> bounded POI API
            |
            +-> packaged HTML/CSS/ES modules -> MapLibre -> configured raster tiles
 
@@ -189,6 +190,55 @@ under the BSD 3-Clause license. The default tiles are OpenStreetMap tiles and th
 visible contributor attribution must not be hidden. This application does not
 prefetch, bulk-download, or provide offline tiles.
 
+### Scenic and hydration places
+
+The **Places** disclosure queries only the current map viewport from the local POI
+index. Requests wait for map movement to finish, debounce for 250 ms, cancel stale
+work, and enforce the server result limit. MapLibre renders clustered GeoJSON
+sources rather than a DOM marker per regional feature. Ordinary labels are
+collision-aware and begin at useful zoom levels; a separately sourced selected
+marker and label remain visible even when nearby features cluster. Inline SVG
+artwork is generated locally for distinct scenic, historic, tower, attraction,
+verified-water, unknown-water, and non-potable marker shapes. No icon CDN is used.
+
+Defaults show primary scenic places and verified drinking water. Unknown-potability
+fountains/taps, broad tourist attractions, and restricted access are opt-in.
+Private and explicitly non-potable features are available only through the advanced
+controls. Selecting a discovered place highlights it and opens a DOM-safe popup; it
+does not add, remove, reorder, or move a required route point and has no effect on
+generation, ranking, analysis, or GPX output.
+
+The offline classifier accepts only these exact OSM combinations:
+
+| Exact tags | Category | Meaning |
+| --- | --- | --- |
+| `tourism=viewpoint` | `viewpoint` | primary scenic |
+| `historic=castle` | `castle` | primary scenic; `ruins=yes` is retained as metadata |
+| `historic=ruins` | `ruins` | primary scenic |
+| `historic=archaeological_site` | `archaeological_site` | primary scenic |
+| `man_made=tower` + `tower:type=observation` | `observation_tower` | primary scenic |
+| `tourism=attraction` | `tourism_attraction` | broad scenic |
+| `amenity=drinking_water` | `drinking_water` | verified in mapped data unless `drinking_water=no` |
+| `drinking_water=yes` plus `man_made=water_tap`, `amenity=fountain`, `natural=spring`, `man_made=water_well`, or `amenity=water_point` | `drinking_water` | verified in mapped data |
+| `amenity=fountain` with no `drinking_water` tag | `fountain` | potability unknown |
+| `man_made=water_tap` with no `drinking_water` tag | `water_tap` | potability unknown |
+| a recognized hydration form plus `drinking_water=no` | form-specific hydration category | explicitly non-potable and hidden by default |
+
+Generic `tourism=yes`, `historic=yes`, and `building=historic` are not selected.
+If one OSM object matches several classes, it emits one marker identified by OSM
+type and ID, retains secondary categories, and uses fixed priority: verified water,
+viewpoint, observation tower, castle, archaeological site, ruins, broad attraction,
+unknown water, then non-potable water. Distinct objects are never merged only
+because their name or coordinate matches.
+
+Access maps `yes`/`public` to public, `no`/`private` to private, and values such as
+`customers`, `permissive`, `destination`, `delivery`, and `designated` to
+restricted. Missing or unrecognized access stays unknown. Popups expose only a
+small sorted tag subset and use careful language: a verified source is mapped in
+OpenStreetMap as drinking water; unknown means potability is not specified; and
+non-potable means it is mapped as non-potable. None of these claims current water
+quality, availability, operation, or legal access.
+
 ### Web configuration
 
 | Environment variable | Default | Purpose |
@@ -201,6 +251,10 @@ prefetch, bulk-download, or provide offline tiles.
 | `SUGARGLIDER_NATURE_INDEX_PATH` | `/data/nature/ile-de-france-nature-index.json.gz` | Local deterministic nature index |
 | `SUGARGLIDER_NATURE_WATER_BUFFER_M` | `100` | Mapped-water proximity buffer (0–1000 m) |
 | `SUGARGLIDER_NATURE_MISSING_INDEX_WARNING` | `false` | Log a missing default index as warning rather than information |
+| `SUGARGLIDER_POI_INDEX_PATH` | `/data/pois/ile-de-france-poi-index.json.gz` | Local scenic/hydration POI index |
+| `SUGARGLIDER_POI_MISSING_INDEX_WARNING` | `false` | Choose warning rather than info logging for a missing POI index |
+| `SUGARGLIDER_POI_DEFAULT_LIMIT` | `500` | Default viewport result limit |
+| `SUGARGLIDER_POI_MAX_LIMIT` | `1000` | Hard public viewport result limit |
 
 These validated values are exposed to the browser by `GET /v1/ui/config`. Tile
 templates and attribution are deployment configuration, not frontend constants.
@@ -235,6 +289,38 @@ uncompressed sizes, and elapsed time. Generated indexes under `data/nature` are
 ignored by Git. The API image contains Shapely but not the build-only `osmium`
 package, and the PBF is never copied into that image.
 
+Build the local scenic and hydration POI index from the same PBF:
+
+```sh
+make poi-index
+# Equivalent explicit command:
+uv run python -m sugarglider.pois.build \
+  --osm-pbf data/osm/ile-de-france-latest.osm.pbf \
+  --output data/pois/ile-de-france-poi-index.json.gz
+```
+
+The POI builder streams nodes, located ways, and assembled relation areas. Nodes
+retain their coordinate; valid polygonal ways and multipolygon relations use an
+interior `representative_point()` with relation holes preserved; non-area ways use
+a deterministic midpoint measured in the shared local metric projection. Invalid
+geometry is skipped and counted. Features and public tags are sorted, JSON is
+canonical, gzip metadata has a zero timestamp, and the output is atomically
+replaced. The report includes category/potability/access counts, skipped-invalid
+count, sizes, bounds, SHA-256, and elapsed time. Rebuilding identical input produces
+byte-identical output without embedding an absolute path or current timestamp.
+
+Generated files under `data/pois` are ignored. Docker mounts that directory
+read-only. The runtime image contains no pyosmium and never opens the source PBF.
+FastAPI loads and validates the gzip once during lifespan startup, projects its
+immutable point tuple once, and constructs one reusable Shapely STRtree. Each
+request performs a tree bounding-box query and filters only returned candidates.
+A missing or corrupt POI index leaves routing/generation operational and produces a
+safe unavailable status and structured empty search response.
+
+Run `make benchmark-pois` after building. It reports load time, process peak RSS,
+and warm-up-excluded median and maximum viewport-query latency for Marly and central
+Paris without adding flaky timing assertions.
+
 Start GraphHopper and the API:
 
 ```sh
@@ -242,9 +328,10 @@ make up
 make logs
 ```
 
-The API bind-mounts `data/nature` read-only. A missing or corrupt index disables
-nature analysis, leaves ordinary routing and generation available, and is visible
-through status and deterministic warnings. The first GraphHopper startup imports
+The API bind-mounts `data/nature` and `data/pois` read-only. A missing or corrupt
+index disables only its corresponding analysis or discovery feature, leaves
+ordinary routing and generation available, and is visible through safe status and
+deterministic warnings. The first GraphHopper startup imports
 the PBF and creates the hiking graph and
 landmark preparation under `data/graph-cache`; this can take several minutes and
 substantial memory. Later starts reuse the bind-mounted cache. If the GraphHopper
@@ -258,6 +345,12 @@ at `http://localhost:8989` and the API at `http://localhost:8000`.
 - `GET /ready` checks GraphHopper `/info` and requires its `hike` profile.
 - `GET /v1/nature/status` reports safe local-index metadata, configured water
   buffer, and warnings without exposing host directory paths.
+- `GET /v1/pois/status` reports safe POI format/source metadata and category,
+  potability, and access counts without exposing a host directory path.
+- `POST /v1/pois/search` accepts a finite, non-dateline WGS84 bounding box plus
+  category, group, potability, access/private, and bounded-limit filters. It returns
+  deterministically ordered point features only—never source polygons or the full
+  regional index.
 - `POST /v1/routes` returns routed GeoJSON-order coordinates, summary metrics,
   snapped anchors, raw path details, and typed route analysis.
 - `POST /v1/routes/gpx` computes the same route and returns a downloadable GPX
@@ -764,6 +857,13 @@ data may be absent or stale. Every generated route still requires visual inspect
 and validation against local access rules, signage, closures, and conditions on the
 ground.
 
+Place discovery is limited to the exact selected OSM tags in the configured extract.
+Names, access, opening hours, seasonal status, potability tags, and the existence or
+operation of a fountain/tap can be missing, incorrect, or stale. The point chosen
+for a polygon is a deterministic display position, not an entrance or routable
+access point. PR10 does not route through discovered places; POI-aware generation is
+deferred to PR11.
+
 ### Manual browser-test checklist
 
 - [ ] Open `/`; confirm the map and visible attribution load.
@@ -785,6 +885,14 @@ ground.
 - [ ] Confirm null loop-geometry metrics say “not evaluated,” never numeric zero.
 - [ ] Toggle the nature underlay and confirm repetition/backtracking stay above it.
 - [ ] Confirm browser network requests contain no raw nature-polygon download.
+- [ ] Confirm Places defaults to primary scenic and verified water; unknown, broad,
+      restricted, private, and non-potable options remain off.
+- [ ] Pan between Marly and Paris; confirm one bounded request after movement,
+      clusters, individual markers, collision-aware labels, and truncation status.
+- [ ] Inspect viewpoint, verified-water, unknown-water, restricted/private, and
+      non-potable popups; confirm careful mapped-data wording and safe text display.
+- [ ] Select and filter a place; confirm its highlight survives a returned viewport
+      refresh and clears without changing any required route point.
 - [ ] Import a multi-segment GPX; confirm no line joins segment breaks.
 - [ ] Download selected GPX and confirm no second generation request occurs.
 - [ ] Confirm the downloaded GPX has one track/segment and no nature extensions.

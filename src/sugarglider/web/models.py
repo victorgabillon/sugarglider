@@ -21,6 +21,9 @@ class UiConfig(ImmutableModel):
     nature_water_buffer_m: Annotated[float, Field(ge=0, le=1000)]
     nature_preference_values: tuple[Literal["off", "prefer"], ...]
     loop_geometry_preference_values: tuple[Literal["off", "prefer"], ...]
+    poi_index_available: bool
+    poi_default_limit: Annotated[int, Field(ge=1)]
+    poi_max_limit: Annotated[int, Field(ge=1)]
 
 
 class LineStringGeometry(ImmutableModel):

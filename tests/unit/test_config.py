@@ -43,6 +43,31 @@ def test_nature_setting_defaults_and_environment_aliases(
     assert configured.nature_missing_index_warning
 
 
+def test_poi_setting_defaults_environment_aliases_and_limit_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    defaults = Settings()
+    assert defaults.poi_index_path is not None
+    assert defaults.poi_index_path.name == "ile-de-france-poi-index.json.gz"
+    assert not defaults.poi_missing_index_warning
+    assert defaults.poi_default_limit == 500
+    assert defaults.poi_max_limit == 1000
+
+    monkeypatch.setenv("SUGARGLIDER_POI_INDEX_PATH", "/tmp/local-pois.json.gz")
+    monkeypatch.setenv("SUGARGLIDER_POI_MISSING_INDEX_WARNING", "true")
+    monkeypatch.setenv("SUGARGLIDER_POI_DEFAULT_LIMIT", "12")
+    monkeypatch.setenv("SUGARGLIDER_POI_MAX_LIMIT", "20")
+    configured = Settings()
+    assert configured.poi_index_path is not None
+    assert configured.poi_index_path.name == "local-pois.json.gz"
+    assert configured.poi_missing_index_warning
+    assert configured.poi_default_limit == 12
+    assert configured.poi_max_limit == 20
+
+    with pytest.raises(ValidationError):
+        Settings(poi_default_limit=21, poi_max_limit=20)
+
+
 def test_map_environment_aliases(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SUGARGLIDER_MAP_TILE_URL", "https://map.example/{z}/{x}/{y}")
     monkeypatch.setenv("SUGARGLIDER_MAP_ATTRIBUTION", "Example attribution")

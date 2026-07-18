@@ -43,8 +43,13 @@ services:
       SUGARGLIDER_NATURE_INDEX_PATH: ${SUGARGLIDER_NATURE_INDEX_PATH:-/data/nature/ile-de-france-nature-index.json.gz}
       SUGARGLIDER_NATURE_WATER_BUFFER_M: ${SUGARGLIDER_NATURE_WATER_BUFFER_M:-100}
       SUGARGLIDER_NATURE_MISSING_INDEX_WARNING: ${SUGARGLIDER_NATURE_MISSING_INDEX_WARNING:-false}
+      SUGARGLIDER_POI_INDEX_PATH: ${SUGARGLIDER_POI_INDEX_PATH:-/data/pois/ile-de-france-poi-index.json.gz}
+      SUGARGLIDER_POI_MISSING_INDEX_WARNING: ${SUGARGLIDER_POI_MISSING_INDEX_WARNING:-false}
+      SUGARGLIDER_POI_DEFAULT_LIMIT: ${SUGARGLIDER_POI_DEFAULT_LIMIT:-500}
+      SUGARGLIDER_POI_MAX_LIMIT: ${SUGARGLIDER_POI_MAX_LIMIT:-1000}
     volumes:
       - ./data/nature:/data/nature:ro
+      - ./data/pois:/data/pois:ro
     depends_on:
       graphhopper:
         condition: service_healthy
