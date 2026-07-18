@@ -1,4 +1,4 @@
-.PHONY: install format lint typecheck test check brand-assets download-osm nature-index up down logs smoke report generate generate-all-pois
+.PHONY: install format lint typecheck test check brand-assets download-osm nature-index poi-index benchmark-pois up down logs smoke report generate generate-all-pois
 
 install:
 	uv sync
@@ -27,6 +27,12 @@ download-osm:
 
 nature-index:
 	./scripts/build_nature_index.sh
+
+poi-index:
+	./scripts/build_poi_index.sh
+
+benchmark-pois:
+	uv run python scripts/benchmark_poi_index.py
 
 up:
 	docker compose up --build -d

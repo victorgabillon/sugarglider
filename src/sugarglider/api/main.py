@@ -24,6 +24,14 @@ from sugarglider.nature.index import (
     unavailable_nature_status,
 )
 from sugarglider.nature.models import NatureIndexStatus
+from sugarglider.pois.errors import PoiIndexError, PoiIndexMissingError
+from sugarglider.pois.index import (
+    PoiIndex,
+    available_poi_status,
+    load_poi_index,
+    unavailable_poi_status,
+)
+from sugarglider.pois.models import PoiIndexStatus
 from sugarglider.routing.graphhopper import GraphHopperClient
 from sugarglider.routing.result import RouteResultFactory
 from sugarglider.routing.service import RouteService
@@ -46,6 +54,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         nature_index, nature_status = _load_nature(runtime_settings)
+        poi_index, poi_status = _load_pois(runtime_settings)
         nature_analyzer = (
             NatureRouteAnalyzer(
                 nature_index,
@@ -67,11 +76,18 @@ def create_app(
             nature_water_buffer_m=runtime_settings.nature_water_buffer_m,
             nature_preference_values=("off", "prefer"),
             loop_geometry_preference_values=("off", "prefer"),
+            poi_index_available=poi_status.available,
+            poi_default_limit=runtime_settings.poi_default_limit,
+            poi_max_limit=runtime_settings.poi_max_limit,
         )
         app.state.ui_config = ui_config
         app.state.nature_index = nature_index
         app.state.nature_analyzer = nature_analyzer
         app.state.nature_status = nature_status
+        app.state.poi_index = poi_index
+        app.state.poi_status = poi_status
+        app.state.poi_default_limit = runtime_settings.poi_default_limit
+        app.state.poi_max_limit = runtime_settings.poi_max_limit
         if service is not None:
             app.state.route_service = service
             if generation_service is not None:
@@ -155,6 +171,34 @@ def _load_nature(settings: Settings) -> tuple[NatureIndex | None, NatureIndexSta
         path,
         water_buffer_m=settings.nature_water_buffer_m,
     )
+
+
+def _load_pois(settings: Settings) -> tuple[PoiIndex | None, PoiIndexStatus]:
+    path = settings.poi_index_path
+    if path is None:
+        return None, unavailable_poi_status(
+            None,
+            warnings=("poi_index_unavailable",),
+        )
+    try:
+        index = load_poi_index(path)
+    except PoiIndexMissingError:
+        log = logger.warning if settings.poi_missing_index_warning else logger.info
+        log("POI index %s is unavailable; place discovery is disabled", path.name)
+        return None, unavailable_poi_status(
+            path,
+            warnings=("poi_index_unavailable",),
+        )
+    except PoiIndexError:
+        logger.warning(
+            "POI index %s is invalid; place discovery is disabled",
+            path.name,
+        )
+        return None, unavailable_poi_status(
+            path,
+            warnings=("poi_index_invalid",),
+        )
+    return index, available_poi_status(index, path)
 
 
 app = create_app()

@@ -108,6 +108,15 @@ input, select { width: 100%; min-height: var(--control-height); padding: .48rem 
 input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d; }
 .field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
 
+.places-controls form { margin: .25rem 0 .6rem; display: grid; gap: .38rem; }
+.places-controls .check-control { margin: 0; display: flex; align-items: flex-start; gap: .45rem; font-size: .71rem; line-height: 1.35; }
+.places-controls .check-control input { width: auto; min-height: auto; margin: .12rem 0 0; flex: 0 0 auto; }
+.places-status { min-height: 1.9em; margin: .1rem 0 .5rem; }
+.places-advanced { margin-top: .12rem; padding: .38rem .45rem; border: 1px solid #d8d2c2; border-radius: 6px; background: #f7f3e8; }
+.places-advanced > summary { color: #5c625c; font-size: .68rem; font-weight: 800; }
+.places-advanced[open] > summary { margin-bottom: .42rem; }
+.places-advanced .warning-control { color: #7b3e24; }
+
 .poi-editor > summary { position: sticky; top: -1rem; z-index: 3; margin-inline: -.2rem; padding-inline: .2rem; background: var(--panel-background); }
 .poi-list { position: relative; max-height: min(47vh, 520px); margin: .45rem 0; padding: .15rem .2rem .15rem 0; display: grid; gap: .45rem; overflow-y: auto; overscroll-behavior: contain; scroll-padding: .4rem; }
 .poi-row { min-width: 0; padding: .48rem; display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; gap: .45rem; border: 1px solid #d2d2c4; border-radius: 8px; background: #f5f3e9; box-shadow: 0 1px 2px rgb(42 47 39 / 5%); }
@@ -168,6 +177,9 @@ input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d;
 .marker.start { color: #2f281a; background: #f2c45a; outline: 2px solid var(--accent-orange); }
 .marker.optional { width: 13px; height: 13px; border-radius: 2px; background: var(--accent-orange); transform: rotate(45deg); }
 .marker.waypoint { width: 14px; height: 14px; border-radius: 2px 7px 2px 7px; background: var(--import-blue); }
+.marker.place-scenic { color: #214b3b; border: 2px solid #214b3b; background: #fffdf7; }
+.marker.place-water { color: #146d91; border: 2px solid #146d91; background: #fffdf7; }
+.marker.place-unknown { color: #8a5b0e; border: 2px dashed #8a5b0e; background: #fffdf7; }
 
 .required-marker { width: 40px; height: 60px; padding: 0; border: 0; color: var(--text); background: transparent; cursor: grab; }
 .required-marker.start { width: 48px; height: 72px; }
@@ -189,6 +201,11 @@ input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d;
 .point-popup strong { display: block; margin-bottom: .2rem; color: var(--primary-action); font-size: .82rem; line-height: 1.25; }
 .point-popup p { margin: .18rem 0; font-size: .68rem; line-height: 1.35; }
 .point-popup .popup-status { color: #8a461f; font-weight: 800; }
+.place-popup { min-width: 210px; max-width: 285px; }
+.place-popup h3 { margin: 0 0 .35rem; color: var(--primary-action); font-size: .86rem; }
+.place-popup p strong { display: inline; color: #394940; font-size: inherit; }
+.place-popup .place-explanation { margin-top: .45rem; padding-top: .4rem; border-top: 1px solid var(--border); font-weight: 750; }
+.place-popup .popup-warning { color: #805014; font-weight: 750; }
 
 .candidate-list { min-width: 0; display: grid; grid-template-columns: repeat(5, minmax(228px, 1fr)); gap: .7rem; overflow-x: auto; overscroll-behavior-inline: contain; padding: .65rem .1rem .25rem; }
 .candidate-card { min-width: 228px; overflow: hidden; border: 1px solid #c7c7b9; border-radius: 9px; color: var(--text); background: var(--elevated-surface); box-shadow: 0 1px 3px rgb(30 40 32 / 8%); }

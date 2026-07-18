@@ -1,13 +1,24 @@
-import { ApiError, exportRoute, generateRoutes, getConfig, visualizeRoute } from "./api.js";
+import { ApiError, exportRoute, generateRoutes, getConfig, getPoiStatus, searchPois, visualizeRoute } from "./api.js";
 import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
-import { clearRoutes, fitCoordinates, initializeMap, renderCandidates, renderImportedGpx, renderOptionalMarkers, renderRequiredMarkers, renderVisualization, resizeMap } from "./map.js";
+import { clearRoutes, currentViewportBounds, fitCoordinates, initializeMap, renderCandidates, renderImportedGpx, renderOptionalMarkers, renderPois, renderRequiredMarkers, renderVisualization, resizeMap } from "./map.js";
 import { currentRequest, invalidateCandidates, pointDisplayName, selectedCandidate, state } from "./state.js";
 
 const byId = (id) => document.getElementById(id);
 let elapsedTimer = null;
 let mapReady = false;
+let poiDebounceTimer = null;
+let pendingPoiBounds = null;
+
+const PRIMARY_SCENIC_CATEGORIES = [
+  "viewpoint",
+  "observation_tower",
+  "castle",
+  "archaeological_site",
+  "ruins",
+];
+const HYDRATION_CATEGORIES = ["drinking_water", "fountain", "water_tap"];
 
 function showError(message, details = "") {
   byId("error-message").textContent = message;
@@ -20,6 +31,143 @@ function hideError() { byId("error-banner").classList.add("hidden"); }
 function showMapError(message) {
   byId("map-error-message").textContent = message;
   byId("map-error").classList.remove("hidden");
+}
+
+function updatePoiFiltersFromControls() {
+  state.poiFilters = {
+    scenic: byId("place-scenic").checked,
+    verifiedWater: byId("place-verified-water").checked,
+    unknownWater: byId("place-unknown-water").checked,
+    broadAttractions: byId("place-broad").checked,
+    restrictedAccess: byId("place-restricted").checked,
+    includePrivate: byId("place-private").checked,
+    nonPotable: byId("place-non-potable").checked,
+  };
+}
+
+function poiCategoriesAndPotability() {
+  const categories = [];
+  const potability = [];
+  if (state.poiFilters.scenic) categories.push(...PRIMARY_SCENIC_CATEGORIES);
+  if (state.poiFilters.broadAttractions) categories.push("tourism_attraction");
+  if (state.poiFilters.verifiedWater) {
+    categories.push("drinking_water");
+    potability.push("verified");
+  }
+  if (state.poiFilters.unknownWater) {
+    categories.push("fountain", "water_tap");
+    potability.push("unknown");
+  }
+  if (state.poiFilters.nonPotable) {
+    categories.push(...HYDRATION_CATEGORIES);
+    potability.push("non_potable");
+  }
+  return {
+    categories: [...new Set(categories)],
+    potability: [...new Set(potability)],
+  };
+}
+
+function normalizedViewportBounds(bounds) {
+  if (!bounds) return null;
+  const normalized = {
+    west: Math.max(-180, bounds.west),
+    south: Math.max(-90, bounds.south),
+    east: Math.min(180, bounds.east),
+    north: Math.min(90, bounds.north),
+  };
+  if (normalized.west >= normalized.east || normalized.south >= normalized.north) return null;
+  return normalized;
+}
+
+function clearPoiFeatures(status) {
+  state.poiFeatures = [];
+  state.selectedPoiId = null;
+  byId("places-count").textContent = "";
+  byId("places-status").textContent = status;
+  if (mapReady) renderPois([], null, selectPoi);
+}
+
+function poiRequestBody(bounds) {
+  const filters = poiCategoriesAndPotability();
+  if (!filters.categories.length) return null;
+  const groups = [];
+  if (filters.categories.some((category) => PRIMARY_SCENIC_CATEGORIES.includes(category) || category === "tourism_attraction")) {
+    groups.push("scenic");
+  }
+  if (filters.categories.some((category) => HYDRATION_CATEGORIES.includes(category))) {
+    groups.push("hydration");
+  }
+  const access = ["public", "unknown"];
+  if (state.poiFilters.restrictedAccess) access.push("restricted");
+  if (state.poiFilters.includePrivate) access.push("private");
+  return {
+    bbox: bounds,
+    groups,
+    categories: filters.categories,
+    potability: filters.potability,
+    access,
+    include_private: state.poiFilters.includePrivate,
+    limit: Math.min(state.config.poi_default_limit, state.config.poi_max_limit),
+  };
+}
+
+function selectPoi(id) {
+  if (!state.poiFeatures.some((feature) => feature.id === id)) return;
+  state.selectedPoiId = id;
+  renderPois(state.poiFeatures, state.selectedPoiId, selectPoi);
+}
+
+async function fetchViewportPois(id, bounds) {
+  if (!state.config?.poi_index_available) return;
+  const normalized = normalizedViewportBounds(bounds);
+  const request = normalized ? poiRequestBody(normalized) : null;
+  if (!request) {
+    state.poiRequest = { status: "idle", id };
+    clearPoiFeatures(normalized ? "Place filters are off." : "This viewport cannot be searched.");
+    return;
+  }
+  const controller = new AbortController();
+  state.poiAbortController = controller;
+  state.poiRequest = { status: "loading", id };
+  byId("places-status").textContent = "Loading mapped places for this viewport…";
+  try {
+    const response = await searchPois(request, controller.signal);
+    if (state.poiRequest.id !== id) return;
+    state.poiFeatures = response.features;
+    if (!state.poiFeatures.some((feature) => feature.id === state.selectedPoiId)) {
+      state.selectedPoiId = null;
+    }
+    state.poiRequest = { status: "success", id };
+    renderPois(state.poiFeatures, state.selectedPoiId, selectPoi);
+    byId("places-count").textContent = String(response.returned_count);
+    if (!response.available) {
+      byId("places-status").textContent = "POI index unavailable. Routing still works.";
+    } else if (!response.returned_count) {
+      byId("places-status").textContent = "No matching mapped places in this viewport.";
+    } else if (response.truncated) {
+      byId("places-status").textContent = `Showing ${response.returned_count} of ${response.total_matching} matches — zoom in to narrow the viewport.`;
+    } else {
+      byId("places-status").textContent = `${response.returned_count} mapped place${response.returned_count === 1 ? "" : "s"} in this viewport.`;
+    }
+  } catch (error) {
+    if (state.poiRequest.id !== id || error.name === "AbortError") return;
+    state.poiRequest = { status: "error", id };
+    byId("places-status").textContent = "Places could not be loaded; routing still works.";
+  } finally {
+    if (state.poiRequest.id === id) state.poiAbortController = null;
+  }
+}
+
+function schedulePoiRefresh(bounds = currentViewportBounds()) {
+  if (!state.config?.poi_index_available) return;
+  pendingPoiBounds = bounds;
+  window.clearTimeout(poiDebounceTimer);
+  state.poiAbortController?.abort();
+  state.poiAbortController = null;
+  const id = state.poiRequest.id + 1;
+  state.poiRequest = { status: "scheduled", id };
+  poiDebounceTimer = window.setTimeout(() => fetchViewportPois(id, pendingPoiBounds), 250);
 }
 
 function updateOptionsFromControls() {
@@ -296,6 +444,7 @@ function renderMapData() {
     candidate ? state.visualizationCache.get(candidate.signature) ?? null : null,
     state.showNatureContext,
   );
+  renderPois(state.poiFeatures, state.selectedPoiId, selectPoi);
 }
 
 function candidateBadges(candidate, search) {
@@ -859,6 +1008,10 @@ function bindEvents() {
     state.showNatureContext = event.target.checked;
     renderMapData();
   });
+  byId("places-filters").addEventListener("change", () => {
+    updatePoiFiltersFromControls();
+    schedulePoiRefresh();
+  });
   byId("download-gpx").addEventListener("click", downloadSelected);
   byId("copy-request").addEventListener("click", async () => {
     try {
@@ -877,6 +1030,11 @@ async function start() {
   bindEvents();
   try {
     state.config = await getConfig();
+    try {
+      state.poiIndexStatus = await getPoiStatus();
+    } catch {
+      state.poiIndexStatus = { available: false, feature_count: null };
+    }
     const natureAvailable = Boolean(state.config.nature_index_available);
     const preferOption = byId("nature-preference").querySelector('option[value="prefer"]');
     preferOption.disabled = !natureAvailable;
@@ -888,12 +1046,23 @@ async function start() {
     byId("show-nature").disabled = !natureAvailable;
     state.showNatureContext = natureAvailable;
     byId("show-nature").checked = natureAvailable;
+    const poiAvailable = Boolean(
+      state.config.poi_index_available && state.poiIndexStatus?.available,
+    );
+    state.config.poi_index_available = poiAvailable;
+    byId("places-filters").querySelectorAll("input").forEach((input) => {
+      input.disabled = !poiAvailable;
+    });
+    byId("places-status").textContent = poiAvailable
+      ? `Local OSM places index ready · ${formatCount(state.poiIndexStatus.feature_count)} regional features.`
+      : "POI index unavailable. Place discovery is disabled; routing still works.";
     initializeMap(state.config, {
       onReady: () => {
         mapReady = true;
         renderMapData();
       },
       onError: showMapError,
+      onViewportChange: schedulePoiRefresh,
       onMapClick: (coordinate) => {
         if (!state.addPointMode) return;
         if (state.points.length >= state.config.max_required_points) {

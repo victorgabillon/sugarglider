@@ -23,6 +23,20 @@ export const state = {
   addPointMode: false,
   showAllCandidates: true,
   showNatureContext: false,
+  poiFeatures: [],
+  selectedPoiId: null,
+  poiIndexStatus: null,
+  poiRequest: { status: "idle", id: 0 },
+  poiAbortController: null,
+  poiFilters: {
+    scenic: true,
+    verifiedWater: true,
+    unknownWater: false,
+    broadAttractions: false,
+    restrictedAccess: false,
+    includePrivate: false,
+    nonPotable: false,
+  },
 };
 
 export function invalidateCandidates() {

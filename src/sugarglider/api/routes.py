@@ -1,6 +1,6 @@
 """HTTP endpoint definitions."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import Response
@@ -24,6 +24,13 @@ from sugarglider.generation.service import (
 )
 from sugarglider.gpx.writer import gpx_filename, write_gpx
 from sugarglider.nature.analysis import NatureRouteAnalyzer
+from sugarglider.pois.errors import PoiSearchLimitError
+from sugarglider.pois.index import PoiIndex, unavailable_poi_search
+from sugarglider.pois.models import (
+    PoiIndexStatus,
+    PoiSearchRequest,
+    PoiSearchResponse,
+)
 from sugarglider.routing.graphhopper import RoutingError, RoutingUnavailableError
 from sugarglider.web.models import RouteVisualization
 
@@ -40,6 +47,29 @@ class HealthResponse(BaseModel):
 async def health() -> HealthResponse:
     """Report application liveness without consulting GraphHopper."""
     return HealthResponse()
+
+
+@router.get("/v1/pois/status", response_model=PoiIndexStatus)
+async def poi_status(request: Request) -> PoiIndexStatus:
+    """Return local POI-index availability without exposing a host path."""
+    status: PoiIndexStatus = request.app.state.poi_status
+    return status
+
+
+@router.post("/v1/pois/search", response_model=PoiSearchResponse)
+async def search_pois(
+    query: Annotated[PoiSearchRequest, Body()], request: Request
+) -> PoiSearchResponse:
+    """Return one bounded viewport slice from the lifespan-loaded point index."""
+    limit = query.limit or cast(int, request.app.state.poi_default_limit)
+    maximum = cast(int, request.app.state.poi_max_limit)
+    if limit > maximum:
+        raise PoiSearchLimitError
+    index = cast(PoiIndex | None, request.app.state.poi_index)
+    if index is None:
+        status = cast(PoiIndexStatus, request.app.state.poi_status)
+        return unavailable_poi_search(warnings=status.warnings)
+    return index.search(query, limit=limit)
 
 
 @router.get("/ready", response_model=HealthResponse)

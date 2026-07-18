@@ -1,9 +1,9 @@
 """Application configuration loaded from environment variables."""
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Self
 
-from pydantic import AnyHttpUrl, Field
+from pydantic import AnyHttpUrl, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -97,3 +97,25 @@ class Settings(BaseSettings):
         bool,
         Field(validation_alias="SUGARGLIDER_NATURE_MISSING_INDEX_WARNING"),
     ] = False
+    poi_index_path: Annotated[
+        Path | None,
+        Field(validation_alias="SUGARGLIDER_POI_INDEX_PATH"),
+    ] = Path("/data/pois/ile-de-france-poi-index.json.gz")
+    poi_missing_index_warning: Annotated[
+        bool,
+        Field(validation_alias="SUGARGLIDER_POI_MISSING_INDEX_WARNING"),
+    ] = False
+    poi_default_limit: Annotated[
+        int,
+        Field(ge=1, le=5000, validation_alias="SUGARGLIDER_POI_DEFAULT_LIMIT"),
+    ] = 500
+    poi_max_limit: Annotated[
+        int,
+        Field(ge=1, le=5000, validation_alias="SUGARGLIDER_POI_MAX_LIMIT"),
+    ] = 1000
+
+    @model_validator(mode="after")
+    def validate_poi_limits(self) -> Self:
+        if self.poi_default_limit > self.poi_max_limit:
+            raise ValueError("POI default limit cannot exceed the maximum limit")
+        return self

@@ -21,6 +21,23 @@ export async function getConfig() {
   return response.json();
 }
 
+export async function getPoiStatus() {
+  const response = await fetch("/v1/pois/status", { headers: { Accept: "application/json" } });
+  if (!response.ok) throw await responseError(response);
+  return response.json();
+}
+
+export async function searchPois(request, signal) {
+  const response = await fetch("/v1/pois/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(request),
+    signal,
+  });
+  if (!response.ok) throw await responseError(response);
+  return response.json();
+}
+
 export async function generateRoutes(request, signal) {
   const response = await fetch("/v1/routes/generate", {
     method: "POST",
