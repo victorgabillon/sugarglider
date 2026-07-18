@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from sugarglider.domain.generation import (
     CandidateScore,
     GeneratedCandidate,
+    LoopGeometryPreference,
     NaturePreference,
 )
 from sugarglider.domain.models import RouteResult
@@ -70,10 +71,11 @@ def score_route(
 def rank_candidates(
     candidates: tuple[GeneratedCandidate, ...],
     nature_preference: NaturePreference = "off",
+    loop_geometry_preference: LoopGeometryPreference = "off",
 ) -> tuple[GeneratedCandidate, ...]:
     """Rank natural loops within tolerance and keep distance pressure outside it."""
 
-    if nature_preference == "off":
+    if nature_preference == "off" and loop_geometry_preference == "off":
 
         def ranking_key(candidate: GeneratedCandidate) -> tuple[object, ...]:
             backtrack = candidate.route.analysis.immediate_backtrack.share
@@ -102,13 +104,23 @@ def rank_candidates(
         def ranking_key(candidate: GeneratedCandidate) -> tuple[object, ...]:
             backtrack = candidate.route.analysis.immediate_backtrack.share
             repetition = candidate.route.analysis.repetition.repeated_distance.share
-            nature = _nature_ranking_key(candidate)
+            geometry = (
+                (_loop_geometry_ranking_key(candidate),)
+                if loop_geometry_preference == "prefer"
+                else ()
+            )
+            nature = (
+                (_nature_ranking_key(candidate),)
+                if nature_preference == "prefer"
+                else ()
+            )
             if candidate.within_tolerance:
                 return (
                     0,
                     backtrack,
                     repetition,
-                    nature,
+                    *geometry,
+                    *nature,
                     candidate.score.total,
                     candidate.target_error_m,
                     candidate.signature,
@@ -118,7 +130,8 @@ def rank_candidates(
                 candidate.score.distance_error_ratio,
                 backtrack,
                 repetition,
-                nature,
+                *geometry,
+                *nature,
                 candidate.score.total,
                 candidate.signature,
             )
@@ -136,9 +149,10 @@ def rank_candidates(
 def rank_low_overlap_candidates(
     candidates: tuple[GeneratedCandidate, ...],
     nature_preference: NaturePreference = "off",
+    loop_geometry_preference: LoopGeometryPreference = "off",
 ) -> tuple[GeneratedCandidate, ...]:
     """Rank tolerance first, then exact repeated distance and backtracking."""
-    if nature_preference == "off":
+    if nature_preference == "off" and loop_geometry_preference == "off":
         ordered = sorted(
             candidates,
             key=lambda candidate: (
@@ -151,22 +165,37 @@ def rank_low_overlap_candidates(
             ),
         )
     else:
-        ordered = sorted(
-            candidates,
-            key=lambda candidate: (
+
+        def ranking_key(candidate: GeneratedCandidate) -> tuple[object, ...]:
+            geometry = (
+                (_loop_geometry_ranking_key(candidate),)
+                if loop_geometry_preference == "prefer"
+                else ()
+            )
+            nature = (
+                (_nature_ranking_key(candidate),)
+                if nature_preference == "prefer"
+                else ()
+            )
+            return (
                 0 if candidate.within_tolerance else 1,
                 (
                     candidate.score.distance_error_ratio
                     if not candidate.within_tolerance
                     else 0.0
                 ),
-                candidate.route.analysis.immediate_backtrack.share,
                 candidate.route.analysis.repetition.repeated_distance.share,
-                _nature_ranking_key(candidate),
+                candidate.route.analysis.immediate_backtrack.share,
+                *geometry,
+                *nature,
                 candidate.score.total,
                 candidate.target_error_m,
                 candidate.signature,
-            ),
+            )
+
+        ordered = sorted(
+            candidates,
+            key=ranking_key,
         )
     return tuple(
         candidate.model_copy(update={"rank": rank})
@@ -180,6 +209,16 @@ def _nature_ranking_key(candidate: GeneratedCandidate) -> tuple[int, float]:
     if nature is None:
         return (1, 0.0)
     return (0, -nature.nature_score)
+
+
+def _loop_geometry_ranking_key(
+    candidate: GeneratedCandidate,
+) -> tuple[int, float]:
+    """Sort known penalties low-to-high and keep unknown distinct from zero."""
+    geometry = candidate.route.analysis.loop_geometry
+    if geometry is None:
+        return (1, 0.0)
+    return (0, geometry.penalty_breakdown.total)
 
 
 def is_natural_improvement(

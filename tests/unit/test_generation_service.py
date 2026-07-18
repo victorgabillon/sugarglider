@@ -1,11 +1,20 @@
 """Deterministic generation orchestration using a fake routing backend."""
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 import pytest
 
+from sugarglider.analysis.loop_geometry import (
+    LoopGeometryRouteAnalyzer,
+    score_loop_geometry,
+)
 from sugarglider.analysis.route import ProjectedGeometryEdge, RouteAnalyzer
-from sugarglider.domain.analysis import DistanceMetric, NatureAnalysis
+from sugarglider.domain.analysis import (
+    DistanceMetric,
+    LoopGeometryAnalysis,
+    NatureAnalysis,
+)
 from sugarglider.domain.generation import (
     GeneratedCandidate,
     RouteGenerationRequest,
@@ -177,6 +186,130 @@ class FakeRoutingBackend:
         )
 
 
+@dataclass(frozen=True)
+class ControlledCandidateMetrics:
+    distance_m: float
+    backtrack_share: float
+    repetition_share: float
+    near_parallel_share: float
+    woodland_share: float | None = None
+
+
+class ControlledGeometryBackend(FakeRoutingBackend):
+    """Return identical primary data across modes and one distinct balanced route."""
+
+    def __init__(
+        self,
+        control: ControlledCandidateMetrics,
+        balanced: ControlledCandidateMetrics,
+    ) -> None:
+        super().__init__(baseline_distance_m=20_000)
+        self.control = control
+        self.balanced = balanced
+
+    async def route(
+        self,
+        points: tuple[Coordinate, ...],
+        profile: str = "hike",
+        *,
+        pass_through: bool = False,
+    ) -> RoutedPath:
+        if not pass_through:
+            return self._path(points, self.baseline_distance_m, edge_offset=1)
+        self.candidate_route_calls += 1
+        self.candidate_sequences.append(points)
+        self.pass_through_values.append(pass_through)
+        balanced = self.candidate_route_calls > 1
+        metrics = self.balanced if balanced else self.control
+        return self._path(
+            points,
+            metrics.distance_m,
+            edge_offset=200 if balanced else 100,
+        )
+
+
+class ControlledMetricsFactory(RouteResultFactory):
+    """Attach exact public comparison metrics selected by a routed edge marker."""
+
+    def __init__(
+        self,
+        control: ControlledCandidateMetrics,
+        balanced: ControlledCandidateMetrics,
+    ) -> None:
+        super().__init__()
+        self.control = control
+        self.balanced = balanced
+
+    def create(
+        self,
+        *,
+        name: str,
+        path: RoutedPath,
+        input_point_count: int,
+    ) -> RouteResult:
+        route = super().create(
+            name=name,
+            path=path,
+            input_point_count=input_point_count,
+        )
+        edge_details = path.details.get("edge_id", ())
+        marker = edge_details[0].value if edge_details else 0
+        metrics = (
+            self.balanced if isinstance(marker, int) and marker >= 200 else self.control
+        )
+        distance_m = route.summary.distance_m
+        penalty = score_loop_geometry(
+            self_crossing_count=0,
+            near_parallel_share=metrics.near_parallel_share,
+            compactness=1,
+            sector_balance=1,
+            elongation=1,
+        )
+        geometry = LoopGeometryAnalysis(
+            closed=True,
+            start_end_gap_m=0,
+            enclosed_area_m2=1,
+            convex_hull_area_m2=1,
+            compactness=1,
+            sector_count=8,
+            sector_distance_shares=(0.125,) * 8,
+            sector_balance=1,
+            mean_radius_m=1,
+            max_radius_m=1,
+            elongation=1,
+            self_crossing_count=0,
+            near_parallel=DistanceMetric(
+                distance_m=distance_m * metrics.near_parallel_share,
+                share=metrics.near_parallel_share,
+            ),
+            penalty_breakdown=penalty,
+            warnings=(),
+        )
+        analysis = route.analysis.model_copy(
+            update={
+                "immediate_backtrack": DistanceMetric(
+                    distance_m=distance_m * metrics.backtrack_share,
+                    share=metrics.backtrack_share,
+                ),
+                "repetition": route.analysis.repetition.model_copy(
+                    update={
+                        "repeated_distance": DistanceMetric(
+                            distance_m=distance_m * metrics.repetition_share,
+                            share=metrics.repetition_share,
+                        )
+                    }
+                ),
+                "loop_geometry": geometry,
+                "nature": (
+                    _controlled_nature(distance_m, metrics.woodland_share)
+                    if metrics.woodland_share is not None
+                    else None
+                ),
+            }
+        )
+        return route.model_copy(update={"analysis": analysis})
+
+
 class CountingNatureAnalyzer:
     """Count enriched public analyses while delegating exact nature semantics."""
 
@@ -189,6 +322,22 @@ class CountingNatureAnalyzer:
         edges: tuple[ProjectedGeometryEdge, ...],
         route_distance_m: float,
     ) -> NatureAnalysis:
+        self.call_count += 1
+        return self.delegate.analyze_route(edges, route_distance_m)
+
+
+class CountingLoopGeometryAnalyzer:
+    """Count complete-route shape analysis while delegating exact metrics."""
+
+    def __init__(self) -> None:
+        self.delegate = LoopGeometryRouteAnalyzer()
+        self.call_count = 0
+
+    def analyze_route(
+        self,
+        edges: tuple[ProjectedGeometryEdge, ...],
+        route_distance_m: float,
+    ) -> LoopGeometryAnalysis:
         self.call_count += 1
         return self.delegate.analyze_route(edges, route_distance_m)
 
@@ -227,6 +376,42 @@ def _empty_nature_index() -> NatureIndex:
             ),
             features=(),
         )
+    )
+
+
+def _controlled_nature(distance_m: float, woodland_share: float) -> NatureAnalysis:
+    unknown_share = 1.0 - woodland_share
+    breakdown = score_nature(
+        woodland_share=woodland_share,
+        open_natural_share=0,
+        agriculture_share=0,
+        park_or_protected_share=0,
+        near_water_share=0,
+        urban_share=0,
+        unknown_share=unknown_share,
+    )
+    zero = DistanceMetric(distance_m=0, share=0)
+    return NatureAnalysis(
+        available=True,
+        index_format_version=1,
+        index_feature_count=2,
+        woodland=DistanceMetric(
+            distance_m=distance_m * woodland_share,
+            share=woodland_share,
+        ),
+        open_natural=zero,
+        agriculture=zero,
+        water_crossing=zero,
+        urban=zero,
+        unknown_landcover=DistanceMetric(
+            distance_m=distance_m * unknown_share,
+            share=unknown_share,
+        ),
+        park_or_protected=zero,
+        near_water=zero,
+        nature_score=breakdown.final_score,
+        score_breakdown=breakdown,
+        warnings=(),
     )
 
 
@@ -276,6 +461,48 @@ def _candidate_with_nature(
         }
     )
     return candidate.model_copy(update={"route": route, "signature": signature})
+
+
+def _candidate_with_loop_geometry(
+    candidate: GeneratedCandidate,
+    *,
+    near_parallel_share: float,
+    signature: str,
+) -> GeneratedCandidate:
+    route = candidate.route
+    penalty = score_loop_geometry(
+        self_crossing_count=0,
+        near_parallel_share=near_parallel_share,
+        compactness=1,
+        sector_balance=1,
+        elongation=1,
+    )
+    geometry = LoopGeometryAnalysis(
+        closed=True,
+        start_end_gap_m=0,
+        enclosed_area_m2=1,
+        convex_hull_area_m2=1,
+        compactness=1,
+        sector_count=8,
+        sector_distance_shares=(0.125,) * 8,
+        sector_balance=1,
+        mean_radius_m=1,
+        max_radius_m=1,
+        elongation=1,
+        self_crossing_count=0,
+        near_parallel=DistanceMetric(
+            distance_m=route.summary.distance_m * near_parallel_share,
+            share=near_parallel_share,
+        ),
+        penalty_breakdown=penalty,
+        warnings=(),
+    )
+    enriched = route.model_copy(
+        update={
+            "analysis": route.analysis.model_copy(update={"loop_geometry": geometry})
+        }
+    )
+    return candidate.model_copy(update={"route": enriched, "signature": signature})
 
 
 class OrderAwareRoutingBackend(FakeRoutingBackend):
@@ -664,6 +891,185 @@ async def test_omitted_nature_preference_matches_explicit_off() -> None:
 
 
 @pytest.mark.asyncio
+async def test_omitted_loop_geometry_preference_matches_explicit_off() -> None:
+    default_backend = FakeRoutingBackend()
+    explicit_backend = FakeRoutingBackend()
+    default = await RouteGenerationService(default_backend, max_evaluations=4).generate(
+        generation_request()
+    )
+    explicit = await RouteGenerationService(
+        explicit_backend, max_evaluations=4
+    ).generate(
+        generation_request().model_copy(update={"loop_geometry_preference": "off"})
+    )
+    assert default.model_dump(mode="json") == explicit.model_dump(mode="json")
+    assert default_backend.round_trip_calls == explicit_backend.round_trip_calls
+    assert (
+        default_backend.candidate_route_calls == explicit_backend.candidate_route_calls
+    )
+
+
+@pytest.mark.asyncio
+async def test_preferred_lane_derives_balanced_sequences_from_base_cache() -> None:
+    backend = FakeRoutingBackend()
+    request = generation_request().model_copy(
+        update={"loop_geometry_preference": "prefer"}
+    )
+    result = await RouteGenerationService(backend, max_evaluations=3).generate(request)
+    assert backend.round_trip_calls == 3
+    assert result.search.round_trip_proposal_count == 3
+    assert result.search.derived_proposal_sequence_count == 9
+    assert backend.candidate_route_calls == 9
+    assert result.search.base_search_budget == 3
+    assert result.search.loop_geometry_extra_evaluation_budget == 12
+    assert result.search.loop_geometry_extra_evaluated_count == 6
+    assert result.search.loop_geometry_extra_successful_count == 6
+    assert result.search.loop_geometry_extra_rejected_count == 0
+    assert result.search.evaluated_candidate_count == 9
+    assert result.search.search_budget == 15
+    assert {candidate.construction for candidate in result.candidates} == {
+        "sector_balanced_detour",
+        "round_trip_detour",
+    }
+    assert all(
+        candidate.routing_points[0] == request.supplied_required_points[0]
+        for candidate in result.candidates
+    )
+
+
+async def _controlled_mode_results(
+    control: ControlledCandidateMetrics,
+    balanced: ControlledCandidateMetrics,
+    *,
+    nature_preference: bool = False,
+) -> tuple[
+    RouteGenerationResult,
+    RouteGenerationResult,
+    ControlledGeometryBackend,
+    ControlledGeometryBackend,
+]:
+    off_backend = ControlledGeometryBackend(control, balanced)
+    prefer_backend = ControlledGeometryBackend(control, balanced)
+    request = generation_request(candidates=2).model_copy(
+        update={"nature_preference": "prefer" if nature_preference else "off"}
+    )
+    off = await RouteGenerationService(
+        off_backend,
+        ControlledMetricsFactory(control, balanced),
+        max_evaluations=1,
+        loop_geometry_extra_evaluations=1,
+        nature_index_available=nature_preference,
+        nature_index_feature_count=2 if nature_preference else None,
+    ).generate(request)
+    prefer = await RouteGenerationService(
+        prefer_backend,
+        ControlledMetricsFactory(control, balanced),
+        max_evaluations=1,
+        loop_geometry_extra_evaluations=1,
+        nature_index_available=nature_preference,
+        nature_index_feature_count=2 if nature_preference else None,
+    ).generate(request.model_copy(update={"loop_geometry_preference": "prefer"}))
+    return off, prefer, off_backend, prefer_backend
+
+
+@pytest.mark.asyncio
+async def test_prefer_retains_identical_off_control_when_balanced_is_worse() -> None:
+    control = ControlledCandidateMetrics(41_000, 0.1, 0.1, 0.1)
+    balanced = ControlledCandidateMetrics(42_000, 0.2, 0.2, 0.4)
+    off, prefer, off_backend, prefer_backend = await _controlled_mode_results(
+        control, balanced
+    )
+
+    assert prefer.candidates[0].signature == off.candidates[0].signature
+    assert any(
+        candidate.signature == off.candidates[0].signature
+        for candidate in prefer.candidates
+    )
+    assert "loop_geometry_no_candidate_improvement" in prefer.search.warnings
+    assert off_backend.round_trip_calls == prefer_backend.round_trip_calls == 1
+    assert off_backend.candidate_route_calls == 1
+    assert prefer_backend.candidate_route_calls == 2
+    assert off_backend.candidate_sequences == prefer_backend.candidate_sequences[:1]
+    assert off.search.base_search_budget == prefer.search.base_search_budget == 1
+    assert off.search.loop_geometry_extra_evaluation_budget == 0
+    assert prefer.search.loop_geometry_extra_evaluation_budget == 1
+    assert prefer.search.loop_geometry_extra_evaluated_count == 1
+    assert prefer.search.loop_geometry_extra_successful_count == 1
+    assert prefer.search.loop_geometry_extra_rejected_count == 0
+    assert off.search.round_trip_proposal_count == 1
+    assert prefer.search.round_trip_proposal_count == 1
+    assert off.search.derived_proposal_sequence_count == 1
+    assert prefer.search.derived_proposal_sequence_count == 3
+    assert off.search.evaluated_candidate_count == 1
+    assert prefer.search.evaluated_candidate_count == 2
+    assert prefer.search.evaluated_candidate_count <= prefer.search.search_budget
+
+
+@pytest.mark.asyncio
+async def test_prefer_promotes_strict_geometry_improvement_on_equal_control() -> None:
+    control = ControlledCandidateMetrics(41_000, 0.1, 0.1, 0.5)
+    balanced = ControlledCandidateMetrics(41_000, 0.1, 0.1, 0.1)
+    off, prefer, _off_backend, _prefer_backend = await _controlled_mode_results(
+        control, balanced
+    )
+
+    assert off.candidates[0].construction == "round_trip_detour"
+    assert prefer.candidates[0].construction == "sector_balanced_detour"
+    assert prefer.candidates[0].signature != off.candidates[0].signature
+    assert "loop_geometry_no_candidate_improvement" not in prefer.search.warnings
+
+
+@pytest.mark.asyncio
+async def test_prefer_allows_higher_priority_improvement_despite_worse_shape() -> None:
+    control = ControlledCandidateMetrics(41_000, 0.2, 0.1, 0.1)
+    balanced = ControlledCandidateMetrics(41_000, 0.1, 0.1, 0.5)
+    off, prefer, _off_backend, _prefer_backend = await _controlled_mode_results(
+        control, balanced
+    )
+
+    assert prefer.candidates[0].signature != off.candidates[0].signature
+    assert prefer.candidates[0].route.analysis.immediate_backtrack.share == 0.1
+    preferred_geometry = prefer.candidates[0].route.analysis.loop_geometry
+    control_geometry = off.candidates[0].route.analysis.loop_geometry
+    assert preferred_geometry is not None and control_geometry is not None
+    assert (
+        preferred_geometry.penalty_breakdown.total
+        > control_geometry.penalty_breakdown.total
+    )
+
+
+@pytest.mark.asyncio
+async def test_prefer_rejects_higher_priority_regression_despite_better_shape() -> None:
+    control = ControlledCandidateMetrics(41_000, 0.1, 0.1, 0.5)
+    balanced = ControlledCandidateMetrics(41_000, 0.1, 0.2, 0.1)
+    off, prefer, _off_backend, _prefer_backend = await _controlled_mode_results(
+        control, balanced
+    )
+
+    assert prefer.candidates[0].signature == off.candidates[0].signature
+    assert "loop_geometry_no_candidate_improvement" in prefer.search.warnings
+
+
+@pytest.mark.asyncio
+async def test_nature_cannot_worsen_effective_geometry_control() -> None:
+    control = ControlledCandidateMetrics(41_000, 0.1, 0.1, 0.1, 0.0)
+    balanced = ControlledCandidateMetrics(41_000, 0.1, 0.1, 0.5, 1.0)
+    off, prefer, _off_backend, _prefer_backend = await _controlled_mode_results(
+        control,
+        balanced,
+        nature_preference=True,
+    )
+
+    assert prefer.candidates[0].signature == off.candidates[0].signature
+    assert any(
+        candidate.signature == off.candidates[0].signature
+        for candidate in prefer.candidates
+    )
+    assert "loop_geometry_no_candidate_improvement" in prefer.search.warnings
+    assert "nature_no_candidate_improvement" in prefer.search.warnings
+
+
+@pytest.mark.asyncio
 async def test_unavailable_nature_preference_preserves_results_and_budget() -> None:
     off_backend = FakeRoutingBackend()
     prefer_backend = FakeRoutingBackend()
@@ -848,6 +1254,41 @@ async def test_wider_beam_does_not_enrich_temporary_states() -> None:
     assert narrow_nature < narrow_structural
 
 
+@pytest.mark.asyncio
+async def test_wider_beam_never_runs_loop_geometry_on_temporary_states() -> None:
+    request = generation_request(candidates=3).model_copy(
+        update={
+            "path_selection_mode": "low_overlap",
+            "loop_geometry_preference": "prefer",
+        }
+    )
+    observations: list[tuple[int, int]] = []
+    for beam_width in (1, 12):
+        counter = CountingLoopGeometryAnalyzer()
+        structural_factory = CountingStructuralFactory()
+        result = await RouteGenerationService(
+            LowOverlapRoutingBackend(),
+            RouteResultFactory(RouteAnalyzer(loop_geometry_analyzer=counter)),
+            structural_result_factory=structural_factory,
+            low_overlap_settings=LowOverlapSettings(
+                beam_width=beam_width,
+                max_paths=5,
+            ),
+        ).generate(request)
+        assert counter.call_count < structural_factory.call_count
+        assert all(
+            candidate.route.analysis.loop_geometry is not None
+            for candidate in result.candidates
+        )
+        observations.append((counter.call_count, structural_factory.call_count))
+
+    narrow_geometry, narrow_structural = observations[0]
+    wide_geometry, wide_structural = observations[1]
+    assert wide_structural > narrow_structural
+    assert narrow_geometry < narrow_structural
+    assert wide_geometry < wide_structural
+
+
 def test_nature_low_overlap_source_uses_all_drafts_with_bounded_capacity(
     generation_result: RouteGenerationResult,
 ) -> None:
@@ -893,6 +1334,109 @@ def test_nature_low_overlap_source_uses_all_drafts_with_bounded_capacity(
         (control, visible, hidden_best_larger, hidden_best_smaller),
     )
     assert single_source == (control,)
+
+
+def test_staged_geometry_promotes_only_a_strictly_better_shape(
+    generation_result: RouteGenerationResult,
+) -> None:
+    base = generation_result.candidates[0]
+    lollipop = _candidate_with_loop_geometry(
+        base,
+        near_parallel_share=0.8,
+        signature="a-lollipop",
+    )
+    ring = _candidate_with_loop_geometry(
+        base,
+        near_parallel_share=0.1,
+        signature="z-ring",
+    )
+    warnings: set[str] = set()
+    ranked = RouteGenerationService(FakeRoutingBackend())._rank_standard_staged(
+        (lollipop, ring),
+        nature_preference="off",
+        loop_geometry_preference="prefer",
+        warnings=warnings,
+    )
+    assert ranked[0].signature == "z-ring"
+    assert "loop_geometry_no_candidate_improvement" not in warnings
+
+    warnings.clear()
+    ring_first = ring.model_copy(update={"signature": "a-ring"})
+    lollipop_second = lollipop.model_copy(update={"signature": "z-lollipop"})
+    unchanged = RouteGenerationService(FakeRoutingBackend())._rank_standard_staged(
+        (ring_first, lollipop_second),
+        nature_preference="off",
+        loop_geometry_preference="prefer",
+        warnings=warnings,
+    )
+    assert unchanged[0].signature == "a-ring"
+    assert "loop_geometry_no_candidate_improvement" in warnings
+
+
+def test_both_preferences_keep_geometry_ahead_of_nature(
+    generation_result: RouteGenerationResult,
+) -> None:
+    base = generation_result.candidates[0]
+    geometry = _candidate_with_nature(
+        _candidate_with_loop_geometry(
+            base,
+            near_parallel_share=0.1,
+            signature="geometry-base",
+        ),
+        woodland_share=0,
+        signature="geometry",
+    )
+    nature = _candidate_with_nature(
+        _candidate_with_loop_geometry(
+            base,
+            near_parallel_share=0.8,
+            signature="nature-base",
+        ),
+        woodland_share=1,
+        signature="nature",
+    )
+    warnings: set[str] = set()
+    ranked = RouteGenerationService(FakeRoutingBackend())._rank_standard_staged(
+        (nature, geometry),
+        nature_preference="prefer",
+        loop_geometry_preference="prefer",
+        warnings=warnings,
+    )
+    assert ranked[0].signature == "geometry"
+
+
+def test_low_overlap_source_capacity_prioritizes_geometry_before_nature(
+    generation_result: RouteGenerationResult,
+) -> None:
+    base = generation_result.candidates[0]
+    control = _candidate_with_loop_geometry(
+        base, near_parallel_share=0.8, signature="control"
+    )
+    geometry = _candidate_with_loop_geometry(
+        base, near_parallel_share=0.1, signature="geometry"
+    )
+    nature = _candidate_with_nature(
+        _candidate_with_loop_geometry(
+            base, near_parallel_share=0.7, signature="nature-base"
+        ),
+        woodland_share=1,
+        signature="nature",
+    )
+    service = RouteGenerationService(
+        FakeRoutingBackend(),
+        low_overlap_settings=LowOverlapSettings(source_count=2),
+    )
+    selected = service._preference_aware_refinement_sources(
+        control,
+        (nature, control),
+        (control, nature, geometry),
+        loop_geometry_preference="prefer",
+        nature_preference="prefer",
+    )
+    assert [candidate.signature for candidate in selected] == [
+        "control",
+        "geometry",
+    ]
 
 
 @pytest.mark.asyncio

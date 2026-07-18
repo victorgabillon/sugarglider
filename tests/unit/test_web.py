@@ -296,6 +296,7 @@ async def test_ui_config_uses_injected_map_settings(
         "nature_index_available": False,
         "nature_water_buffer_m": 100.0,
         "nature_preference_values": ["off", "prefer"],
+        "loop_geometry_preference_values": ["off", "prefer"],
     }
 
 
@@ -536,6 +537,45 @@ def test_frontend_exposes_nature_without_raw_polygon_requests() -> None:
     assert "Object.entries(styles)" in map_code
     assert "/v1/nature/polygons" not in app + map_code
     assert "maplibre-gl@4.7.1" in html
+
+
+def test_frontend_exposes_loop_geometry_request_metrics_and_nulls() -> None:
+    html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
+    app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
+    state = (STATIC_DIRECTORY / "state.js").read_text(encoding="utf-8")
+    formatting = (STATIC_DIRECTORY / "format.js").read_text(encoding="utf-8")
+    assert 'id="loop-geometry-preference"' in html
+    assert "Prefer balanced loops" in html
+    assert "Distance, backtracking and repetition remain more important" in html
+    assert 'loopGeometryPreference: "off"' in state
+    assert "loop_geometry_preference: state.options.loopGeometryPreference" in state
+    assert 'value.loop_geometry_preference ?? "off"' in app
+    assert "loopGeometryCardSummary" in app
+    assert "loopGeometryCardDetails" in app
+    assert "loopGeometrySection" in app
+    assert '<details class="loop-geometry-exact">' in app
+    assert "Exact geometry details" in app
+    assert "loop-sector-grid" in app
+    assert "Sector ${index + 1}" in app
+    assert "Base evaluation budget" in app
+    assert "Geometry extra evaluations" in app
+    for label in (
+        "Shape penalty (lower is better)",
+        "Compactness",
+        "Sector balance",
+        "Near-parallel corridor",
+        "Self-crossings",
+        "Elongation",
+        "Enclosed area",
+        "Maximum radius",
+    ):
+        assert label in app
+    assert "Shape metrics are unknown, not zero" in app
+    assert "loop_geometry_analysis_incomplete" in formatting
+    assert "loop_geometry_no_candidate_improvement" in formatting
+    assert "natureSection(analysis.nature, search)" in app
+    assert 'id="show-nature"' in html
+    assert "/v1/nature/polygons" not in app
 
 
 def test_frontend_uses_local_brand_identity_and_accessible_landmarks() -> None:

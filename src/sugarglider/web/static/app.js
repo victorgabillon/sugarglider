@@ -32,6 +32,7 @@ function updateOptionsFromControls() {
     pointOrderMode: byId("point-order-mode").value,
     pathSelectionMode: byId("path-selection-mode").value,
     naturePreference: byId("nature-preference").value,
+    loopGeometryPreference: byId("loop-geometry-preference").value,
   };
 }
 
@@ -44,6 +45,7 @@ function updateControlsFromOptions() {
   byId("point-order-mode").value = state.options.pointOrderMode;
   byId("path-selection-mode").value = state.options.pathSelectionMode;
   byId("nature-preference").value = state.options.naturePreference;
+  byId("loop-geometry-preference").value = state.options.loopGeometryPreference;
 }
 
 function validPoint(point) {
@@ -312,6 +314,34 @@ function metricBar(label, share, className, displayValue) {
   return `<div class="bar-metric ${className}"><div class="bar-heading"><span>${escapeHtml(label)}</span><strong>${escapeHtml(displayValue)}</strong></div><div class="metric-track" role="img" aria-label="${escapeHtml(`${label}: ${displayValue}`)}"><div class="metric-fill" style="--metric-value:${percentage.toFixed(3)}%"></div></div></div>`;
 }
 
+function loopGeometryCardSummary(geometry) {
+  if (!geometry) {
+    return '<div class="loop-geometry-card not-evaluated"><div class="loop-geometry-heading"><strong>Loop geometry</strong><span>not evaluated</span></div><p>Shape metrics are unknown, not zero.</p></div>';
+  }
+  return `<div class="loop-geometry-card"><div class="loop-geometry-heading"><strong>Loop geometry</strong><span>${geometry.penalty_breakdown.total.toFixed(4)} · lower is better</span></div><dl><dt>Compactness</dt><dd>${geometry.compactness.toFixed(4)}</dd><dt>Sector balance</dt><dd>${geometry.sector_balance.toFixed(4)}</dd><dt>Near-parallel</dt><dd>${formatPercent(geometry.near_parallel.share)}</dd><dt>Self-crossings</dt><dd>${formatCount(geometry.self_crossing_count)}</dd></dl></div>`;
+}
+
+function loopGeometryCardDetails(geometry) {
+  const details = document.createElement("details");
+  details.className = "loop-geometry-details";
+  const summary = document.createElement("summary");
+  summary.textContent = "Loop geometry details";
+  const content = document.createElement("div");
+  content.innerHTML = geometry
+    ? metricRows([
+      ["Elongation", geometry.elongation.toFixed(4)],
+      ["Enclosed area", `${geometry.enclosed_area_m2.toFixed(2)} m²`],
+      ["Maximum radius", `${geometry.max_radius_m.toFixed(2)} m`],
+    ])
+    : metricRows([
+      ["Elongation", "not evaluated"],
+      ["Enclosed area", "not evaluated"],
+      ["Maximum radius", "not evaluated"],
+    ]);
+  details.append(summary, content);
+  return details;
+}
+
 function renderCandidatesPanel() {
   const container = byId("candidate-list");
   const result = state.generationResult;
@@ -325,6 +355,7 @@ function renderCandidatesPanel() {
   result.candidates.forEach((candidate) => {
     const analysis = candidate.route.analysis;
     const nature = analysis.nature;
+    const loopGeometry = analysis.loop_geometry;
     const repeatedDistance = analysis.repetition.repeated_distance.distance_m;
     const nonImmediate = Math.max(repeatedDistance - analysis.immediate_backtrack.distance_m, 0);
     const nonImmediateShare = candidate.route.summary.distance_m > 0
@@ -340,13 +371,15 @@ function renderCandidatesPanel() {
     selector.className = "candidate-select";
     selector.setAttribute("aria-pressed", String(selected));
     selector.setAttribute("aria-label", `Select candidate ${candidate.rank}, ${formatDistance(candidate.route.summary.distance_m)}`);
-    selector.innerHTML = `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate, result.search)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.construction))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.target_error_m)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Major road</span><strong>${formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${metricBar("Trail-like", analysis.trail_like.share, "trail", formatPercent(analysis.trail_like.share))}${metricBar("Paved", analysis.paved.share, "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}`;
+    selector.innerHTML = `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate, result.search)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.construction))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.target_error_m)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Major road</span><strong>${formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${metricBar("Trail-like", analysis.trail_like.share, "trail", formatPercent(analysis.trail_like.share))}${metricBar("Paved", analysis.paved.share, "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}`;
     selector.addEventListener("click", () => selectCandidate(candidate.signature));
     card.append(selector);
+    card.append(loopGeometryCardDetails(loopGeometry));
 
     const warningCodes = [...new Set([
       ...result.search.warnings,
       ...analysis.warnings,
+      ...(loopGeometry?.warnings ?? []),
       ...(nature?.warnings ?? []),
     ])];
     if (warningCodes.length) {
@@ -408,6 +441,53 @@ function natureSection(nature, search) {
   ]) + '<p class="context-note">Derived from local OpenStreetMap polygons. Unknown means unmapped or outside the index. Near water describes proximity to mapped water, not a water view. Protected-area tags do not guarantee public access. The score describes mapped environmental context—not beauty, biodiversity, accessibility, or safety.</p>';
 }
 
+function loopGeometrySection(geometry) {
+  const sectorGrid = (shares) => `<ol class="loop-sector-grid">${Array.from({ length: 8 }, (_, index) => `<li><span>Sector ${index + 1}</span><strong>${shares ? shares[index].toFixed(6) : "not evaluated"}</strong></li>`).join("")}</ol>`;
+  if (!geometry) {
+    return `<section class="loop-geometry-panel"><h3>Loop geometry</h3>${metricRows([
+      ["Shape penalty (lower is better)", "not evaluated"],
+      ["Compactness", "not evaluated"],
+      ["Sector balance", "not evaluated"],
+      ["Near-parallel corridor", "not evaluated"],
+      ["Self-crossings", "not evaluated"],
+    ])}<details class="loop-geometry-exact"><summary>Exact geometry details</summary>${sectorGrid(null)}${metricRows([
+      ["Elongation", "not evaluated"],
+      ["Enclosed area", "not evaluated"],
+      ["Convex-hull area", "not evaluated"],
+      ["Mean radius", "not evaluated"],
+      ["Maximum radius", "not evaluated"],
+      ["Start/end gap", "not evaluated"],
+      ["Closed within 25 m", "not evaluated"],
+      ["Crossing component", "not evaluated"],
+      ["Near-parallel component", "not evaluated"],
+      ["Compactness component", "not evaluated"],
+      ["Sector-imbalance component", "not evaluated"],
+      ["Elongation component", "not evaluated"],
+    ])}</details><p class="context-note">Loop-geometry metrics are unknown, not numeric zero.</p></section>`;
+  }
+  const penalty = geometry.penalty_breakdown;
+  return `<section class="loop-geometry-panel"><h3>Loop geometry</h3>${metricRows([
+    ["Shape penalty (lower is better)", penalty.total.toFixed(6)],
+    ["Compactness", geometry.compactness.toFixed(6)],
+    ["Sector balance", geometry.sector_balance.toFixed(6)],
+    ["Near-parallel corridor", `${geometry.near_parallel.distance_m.toFixed(2)} m · ${formatPercent(geometry.near_parallel.share)}`],
+    ["Self-crossings", formatCount(geometry.self_crossing_count)],
+  ])}<details class="loop-geometry-exact"><summary>Exact geometry details</summary>${sectorGrid(geometry.sector_distance_shares)}${metricRows([
+    ["Elongation", geometry.elongation.toFixed(6)],
+    ["Enclosed area", `${geometry.enclosed_area_m2.toFixed(2)} m²`],
+    ["Convex-hull area", `${geometry.convex_hull_area_m2.toFixed(2)} m²`],
+    ["Mean radius", `${geometry.mean_radius_m.toFixed(2)} m`],
+    ["Maximum radius", `${geometry.max_radius_m.toFixed(2)} m`],
+    ["Start/end gap", `${geometry.start_end_gap_m.toFixed(2)} m`],
+    ["Closed within 25 m", geometry.closed ? "Yes" : "No"],
+    ["Crossing component", `${penalty.crossing_penalty.toFixed(6)} = ${penalty.crossing_penalty_per_crossing.toFixed(2)} × ${penalty.crossing_count_input}`],
+    ["Near-parallel component", `${penalty.near_parallel_penalty.toFixed(6)} = ${penalty.near_parallel_penalty_weight.toFixed(2)} × ${penalty.near_parallel_share_input.toFixed(6)}`],
+    ["Compactness component", `${penalty.compactness_penalty.toFixed(6)} = ${penalty.compactness_penalty_weight.toFixed(2)} × (1 − ${penalty.compactness_input.toFixed(6)})`],
+    ["Sector-imbalance component", `${penalty.sector_imbalance_penalty.toFixed(6)} = ${penalty.sector_imbalance_penalty_weight.toFixed(2)} × (1 − ${penalty.sector_balance_input.toFixed(6)})`],
+    ["Elongation component", `${penalty.elongation_penalty.toFixed(6)} = ${penalty.elongation_penalty_weight.toFixed(2)} × (1 − ${penalty.elongation_input.toFixed(6)})`],
+  ])}</details><p class="context-note">These projected shape diagnostics do not measure scenic beauty, safety or accessibility. Dense networks and routed geometry resolution can affect corridor detection.</p></section>`;
+}
+
 function renderMetrics() {
   const candidate = selectedCandidate();
   const result = state.generationResult;
@@ -427,6 +507,7 @@ function renderMetrics() {
   const warningCodes = [...new Set([
     ...search.warnings,
     ...analysis.warnings,
+    ...(analysis.loop_geometry?.warnings ?? []),
     ...(analysis.nature?.warnings ?? []),
   ])];
   const warnings = warningCodes
@@ -454,14 +535,25 @@ function renderMetrics() {
     ["Official hiking network", formatPercent(analysis.official_hiking_network.share)],
     ["Major roads", formatPercent(analysis.major_road.share)],
     ["Car-accessible", formatDistance(analysis.car_accessible.distance_m)],
-  ]) + natureSection(analysis.nature, search) + section("Search diagnostics", [
+  ]) + loopGeometrySection(analysis.loop_geometry) + natureSection(analysis.nature, search) + section("Search diagnostics", [
     ["Status", friendlyLabel(search.status)],
+    ["Loop shape requested", search.loop_geometry_requested ? "Yes" : "No"],
+    ["Recommended shape penalty", nullable(search.recommended_loop_geometry_penalty, (value) => Number(value).toFixed(6))],
+    ["Best available shape penalty", nullable(search.best_available_loop_geometry_penalty, (value) => Number(value).toFixed(6))],
     ["Nature preference requested", search.nature_requested ? "Yes" : "No"],
     ["Nature index available", search.nature_index_available ? "Yes" : "No"],
     ["Nature index features", nullable(search.nature_index_feature_count, formatCount)],
     ["Recommended nature score", nullable(search.recommended_nature_score, (value) => `${Number(value).toFixed(1)} / 100`)],
     ["Best available nature score", nullable(search.best_available_nature_score, (value) => `${Number(value).toFixed(1)} / 100`)],
     ["Full-route evaluations", `${formatCount(search.evaluated_candidate_count)} / ${formatCount(search.search_budget)}`],
+    ["Base evaluation budget", formatCount(search.base_search_budget)],
+    ["Base evaluations", formatCount(search.evaluated_candidate_count - search.loop_geometry_extra_evaluated_count)],
+    ["Geometry extra budget", formatCount(search.loop_geometry_extra_evaluation_budget)],
+    ["Geometry extra evaluations", formatCount(search.loop_geometry_extra_evaluated_count)],
+    ["Geometry extra successes", formatCount(search.loop_geometry_extra_successful_count)],
+    ["Geometry extra rejections", formatCount(search.loop_geometry_extra_rejected_count)],
+    ["Round-trip proposal calls", search.round_trip_proposal_count],
+    ["Derived proposal sequences", search.derived_proposal_sequence_count],
     ["Mandatory-order evaluations", search.evaluated_order_count],
     ["Alternative-leg requests", `${search.alternative_leg_request_count} / ${search.low_overlap_request_budget}`],
     ["Alternative paths", search.alternative_path_count],
@@ -472,7 +564,7 @@ function renderMetrics() {
     ["Best low-overlap repetition", nullable(search.best_low_overlap_repeated_share)],
     ["Pre-refinement backtracking", nullable(search.pre_low_overlap_backtrack_share)],
     ["Best low-overlap backtracking", nullable(search.best_low_overlap_backtrack_share)],
-  ]) + `<section><h3>Warnings</h3><ul class="warning-list">${warnings}</ul><details><summary>Raw warning codes</summary><pre>${escapeHtml(JSON.stringify({ search: search.warnings, route: analysis.warnings, nature: analysis.nature?.warnings ?? [] }, null, 2))}</pre></details></section>`;
+  ]) + `<section><h3>Warnings</h3><ul class="warning-list">${warnings}</ul><details><summary>Raw warning codes</summary><pre>${escapeHtml(JSON.stringify({ search: search.warnings, route: analysis.warnings, loop_geometry: analysis.loop_geometry?.warnings ?? [], nature: analysis.nature?.warnings ?? [] }, null, 2))}</pre></details></section>`;
 }
 
 function renderStatus() {
@@ -632,10 +724,12 @@ function normalizeImportedRequest(value) {
   const pointOrderMode = value.point_order_mode ?? "fixed";
   const pathSelectionMode = value.path_selection_mode ?? "shortest";
   const requestedNaturePreference = value.nature_preference ?? "off";
+  const loopGeometryPreference = value.loop_geometry_preference ?? "off";
   if (
     !["fixed", "optimize_loop"].includes(pointOrderMode)
     || !["shortest", "low_overlap"].includes(pathSelectionMode)
     || !["off", "prefer"].includes(requestedNaturePreference)
+    || !["off", "prefer"].includes(loopGeometryPreference)
   ) {
     throw new Error("The request contains an unsupported generation mode.");
   }
@@ -670,6 +764,7 @@ function normalizeImportedRequest(value) {
       pointOrderMode,
       pathSelectionMode,
       naturePreference,
+      loopGeometryPreference,
     },
   };
 }

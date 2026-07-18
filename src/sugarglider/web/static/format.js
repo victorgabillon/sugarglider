@@ -5,6 +5,7 @@ export const formatCount = (value) => new Intl.NumberFormat().format(Number(valu
 const labels = {
   direct_order: "Direct mandatory order",
   round_trip_detour: "Round-trip detour",
+  sector_balanced_detour: "Sector-balanced detour",
   alternative_leg_beam: "Alternative-leg beam",
   within_tolerance: "Within tolerance",
   best_effort: "Best effort",
@@ -19,6 +20,11 @@ const labels = {
   nature_analysis_incomplete: "Mapped nature could not be evaluated for every candidate.",
   nature_index_route_partly_outside: "Part of the route is outside the local nature index and remains unknown.",
   nature_no_candidate_improvement: "No eligible candidate improved the mapped nature score; the original recommendation was preserved.",
+  loop_geometry_analysis_incomplete: "Loop geometry could not be evaluated for every candidate.",
+  loop_geometry_no_candidate_improvement: "No eligible candidate strictly improved the loop-geometry penalty; the previous recommendation was preserved.",
+  loop_geometry_route_not_closed: "The routed geometry is not closed within the 25 m analysis tolerance.",
+  loop_geometry_degenerate: "The routed geometry is too degenerate for every loop-shape metric.",
+  loop_geometry_area_unavailable: "No positive enclosed polygon face could be measured.",
 };
 
 export const friendlyLabel = (value) => labels[value] ?? value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());

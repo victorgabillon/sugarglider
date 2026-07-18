@@ -16,7 +16,7 @@ Sugarglider is an open-source trail-running route generator in development. The
 long-term product will combine required waypoints, target distance, trail and nature
 preferences, popularity signals, access rules, and limits on repeated sections.
 
-The implemented PR1–PR8 scope accepts mandatory latitude/longitude anchors, asks a
+The implemented PR1–PR9 scope accepts mandatory latitude/longitude anchors, asks a
 self-hosted GraphHopper 11.0 instance to route them along real OpenStreetMap edges,
 analyzes the routed edges, and can search for several closed-loop candidates near a
 target distance. A local browser interface supports planning, comparison, local GPX
@@ -31,7 +31,7 @@ browser -> FastAPI -> RouteService ----------> routing backend -> GraphHopper / 
                     RouteGenerationService --+       |
                        |                              +-> routed path details
                        +-> sampling, ordering, low-overlap beam search
-                       +-> graph analysis + optional nature analysis
+                       +-> graph + loop-geometry + optional nature analysis
                        +-> score, ranking, diversity
                     visualization projection + GPX writer
                        |
@@ -54,9 +54,12 @@ The analyzer uses standard-library haversine distances for every geometry edge a
 normalizes them to GraphHopper's authoritative route distance. Raw path-detail
 breakdowns remain available alongside explainable derived metrics. Generation uses
 a fixed, documented PR3 score; ordinary route analysis does not assign a score.
-When the optional local nature index is available, the same normalized edges are
-intersected with OSM polygons and receive a separate, explainable PR7 nature score.
-The API never parses the PBF or calls a hosted GIS service during a request.
+Every complete public route also receives explainable PR9 loop-geometry metrics in
+projected metres. When the optional local nature index is available, the same
+normalized edges are intersected with OSM polygons and receive a separate,
+explainable PR7 nature score. The API never parses the PBF or calls a hosted GIS
+service during a request. Temporary low-overlap beam states use only the existing
+structural analysis and never run Shapely geometry or nature analysis.
 
 Generation defaults to fixed required-anchor order. An explicit optimized-loop mode
 keeps the first point fixed while proposing deterministic visit orders for every
@@ -125,8 +128,10 @@ The GUI supports a complete local planning workflow:
    start/end; do not add a closing duplicate. Names imported from JSON—including
    accents—remain attached to their coordinates through editing and export.
 3. Choose target and tolerance in kilometres, point ordering, candidate count, and
-   natural-shortest or low-overlap path selection. Optionally choose **Prefer mapped
-   nature** when the local nature index is available, then generate.
+   natural-shortest or low-overlap path selection. Optionally choose **Prefer
+   balanced loops** and **Prefer mapped nature** when the local nature index is
+   available, then generate. Distance, backtracking, and repetition remain higher
+   priorities than either preference.
 4. Select candidate cards or route lines to compare the server-returned ranking.
    Orange dashed sections are repeated edge runs; stronger red dashes are immediate
    stack-shaped out-and-back returns. The backend calculates both overlays using the
@@ -289,8 +294,9 @@ The separate default alternative-leg request budget is 48; identical leg request
 are cached across refinement sources.
 
 Temporary beam states use structural route analysis only. Nature enrichment runs
-for completed standard and refined candidates, so increasing beam width does not
-multiply polygon-intersection work that cannot affect beam pruning.
+for completed standard and refined candidates, as does loop-geometry analysis, so
+increasing beam width does not multiply Shapely work that cannot affect beam
+pruning.
 
 Low-overlap recommendation still requires target tolerance first. A refined route
 may outrank its standard source only when it lowers total repeated-edge share without
@@ -321,6 +327,31 @@ includes the strongest eligible nature source. A refined candidate still cannot
 replace its source unless repetition falls without increasing immediate
 backtracking; a nature score can never bypass that gate.
 
+Loop-shape preference defaults to `loop_geometry_preference="off"`. Omitting it or
+explicitly using `off` preserves PR8 proposal sampling, descriptor order,
+GraphHopper calls, full-route evaluations, candidate signatures, and recommendation
+for a deterministic graph and request. Geometry metrics remain additive in public
+route analysis even in off mode. With `prefer`, the ordinary ranking keeps target
+tolerance, outside-tolerance distance pressure, immediate backtracking, and total
+repetition ahead of loop geometry. Low-overlap ranking retains its existing order
+of tolerance, outside-distance pressure, repetition, and backtracking before loop
+geometry. Nature follows geometry in both modes; the fixed PR3 score and stable
+signature remain later tie-breakers. Missing geometry is null and sorts after known
+geometry at that comparison position, never as numeric zero.
+
+Preference promotion is control-gated. Prefer first completes the exact legacy
+Off search and keeps its recommendation as the control. A candidate with a better
+higher-priority tuple may replace that control even when its shape penalty is
+worse; a candidate with a worse tuple cannot replace it. When the tuple is equal,
+promotion requires a strictly lower exact public shape penalty. Otherwise the
+control remains with `loop_geometry_no_candidate_improvement`. Nature ranking then
+starts from that effective geometry decision and cannot worsen its ordering. For
+low-overlap results, PR5's gate is applied first: a refined candidate must reduce
+repetition without increasing immediate backtracking. Neither geometry nor nature
+can rescue a candidate that fails that gate. The explicit primary control source
+is refined before geometry and nature sources can use the remaining bounded leg
+capacity.
+
 Optimized mode evaluates at most 16 unique order proposals: original order,
 clockwise and counter-clockwise angular sweeps, nearest-neighbour cycles, angular
 cuts, and bounded 2-opt refinements. This is a deterministic geometric heuristic,
@@ -330,14 +361,35 @@ the best below-target order so it can be lengthened, even when longer mandatory
 routes rank better as final candidates.
 
 The detour search is deliberately small and deterministic for a fixed graph,
-request, seed, and settings. It tries factors `0.60`, `0.80`, `1.00`,
-`1.20`, and `1.45` at each distinct required anchor, samples positions near 25%,
-50%, and 75% of each proposal, and performs at most one refinement for a few close
-candidates. Full routes use `pass_through=true`; optional points whose snapped
-positions move more than 300 m are rejected. Exact point sequences are cached and
-the default full-candidate evaluation budget is 48. GraphHopper round-trip distance
-is approximate, and inserted proposal points are subsequently rerouted through the
-entire required sequence, so the requested distance is not guaranteed.
+request, seed, and settings. It tries factors `0.60`, `0.80`, `1.00`, `1.20`, and
+`1.45` at distinct required anchors and performs at most one refinement for a few
+close candidates. Off mode keeps the existing cumulative 25/50/75% samples and
+descriptor ordering exactly. Prefer runs that identical primary lane with the same
+default 48 complete-route evaluations, proposal calls, refinements, caches,
+signatures, and control recommendation. Successful primary round-trip proposal
+geometry is retained in a deterministic cache.
+
+After the primary lane, Prefer has a separate default allowance of 12 complete-
+route evaluations. It revisits cached proposals in bounded angular descriptor
+order, samples each at `1/12` through `11/12`, assigns positions to eight global
+sectors, and greedily selects at most three points by new-sector coverage, circular
+sector separation, radius, then stable earliest fraction. Only balanced forward
+and reverse sequences are evaluated in this extra lane; another legacy sequence is
+not. A missing cache entry is skipped without another GraphHopper round-trip call.
+All optional points lie on routed proposal geometry; no radial or straight-line
+WGS84 waypoint is invented.
+
+`SearchSummary.base_search_budget` exposes the unchanged primary allowance.
+`loop_geometry_extra_evaluation_budget`, `loop_geometry_extra_evaluated_count`,
+`loop_geometry_extra_successful_count`, and
+`loop_geometry_extra_rejected_count` expose the additive lane. Consequently the
+default public `search_budget` is 48 in Off mode and 60 in Prefer mode, while
+`evaluated_candidate_count` never exceeds that total. Proposal backend calls and
+derived sequences remain separately accounted because one cached proposal can
+derive multiple sequences. Full routes use `pass_through=true`; optional points
+whose snapped positions move more than 300 m are rejected. GraphHopper round-trip
+distance is approximate, and inserted proposal points are subsequently rerouted
+through the entire required sequence, so the requested distance is not guaranteed.
 
 Search statuses mean:
 
@@ -377,9 +429,9 @@ Every candidate exposes `required_point_order`, retaining original request indic
 and coordinates. It includes the fixed start once and excludes automatic closure.
 It also exposes immutable `routing_points`, containing the exact required and
 generated points in construction order without the automatic closing duplicate,
-and a `construction` value: `direct_order`, `round_trip_detour`, or
-`alternative_leg_beam`. For optimized requests, `baseline` is deliberately the
-original fixed-order route.
+and a `construction` value: `direct_order`, `round_trip_detour`,
+`sector_balanced_detour`, or `alternative_leg_beam`. For optimized requests,
+`baseline` is deliberately the original fixed-order route.
 
 Low-overlap optimization uses exact GraphHopper edge IDs. It cannot recognize nearby
 parallel corridors as overlap, does not guarantee zero repetition, and cannot avoid
@@ -432,6 +484,27 @@ crashing. To isolate analysis performance for a saved response:
 
 ```sh
 uv run python scripts/benchmark_nature_analysis.py ./all-pois.json
+```
+
+Compare PR9 loop-shape off/prefer generation with identical Marly request fields
+and bounded budgets:
+
+```sh
+uv run python scripts/compare_marly_loop_geometry.py
+```
+
+The report includes each recommendation and best returned geometry candidate,
+control and preferred signatures, exact higher-priority comparison, base/extra
+accounting, complete shape/nature metrics, warnings, and runtime. It exits nonzero
+if Prefer violates the control contract or its bounded accounting. It writes
+response JSON and validated selected-candidate GPX only under `/tmp`; GPX export
+posts the already returned `RouteResult` and does not rerun generation. To benchmark
+isolated loop analysis after one excluded warm-up run, either route the existing
+direct Marly example through the live API or supply saved response JSON:
+
+```sh
+uv run python scripts/benchmark_loop_geometry.py
+uv run python scripts/benchmark_loop_geometry.py /tmp/sugarglider-marly-loop-off.json
 ```
 
 ### Local mapped-nature analysis
@@ -517,6 +590,64 @@ Every share is relative to the complete GraphHopper route distance:
   expose uncertainty.
 - `detail_breakdowns` reports explicit values and coverage for every returned path
   detail. Explicit null is a bucket; uncovered geometry is not invented as a value.
+
+#### Explainable loop geometry
+
+Loop geometry uses the route's first position as its start and the same normalized,
+GraphHopper-authoritative edges as route analysis. A single deterministic local
+equirectangular projection supplies metre coordinates to loop and nature analysis;
+nature alone retains the regional extract-span validation. The public metrics are:
+
+- `closed`: projected start/end gap at most the named 25 m closure tolerance.
+  Non-closed routes report `loop_geometry_route_not_closed`, zero enclosed area,
+  and zero compactness while preserving the other meaningful measurements.
+- `enclosed_area_m2`: for a closed route, the sum of distinct positive faces after
+  noding and polygonizing the routed line network. Repeated sections do not multiply
+  area, and figure-eight lobes remain separate faces. A route whose final position
+  is within the 25 m closure tolerance uses a synthetic start connection for this
+  area calculation only; it does not alter route geometry, distance, repetition,
+  corridor analysis, or GPX. Degenerate geometry yields zero with a warning rather
+  than relying on a raw polygon from route coordinates.
+- `convex_hull_area_m2`: projected line convex-hull area, or zero for a line/point.
+- `compactness = clamp(4π × enclosed area / authoritative route distance², 0, 1)`.
+  A circle approaches 1 and a square approximately 0.785; long stems and repeated
+  laps reduce it.
+- `sector_distance_shares`: authoritative edge distances assigned by midpoint
+  bearing to exactly eight equal sectors around the start. An edge midpoint at the
+  start uses its direction deterministically. Positive-distance shares sum to one.
+  `sector_balance = -Σ(p log p) / log(8)` is normalized Shannon entropy: one-sided
+  concentration approaches 0 and even angular coverage approaches 1.
+- `mean_radius_m`: authoritative-distance-weighted projected midpoint radius, and
+  `max_radius_m`: maximum projected position radius. Maximum radius is explanatory
+  and is not independently minimized.
+- `elongation`: minor/major axis ratio of the minimum rotated rectangle of the
+  route hull. Approximately equal width approaches 1; a thin corridor approaches
+  0; degenerate lines and points are zero.
+- `self_crossing_count`: unique interior point crossings of non-adjacent routed
+  edges. Adjacent edges (including first/last in a closed route), shared vertices,
+  and collinear overlap are excluded; crossing points are deterministically
+  deduplicated within 0.10 m.
+- `near_parallel`: authoritative route distance within 40 m of a non-local section
+  that is parallel or anti-parallel within 30 degrees and separated by at least
+  250 m along the cyclic route axis. One shared STRtree finds nearby edges; unioned
+  neighbor buffers prevent double counting. A perpendicular crossing and ordinary
+  adjacent bends do not qualify.
+
+The separate shape penalty is lower-is-better and does not alter PR3
+`CandidateScore.total`:
+
+```text
+0.25 × min(self-crossing count, 8)
++ 3.00 × near-parallel share
++ 1.25 × (1 - compactness)
++ 0.75 × (1 - sector balance)
++ 0.25 × (1 - elongation)
+```
+
+The API exposes every exact input, weight, component, and the component sum. This is
+not a beauty, scenic-value, safety, accessibility, legality, or trail-condition
+score. Dense urban/path networks, OSM completeness, GraphHopper simplification, and
+source geometry resolution can affect self-crossing and corridor detection.
 
 For example, the JSON response includes this shape (values are illustrative):
 
@@ -625,7 +756,7 @@ Elevation is disabled, so GPX trackpoints contain no invented elevations or
 timestamps, and GPX files contain no analysis extensions.
 
 Nature analysis is limited to selected mapped OSM polygons. It does not infer
-nearby parallel-corridor context, satellite land cover, biodiversity, viewpoints,
+scenic quality, satellite land cover, biodiversity, viewpoints,
 elevation, popularity, accessibility, water visibility, uploaded activities,
 current closures, or real-world trail conditions. There is no geocoding,
 persistence, account system, elevation profile, or offline map. OSM tags and access
@@ -648,7 +779,10 @@ ground.
 - [ ] Select cards and map lines; compare metrics with generation JSON.
 - [ ] Confirm repeated and immediate-backtrack styles are distinct.
 - [ ] Confirm nature availability and the Off/Prefer control are visible.
+- [ ] Confirm Loop shape defaults to Off, survives import/copy, and Prefer retains
+      every mandatory point while showing exact non-null geometry metrics.
 - [ ] Generate the Marly request and confirm null nature metrics never render as zero.
+- [ ] Confirm null loop-geometry metrics say “not evaluated,” never numeric zero.
 - [ ] Toggle the nature underlay and confirm repetition/backtracking stay above it.
 - [ ] Confirm browser network requests contain no raw nature-polygon download.
 - [ ] Import a multi-segment GPX; confirm no line joins segment breaks.
