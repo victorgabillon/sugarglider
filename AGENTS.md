@@ -65,6 +65,20 @@
 - POI discovery is display-only. Selection and filters must never mutate mandatory
   points, generation, ranking, route analysis, route geometry, or GPX output.
 - Generated POI indexes under `data/pois` must never be committed.
+- Auto Tour must retain and expose its best no-POI control; POI reward must never
+  override target-tolerance, backtracking, repetition, loop-geometry, crossing, or
+  hard-point gates.
+- Auto Tour skeletons and exported lines must use only GraphHopper-routed geometry;
+  ellipse and POI coordinates are proposals, never straight-line route fallback.
+- Auto Tour POIs must come only from the startup-loaded local index. Private and
+  non-potable features are excluded from normal tour search, and only verified
+  drinking water uses the blue mascot water pin.
+- Auto Tour isochrone, round-trip, skeleton, POI, repair, alternative-leg, and total
+  budgets must remain strict, deterministic, cached, and public in diagnostics.
+- Temporary insertion and low-overlap beam states must use structural analysis only;
+  expensive nature and loop-geometry enrichment belongs only on complete candidates.
+- Auto Tour GPX export remains a clean single track/segment with no POI, nature,
+  route-analysis, or Auto Tour extensions.
 - Loop geometry must use the shared local metric projection and normalized routed
   edges; GraphHopper distance remains authoritative for shares and compactness.
 - Loop-geometry metrics and penalties must remain explainable and separate from

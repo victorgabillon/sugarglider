@@ -49,6 +49,17 @@ export async function generateRoutes(request, signal) {
   return response.json();
 }
 
+export async function generateAutoTour(request, signal) {
+  const response = await fetch("/v1/tours/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(request),
+    signal,
+  });
+  if (!response.ok) throw await responseError(response);
+  return response.json();
+}
+
 export async function visualizeRoute(route, signal) {
   const response = await fetch("/v1/routes/visualization", {
     method: "POST",

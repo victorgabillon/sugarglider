@@ -68,6 +68,28 @@ def test_poi_setting_defaults_environment_aliases_and_limit_order(
         Settings(poi_default_limit=21, poi_max_limit=20)
 
 
+def test_auto_tour_corridor_defaults_aliases_and_bounds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    defaults = Settings()
+    assert defaults.auto_tour_scenic_corridor_radius_m == 600
+    assert defaults.auto_tour_water_corridor_radius_m == 350
+    assert not defaults.auto_tour_include_broad_attractions
+
+    monkeypatch.setenv("SUGARGLIDER_AUTO_TOUR_SCENIC_CORRIDOR_RADIUS_M", "750")
+    monkeypatch.setenv("SUGARGLIDER_AUTO_TOUR_WATER_CORRIDOR_RADIUS_M", "275")
+    monkeypatch.setenv("SUGARGLIDER_AUTO_TOUR_INCLUDE_BROAD_ATTRACTIONS", "true")
+    configured = Settings()
+    assert configured.auto_tour_scenic_corridor_radius_m == 750
+    assert configured.auto_tour_water_corridor_radius_m == 275
+    assert configured.auto_tour_include_broad_attractions
+
+    with pytest.raises(ValidationError):
+        Settings(auto_tour_scenic_corridor_radius_m=49)
+    with pytest.raises(ValidationError):
+        Settings(auto_tour_water_corridor_radius_m=1_001)
+
+
 def test_map_environment_aliases(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SUGARGLIDER_MAP_TILE_URL", "https://map.example/{z}/{x}/{y}")
     monkeypatch.setenv("SUGARGLIDER_MAP_ATTRIBUTION", "Example attribution")

@@ -16,7 +16,8 @@ Sugarglider is an open-source trail-running route generator in development. The
 long-term product will combine required waypoints, target distance, trail and nature
 preferences, popularity signals, access rules, and limits on repeated sections.
 
-The implemented PR1–PR10 scope accepts mandatory latitude/longitude anchors, asks a
+The implemented PR1–PR11 scope supports both a start-only, preference-driven Auto
+Tour and the established mandatory-waypoint planner. It asks a
 self-hosted GraphHopper 11.0 instance to route them along real OpenStreetMap edges,
 analyzes the routed edges, and can search for several closed-loop candidates near a
 target distance. A local browser interface supports planning, comparison, local GPX
@@ -30,6 +31,7 @@ identity and mascot pins without adding a frontend build system.
 ```text
 browser -> FastAPI -> RouteService ----------> routing backend -> GraphHopper / OSM
                     RouteGenerationService --+       |
+                    AutoTourService ----------+       +-> isochrone + routed loops
                        |                              +-> routed path details
                        +-> sampling, ordering, low-overlap beam search
                        +-> graph + loop-geometry + optional nature analysis
@@ -120,7 +122,28 @@ resizing, or recompression. The runtime copies under
 
 ## Web route planner
 
-The GUI supports a complete local planning workflow:
+The GUI has two independent planning modes. **Auto Tour** is the fresh-session
+default: choose one start, a target, optional hard anchors, direction, scenic,
+verified-water, nature, loop-shape, distance-priority, and low-overlap preferences.
+It builds graph-routed loop skeletons before considering close-enough places.
+**Waypoint Route** preserves the existing
+mandatory-point request, import, ordering, and generation behavior and its unchanged
+defaults. Switching modes preserves each form's points and settings.
+
+Request JSON import follows the active mode. In Auto Tour, the first point becomes
+the exact start and the remaining (at most 30) named points become ordered requested
+close-enough places, defaulting to a 100 m visit radius and `must_visit` importance;
+the browser does not switch modes. Castle, viewpoint, or verified-water metadata may
+select the documented 200 m, 125 m, or 50 m radii. In an explicitly selected
+Waypoint Route, the same JSON retains its old exact mandatory-coordinate semantics.
+Imported requested places immediately appear through their own MapLibre GeoJSON
+source as numbered `R` markers: cream while pending, green when the selected
+candidate satisfies them, and red when missed. Selecting a marker or its keyboard-
+accessible list row opens a DOM-safe measured-result popup and displays its actual
+visit-radius circle. An advanced map toggle can display every missed-place radius;
+these circles are proximity thresholds, not routing-access polygons.
+
+The Waypoint Route workflow remains:
 
 1. Use **Import request JSON** to load a generation request such as
    `examples/marly/all-pois-generation-request.json`, or enable **Add point on map**
@@ -199,7 +222,10 @@ sources rather than a DOM marker per regional feature. Ordinary labels are
 collision-aware and begin at useful zoom levels; a separately sourced selected
 marker and label remain visible even when nearby features cluster. Inline SVG
 artwork is generated locally for distinct scenic, historic, tower, attraction,
-verified-water, unknown-water, and non-potable marker shapes. No icon CDN is used.
+unknown-water, and non-potable marker shapes. Verified drinking water alone uses
+the packaged blue `sugarglider-water-pin.png`, loaded once as a MapLibre symbol
+image; it is not instantiated as one DOM image per regional POI. No icon CDN is
+used.
 
 Defaults show primary scenic places and verified drinking water. Unknown-potability
 fountains/taps, broad tourist attractions, and restricted access are opt-in.
@@ -207,6 +233,20 @@ Private and explicitly non-potable features are available only through the advan
 controls. Selecting a discovered place highlights it and opens a DOM-safe popup; it
 does not add, remove, reorder, or move a required route point and has no effect on
 generation, ranking, analysis, or GPX output.
+
+In Auto Tour, popups for public/restricted primary scenic places and mapped verified
+drinking water offer **Prefer in Auto Tour**. This adds a stable ID to a maximum-eight
+soft preference list; it never creates an exact waypoint. Private and explicitly
+non-potable POIs cannot be preferred. Selected-place state remains separate from
+selected mandatory-point state. Accepted visits use stronger map styling and are
+listed in route-progress order with their measured visit distance, insertion status,
+detour attribution, and public reward breakdown.
+
+Requested close-enough places are a separate, stronger objective than discovered
+OSM POIs. Every candidate reports every requested place in original input order,
+its configured importance and radius, the measured final-route distance, whether it
+was deliberately routed, and an explicit satisfied or missed reason. They are never
+silently discarded for lying outside the discovered-POI corridor.
 
 The offline classifier accepts only these exact OSM combinations:
 
@@ -255,6 +295,9 @@ quality, availability, operation, or legal access.
 | `SUGARGLIDER_POI_MISSING_INDEX_WARNING` | `false` | Choose warning rather than info logging for a missing POI index |
 | `SUGARGLIDER_POI_DEFAULT_LIMIT` | `500` | Default viewport result limit |
 | `SUGARGLIDER_POI_MAX_LIMIT` | `1000` | Hard public viewport result limit |
+| `SUGARGLIDER_AUTO_TOUR_SCENIC_CORRIDOR_RADIUS_M` | `600` | Scenic opportunity corridor (50–2000 m) |
+| `SUGARGLIDER_AUTO_TOUR_WATER_CORRIDOR_RADIUS_M` | `350` | Verified-water opportunity corridor (25–1000 m) |
+| `SUGARGLIDER_AUTO_TOUR_INCLUDE_BROAD_ATTRACTIONS` | `false` | Permit broad attractions without an explicit preferred ID |
 
 These validated values are exposed to the browser by `GET /v1/ui/config`. Tile
 templates and attribution are deployment configuration, not frontend constants.
@@ -357,6 +400,9 @@ at `http://localhost:8989` and the API at `http://localhost:8000`.
   containing exactly one track and one segment.
 - `POST /v1/routes/generate` returns the required-anchor baseline, ranked candidates,
   and bounded-search diagnostics.
+- `POST /v1/tours/generate` runs the separate skeleton-first Auto Tour search and
+  returns its no-POI control, ranked complete candidates, POI visits/rejections,
+  strict request accounting, and phase timings.
 - `POST /v1/routes/generate/gpx` repeats the deterministic search and exports its
   best candidate as the same clean, track-only GPX format.
 - `POST /v1/routes/gpx/from-result` exports a posted `RouteResult` without routing or
@@ -365,6 +411,86 @@ at `http://localhost:8989` and the API at `http://localhost:8000`.
   normal, repeated, or immediate-backtrack, plus optional server-derived nature
   properties for map rendering. It never returns raw nature polygons.
 - `GET /v1/ui/config` returns validated browser map configuration.
+
+### Skeleton-first Auto Tour
+
+Auto Tour asks GraphHopper for one walking isochrone at half the target distance and
+constructs deterministic six-vertex ellipse skeletons at eight bearings, three
+aspect ratios, and two perimeter scales. The start lies on the ellipse perimeter,
+not at its centre, so the initial candidate is already a start-to-start tour rather
+than a radial spoke with an invented connector. Ellipse perimeter is solved in local
+projected metres; an ellipse is uniformly shrunk until every vertex lies within the
+real isochrone. Optional hard anchors (maximum six) are inserted in stable angular
+order. Every public line is then a complete GraphHopper route with `pass_through`—an
+ellipse is only a routing-point proposal and never exported geometry.
+
+When `/isochrone` is unavailable, each headed GraphHopper round trip remains a raw
+no-insertion control and also supplies a deterministic sampled fallback skeleton.
+Five to eight ordered anchors are sampled from actual graph-routed geometry using
+cumulative progress and sector diversity, kept at least 250 m apart, and routed
+again through the normal multipoint API with `pass_through=true`. These sampled
+skeletons participate in requested-place routing, discovered-POI insertion, corridor
+repair, and alternative-leg repair; fallback mode never disables deliberate POI
+routing merely because the isochrone endpoint returned 404.
+
+At most six diverse graph-valid controls continue to POI search, and all distinct
+retained base controls remain eligible for the returned candidate pool. The best
+global no-insertion control is identified separately, while incidental scenic or
+water value on another control can still affect recommendation. A local STRtree
+queries a 600 m scenic and 350 m verified-water corridor by default. A POI counts as
+visited only when the final routed geometry lies within its exact neighborhood:
+viewpoint 150 m, observation tower 120 m, castle 200 m, ruins and archaeological
+site 150 m, broad attraction 120 m, and verified drinking water 50 m. Representative
+OSM coordinates are approximations and still have to route and snap successfully.
+
+Rewards are public and separate from route quality: verified water 6.0, viewpoint
+5.0, observation tower 4.5, castle 4.0, archaeological site and ruins 3.0, and broad
+attraction 1.5, plus a 1.0 category-diversity bonus, diminishing returns for repeated
+categories, a one-time 2.0 verified-water bonus, and a 3.0 preferred-ID boost.
+
+In default `distance_priority="flexible"`, graph validity and exact hard anchors come
+first, followed by feasible must-visit requested places, immediate backtracking,
+global loop coherence, preferred requested places, total discovered-POI value,
+nature/trail quality, and a continuous distance penalty. Flexible searches enforce
+`target + max(2 × tolerance, 25% × target)` as a public safety maximum. `balanced`
+uses the same coherence protections with a stronger continuous distance charge;
+explicit `strict` preserves tolerance-first selection. Flexible and balanced gates
+allow bounded quality trade-offs but never a large immediate out-and-back. Relative
+to a family control, flexible caps backtracking at +2 percentage points, repetition
+at +8 points, outbound/return proximity at +8 points, loop-geometry penalty at
++0.40, and new crossings at one. Balanced tightens those limits to +1, +2, +4,
++0.20, and zero respectively; strict retains the earlier no-regression gate.
+
+Loop analysis splits a closed route at its farthest progress point and compares
+bounded 60 m samples of outbound and return halves outside the endpoint
+neighborhoods. The public outbound/return proximity share detects narrow hairpins
+even on different OSM edges. Angular monotonicity, largest sector share, and occupied
+sector count make mixed one-sided loops visible and prevent a highly mixed route from
+winning solely on target error when a coherent alternative exists.
+
+Local repair can evaluate a bounded `A → P → Q → B` corridor continuation when a
+singleton visit creates over 300 m of backtracking or high outbound/return
+proximity. `Q` may be another requested place or a discovered scenic/verified-water
+opportunity. The response explains repeated and immediate-backtracking distance
+removed, distance added, requested/POI gains, geometry change, and reason
+`corridor_continuation`. Marginal insertion distance becomes unavailable after a
+global removal, replacement, corridor, or alternative-leg repair rather than
+remaining as a stale final-route claim.
+
+The public per-request bounds are one isochrone, eight GraphHopper round-trip
+controls, 24 skeleton complete routes, 24 POI complete routes, 12 local-repair
+complete routes, and 24 alternative-leg requests (92 route calls in the configured
+default total). Cache hits consume no budget and are reported. Corridor evaluations
+are a named subset of the existing 12-call local-repair budget. Missing POI or nature
+indexes leave a graph-valid control with explicit warnings and unknown metrics. A
+malformed or unsupported isochrone falls back to both raw and sampled headed
+GraphHopper routes; timeout and global GraphHopper unavailability still propagate as
+structured errors.
+
+Mapped verified water means only that the local OSM extract classifies it as
+drinking water. Auto Tour does not guarantee current access, opening, operation,
+seasonal availability, water safety, or legal passage. It never calls Overpass or a
+hosted POI service at runtime.
 
 ### Target-distance generation
 
@@ -857,16 +983,24 @@ data may be absent or stale. Every generated route still requires visual inspect
 and validation against local access rules, signage, closures, and conditions on the
 ground.
 
-Place discovery is limited to the exact selected OSM tags in the configured extract.
+Place discovery and soft Auto Tour collection are limited to the exact selected OSM
+tags in the configured extract.
 Names, access, opening hours, seasonal status, potability tags, and the existence or
 operation of a fountain/tap can be missing, incorrect, or stale. The point chosen
 for a polygon is a deterministic display position, not an entrance or routable
-access point. PR10 does not route through discovered places; POI-aware generation is
-deferred to PR11.
+access point. An Auto Tour insertion routes the representative coordinate through
+GraphHopper but accepts the POI only when final geometry enters its category-specific
+neighborhood; this still does not prove a usable entrance or current access.
 
 ### Manual browser-test checklist
 
 - [ ] Open `/`; confirm the map and visible attribution load.
+- [ ] Confirm Auto Tour is the fresh-session default and Waypoint Route remains
+      available with its former defaults and imported 23-point request behavior.
+- [ ] Set the station start by map click and coordinate inputs; add up to six hard
+      anchors and confirm the separate limits.
+- [ ] Confirm Auto Tour defaults prefer low overlap, balanced loops, mapped nature,
+      scenic places, and verified water.
 - [ ] Confirm the branded header, local favicon, and initial mascot guidance.
 - [ ] Import the 23-POI Marly JSON; confirm exactly 23 mascot pins numbered 1–23.
 - [ ] Confirm full accented names remain available while ordinary labels avoid
@@ -891,6 +1025,12 @@ deferred to PR11.
       clusters, individual markers, collision-aware labels, and truncation status.
 - [ ] Inspect viewpoint, verified-water, unknown-water, restricted/private, and
       non-potable popups; confirm careful mapped-data wording and safe text display.
+- [ ] Confirm only eligible public/restricted scenic and verified-water popups show
+      “Prefer in Auto Tour”; private/non-potable popups do not.
+- [ ] Generate the Marly Auto Tour; compare the retained no-POI control, accepted
+      itinerary, reward breakdown, rejection reasons, and strict budget accounting.
+- [ ] Confirm visited POIs are stronger than nearby POIs and the verified-water
+      mascot pin remains visible when selected.
 - [ ] Select and filter a place; confirm its highlight survives a returned viewport
       refresh and clears without changing any required route point.
 - [ ] Import a multi-segment GPX; confirm no line joins segment breaks.

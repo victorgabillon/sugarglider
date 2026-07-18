@@ -60,6 +60,12 @@
           <button id="clear-results" class="text-button" type="button">Clear results</button>
         </div>
 
+        <fieldset class="planning-mode" aria-label="Planning mode">
+          <legend>Planning mode</legend>
+          <label><input type="radio" name="planning-mode" value="auto_tour" checked> Auto Tour</label>
+          <label><input type="radio" name="planning-mode" value="waypoint_route"> Waypoint Route</label>
+        </fieldset>
+
         <details class="control-section" open>
           <summary>Route settings</summary>
           <form id="route-form" novalidate>
@@ -72,7 +78,20 @@
               <label>Candidates<select id="candidate-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
               <label>Profile<select id="profile" disabled><option>hike</option></select></label>
             </div>
-            <label>Mandatory-point order<select id="point-order-mode"><option value="fixed">Fixed input order</option><option value="optimize_loop">Optimize loop</option></select></label>
+            <section id="auto-tour-fields" class="mode-fields" aria-label="Auto Tour preferences">
+              <p class="auto-tour-explanation">Builds graph-routed loop skeletons, links requested close-enough places, then evaluates nearby scenic and verified-water opportunities inside a fixed search budget.</p>
+              <div class="field-pair">
+                <label>Start latitude<input id="auto-start-lat" type="number" min="-90" max="90" step="0.000001" placeholder="Click the map"></label>
+                <label>Start longitude<input id="auto-start-lon" type="number" min="-180" max="180" step="0.000001" placeholder="Click the map"></label>
+              </div>
+              <label>Direction<select id="direction-preference"><option value="any">Any</option><option value="clockwise">Clockwise</option><option value="counterclockwise">Counter-clockwise</option></select></label>
+              <label>Distance priority<select id="distance-priority"><option value="flexible" selected>Flexible — places and coherence first</option><option value="balanced">Balanced</option><option value="strict">Strict — tolerance first</option></select></label>
+              <div class="field-pair">
+                <label>Scenic places<select id="scenic-preference"><option value="prefer">Prefer</option><option value="off">Off</option></select></label>
+                <label>Verified drinking water<select id="water-preference"><option value="prefer">Prefer</option><option value="off">Off</option></select></label>
+              </div>
+            </section>
+            <label id="waypoint-order-field">Mandatory-point order<select id="point-order-mode"><option value="fixed">Fixed input order</option><option value="optimize_loop">Optimize loop</option></select></label>
             <label>Path selection<select id="path-selection-mode"><option value="shortest">Natural shortest paths</option><option value="low_overlap">Low-overlap alternatives</option></select></label>
             <label>Loop shape<select id="loop-geometry-preference"><option value="off">Off</option><option value="prefer">Prefer balanced loops</option></select></label>
             <p class="field-help">Prefers compact, directionally balanced loops with fewer close parallel corridors. Distance, backtracking and repetition remain more important.</p>
@@ -97,11 +116,21 @@
               <label class="check-control warning-control"><input id="place-non-potable" type="checkbox"> Explicitly non-potable water</label>
             </details>
           </form>
-          <p class="field-help">Discovery only: shown places never alter mandatory points, generation, ranking, or GPX output.</p>
+          <p id="places-explanation" class="field-help">Browse mapped places and optionally prefer eligible places for Auto Tour. Simply selecting a place never changes the route; shown places never alter mandatory points, generation, ranking, or GPX output.</p>
         </details>
 
         <details class="control-section poi-editor" open>
-          <summary><span>Required POIs</span><span id="poi-count">0 / 30</span></summary>
+          <summary><span id="point-editor-title">Start and hard anchors</span><span id="poi-count">0 / 7</span></summary>
+          <section id="preferred-pois" class="preferred-pois" aria-label="Preferred places">
+            <div class="section-heading"><strong>Preferred places</strong><span id="preferred-poi-count">0 / 8</span></div>
+            <p id="preferred-poi-empty" class="field-help">Choose “Prefer in Auto Tour” from an eligible place popup.</p>
+            <ul id="preferred-poi-list"></ul>
+          </section>
+          <section id="requested-places" class="preferred-pois" aria-label="Requested close-enough places">
+            <div class="section-heading"><strong>Requested close-enough places</strong><span id="requested-place-count">0 / 30</span></div>
+            <p id="requested-place-empty" class="field-help">In Auto Tour mode, imported request points after the start appear here instead of becoming exact waypoints.</p>
+            <ul id="requested-place-list"></ul>
+          </section>
           <p id="poi-validation" class="validation" role="status"></p>
           <div id="poi-list" class="poi-list" role="list" aria-label="Ordered required points"></div>
           <div class="button-row">
@@ -117,7 +146,7 @@
         </section>
 
         <div class="generate-actions">
-          <button id="generate" class="button primary wide" type="button" data-icon="generate" disabled>Generate routes</button>
+          <button id="generate" class="button primary wide" type="button" data-icon="generate" disabled>Generate Auto Tour</button>
           <button id="cancel" class="button danger hidden" type="button" data-icon="cancel">Cancel</button>
           <button id="copy-request" class="text-button" type="button" data-icon="copy">Copy request JSON</button>
         </div>
@@ -126,7 +155,7 @@
           <img src="/static/brand/sugarglider-compact-icon.png" width="48" height="48" alt="">
           <div><h2 id="generation-title">Planning your loop…</h2><p>Checking the requested points and route alternatives. This may take a little while for low-overlap or nature-aware searches.</p></div>
         </section>
-        <p id="request-status" class="status" aria-live="polite">Add at least two mandatory points.</p>
+        <p id="request-status" class="status" aria-live="polite">Choose an Auto Tour start point.</p>
       </aside>
 
       <section class="map-panel" aria-labelledby="map-title">
@@ -134,11 +163,12 @@
         <div id="map" role="application" aria-label="Interactive trail route map"></div>
         <section id="planner-empty" class="map-empty-state" aria-labelledby="empty-title">
           <img src="/static/brand/sugarglider-flying-map.png" width="1024" height="1024" loading="lazy" alt="">
-          <div><h2 id="empty-title">Choose the paths that matter</h2><p>Import a request, inspect a GPX, or add at least two required points directly on the map.</p></div>
+          <div><h2 id="empty-title">Choose the paths that matter</h2><p>Click the map to set an Auto Tour start, import a waypoint request, or inspect a GPX.</p></div>
         </section>
         <div class="map-tools" aria-label="Map display controls">
           <label data-icon="alternatives"><input id="show-all" type="checkbox" checked> Show alternatives</label>
           <label data-icon="nature"><input id="show-nature" type="checkbox"> Show nature</label>
+          <label id="show-missed-requested-radii-control" class="advanced-map-control" title="Advanced requested-place display"><input id="show-missed-requested-radii" type="checkbox"> Missed radii</label>
         </div>
         <details class="legend">
           <summary>Map legend</summary>
@@ -149,10 +179,16 @@
             <span><i class="line backtrack"></i>Immediate out-and-back</span>
             <span><i class="marker mandatory">1</i>Required mascot pin</span>
             <span><i class="marker start">1</i>Start/end</span>
+            <span class="legend-group">Your plan</span>
+            <span><i class="marker requested-pending">R1</i>Requested, pending</span>
+            <span><i class="marker requested-satisfied">R1</i>Requested, satisfied</span>
+            <span><i class="marker requested-missed">R1</i>Requested, missed</span>
             <span><i class="marker optional"></i>Generated point</span>
             <span><i class="marker waypoint"></i>GPX waypoint</span>
+            <span class="legend-group">Mapped OSM discovery</span>
             <span><i class="marker place-scenic">▲</i>Scenic place</span>
-            <span><i class="marker place-water">✓</i>Verified water</span>
+            <span><i class="marker place-water mascot-water"></i>Verified water mascot pin</span>
+            <span><i class="marker visited-place"></i>Visited place</span>
             <span><i class="marker place-unknown">?</i>Unknown potability</span>
             <span><i class="line imported"></i>Imported GPX</span>
             <span class="nature-legend"><i class="line woodland"></i>Woodland</span>

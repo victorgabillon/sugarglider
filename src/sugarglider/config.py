@@ -113,6 +113,26 @@ class Settings(BaseSettings):
         int,
         Field(ge=1, le=5000, validation_alias="SUGARGLIDER_POI_MAX_LIMIT"),
     ] = 1000
+    auto_tour_scenic_corridor_radius_m: Annotated[
+        float,
+        Field(
+            ge=50,
+            le=2000,
+            validation_alias="SUGARGLIDER_AUTO_TOUR_SCENIC_CORRIDOR_RADIUS_M",
+        ),
+    ] = 600.0
+    auto_tour_water_corridor_radius_m: Annotated[
+        float,
+        Field(
+            ge=25,
+            le=1000,
+            validation_alias="SUGARGLIDER_AUTO_TOUR_WATER_CORRIDOR_RADIUS_M",
+        ),
+    ] = 350.0
+    auto_tour_include_broad_attractions: Annotated[
+        bool,
+        Field(validation_alias="SUGARGLIDER_AUTO_TOUR_INCLUDE_BROAD_ATTRACTIONS"),
+    ] = False
 
     @model_validator(mode="after")
     def validate_poi_limits(self) -> Self:

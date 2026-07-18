@@ -35,6 +35,8 @@ from sugarglider.pois.models import PoiIndexStatus
 from sugarglider.routing.graphhopper import GraphHopperClient
 from sugarglider.routing.result import RouteResultFactory
 from sugarglider.routing.service import RouteService
+from sugarglider.tours.poi_selection import TourPoiSettings
+from sugarglider.tours.service import AutoTourService, AutoTourSettings
 from sugarglider.web.models import UiConfig
 from sugarglider.web.routes import STATIC_DIRECTORY
 from sugarglider.web.routes import router as web_router
@@ -46,6 +48,7 @@ def create_app(
     service: RouteService | None = None,
     generation_service: RouteGenerationService | None = None,
     settings: Settings | None = None,
+    auto_tour_service: AutoTourService | None = None,
 ) -> FastAPI:
     """Build an application, optionally injecting a service for tests."""
 
@@ -79,6 +82,12 @@ def create_app(
             poi_index_available=poi_status.available,
             poi_default_limit=runtime_settings.poi_default_limit,
             poi_max_limit=runtime_settings.poi_max_limit,
+            auto_tour_scenic_corridor_radius_m=(
+                runtime_settings.auto_tour_scenic_corridor_radius_m
+            ),
+            auto_tour_water_corridor_radius_m=(
+                runtime_settings.auto_tour_water_corridor_radius_m
+            ),
         )
         app.state.ui_config = ui_config
         app.state.nature_index = nature_index
@@ -92,6 +101,8 @@ def create_app(
             app.state.route_service = service
             if generation_service is not None:
                 app.state.generation_service = generation_service
+            if auto_tour_service is not None:
+                app.state.auto_tour_service = auto_tour_service
             yield
             return
         async with httpx.AsyncClient() as client:
@@ -126,6 +137,39 @@ def create_app(
                 ),
                 nature_index_available=nature_status.available,
                 nature_index_feature_count=nature_status.feature_count,
+            )
+            app.state.auto_tour_service = AutoTourService(
+                backend,
+                result_factory,
+                poi_index=poi_index,
+                settings=AutoTourSettings(
+                    max_snap_displacement_m=(
+                        runtime_settings.generation_max_optional_snap_displacement_m
+                    ),
+                    poi=TourPoiSettings(
+                        scenic_corridor_radius_m=(
+                            runtime_settings.auto_tour_scenic_corridor_radius_m
+                        ),
+                        verified_water_corridor_radius_m=(
+                            runtime_settings.auto_tour_water_corridor_radius_m
+                        ),
+                        include_broad_attractions=(
+                            runtime_settings.auto_tour_include_broad_attractions
+                        ),
+                    ),
+                ),
+                nature_index_available=nature_status.available,
+                structural_result_factory=structural_result_factory,
+                low_overlap_settings=LowOverlapSettings(
+                    max_paths=runtime_settings.low_overlap_max_paths,
+                    max_weight_factor=(runtime_settings.low_overlap_max_weight_factor),
+                    max_share_factor=runtime_settings.low_overlap_max_share_factor,
+                    beam_width=min(12, runtime_settings.low_overlap_beam_width),
+                    max_leg_requests=min(
+                        24, runtime_settings.low_overlap_max_leg_requests
+                    ),
+                    source_count=min(2, runtime_settings.low_overlap_source_count),
+                ),
             )
             yield
 

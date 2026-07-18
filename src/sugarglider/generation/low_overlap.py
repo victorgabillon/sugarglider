@@ -81,6 +81,7 @@ class LowOverlapBeamSearch:
     structural_result_factory: RouteResultFactory
     settings: LowOverlapSettings
     request_count: int = 0
+    cache_hit_count: int = 0
     alternative_path_count: int = 0
     budget_exhausted: bool = False
     _cache: dict[AlternativeCacheKey, tuple[RoutedPath, ...]] = field(
@@ -183,6 +184,7 @@ class LowOverlapBeamSearch:
         )
         cached = self._cache.get(key)
         if cached is not None:
+            self.cache_hit_count += 1
             return cached
         if self.request_count >= self.settings.max_leg_requests:
             self.budget_exhausted = True

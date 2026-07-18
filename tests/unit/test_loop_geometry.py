@@ -256,6 +256,18 @@ def test_sector_shares_partition_and_balanced_route_has_higher_entropy() -> None
     assert balanced.sector_balance > one_sided.sector_balance
 
 
+def test_outbound_return_metric_detects_edge_disjoint_narrow_hairpin() -> None:
+    rounded = _analysis(((0, 0), (1_000, 0), (1_000, 1_000), (0, 1_000), (0, 0)))
+    hairpin = _analysis(((0, 0), (5_000, 0), (5_000, 100), (0, 100), (0, 0)))
+    elongated = _analysis(((0, 0), (5_000, 0), (5_000, 1_000), (0, 1_000), (0, 0)))
+    assert rounded.outbound_return_proximity.share == 0
+    assert hairpin.outbound_return_proximity.share > 0.9
+    assert elongated.outbound_return_proximity.share == 0
+    assert hairpin.maximum_sector_distance_share > 0.9
+    assert rounded.occupied_sector_count > 1
+    assert _analysis(((0, 0), (5_000, 0), (5_000, 100), (0, 100), (0, 0))) == hairpin
+
+
 def test_authoritative_distance_scales_public_distances_not_shares() -> None:
     positions = ((0, 0), (1_000, 0), (1_000, 30), (0, 30), (0, 0))
     normal = _analysis(positions)
