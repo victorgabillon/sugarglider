@@ -2,7 +2,7 @@
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 
@@ -23,6 +23,7 @@ from sugarglider.generation.service import (
     TargetDistanceInfeasibleError,
 )
 from sugarglider.gpx.writer import gpx_filename, write_gpx
+from sugarglider.nature.analysis import NatureRouteAnalyzer
 from sugarglider.routing.graphhopper import RoutingError, RoutingUnavailableError
 from sugarglider.web.models import RouteVisualization
 
@@ -91,10 +92,12 @@ async def create_route_gpx_from_result(
 @router.post("/v1/routes/visualization", response_model=RouteVisualization)
 async def visualize_route(
     route: Annotated[RouteResult, Body()],
+    request: Request,
 ) -> RouteVisualization:
     """Return server-classified contiguous map sections for a route result."""
     try:
-        return build_route_visualization(route)
+        nature_analyzer: NatureRouteAnalyzer | None = request.app.state.nature_analyzer
+        return build_route_visualization(route, nature_analyzer)
     except RouteAnalysisError as exc:
         raise RouteVisualizationError from exc
 

@@ -78,7 +78,7 @@ class LowOverlapBeamSearch:
     """Retrieve cached alternatives and assemble globally analyzed route paths."""
 
     backend: RoutingBackend
-    result_factory: RouteResultFactory
+    structural_result_factory: RouteResultFactory
     settings: LowOverlapSettings
     request_count: int = 0
     alternative_path_count: int = 0
@@ -128,7 +128,7 @@ class LowOverlapBeamSearch:
                         composed = compose_routed_segments(segments)
                     except RouteCompositionError:
                         continue
-                    route = self.result_factory.create(
+                    route = self.structural_result_factory.create(
                         name=name,
                         path=composed,
                         input_point_count=input_point_count,
@@ -157,7 +157,7 @@ class LowOverlapBeamSearch:
             )
 
         if any(
-            self.result_factory.create(
+            self.structural_result_factory.create(
                 name=name,
                 path=state.composed_path,
                 input_point_count=input_point_count,

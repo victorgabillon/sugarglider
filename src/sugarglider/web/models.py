@@ -6,6 +6,7 @@ from pydantic import Field
 
 from sugarglider.domain.analysis import DetailValue
 from sugarglider.domain.models import GeoJsonPosition, ImmutableModel
+from sugarglider.nature.analysis import NatureVisualizationClass
 
 
 class UiConfig(ImmutableModel):
@@ -16,6 +17,9 @@ class UiConfig(ImmutableModel):
     initial_center: GeoJsonPosition
     initial_zoom: Annotated[float, Field(ge=0, le=22)]
     max_required_points: Annotated[int, Field(ge=2)]
+    nature_index_available: bool
+    nature_water_buffer_m: Annotated[float, Field(ge=0, le=1000)]
+    nature_preference_values: tuple[Literal["off", "prefer"], ...]
 
 
 class LineStringGeometry(ImmutableModel):
@@ -33,6 +37,9 @@ class RouteSectionProperties(ImmutableModel):
     edge_id: int | None
     surface: DetailValue
     road_class: DetailValue
+    nature_class: NatureVisualizationClass | None = None
+    park_or_protected: bool | None = None
+    near_water: bool | None = None
 
 
 class RouteSectionFeature(ImmutableModel):

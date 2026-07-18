@@ -1,4 +1,4 @@
-.PHONY: install format lint typecheck test check download-osm up down logs smoke report generate generate-all-pois
+.PHONY: install format lint typecheck test check download-osm nature-index up down logs smoke report generate generate-all-pois
 
 install:
 	uv sync
@@ -21,6 +21,9 @@ check: lint typecheck test
 
 download-osm:
 	./scripts/download_osm.sh
+
+nature-index:
+	./scripts/build_nature_index.sh
 
 up:
 	docker compose up --build -d

@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse
 
+from sugarglider.nature.models import NatureIndexStatus
 from sugarglider.web.models import UiConfig
 
 router = APIRouter()
@@ -22,3 +23,10 @@ async def ui_config(request: Request) -> UiConfig:
     """Return validated, public map settings."""
     config: UiConfig = request.app.state.ui_config
     return config
+
+
+@router.get("/v1/nature/status", response_model=NatureIndexStatus)
+async def nature_status(request: Request) -> NatureIndexStatus:
+    """Return safe local-index availability without exposing a host path."""
+    status: NatureIndexStatus = request.app.state.nature_status
+    return status

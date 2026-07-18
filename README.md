@@ -16,11 +16,12 @@ Sugarglider is an open-source trail-running route generator in development. The
 long-term product will combine required waypoints, target distance, trail and nature
 preferences, popularity signals, access rules, and limits on repeated sections.
 
-The implemented PR1–PR6 scope accepts mandatory latitude/longitude anchors, asks a
+The implemented PR1–PR7 scope accepts mandatory latitude/longitude anchors, asks a
 self-hosted GraphHopper 11.0 instance to route them along real OpenStreetMap edges,
 analyzes the routed edges, and can search for several closed-loop candidates near a
 target distance. A local browser interface supports planning, comparison, local GPX
-inspection, and clean GPX 1.1 export of an already selected candidate.
+inspection, mapped-nature comparison, and clean GPX 1.1 export of an already
+selected candidate.
 
 ## Current scope and architecture
 
@@ -29,8 +30,13 @@ browser -> FastAPI -> RouteService ----------> routing backend -> GraphHopper / 
                     RouteGenerationService --+       |
                        |                              +-> routed path details
                        +-> sampling, ordering, low-overlap beam search
-                       +-> analysis, score, diversity
+                       +-> graph analysis + optional nature analysis
+                       +-> score, ranking, diversity
                     visualization projection + GPX writer
+                       |
+                       +-> one startup-loaded Shapely STRtree
+                                 ^
+local OSM PBF -> pyosmium index builder -> deterministic gzip JSON
            |
            +-> packaged HTML/CSS/ES modules -> MapLibre -> configured raster tiles
 ```
@@ -45,6 +51,9 @@ The analyzer uses standard-library haversine distances for every geometry edge a
 normalizes them to GraphHopper's authoritative route distance. Raw path-detail
 breakdowns remain available alongside explainable derived metrics. Generation uses
 a fixed, documented PR3 score; ordinary route analysis does not assign a score.
+When the optional local nature index is available, the same normalized edges are
+intersected with OSM polygons and receive a separate, explainable PR7 nature score.
+The API never parses the PBF or calls a hosted GIS service during a request.
 
 Generation defaults to fixed required-anchor order. An explicit optimized-loop mode
 keeps the first point fixed while proposing deterministic visit orders for every
@@ -100,11 +109,13 @@ The GUI supports a complete local planning workflow:
 2. Rename, edit, drag, remove, or reorder POIs. The first is the fixed loop
    start/end; do not add a closing duplicate.
 3. Choose target and tolerance in kilometres, point ordering, candidate count, and
-   natural-shortest or low-overlap path selection, then generate.
+   natural-shortest or low-overlap path selection. Optionally choose **Prefer mapped
+   nature** when the local nature index is available, then generate.
 4. Select candidate cards or route lines to compare the server-returned ranking.
    Orange dashed sections are repeated edge runs; stronger red dashes are immediate
    stack-shaped out-and-back returns. The backend calculates both overlays using the
-   same semantics as route analysis.
+   same semantics as route analysis. **Show nature context** adds a wider patterned
+   land-cover underlay without hiding those repetition styles.
 5. Download the selected candidate. This posts its existing immutable `RouteResult`
    to `/v1/routes/gpx/from-result`; GraphHopper and generation are not called again.
 
@@ -128,6 +139,9 @@ prefetch, bulk-download, or provide offline tiles.
 | `SUGARGLIDER_MAP_INITIAL_LAT` | `48.87` | Initial center latitude |
 | `SUGARGLIDER_MAP_INITIAL_LON` | `2.10` | Initial center longitude |
 | `SUGARGLIDER_MAP_INITIAL_ZOOM` | `11.0` | Initial regional zoom (0–22) |
+| `SUGARGLIDER_NATURE_INDEX_PATH` | `/data/nature/ile-de-france-nature-index.json.gz` | Local deterministic nature index |
+| `SUGARGLIDER_NATURE_WATER_BUFFER_M` | `100` | Mapped-water proximity buffer (0–1000 m) |
+| `SUGARGLIDER_NATURE_MISSING_INDEX_WARNING` | `false` | Log a missing default index as warning rather than information |
 
 These validated values are exposed to the browser by `GET /v1/ui/config`. Tile
 templates and attribution are deployment configuration, not frontend constants.
@@ -144,6 +158,24 @@ The script is idempotent, writes through a temporary file, and supports
 `FORCE=1` and an `OSM_PBF_URL` override. PBF files and imported graph caches are
 ignored by Git.
 
+Build the local nature index from that same PBF:
+
+```sh
+make nature-index
+# Equivalent explicit command:
+uv run python -m sugarglider.nature.build \
+  --osm-pbf data/osm/ile-de-france-latest.osm.pbf \
+  --output data/nature/ile-de-france-nature-index.json.gz
+```
+
+The builder streams OSM areas with pyosmium, filters tags before retaining
+geometry, repairs straightforward invalid polygon topology with Shapely
+`make_valid`, and atomically writes canonical gzip JSON with a zero gzip timestamp.
+It reports feature/class counts, skipped invalid features, compressed and
+uncompressed sizes, and elapsed time. Generated indexes under `data/nature` are
+ignored by Git. The API image contains Shapely but not the build-only `osmium`
+package, and the PBF is never copied into that image.
+
 Start GraphHopper and the API:
 
 ```sh
@@ -151,7 +183,10 @@ make up
 make logs
 ```
 
-The first GraphHopper startup imports the PBF and creates the hiking graph and
+The API bind-mounts `data/nature` read-only. A missing or corrupt index disables
+nature analysis, leaves ordinary routing and generation available, and is visible
+through status and deterministic warnings. The first GraphHopper startup imports
+the PBF and creates the hiking graph and
 landmark preparation under `data/graph-cache`; this can take several minutes and
 substantial memory. Later starts reuse the bind-mounted cache. If the GraphHopper
 configuration or PBF changes incompatibly, stop the stack and deliberately clear
@@ -162,6 +197,8 @@ at `http://localhost:8989` and the API at `http://localhost:8000`.
 
 - `GET /health` checks only that the FastAPI process is alive.
 - `GET /ready` checks GraphHopper `/info` and requires its `hike` profile.
+- `GET /v1/nature/status` reports safe local-index metadata, configured water
+  buffer, and warnings without exposing host directory paths.
 - `POST /v1/routes` returns routed GeoJSON-order coordinates, summary metrics,
   snapped anchors, raw path details, and typed route analysis.
 - `POST /v1/routes/gpx` computes the same route and returns a downloadable GPX
@@ -173,7 +210,8 @@ at `http://localhost:8989` and the API at `http://localhost:8000`.
 - `POST /v1/routes/gpx/from-result` exports a posted `RouteResult` without routing or
   generation.
 - `POST /v1/routes/visualization` returns contiguous typed GeoJSON sections marked
-  normal, repeated, or immediate-backtrack for map rendering.
+  normal, repeated, or immediate-backtrack, plus optional server-derived nature
+  properties for map rendering. It never returns raw nature polygons.
 - `GET /v1/ui/config` returns validated browser map configuration.
 
 ### Target-distance generation
@@ -196,6 +234,10 @@ routes composes those legs and analyzes repeated edge IDs across the complete ro
 The separate default alternative-leg request budget is 48; identical leg requests
 are cached across refinement sources.
 
+Temporary beam states use structural route analysis only. Nature enrichment runs
+for completed standard and refined candidates, so increasing beam width does not
+multiply polygon-intersection work that cannot affect beam pruning.
+
 Low-overlap recommendation still requires target tolerance first. A refined route
 may outrank its standard source only when it lowers total repeated-edge share without
 increasing immediate backtracking. Qualifying routes then rank by repetition,
@@ -204,6 +246,26 @@ that trades lower repetition for more obvious out-and-back traversal may still b
 returned for comparison, but it is not recommended ahead of its source. One standard
 candidate is retained as the public control. This optimization changes path
 selection for an already chosen point order; it does not reorder mandatory POIs.
+
+Nature preference defaults to `nature_preference="off"`. Omitting it or explicitly
+using `off` preserves the pre-PR7 ranking. With `prefer`, target tolerance and
+natural-loop validity remain hard constraints. Within tolerance, immediate
+backtracking and total repeated-edge share are compared before the optional nature
+score; the existing PR3 score, target error, and signature remain tie-breakers.
+Outside tolerance, distance-error pressure remains first. An unknown nature score
+stays null and sorts after known scores only at the nature comparison position—it
+is never converted to zero. If nature was requested but unavailable, the existing
+result is retained with `nature_index_unavailable`. If no eligible candidate raises
+the score, the original recommendation is retained with
+`nature_no_candidate_improvement`.
+
+Nature-aware ranking runs over all successfully analyzed drafts before diversity
+and candidate-count truncation. It does not generate geometry, alter signatures,
+increase the full-route evaluation budget, or add GraphHopper calls. Low-overlap
+source selection keeps the existing PR5 source and, when capacity permits, also
+includes the strongest eligible nature source. A refined candidate still cannot
+replace its source unless repetition falls without increasing immediate
+backtracking; a nature score can never bypass that gate.
 
 Optimized mode evaluates at most 16 unique order proposals: original order,
 clockwise and counter-clockwise angular sweeps, nearest-neighbour cycles, angular
@@ -269,7 +331,6 @@ Low-overlap optimization uses exact GraphHopper edge IDs. It cannot recognize ne
 parallel corridors as overlap, does not guarantee zero repetition, and cannot avoid
 retracing forced by dead-end POIs. Dynamic history-dependent Java edge penalties,
 custom GraphHopper plugins, and exact simple-cycle solving remain future work.
-Nature/land-cover scoring also remains future work.
 
 `SearchSummary.low_overlap_requested` distinguishes a search that did not run from
 one that found perfect zero overlap. The pre/refined repetition and backtracking
@@ -308,6 +369,69 @@ make generate-all-pois
 # Custom destinations:
 ./scripts/generate_marly_all_pois.sh ./all-pois.json ./all-pois.gpx
 ```
+
+This workflow calls the same generation settings once with nature preference off
+and once with it on, prints the index status and each candidate's graph/nature
+metrics, reports whether the recommendation changed, and exports the already
+returned prefer-mode `RouteResult`. It handles an unavailable index without
+crashing. To isolate analysis performance for a saved response:
+
+```sh
+uv run python scripts/benchmark_nature_analysis.py ./all-pois.json
+```
+
+### Local mapped-nature analysis
+
+The deterministic index retains these exact OSM area classifications:
+
+| Primary class | Accepted tags |
+| --- | --- |
+| Woodland | `natural=wood`, `landuse=forest` |
+| Open natural | `natural=grassland/heath/scrub/fell/wetland/beach`, `landuse=meadow/grass` |
+| Agriculture | `landuse=farmland/orchard/vineyard/plant_nursery` |
+| Water | `natural=water`, `waterway=riverbank`, `landuse=reservoir/basin` |
+| Urban/developed | `landuse=residential/commercial/retail/industrial/construction/brownfield/landfill/railway/garages`, `amenity=parking` |
+
+Conflicting primary tags resolve in the fixed priority **urban → water → woodland
+→ open natural → agriculture**. This conservative order prevents a lower-priority
+natural tag from hiding explicitly developed or water land cover. `leisure=park`,
+`leisure=nature_reserve`, `boundary=national_park`, and
+`boundary=protected_area` form an independent park/protected overlay; protection
+does not imply public access. Other `leisure=*` areas are not assumed natural.
+
+Index polygons remain WGS84. At startup they are projected once to metres with a
+fixed-reference-latitude regional equirectangular projection. This is suitable for
+an extract such as Île-de-France, not a global equal-area projection; overly tall
+indexes are rejected. Each normalized route geometry edge queries an STRtree and
+uses exact line/polygon intersection fractions. Those fractions multiply the
+authoritative GraphHopper-normalized edge distance. Midpoints, degree-as-metre
+distances, and straight-line route fallbacks are never used.
+
+Water proximity keeps an STRtree over original, unbuffered water polygons. Each
+route makes one distance-bounded tree query, then buffers and unions only the
+nearby candidates; the analyzer does not build or retain a buffered copy of every
+regional water polygon at startup.
+
+Woodland, open natural, agriculture, water crossing, urban, and unknown land cover
+partition the complete route distance. Missing mapping and distance outside the
+index remain visibly unknown. Park/protected and “within 100 m of mapped water”
+(using the configured value) are independent overlays and can overlap any primary
+class. Water proximity does not claim a water view.
+
+The separate nature score starts at 50 and exposes every signed component:
+
+```text
++ 50 × 1.00 × woodland share
++ 50 × 0.85 × open-natural share
++ 50 × 0.30 × agriculture share
++ 50 × 0.20 × park/protected share
++ 50 × 0.15 × near-water share
+- 50 × 1.00 × urban share
+- 50 × 0.10 × unknown share
+```
+
+The result is capped to 0–100. It expresses mapped environmental context, not
+beauty, biodiversity, accessibility, public access, safety, or current conditions.
 
 Generation makes several local GraphHopper calls and is intended for interactive
 requests measured in seconds, not a high-throughput endpoint. The GPX endpoint
@@ -425,6 +549,12 @@ Routing uses © [OpenStreetMap contributors](https://www.openstreetmap.org/copyr
 data distributed by [Geofabrik](https://download.geofabrik.de/) under the Open Data
 Commons Open Database License (ODbL). This is attribution, not a legal
 interpretation; downstream redistributors remain responsible for their obligations.
+The generated index is derived from the configured OSM extract and therefore needs
+the same OSM attribution and ODbL consideration when redistributed.
+
+Shapely is a runtime dependency under the BSD 3-Clause license. pyosmium (`osmium`)
+is used only by development/index-build environments under the BSD 2-Clause
+license. Neither adds a runtime remote service dependency.
 
 OpenStreetMap and routing engines can be incomplete or out of date. Generated
 routes must still be checked against current local closures, land-access rules,
@@ -440,11 +570,13 @@ measure of quality, and edge-ID diversity is set-based rather than distance-weig
 Elevation is disabled, so GPX trackpoints contain no invented elevations or
 timestamps, and GPX files contain no analysis extensions.
 
-Nature areas, land cover, popularity, uploaded activities, current closures, and
-real-world trail conditions are not modeled. There is no geocoding, persistence,
-account system, elevation profile, or offline map. OSM tags and access data may be
-absent or stale. Every generated route still requires visual inspection and
-validation against local access rules, signage, closures, and conditions on the
+Nature analysis is limited to selected mapped OSM polygons. It does not infer
+nearby parallel-corridor context, satellite land cover, biodiversity, viewpoints,
+elevation, popularity, accessibility, water visibility, uploaded activities,
+current closures, or real-world trail conditions. There is no geocoding,
+persistence, account system, elevation profile, or offline map. OSM tags and access
+data may be absent or stale. Every generated route still requires visual inspection
+and validation against local access rules, signage, closures, and conditions on the
 ground.
 
 ### Manual browser-test checklist
@@ -455,8 +587,13 @@ ground.
 - [ ] Generate candidates in shortest and low-overlap modes.
 - [ ] Select cards and map lines; compare metrics with generation JSON.
 - [ ] Confirm repeated and immediate-backtrack styles are distinct.
+- [ ] Confirm nature availability and the Off/Prefer control are visible.
+- [ ] Generate the Marly request and confirm null nature metrics never render as zero.
+- [ ] Toggle the nature underlay and confirm repetition/backtracking stay above it.
+- [ ] Confirm browser network requests contain no raw nature-polygon download.
 - [ ] Import a multi-segment GPX; confirm no line joins segment breaks.
 - [ ] Download selected GPX and confirm no second generation request occurs.
+- [ ] Confirm the downloaded GPX has one track/segment and no nature extensions.
 - [ ] Check the downloaded track in gpx.studio.
 - [ ] Check narrow responsive layout and keyboard navigation.
 ---

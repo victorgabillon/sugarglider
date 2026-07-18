@@ -9,6 +9,7 @@ export const state = {
     seed: 0,
     pointOrderMode: "fixed",
     pathSelectionMode: "shortest",
+    naturePreference: "off",
   },
   generationResult: null,
   selectedSignature: null,
@@ -18,6 +19,7 @@ export const state = {
   visualizationCache: new Map(),
   addPointMode: false,
   showAllCandidates: true,
+  showNatureContext: false,
 };
 
 export function invalidateCandidates() {
@@ -44,5 +46,6 @@ export function currentRequest() {
     profile: "hike",
     point_order_mode: state.options.pointOrderMode,
     path_selection_mode: state.options.pathSelectionMode,
+    nature_preference: state.options.naturePreference,
   };
 }

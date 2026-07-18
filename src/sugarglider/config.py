@@ -1,5 +1,6 @@
 """Application configuration loaded from environment variables."""
 
+from pathlib import Path
 from typing import Annotated
 
 from pydantic import AnyHttpUrl, Field
@@ -80,3 +81,19 @@ class Settings(BaseSettings):
         float,
         Field(ge=0, le=22, validation_alias="SUGARGLIDER_MAP_INITIAL_ZOOM"),
     ] = 11.0
+    nature_index_path: Annotated[
+        Path | None,
+        Field(validation_alias="SUGARGLIDER_NATURE_INDEX_PATH"),
+    ] = Path("/data/nature/ile-de-france-nature-index.json.gz")
+    nature_water_buffer_m: Annotated[
+        float,
+        Field(
+            ge=0,
+            le=1000,
+            validation_alias="SUGARGLIDER_NATURE_WATER_BUFFER_M",
+        ),
+    ] = 100.0
+    nature_missing_index_warning: Annotated[
+        bool,
+        Field(validation_alias="SUGARGLIDER_NATURE_MISSING_INDEX_WARNING"),
+    ] = False

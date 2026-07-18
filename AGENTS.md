@@ -43,6 +43,19 @@
   it must not rerun generation or routing.
 - Map attribution must remain visible. Do not bulk-download, prefetch, or cache map
   tiles, and do not add offline map behavior.
+- Nature data must remain local and derived from the configured OSM PBF; never add a
+  runtime Overpass or other hosted GIS dependency.
+- Nature analysis must reuse normalized routed geometry edges and must never invent
+  or modify route geometry.
+- Woodland, open-natural, agriculture, water-crossing, urban, and unknown nature
+  metrics must partition the authoritative route distance. Park/protected and
+  near-water metrics remain independent overlays.
+- Missing or uncovered nature data must remain visibly unknown, never guessed as
+  urban or natural.
+- Nature preference must never outrank target-distance tolerance or natural-loop
+  validity, and PR5's repetition/backtracking promotion gate remains authoritative.
+- Nature indexes are generated data and must never be committed. GPX output remains
+  free of nature-analysis extensions.
 - Never commit generated GPX files or browser validation screenshots.
-- Nature and popularity signals remain future work.
+- Popularity signals remain future work.
 - Never commit PBF map data, GraphHopper caches, secrets, or generated GPX files.

@@ -15,6 +15,7 @@ from sugarglider.analysis.route import (
 )
 from sugarglider.domain.analysis import DetailValue
 from sugarglider.domain.models import GeoJsonPosition, RouteResult
+from sugarglider.nature.analysis import NatureEdgeContext, NatureRouteAnalyzer
 from sugarglider.web.models import (
     LineStringGeometry,
     RouteSectionFeature,
@@ -29,6 +30,7 @@ class _SectionKey:
     edge_id: int | None
     surface: DetailValue
     road_class: DetailValue
+    nature: NatureEdgeContext | None
 
 
 def _detail(edge: ProjectedGeometryEdge, name: str) -> DetailValue:
@@ -41,6 +43,7 @@ def _key(
     *,
     repeated: bool,
     immediate_backtrack: bool,
+    nature: NatureEdgeContext | None,
 ) -> _SectionKey:
     kind: Literal["normal", "repeated", "immediate_backtrack"]
     if immediate_backtrack:
@@ -54,10 +57,14 @@ def _key(
         edge_id=known_edge_id(edge),
         surface=_detail(edge, "surface"),
         road_class=_detail(edge, "road_class"),
+        nature=nature,
     )
 
 
-def build_route_visualization(route: RouteResult) -> RouteVisualization:
+def build_route_visualization(
+    route: RouteResult,
+    nature_analyzer: NatureRouteAnalyzer | None = None,
+) -> RouteVisualization:
     """Classify and group route geometry without changing the posted result."""
     edges = project_geometry_edges(
         geometry=route.geometry,
@@ -75,6 +82,11 @@ def build_route_visualization(route: RouteResult) -> RouteVisualization:
             )
             for edge in edges
         )
+    )
+    nature_contexts: tuple[NatureEdgeContext | None, ...] = (
+        nature_analyzer.edge_contexts(edges)
+        if nature_analyzer is not None
+        else tuple(None for _edge in edges)
     )
 
     features: list[RouteSectionFeature] = []
@@ -95,6 +107,21 @@ def build_route_visualization(route: RouteResult) -> RouteVisualization:
                     edge_id=section_key.edge_id,
                     surface=section_key.surface,
                     road_class=section_key.road_class,
+                    nature_class=(
+                        section_key.nature.nature_class
+                        if section_key.nature is not None
+                        else None
+                    ),
+                    park_or_protected=(
+                        section_key.nature.park_or_protected
+                        if section_key.nature is not None
+                        else None
+                    ),
+                    near_water=(
+                        section_key.nature.near_water
+                        if section_key.nature is not None
+                        else None
+                    ),
                 ),
             )
         )
@@ -106,6 +133,7 @@ def build_route_visualization(route: RouteResult) -> RouteVisualization:
             edge,
             repeated=repeated[index],
             immediate_backtrack=immediate[index],
+            nature=nature_contexts[index],
         )
         if edge_key != section_key:
             finish_section()

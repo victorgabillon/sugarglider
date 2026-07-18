@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import pairwise
 from math import asin, cos, isfinite, radians, sin, sqrt
+from typing import Protocol
 
 from sugarglider.analysis.backtracking import (
     MIN_BACKTRACK_EDGE_ID_COVERAGE,
@@ -16,6 +17,7 @@ from sugarglider.domain.analysis import (
     DetailBucket,
     DetailValue,
     DistanceMetric,
+    NatureAnalysis,
     RepetitionAnalysis,
     RouteAnalysis,
 )
@@ -62,6 +64,16 @@ class RouteAnalysisError(ValueError):
     """The routed geometry or its path-detail intervals are impossible to analyze."""
 
 
+class NatureAnalyzer(Protocol):
+    """Optional structural interface over normalized route geometry edges."""
+
+    def analyze_route(
+        self,
+        edges: tuple["ProjectedGeometryEdge", ...],
+        route_distance_m: float,
+    ) -> NatureAnalysis: ...
+
+
 @dataclass(frozen=True)
 class ProjectedGeometryEdge:
     from_index: int
@@ -101,6 +113,9 @@ def haversine_distance_m(start: GeoJsonPosition, end: GeoJsonPosition) -> float:
 
 class RouteAnalyzer:
     """Build deterministic analysis from geometry, distance, and typed details."""
+
+    def __init__(self, nature_analyzer: NatureAnalyzer | None = None) -> None:
+        self._nature_analyzer = nature_analyzer
 
     def analyze(
         self,
@@ -152,6 +167,11 @@ class RouteAnalyzer:
         }
         if backtrack_coverage.share < MIN_BACKTRACK_EDGE_ID_COVERAGE:
             warnings.add("backtrack_edge_id_coverage_insufficient")
+        nature = (
+            self._nature_analyzer.analyze_route(edges, route_distance_m)
+            if self._nature_analyzer is not None
+            else None
+        )
 
         return RouteAnalysis(
             route_distance_m=route_distance_m,
@@ -188,6 +208,7 @@ class RouteAnalyzer:
                 backtracking.immediate_backtrack_distance_m, route_distance_m
             ),
             backtrack_edge_id_coverage=backtrack_coverage,
+            nature=nature,
             warnings=tuple(sorted(warnings)),
         )
 

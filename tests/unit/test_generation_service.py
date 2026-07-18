@@ -4,16 +4,27 @@ from collections.abc import Mapping
 
 import pytest
 
-from sugarglider.domain.generation import RouteGenerationRequest
-from sugarglider.domain.models import Coordinate, PathDetailSegment
+from sugarglider.analysis.route import ProjectedGeometryEdge, RouteAnalyzer
+from sugarglider.domain.analysis import DistanceMetric, NatureAnalysis
+from sugarglider.domain.generation import (
+    GeneratedCandidate,
+    RouteGenerationRequest,
+    RouteGenerationResult,
+)
+from sugarglider.domain.models import Coordinate, PathDetailSegment, RouteResult
 from sugarglider.generation.low_overlap import LowOverlapSettings
 from sugarglider.generation.service import RouteGenerationService
+from sugarglider.nature.analysis import NatureRouteAnalyzer
+from sugarglider.nature.index import NatureIndex
+from sugarglider.nature.models import NatureIndexDocument, NatureIndexMetadata
+from sugarglider.nature.scoring import score_nature
 from sugarglider.routing.backend import RoutedPath
 from sugarglider.routing.graphhopper import (
     RoutingPointError,
     RoutingTimeoutError,
     RoutingUnavailableError,
 )
+from sugarglider.routing.result import RouteResultFactory
 
 
 class FakeRoutingBackend:
@@ -164,6 +175,107 @@ class FakeRoutingBackend:
             snapped_points=snapped,
             details=details,
         )
+
+
+class CountingNatureAnalyzer:
+    """Count enriched public analyses while delegating exact nature semantics."""
+
+    def __init__(self, delegate: NatureRouteAnalyzer) -> None:
+        self.delegate = delegate
+        self.call_count = 0
+
+    def analyze_route(
+        self,
+        edges: tuple[ProjectedGeometryEdge, ...],
+        route_distance_m: float,
+    ) -> NatureAnalysis:
+        self.call_count += 1
+        return self.delegate.analyze_route(edges, route_distance_m)
+
+
+class CountingStructuralFactory(RouteResultFactory):
+    """Count structural beam analysis without adding nature enrichment."""
+
+    def __init__(self) -> None:
+        super().__init__(RouteAnalyzer())
+        self.call_count = 0
+
+    def create(
+        self,
+        *,
+        name: str,
+        path: RoutedPath,
+        input_point_count: int,
+    ) -> RouteResult:
+        self.call_count += 1
+        return super().create(
+            name=name,
+            path=path,
+            input_point_count=input_point_count,
+        )
+
+
+def _empty_nature_index() -> NatureIndex:
+    return NatureIndex(
+        NatureIndexDocument(
+            metadata=NatureIndexMetadata(
+                source_basename="empty.osm",
+                reference_latitude=48.5,
+                bounding_box=(1, 47, 3, 50),
+                category_counts={},
+                feature_count=0,
+            ),
+            features=(),
+        )
+    )
+
+
+def _candidate_with_nature(
+    candidate: GeneratedCandidate,
+    *,
+    woodland_share: float,
+    signature: str,
+) -> GeneratedCandidate:
+    distance_m = candidate.route.summary.distance_m
+    unknown_share = 1 - woodland_share
+    breakdown = score_nature(
+        woodland_share=woodland_share,
+        open_natural_share=0,
+        agriculture_share=0,
+        park_or_protected_share=0,
+        near_water_share=0,
+        urban_share=0,
+        unknown_share=unknown_share,
+    )
+    zero = DistanceMetric(distance_m=0, share=0)
+    nature = NatureAnalysis(
+        available=True,
+        index_format_version=1,
+        index_feature_count=2,
+        woodland=DistanceMetric(
+            distance_m=distance_m * woodland_share,
+            share=woodland_share,
+        ),
+        open_natural=zero,
+        agriculture=zero,
+        water_crossing=zero,
+        urban=zero,
+        unknown_landcover=DistanceMetric(
+            distance_m=distance_m * unknown_share,
+            share=unknown_share,
+        ),
+        park_or_protected=zero,
+        near_water=zero,
+        nature_score=breakdown.final_score,
+        score_breakdown=breakdown,
+        warnings=(),
+    )
+    route = candidate.route.model_copy(
+        update={
+            "analysis": candidate.route.analysis.model_copy(update={"nature": nature})
+        }
+    )
+    return candidate.model_copy(update={"route": route, "signature": signature})
 
 
 class OrderAwareRoutingBackend(FakeRoutingBackend):
@@ -533,6 +645,254 @@ async def test_baseline_already_at_target_is_a_candidate() -> None:
     assert len(result.candidates) == 1
     assert result.candidates[0].optional_points == ()
     assert result.candidates[0].target_error_m == 0
+
+
+@pytest.mark.asyncio
+async def test_omitted_nature_preference_matches_explicit_off() -> None:
+    default_backend = FakeRoutingBackend()
+    explicit_backend = FakeRoutingBackend()
+    default = await RouteGenerationService(default_backend, max_evaluations=4).generate(
+        generation_request()
+    )
+    explicit = await RouteGenerationService(
+        explicit_backend, max_evaluations=4
+    ).generate(generation_request().model_copy(update={"nature_preference": "off"}))
+    assert default.model_dump(mode="json") == explicit.model_dump(mode="json")
+    assert (
+        default_backend.candidate_route_calls == explicit_backend.candidate_route_calls
+    )
+
+
+@pytest.mark.asyncio
+async def test_unavailable_nature_preference_preserves_results_and_budget() -> None:
+    off_backend = FakeRoutingBackend()
+    prefer_backend = FakeRoutingBackend()
+    off = await RouteGenerationService(off_backend, max_evaluations=4).generate(
+        generation_request()
+    )
+    prefer = await RouteGenerationService(
+        prefer_backend,
+        max_evaluations=4,
+        nature_index_available=False,
+    ).generate(generation_request().model_copy(update={"nature_preference": "prefer"}))
+    assert [candidate.signature for candidate in prefer.candidates] == [
+        candidate.signature for candidate in off.candidates
+    ]
+    assert prefer.search.nature_requested
+    assert not prefer.search.nature_index_available
+    assert prefer.search.recommended_nature_score is None
+    assert prefer.search.best_available_nature_score is None
+    assert "nature_index_unavailable" in prefer.search.warnings
+    assert prefer.search.warnings == tuple(sorted(prefer.search.warnings))
+    assert prefer_backend.candidate_route_calls == off_backend.candidate_route_calls
+    assert prefer_backend.round_trip_calls == off_backend.round_trip_calls
+
+
+@pytest.mark.asyncio
+async def test_available_nature_analysis_adds_no_graphhopper_calls() -> None:
+    index = _empty_nature_index()
+    result_factory = RouteResultFactory(RouteAnalyzer(NatureRouteAnalyzer(index)))
+    off_backend = FakeRoutingBackend()
+    prefer_backend = FakeRoutingBackend()
+    off = await RouteGenerationService(
+        off_backend,
+        result_factory,
+        max_evaluations=4,
+        nature_index_available=True,
+        nature_index_feature_count=0,
+    ).generate(generation_request())
+    prefer = await RouteGenerationService(
+        prefer_backend,
+        result_factory,
+        max_evaluations=4,
+        nature_index_available=True,
+        nature_index_feature_count=0,
+    ).generate(generation_request().model_copy(update={"nature_preference": "prefer"}))
+    assert [candidate.signature for candidate in prefer.candidates] == [
+        candidate.signature for candidate in off.candidates
+    ]
+    assert all(
+        candidate.route.analysis.nature is not None for candidate in prefer.candidates
+    )
+    assert prefer.search.recommended_nature_score == 45
+    assert prefer.search.best_available_nature_score == 45
+    assert "nature_no_candidate_improvement" in prefer.search.warnings
+    assert prefer_backend.candidate_route_calls == off_backend.candidate_route_calls
+    assert prefer_backend.round_trip_calls == off_backend.round_trip_calls
+
+
+@pytest.mark.asyncio
+async def test_public_and_complete_standard_routes_receive_nature_analysis() -> None:
+    counter = CountingNatureAnalyzer(NatureRouteAnalyzer(_empty_nature_index()))
+    enriched_factory = RouteResultFactory(RouteAnalyzer(counter))
+    backend = FakeRoutingBackend()
+    request = generation_request()
+    baseline_path = await backend.route(
+        (*request.supplied_required_points, request.supplied_required_points[0]),
+        request.profile,
+    )
+    public_route = enriched_factory.create(
+        name="public",
+        path=baseline_path,
+        input_point_count=request.required_point_count,
+    )
+    assert counter.call_count == 1
+    assert public_route.analysis.nature is not None
+
+    counter.call_count = 0
+    result = await RouteGenerationService(
+        backend,
+        enriched_factory,
+        max_evaluations=4,
+        nature_index_available=True,
+        nature_index_feature_count=0,
+    ).generate(request)
+    assert counter.call_count == 1 + result.search.successful_candidate_count
+    assert counter.call_count == 1 + backend.candidate_route_calls
+    assert all(
+        candidate.route.analysis.nature is not None for candidate in result.candidates
+    )
+
+
+@pytest.mark.asyncio
+async def test_partial_beam_states_use_only_structural_analysis() -> None:
+    request = generation_request(candidates=3).model_copy(
+        update={"path_selection_mode": "low_overlap"}
+    )
+    backend = LowOverlapRoutingBackend()
+    counter = CountingNatureAnalyzer(NatureRouteAnalyzer(_empty_nature_index()))
+    enriched_factory = RouteResultFactory(RouteAnalyzer(counter))
+    structural_factory = CountingStructuralFactory()
+    result = await RouteGenerationService(
+        backend,
+        enriched_factory,
+        structural_result_factory=structural_factory,
+        low_overlap_settings=LowOverlapSettings(beam_width=12, max_paths=3),
+        nature_index_available=True,
+        nature_index_feature_count=0,
+    ).generate(request)
+
+    # One baseline plus four completed beam states are enriched. The six partial
+    # expansions and four coverage checks use only the structural factory.
+    assert counter.call_count == 5
+    assert structural_factory.call_count == 10
+    assert result.search.alternative_path_count == 4
+    assert backend.alternative_route_calls == 2
+    assert all(
+        candidate.route.analysis.nature is not None for candidate in result.candidates
+    )
+    assert any(
+        candidate.construction == "alternative_leg_beam"
+        for candidate in result.candidates
+    )
+
+    control_backend = LowOverlapRoutingBackend()
+    control = await RouteGenerationService(
+        control_backend,
+        low_overlap_settings=LowOverlapSettings(beam_width=12, max_paths=3),
+    ).generate(request)
+    assert control_backend.alternative_route_calls == backend.alternative_route_calls
+    assert [candidate.signature for candidate in result.candidates] == [
+        candidate.signature for candidate in control.candidates
+    ]
+    assert [
+        (
+            candidate.route.analysis.repetition.repeated_distance.distance_m,
+            candidate.route.analysis.immediate_backtrack.distance_m,
+        )
+        for candidate in result.candidates
+    ] == [
+        (
+            candidate.route.analysis.repetition.repeated_distance.distance_m,
+            candidate.route.analysis.immediate_backtrack.distance_m,
+        )
+        for candidate in control.candidates
+    ]
+
+
+@pytest.mark.asyncio
+async def test_wider_beam_does_not_enrich_temporary_states() -> None:
+    request = generation_request(candidates=3).model_copy(
+        update={"path_selection_mode": "low_overlap"}
+    )
+    observations: list[tuple[int, int, int]] = []
+    for beam_width in (1, 12):
+        counter = CountingNatureAnalyzer(NatureRouteAnalyzer(_empty_nature_index()))
+        structural_factory = CountingStructuralFactory()
+        result = await RouteGenerationService(
+            LowOverlapRoutingBackend(),
+            RouteResultFactory(RouteAnalyzer(counter)),
+            structural_result_factory=structural_factory,
+            low_overlap_settings=LowOverlapSettings(
+                beam_width=beam_width,
+                max_paths=5,
+            ),
+            nature_index_available=True,
+            nature_index_feature_count=0,
+        ).generate(request)
+        assert counter.call_count <= 1 + beam_width
+        assert counter.call_count < structural_factory.call_count
+        observations.append(
+            (
+                counter.call_count,
+                structural_factory.call_count,
+                result.search.alternative_path_count,
+            )
+        )
+
+    narrow_nature, narrow_structural, narrow_alternatives = observations[0]
+    wide_nature, wide_structural, wide_alternatives = observations[1]
+    assert narrow_alternatives == wide_alternatives == 4
+    assert wide_structural > narrow_structural
+    assert wide_nature < wide_structural
+    assert narrow_nature < narrow_structural
+
+
+def test_nature_low_overlap_source_uses_all_drafts_with_bounded_capacity(
+    generation_result: RouteGenerationResult,
+) -> None:
+    base = generation_result.candidates[0]
+    control = _candidate_with_nature(
+        base,
+        woodland_share=0.2,
+        signature="control",
+    )
+    visible = _candidate_with_nature(
+        base,
+        woodland_share=0.4,
+        signature="visible",
+    )
+    hidden_best_larger = _candidate_with_nature(
+        base,
+        woodland_share=0.9,
+        signature="hidden-z",
+    )
+    hidden_best_smaller = _candidate_with_nature(
+        base,
+        woodland_share=0.9,
+        signature="hidden-a",
+    )
+    service = RouteGenerationService(
+        FakeRoutingBackend(),
+        low_overlap_settings=LowOverlapSettings(source_count=2),
+    )
+    selected = service._nature_aware_refinement_sources(
+        (control, visible),
+        (control, visible, hidden_best_larger, hidden_best_smaller),
+    )
+    assert [candidate.signature for candidate in selected] == [
+        "control",
+        "hidden-a",
+    ]
+
+    single_source = RouteGenerationService(
+        FakeRoutingBackend(),
+        low_overlap_settings=LowOverlapSettings(source_count=1),
+    )._nature_aware_refinement_sources(
+        (control, visible),
+        (control, visible, hidden_best_larger, hidden_best_smaller),
+    )
+    assert single_source == (control,)
 
 
 @pytest.mark.asyncio
