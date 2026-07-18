@@ -1,4 +1,4 @@
-.PHONY: install format lint typecheck test check download-osm nature-index up down logs smoke report generate generate-all-pois
+.PHONY: install format lint typecheck test check brand-assets download-osm nature-index up down logs smoke report generate generate-all-pois
 
 install:
 	uv sync
@@ -18,6 +18,9 @@ test:
 	uv run pytest -m "not integration"
 
 check: lint typecheck test
+
+brand-assets:
+	uv run python scripts/sync_web_brand_assets.py
 
 download-osm:
 	./scripts/download_osm.sh

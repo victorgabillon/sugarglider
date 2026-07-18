@@ -56,6 +56,21 @@
   validity, and PR5's repetition/backtracking promotion gate remains authoritative.
 - Nature indexes are generated data and must never be committed. GPX output remains
   free of nature-analysis extensions.
+- `assets/brand` is the canonical editable artwork source. Runtime files under
+  `src/sugarglider/web/static/brand` must remain byte-identical synchronized copies.
+- Never recolor, rotate, stretch, tightly crop, or hand-edit divergent copies of
+  Sugarglider artwork, and never add a remote brand-image dependency.
+- The Sugarglider map pin is for required POIs and the route start only. Generated
+  optional points and imported GPX waypoints must keep distinct marker languages.
+- Required marker names come from request JSON and remain attached through editing,
+  reordering, optimized-order display, dragging, copying, and candidate inspection.
+- Required marker numbers represent current visit order. DOM markers must remain
+  draggable and keyboard focusable, with the painted pin tip aligned to coordinates.
+- Required-point text labels must remain a collision-aware MapLibre symbol layer;
+  do not replace them with permanently overlapping HTML labels.
+- Frontend required-point selection must stay synchronized across marker, label,
+  popup, and POI editor without changing coordinates or invalidating routes by
+  selection alone.
 - Never commit generated GPX files or browser validation screenshots.
 - Popularity signals remain future work.
 - Never commit PBF map data, GraphHopper caches, secrets, or generated GPX files.

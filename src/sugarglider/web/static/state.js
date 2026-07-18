@@ -13,6 +13,8 @@ export const state = {
   },
   generationResult: null,
   selectedSignature: null,
+  selectedPointIndex: null,
+  pendingPointPopupIndex: null,
   importedGpx: null,
   request: { status: "idle", id: 0, startedAt: null },
   abortController: null,
@@ -34,10 +36,19 @@ export function selectedCandidate() {
   ) ?? null;
 }
 
+export function pointDisplayName(point, index) {
+  const name = typeof point?.name === "string" ? point.name.trim() : "";
+  return name || `Point ${index + 1}`;
+}
+
 export function currentRequest() {
   return {
     name: state.options.name,
-    points: state.points.map(({ name, lat, lon }) => ({ name, lat, lon })),
+    points: state.points.map((point, index) => ({
+      name: pointDisplayName(point, index),
+      lat: point.lat,
+      lon: point.lon,
+    })),
     target_distance_m: state.options.targetDistanceKm * 1000,
     tolerance_m: state.options.toleranceKm * 1000,
     candidate_count: state.options.candidateCount,
