@@ -24,6 +24,11 @@ class UiConfig(ImmutableModel):
     poi_index_available: bool
     poi_default_limit: Annotated[int, Field(ge=1)]
     poi_max_limit: Annotated[int, Field(ge=1)]
+    default_planning_mode: Literal["auto_tour"] = "auto_tour"
+    auto_tour_max_hard_points: Literal[6] = 6
+    auto_tour_max_preferred_pois: Literal[8] = 8
+    auto_tour_scenic_corridor_radius_m: Annotated[float, Field(ge=50, le=2000)]
+    auto_tour_water_corridor_radius_m: Annotated[float, Field(ge=25, le=1000)]
 
 
 class LineStringGeometry(ImmutableModel):

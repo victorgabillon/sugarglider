@@ -31,6 +31,10 @@ SELF_CROSSING_DEDUP_TOLERANCE_M = 0.10
 NEAR_PARALLEL_DISTANCE_M = 40.0
 NEAR_PARALLEL_MAX_ANGLE_DEGREES = 30.0
 NEAR_PARALLEL_MIN_ROUTE_SEPARATION_M = 250.0
+OUTBOUND_RETURN_SAMPLE_INTERVAL_M = 60.0
+OUTBOUND_RETURN_PROXIMITY_M = 150.0
+OUTBOUND_RETURN_ENDPOINT_EXCLUSION_M = 250.0
+OUTBOUND_RETURN_MAX_SAMPLES_PER_HALF = 800
 MAX_PENALIZED_SELF_CROSSINGS = 8
 
 type MetricPosition = tuple[float, float]
@@ -146,6 +150,9 @@ class LoopGeometryRouteAnalyzer:
             edges, metric_positions, route_distance_m
         )
         sector_balance = _normalized_entropy(sector_shares)
+        maximum_sector_share = max(sector_shares, default=0.0)
+        occupied_sector_count = sum(share > 0 for share in sector_shares)
+        angular_monotonicity = _angular_monotonicity(metric_positions)
         mean_radius_m = _mean_radius(edges, metric_positions, start, route_distance_m)
         max_radius_m = max(_distance(start, position) for position in metric_positions)
         elongation = _elongation(line)
@@ -160,6 +167,11 @@ class LoopGeometryRouteAnalyzer:
                 if route_distance_m > 0
                 else 0.0
             ),
+        )
+        outbound_return_share = _outbound_return_proximity_share(metric_positions)
+        outbound_return_proximity = DistanceMetric(
+            distance_m=route_distance_m * outbound_return_share,
+            share=outbound_return_share,
         )
         breakdown = score_loop_geometry(
             self_crossing_count=self_crossing_count,
@@ -177,14 +189,113 @@ class LoopGeometryRouteAnalyzer:
             sector_count=LOOP_GEOMETRY_SECTOR_COUNT,
             sector_distance_shares=sector_shares,
             sector_balance=sector_balance,
+            maximum_sector_distance_share=maximum_sector_share,
+            occupied_sector_count=occupied_sector_count,
+            angular_monotonicity=angular_monotonicity,
             mean_radius_m=mean_radius_m,
             max_radius_m=max_radius_m,
             elongation=elongation,
             self_crossing_count=self_crossing_count,
             near_parallel=near_parallel,
+            outbound_return_proximity=outbound_return_proximity,
             penalty_breakdown=breakdown,
             warnings=tuple(sorted(warnings)),
         )
+
+
+def _angular_monotonicity(positions: tuple[MetricPosition, ...]) -> float:
+    """Measure distance-weighted progress around the route centroid."""
+    if len(positions) < 4:
+        return 0.0
+    closed = positions if positions[0] == positions[-1] else (*positions, positions[0])
+    ring = closed[:-1]
+    center = (
+        sum(point[0] for point in ring) / len(ring),
+        sum(point[1] for point in ring) / len(ring),
+    )
+    signed_area = 0.5 * sum(
+        left[0] * right[1] - right[0] * left[1]
+        for left, right in zip(closed, closed[1:], strict=False)
+    )
+    if abs(signed_area) <= SECTOR_ORIGIN_TOLERANCE_M:
+        return 0.0
+    expected_sign = 1.0 if signed_area > 0 else -1.0
+    matching_distance = 0.0
+    angular_distance = 0.0
+    for left, right in zip(closed, closed[1:], strict=False):
+        segment_length = _distance(left, right)
+        if segment_length <= 0:
+            continue
+        left_angle = atan2(left[1] - center[1], left[0] - center[0])
+        right_angle = atan2(right[1] - center[1], right[0] - center[0])
+        delta = (right_angle - left_angle + pi) % (2.0 * pi) - pi
+        if abs(delta) <= 1e-12:
+            continue
+        angular_distance += segment_length
+        if delta * expected_sign > 0:
+            matching_distance += segment_length
+    return _clamp_share(
+        matching_distance / angular_distance if angular_distance > 0 else 0.0
+    )
+
+
+def _outbound_return_proximity_share(
+    positions: tuple[MetricPosition, ...],
+) -> float:
+    """Detect edge-disjoint hairpins by comparing outbound and return halves."""
+    if len(positions) < 4:
+        return 0.0
+    start = positions[0]
+    split_index = max(
+        range(1, len(positions) - 1),
+        key=lambda index: (_distance(start, positions[index]), -index),
+    )
+    outbound = LineString(positions[: split_index + 1])
+    returning = LineString(positions[split_index:])
+    if (
+        outbound.length <= 2 * OUTBOUND_RETURN_ENDPOINT_EXCLUSION_M
+        or returning.length <= 2 * OUTBOUND_RETURN_ENDPOINT_EXCLUSION_M
+    ):
+        return 0.0
+    outbound_core = _line_core(outbound)
+    returning_core = _line_core(returning)
+    if outbound_core is None or returning_core is None:
+        return 0.0
+    outbound_share = _sampled_near_share(outbound_core, returning_core)
+    return_share = _sampled_near_share(returning_core, outbound_core)
+    return _clamp_share((outbound_share + return_share) / 2.0)
+
+
+def _line_core(line: LineString) -> LineString | None:
+    start = OUTBOUND_RETURN_ENDPOINT_EXCLUSION_M
+    end = float(line.length) - OUTBOUND_RETURN_ENDPOINT_EXCLUSION_M
+    if end <= start:
+        return None
+    sample_count = max(2, int((end - start) / OUTBOUND_RETURN_SAMPLE_INTERVAL_M) + 1)
+    sample_count = min(OUTBOUND_RETURN_MAX_SAMPLES_PER_HALF, sample_count)
+    positions = tuple(
+        line.interpolate(start + (end - start) * index / (sample_count - 1)).coords[0]
+        for index in range(sample_count)
+    )
+    return LineString(positions)
+
+
+def _sampled_near_share(source: LineString, opposite: LineString) -> float:
+    sample_count = max(
+        2,
+        min(
+            OUTBOUND_RETURN_MAX_SAMPLES_PER_HALF,
+            int(source.length / OUTBOUND_RETURN_SAMPLE_INTERVAL_M) + 1,
+        ),
+    )
+    near = sum(
+        opposite.distance(
+            source.interpolate(source.length * index / (sample_count - 1))
+        )
+        <= OUTBOUND_RETURN_PROXIMITY_M
+        for index in range(sample_count)
+    )
+    return near / sample_count
 
 
 def _enclosed_area(line: LineString) -> float:

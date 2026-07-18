@@ -161,11 +161,15 @@ class LoopGeometryAnalysis(_ImmutableAnalysisModel):
     sector_count: Annotated[int, Field(ge=1)]
     sector_distance_shares: tuple[Share, ...]
     sector_balance: Share
+    maximum_sector_distance_share: Share
+    occupied_sector_count: NonNegativeInt
+    angular_monotonicity: Share
     mean_radius_m: NonNegativeFloat
     max_radius_m: NonNegativeFloat
     elongation: Share
     self_crossing_count: NonNegativeInt
     near_parallel: DistanceMetric
+    outbound_return_proximity: DistanceMetric
     penalty_breakdown: LoopGeometryPenaltyBreakdown
     warnings: tuple[str, ...]
 
@@ -178,6 +182,17 @@ class LoopGeometryAnalysis(_ImmutableAnalysisModel):
             sector_total, 1.0, rel_tol=1e-9, abs_tol=1e-9
         ):
             raise ValueError("positive sector distance shares must sum to one")
+        if not isclose(
+            self.maximum_sector_distance_share,
+            max(self.sector_distance_shares, default=0.0),
+            rel_tol=0,
+            abs_tol=1e-12,
+        ):
+            raise ValueError("maximum sector share must match sector distances")
+        if self.occupied_sector_count != sum(
+            share > 0 for share in self.sector_distance_shares
+        ):
+            raise ValueError("occupied sector count must match sector distances")
         breakdown = self.penalty_breakdown
         if not (
             breakdown.crossing_count_input == min(self.self_crossing_count, 8)

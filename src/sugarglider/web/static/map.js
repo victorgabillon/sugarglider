@@ -1,9 +1,11 @@
 import { gpxFeatureCollection } from "./gpx.js";
+import { requestedPlaceIdentifier } from "./state.js";
 
 const REQUIRED_LABEL_SOURCE = "required-point-labels";
 const REQUIRED_LABEL_LAYER = "required-point-labels-ordinary";
 const SELECTED_LABEL_LAYER = "required-point-labels-selected";
 const REQUIRED_PIN_URL = "/static/brand/sugarglider-map-pin.png";
+const VERIFIED_WATER_PIN_URL = "/static/brand/sugarglider-water-pin.png";
 const EMPTY_COLLECTION = { type: "FeatureCollection", features: [] };
 const POI_SOURCE = "places-pois";
 const POI_SELECTED_SOURCE = "places-poi-selected-source";
@@ -14,13 +16,23 @@ const POI_SELECTED_LAYER = "places-poi-selected";
 const POI_SELECTED_MARKER_LAYER = "places-poi-selected-marker";
 const POI_LABEL_LAYER = "places-poi-labels";
 const POI_SELECTED_LABEL_LAYER = "places-poi-selected-label";
+const POI_VISITED_LAYER = "places-poi-visited";
+const REQUESTED_SOURCE = "auto-tour-requested-places";
+const REQUESTED_RADIUS_SOURCE = "auto-tour-requested-place-radii";
+const REQUESTED_RADIUS_FILL_LAYER = "auto-tour-requested-radius-fill";
+const REQUESTED_RADIUS_LINE_LAYER = "auto-tour-requested-radius-line";
+const REQUESTED_MARKER_LAYER = "auto-tour-requested-markers";
+const REQUESTED_PREFERRED_LAYER = "auto-tour-requested-preferred-ring";
+const REQUESTED_ORDER_LAYER = "auto-tour-requested-order";
+const REQUESTED_LABEL_LAYER = "auto-tour-requested-labels";
+const REQUESTED_SELECTED_LAYER = "auto-tour-requested-selected";
+const REQUESTED_RADIUS_SEGMENTS = 48;
 
 const POI_ICON_SVGS = {
   "poi-viewpoint": '<path d="M6 36 20 14l8 12 6-8 8 18Z" fill="#fff"/><path d="m13 30 7-11 7 11" fill="none" stroke="#214b3b" stroke-width="3"/>',
   "poi-historic": '<path d="M9 17h6v-5h6v5h6v-5h6v5h6v22H9Z" fill="#fff"/><path d="M18 39V28h12v11M9 21h30" fill="none" stroke="#6d4a2d" stroke-width="3"/>',
   "poi-tower": '<path d="M19 10h10l-2 7 7 22H14l7-22Z" fill="#fff"/><path d="M16 24h16M13 39h22" fill="none" stroke="#3c5268" stroke-width="3"/>',
   "poi-attraction": '<path d="m24 8 4.5 9.3 10.2 1.5-7.4 7.2 1.8 10.2L24 31.4l-9.1 4.8L16.7 26l-7.4-7.2 10.2-1.5Z" fill="#fff" stroke="#7b4d7f" stroke-width="2.5"/>',
-  "poi-water-verified": '<path d="M24 7c-2 6-11 14-11 23a11 11 0 0 0 22 0C35 21 26 13 24 7Z" fill="#fff"/><path d="m18 29 4 4 8-10" fill="none" stroke="#16729a" stroke-width="3.5"/>',
   "poi-water-unknown": '<path d="M24 7c-2 6-11 14-11 23a11 11 0 0 0 22 0C35 21 26 13 24 7Z" fill="#fff"/><path d="M21 24c0-4 7-4 7 0 0 3-4 3-4 6m0 5h.01" fill="none" stroke="#9a6816" stroke-linecap="round" stroke-width="3.5"/>',
   "poi-water-nonpotable": '<path d="M24 7c-2 6-11 14-11 23a11 11 0 0 0 22 0C35 21 26 13 24 7Z" fill="#fff"/><path d="m18 24 12 12m0-12L18 36" fill="none" stroke="#a73535" stroke-linecap="round" stroke-width="3.5"/>',
 };
@@ -33,8 +45,15 @@ let waypointMarkers = [];
 let candidateClickHandler = null;
 let requiredPointActivateHandler = null;
 let poiActivateHandler = null;
+let poiPreferHandler = null;
+let preferredPoiIds = new Set();
 let poiById = new Map();
 let poiPopup = null;
+let requestedPlaceActivateHandler = null;
+let requestedPlaceById = new Map();
+let requestedPlacePopup = null;
+let requestedPlacePopupId = null;
+let requestedRadiusFeatureCount = 0;
 
 export function initializeMap(config, handlers) {
   if (!window.maplibregl) {
@@ -86,6 +105,23 @@ export function initializeMap(config, handlers) {
       requiredPointActivateHandler?.(Number(label.properties.source_index));
       return;
     }
+    const requestedLayers = [
+      REQUESTED_SELECTED_LAYER,
+      REQUESTED_ORDER_LAYER,
+      REQUESTED_PREFERRED_LAYER,
+      REQUESTED_MARKER_LAYER,
+    ].filter((id) => map.getLayer(id));
+    const requested = requestedLayers.length
+      ? map.queryRenderedFeatures(event.point, { layers: requestedLayers })[0]
+      : null;
+    if (requested?.properties?.requested_id) {
+      const feature = requestedPlaceById.get(requested.properties.requested_id);
+      if (feature) {
+        requestedPlaceActivateHandler?.(feature.id);
+        showRequestedPlacePopup(feature);
+      }
+      return;
+    }
     const poiLayers = [POI_SELECTED_MARKER_LAYER, POI_MARKER_LAYER]
       .filter((id) => map.getLayer(id));
     const poi = poiLayers.length
@@ -120,6 +156,12 @@ export function initializeMap(config, handlers) {
   map.on("mousemove", (event) => {
     const interactiveLayers = [
       ...candidateLineLayerIds(),
+      ...[
+        REQUESTED_SELECTED_LAYER,
+        REQUESTED_ORDER_LAYER,
+        REQUESTED_PREFERRED_LAYER,
+        REQUESTED_MARKER_LAYER,
+      ].filter((id) => map.getLayer(id)),
       ...[POI_SELECTED_MARKER_LAYER, POI_MARKER_LAYER, POI_CLUSTER_LAYER]
         .filter((id) => map.getLayer(id)),
       ...[SELECTED_LABEL_LAYER, REQUIRED_LABEL_LAYER].filter((id) => map.getLayer(id)),
@@ -192,7 +234,21 @@ function loadSvgImage(body) {
   });
 }
 
+function loadRasterImage(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = url;
+  });
+}
+
 async function installPoiImages() {
+  if (!map.hasImage("poi-water-verified")) {
+    map.addImage("poi-water-verified", await loadRasterImage(VERIFIED_WATER_PIN_URL), {
+      pixelRatio: 32,
+    });
+  }
   for (const [name, body] of Object.entries(POI_ICON_SVGS)) {
     if (!map.hasImage(name)) {
       map.addImage(name, await loadSvgImage(body), { pixelRatio: 2 });
@@ -260,6 +316,19 @@ function ensurePoiLayers() {
       "circle-opacity": .8,
       "circle-stroke-color": "#d9582b",
       "circle-stroke-width": 4,
+    },
+  });
+  addPoiLayer({
+    id: POI_VISITED_LAYER,
+    type: "circle",
+    source: POI_SOURCE,
+    filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "visited"], true]],
+    paint: {
+      "circle-radius": 20,
+      "circle-color": "#fffdf7",
+      "circle-opacity": .82,
+      "circle-stroke-color": "#d9582b",
+      "circle-stroke-width": 5,
     },
   });
   addPoiLayer({
@@ -332,7 +401,7 @@ function poiIcon(feature) {
   return "poi-historic";
 }
 
-function poiCollection(features, selectedId) {
+function poiCollection(features, selectedId, visitedIds = new Set()) {
   return {
     type: "FeatureCollection",
     features: features.map((feature) => ({
@@ -347,14 +416,15 @@ function poiCollection(features, selectedId) {
         display_name: feature.display_name,
         icon_name: poiIcon(feature),
         selected: feature.id === selectedId,
+        visited: visitedIds.has(feature.id),
       },
     })),
   };
 }
 
-function selectedPoiCollection(features, selectedId) {
+function selectedPoiCollection(features, selectedId, visitedIds) {
   const selected = features.find((feature) => feature.id === selectedId);
-  return poiCollection(selected ? [selected] : [], selectedId);
+  return poiCollection(selected ? [selected] : [], selectedId, visitedIds);
 }
 
 function popupRow(content, label, value, prominent = false) {
@@ -410,6 +480,22 @@ function poiPopupContent(feature) {
     `${Number(feature.coordinate.lat).toFixed(6)}, ${Number(feature.coordinate.lon).toFixed(6)}`,
   );
   popupRow(content, "OSM object", `${feature.osm_type}/${feature.osm_id}`);
+  const scenic = ["viewpoint", "observation_tower", "castle", "archaeological_site", "ruins", "tourism_attraction"].includes(feature.category);
+  const verifiedWater = feature.category === "drinking_water" && feature.potability === "verified";
+  const eligibleAccess = ["public", "restricted"].includes(feature.access_status);
+  if (eligibleAccess && (scenic || verifiedWater) && feature.potability !== "non_potable") {
+    const prefer = document.createElement("button");
+    prefer.type = "button";
+    prefer.className = "button secondary popup-prefer";
+    prefer.textContent = preferredPoiIds.has(feature.id) ? "Preferred in Auto Tour" : "Prefer in Auto Tour";
+    prefer.disabled = preferredPoiIds.has(feature.id);
+    prefer.addEventListener("click", () => {
+      poiPreferHandler?.(feature);
+      prefer.textContent = "Preferred in Auto Tour";
+      prefer.disabled = true;
+    });
+    content.append(prefer);
+  }
   return content;
 }
 
@@ -421,15 +507,422 @@ function showPoiPopup(feature) {
     .addTo(map);
 }
 
-export function renderPois(features, selectedId, onSelect) {
+function backendRequestedPlace(visit) {
+  const place = visit?.requested_place ?? {};
+  return {
+    name: place.name,
+    coordinate: place.coordinate,
+    importance: place.importance,
+    visitRadiusM: place.visit_radius_m,
+    originalIndex: place.original_index,
+  };
+}
+
+export function requestedPlaceFeatureCollection(places, visits = [], selectedId = null) {
+  const visitsById = new Map(visits.map((visit, index) => [
+    requestedPlaceIdentifier(backendRequestedPlace(visit), index),
+    visit,
+  ]));
+  return {
+    type: "FeatureCollection",
+    features: places.map((place, index) => {
+      const id = place.id ?? requestedPlaceIdentifier(place, index);
+      const visit = visitsById.get(id);
+      const status = visit ? (visit.satisfied ? "satisfied" : "missed") : "pending";
+      const originalOrder = Number(place.originalIndex ?? index + 1);
+      const measuredDistance = Number(visit?.measured_distance_m);
+      return {
+        type: "Feature",
+        id,
+        geometry: {
+          type: "Point",
+          coordinates: [place.coordinate.lon, place.coordinate.lat],
+        },
+        properties: {
+          requested_id: id,
+          original_order: originalOrder,
+          name: place.name || `Requested place ${originalOrder}`,
+          longitude: place.coordinate.lon,
+          latitude: place.coordinate.lat,
+          importance: place.importance,
+          visit_radius_m: place.visitRadiusM,
+          status,
+          measured_distance_m: Number.isFinite(measuredDistance)
+            ? measuredDistance
+            : null,
+          visit_reason: visit?.reason ?? null,
+          selected: id === selectedId,
+        },
+      };
+    }),
+  };
+}
+
+function destinationCoordinate(longitude, latitude, distanceM, bearingRadians) {
+  const earthRadiusM = 6371008.8;
+  const angularDistance = distanceM / earthRadiusM;
+  const latitudeRadians = latitude * Math.PI / 180;
+  const longitudeRadians = longitude * Math.PI / 180;
+  const destinationLatitude = Math.asin(
+    Math.sin(latitudeRadians) * Math.cos(angularDistance)
+      + Math.cos(latitudeRadians) * Math.sin(angularDistance) * Math.cos(bearingRadians),
+  );
+  const destinationLongitude = longitudeRadians + Math.atan2(
+    Math.sin(bearingRadians) * Math.sin(angularDistance) * Math.cos(latitudeRadians),
+    Math.cos(angularDistance) - Math.sin(latitudeRadians) * Math.sin(destinationLatitude),
+  );
+  return [
+    destinationLongitude * 180 / Math.PI,
+    destinationLatitude * 180 / Math.PI,
+  ];
+}
+
+export function requestedPlaceRadiusCollection(collection, showMissed = false) {
+  return {
+    type: "FeatureCollection",
+    features: collection.features
+      .filter((feature) => feature.properties.selected
+        || (showMissed && feature.properties.status === "missed"))
+      .map((feature) => {
+        const [longitude, latitude] = feature.geometry.coordinates;
+        const coordinates = Array.from(
+          { length: REQUESTED_RADIUS_SEGMENTS + 1 },
+          (_value, index) => destinationCoordinate(
+            longitude,
+            latitude,
+            feature.properties.visit_radius_m,
+            2 * Math.PI * index / REQUESTED_RADIUS_SEGMENTS,
+          ),
+        );
+        return {
+          type: "Feature",
+          id: feature.id,
+          geometry: { type: "Polygon", coordinates: [coordinates] },
+          properties: {
+            requested_id: feature.id,
+            status: feature.properties.status,
+            visit_radius_m: feature.properties.visit_radius_m,
+          },
+        };
+      }),
+  };
+}
+
+function addRequestedRadiusLayer(layer) {
+  if (!map.getLayer(layer.id)) map.addLayer(layer, firstRouteLayerId());
+}
+
+function addRequestedMarkerLayer(layer) {
+  if (!map.getLayer(layer.id)) map.addLayer(layer);
+}
+
+function ensureRequestedPlaceLayers() {
+  if (!ready || !map) return;
+  if (!map.getSource(REQUESTED_SOURCE)) {
+    map.addSource(REQUESTED_SOURCE, { type: "geojson", data: EMPTY_COLLECTION });
+  }
+  if (!map.getSource(REQUESTED_RADIUS_SOURCE)) {
+    map.addSource(REQUESTED_RADIUS_SOURCE, {
+      type: "geojson",
+      data: EMPTY_COLLECTION,
+    });
+  }
+  const statusColor = [
+    "match", ["get", "status"],
+    "satisfied", "#4f8c61",
+    "missed", "#c94f47",
+    "#fff1c7",
+  ];
+  addRequestedRadiusLayer({
+    id: REQUESTED_RADIUS_FILL_LAYER,
+    type: "fill",
+    source: REQUESTED_RADIUS_SOURCE,
+    paint: {
+      "fill-color": statusColor,
+      "fill-opacity": .13,
+    },
+  });
+  addRequestedRadiusLayer({
+    id: REQUESTED_RADIUS_LINE_LAYER,
+    type: "line",
+    source: REQUESTED_RADIUS_SOURCE,
+    paint: {
+      "line-color": statusColor,
+      "line-width": 2,
+      "line-opacity": .78,
+      "line-dasharray": [2, 1.5],
+    },
+  });
+  addRequestedMarkerLayer({
+    id: REQUESTED_MARKER_LAYER,
+    type: "circle",
+    source: REQUESTED_SOURCE,
+    layout: {
+      "circle-sort-key": ["case", ["get", "selected"], 0, 1],
+    },
+    paint: {
+      "circle-radius": [
+        "case", ["==", ["get", "importance"], "prefer"], 9, 12,
+      ],
+      "circle-color": statusColor,
+      "circle-stroke-color": "#25372f",
+      "circle-stroke-width": 2.5,
+      "circle-opacity": .98,
+    },
+  });
+  addRequestedMarkerLayer({
+    id: REQUESTED_PREFERRED_LAYER,
+    type: "circle",
+    source: REQUESTED_SOURCE,
+    filter: ["==", ["get", "importance"], "prefer"],
+    paint: {
+      "circle-radius": 14,
+      "circle-color": "#fffdf7",
+      "circle-opacity": 0,
+      "circle-stroke-color": "#25372f",
+      "circle-stroke-width": 1.5,
+    },
+  });
+  addRequestedMarkerLayer({
+    id: REQUESTED_SELECTED_LAYER,
+    type: "circle",
+    source: REQUESTED_SOURCE,
+    filter: ["==", ["get", "selected"], true],
+    paint: {
+      "circle-radius": 18,
+      "circle-color": "#fffdf7",
+      "circle-opacity": .34,
+      "circle-stroke-color": "#d9582b",
+      "circle-stroke-width": 3,
+    },
+  });
+  addRequestedMarkerLayer({
+    id: REQUESTED_ORDER_LAYER,
+    type: "symbol",
+    source: REQUESTED_SOURCE,
+    layout: {
+      "text-field": [
+        "concat", "R", ["to-string", ["get", "original_order"]],
+      ],
+      "text-font": ["Open Sans Semibold"],
+      "text-size": 10,
+      "text-allow-overlap": true,
+      "text-ignore-placement": true,
+    },
+    paint: {
+      "text-color": [
+        "match", ["get", "status"],
+        "pending", "#25372f",
+        "#fffef9",
+      ],
+      "text-halo-color": [
+        "match", ["get", "status"],
+        "pending", "#fff1c7",
+        "rgba(0,0,0,0)",
+      ],
+      "text-halo-width": 1,
+    },
+  });
+  addRequestedMarkerLayer({
+    id: REQUESTED_LABEL_LAYER,
+    type: "symbol",
+    source: REQUESTED_SOURCE,
+    minzoom: 12.5,
+    layout: {
+      "text-field": ["get", "name"],
+      "text-font": ["Open Sans Semibold"],
+      "text-size": 11,
+      "text-variable-anchor": ["top", "bottom", "left", "right"],
+      "text-radial-offset": 1.4,
+      "text-max-width": 13,
+      "text-allow-overlap": false,
+      "text-ignore-placement": false,
+      "text-optional": true,
+    },
+    paint: {
+      "text-color": "#26372f",
+      "text-halo-color": "#fffef9",
+      "text-halo-width": 2,
+    },
+  });
+}
+
+function requestedPlaceStatusLabel(status) {
+  if (status === "satisfied") return "Satisfied";
+  if (status === "missed") return "Missed";
+  return "Pending route generation";
+}
+
+function requestedVisitReason(reason) {
+  const values = {
+    already_on_route: "Already on the routed path",
+    deliberately_routed_close_enough: "Deliberately routed close enough",
+    not_reached: "The selected route did not reach this place",
+    snapped_outside_visit_radius: "The routed snap remained outside the visit radius",
+  };
+  return values[reason] ?? null;
+}
+
+function requestedPlacePopupContent(feature) {
+  const properties = feature.properties;
+  const content = document.createElement("div");
+  content.className = "point-popup requested-place-popup";
+  const heading = document.createElement("h3");
+  heading.textContent = properties.name;
+  content.append(heading);
+  const identity = document.createElement("p");
+  identity.textContent = `Requested place ${properties.original_order} · ${properties.importance === "must_visit" ? "Must visit" : "Preferred"}`;
+  content.append(identity);
+  const status = document.createElement("p");
+  status.className = `popup-status requested-status-${properties.status}`;
+  status.textContent = requestedPlaceStatusLabel(properties.status);
+  content.append(status);
+  if (Number.isFinite(properties.measured_distance_m)) {
+    popupRow(
+      content,
+      "Closest route passage",
+      `${Number(properties.measured_distance_m).toFixed(1)} m`,
+    );
+  }
+  popupRow(content, "Required radius", `${Number(properties.visit_radius_m)} m`);
+  popupRow(content, "Visit result", requestedVisitReason(properties.visit_reason));
+  return content;
+}
+
+function showRequestedPlacePopup(feature, reveal = false) {
+  requestedPlacePopup?.remove();
+  requestedPlacePopupId = feature.id;
+  requestedPlacePopup = new window.maplibregl.Popup({
+    offset: 22,
+    closeButton: true,
+    focusAfterOpen: false,
+    maxWidth: "min(300px, calc(100vw - 24px))",
+  })
+    .setLngLat(feature.geometry.coordinates)
+    .setDOMContent(requestedPlacePopupContent(feature))
+    .addTo(map);
+  requestedPlacePopup.on("close", () => {
+    requestedPlacePopup = null;
+    requestedPlacePopupId = null;
+  });
+  if (reveal) {
+    map.easeTo({
+      center: feature.geometry.coordinates,
+      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? 0
+        : 350,
+    });
+  }
+}
+
+function moveRequestedPlaceLayersIntoOrder() {
+  if (!map) return;
+  const routeLayer = firstRouteLayerId();
+  for (const id of [REQUESTED_RADIUS_FILL_LAYER, REQUESTED_RADIUS_LINE_LAYER]) {
+    if (map.getLayer(id) && routeLayer) map.moveLayer(id, routeLayer);
+  }
+  for (const id of [
+    REQUESTED_MARKER_LAYER,
+    REQUESTED_PREFERRED_LAYER,
+    REQUESTED_SELECTED_LAYER,
+    REQUESTED_ORDER_LAYER,
+    REQUESTED_LABEL_LAYER,
+  ]) {
+    if (map.getLayer(id)) map.moveLayer(id);
+  }
+  for (const id of [
+    POI_SELECTED_LAYER,
+    POI_SELECTED_MARKER_LAYER,
+    POI_SELECTED_LABEL_LAYER,
+  ]) {
+    if (map.getLayer(id)) map.moveLayer(id);
+  }
+  moveRequiredLabelsToTop();
+}
+
+export function renderRequestedPlaces(
+  places,
+  visits,
+  selectedId,
+  showMissedRadii,
+  onSelect,
+  revealId = null,
+) {
+  if (!ready || !map) return;
+  ensureRequestedPlaceLayers();
+  const collection = requestedPlaceFeatureCollection(places, visits, selectedId);
+  requestedPlaceById = new Map(collection.features.map((feature) => [
+    feature.id,
+    feature,
+  ]));
+  requestedPlaceActivateHandler = onSelect;
+  map.getSource(REQUESTED_SOURCE).setData(collection);
+  const radii = requestedPlaceRadiusCollection(collection, showMissedRadii);
+  requestedRadiusFeatureCount = radii.features.length;
+  map.getSource(REQUESTED_RADIUS_SOURCE).setData(radii);
+  const selected = selectedId ? requestedPlaceById.get(selectedId) : null;
+  if (!selected) {
+    requestedPlacePopup?.remove();
+    requestedPlacePopup = null;
+    requestedPlacePopupId = null;
+  } else if (requestedPlacePopup && requestedPlacePopupId === selected.id) {
+    requestedPlacePopup
+      .setLngLat(selected.geometry.coordinates)
+      .setDOMContent(requestedPlacePopupContent(selected));
+  }
+  const reveal = revealId ? requestedPlaceById.get(revealId) : null;
+  if (reveal) showRequestedPlacePopup(reveal, true);
+  moveRequestedPlaceLayersIntoOrder();
+}
+
+export function requestedPlaceMapDiagnostics() {
+  const features = [...requestedPlaceById.values()];
+  const statuses = { pending: 0, satisfied: 0, missed: 0 };
+  for (const feature of features) statuses[feature.properties.status] += 1;
+  const requestedLayerIds = [
+    REQUESTED_RADIUS_FILL_LAYER,
+    REQUESTED_RADIUS_LINE_LAYER,
+    REQUESTED_MARKER_LAYER,
+    REQUESTED_PREFERRED_LAYER,
+    REQUESTED_SELECTED_LAYER,
+    REQUESTED_ORDER_LAYER,
+    REQUESTED_LABEL_LAYER,
+  ];
+  const styleLayerIds = (map?.getStyle()?.layers ?? []).map((layer) => layer.id);
+  const visible = ready && map?.getLayer(REQUESTED_MARKER_LAYER)
+    ? map.queryRenderedFeatures(undefined, { layers: [REQUESTED_MARKER_LAYER] })
+    : [];
+  return {
+    sourceExists: Boolean(map?.getSource(REQUESTED_SOURCE)),
+    radiusSourceExists: Boolean(map?.getSource(REQUESTED_RADIUS_SOURCE)),
+    featureCount: features.length,
+    visibleFeatureCount: new Set(
+      visible.map((feature) => feature.properties?.requested_id),
+    ).size,
+    radiusFeatureCount: requestedRadiusFeatureCount,
+    statuses,
+    duplicateLayerCount: requestedLayerIds.reduce(
+      (count, id) => count + Math.max(
+        0,
+        styleLayerIds.filter((layerId) => layerId === id).length - 1,
+      ),
+      0,
+    ),
+  };
+}
+
+export function renderPois(features, selectedId, onSelect, options = {}) {
   if (!ready || !map) return;
   ensurePoiLayers();
   poiById = new Map(features.map((feature) => [feature.id, feature]));
   poiActivateHandler = onSelect;
+  poiPreferHandler = options.onPrefer ?? null;
+  preferredPoiIds = new Set(options.preferredIds ?? []);
+  const visitedIds = new Set(options.visitedIds ?? []);
   map.getSource(POI_SOURCE).setData(
-    poiCollection(features.filter((feature) => feature.id !== selectedId), null),
+    poiCollection(features.filter((feature) => feature.id !== selectedId), null, visitedIds),
   );
-  map.getSource(POI_SELECTED_SOURCE).setData(selectedPoiCollection(features, selectedId));
+  map.getSource(POI_SELECTED_SOURCE).setData(selectedPoiCollection(features, selectedId, visitedIds));
   if (selectedId === null || !poiById.has(selectedId)) {
     poiPopup?.remove();
     poiPopup = null;

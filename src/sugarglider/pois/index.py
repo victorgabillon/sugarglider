@@ -4,6 +4,7 @@ import gzip
 import json
 import unicodedata
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -26,10 +27,19 @@ from sugarglider.pois.models import (
 SUPPORTED_FORMAT_VERSION = 1
 
 
+@dataclass(frozen=True)
+class PoiRouteMatch:
+    """One exact projected point-to-route corridor match."""
+
+    feature: PoiFeature
+    distance_m: float
+    route_progress_share: float
+
+
 class PoiIndex:
     """Immutable POI models and one reusable STRtree over projected points."""
 
-    __slots__ = ("_features", "_metadata", "_projection", "_tree")
+    __slots__ = ("_by_id", "_features", "_metadata", "_projection", "_tree")
 
     def __init__(self, document: PoiIndexDocument) -> None:
         metadata = document.metadata
@@ -54,6 +64,7 @@ class PoiIndex:
 
         self._metadata = metadata
         self._features = document.features
+        self._by_id = {feature.id: feature for feature in self._features}
         self._projection = projection
         self._tree = STRtree(
             tuple(
@@ -78,6 +89,67 @@ class PoiIndex:
         """Return only STRtree candidates, in stable source-index order."""
         raw: object = self._tree.query(geometry)
         return tuple(sorted(cast(Iterable[int], raw)))
+
+    def get_feature(self, poi_id: str) -> PoiFeature | None:
+        """Return one stable feature without scanning the regional tuple."""
+        return self._by_id.get(poi_id)
+
+    def query_near_route(
+        self,
+        route_geometry: tuple[tuple[float, float], ...],
+        radius_m: float,
+        *,
+        groups: tuple[str, ...] = ("scenic", "hydration"),
+        include_broad_attractions: bool = False,
+        limit: int = 500,
+    ) -> tuple[PoiRouteMatch, ...]:
+        """Query the STRtree envelope, then measure only exact corridor candidates."""
+        if radius_m < 0:
+            raise ValueError("POI route corridor radius must be non-negative")
+        if limit < 1:
+            raise ValueError("POI route corridor limit must be positive")
+        if len(route_geometry) < 2:
+            raise ValueError("POI route corridor requires a line")
+        line = self._projection.project_line(route_geometry)
+        if line.is_empty or not line.is_valid or line.length <= 0:
+            raise ValueError("POI route corridor requires a valid non-empty line")
+        envelope = line.buffer(radius_m).envelope
+        matches: list[PoiRouteMatch] = []
+        for index in self.query_indices(envelope):
+            feature = self._features[index]
+            if feature.group not in groups:
+                continue
+            if (
+                feature.access_status == "private"
+                or feature.potability == "non_potable"
+            ):
+                continue
+            if feature.group == "hydration" and feature.potability != "verified":
+                continue
+            if (
+                feature.category == "tourism_attraction"
+                and not include_broad_attractions
+            ):
+                continue
+            point = Point(
+                self._projection.project_position(
+                    (feature.coordinate.lon, feature.coordinate.lat)
+                )
+            )
+            distance = float(line.distance(point))
+            if distance > radius_m:
+                continue
+            progress = float(line.project(point) / line.length)
+            matches.append(PoiRouteMatch(feature, distance, progress))
+        matches.sort(
+            key=lambda match: (
+                match.route_progress_share,
+                match.feature.category,
+                unicodedata.normalize("NFKC", match.feature.display_name).casefold(),
+                match.feature.id,
+            )
+        )
+        return tuple(matches[:limit])
 
     def search(self, request: PoiSearchRequest, *, limit: int) -> PoiSearchResponse:
         """Filter the spatial candidates without scanning the regional feature set."""

@@ -63,6 +63,9 @@ def _with_geometry(
         sector_count=8,
         sector_distance_shares=(0.125,) * 8,
         sector_balance=sector_balance,
+        maximum_sector_distance_share=0.125,
+        occupied_sector_count=8,
+        angular_monotonicity=1,
         mean_radius_m=1,
         max_radius_m=1,
         elongation=elongation,
@@ -71,6 +74,7 @@ def _with_geometry(
             distance_m=route.summary.distance_m * near_parallel_share,
             share=near_parallel_share,
         ),
+        outbound_return_proximity=DistanceMetric(distance_m=0, share=0),
         penalty_breakdown=breakdown,
         warnings=(),
     )

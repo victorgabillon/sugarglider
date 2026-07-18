@@ -3,16 +3,21 @@
 import logging
 from collections.abc import Mapping, Sequence
 from hashlib import sha256
-from typing import cast
+from math import isfinite
+from typing import Any, cast
 
 import httpx
+from shapely import make_valid
+from shapely.geometry import GeometryCollection, MultiPolygon, Polygon, shape
+from shapely.geometry.base import BaseGeometry
+from shapely.ops import unary_union
 
 from sugarglider.domain.models import (
     Coordinate,
     GeoJsonPosition,
     PathDetailSegment,
 )
-from sugarglider.routing.backend import RoutedPath
+from sugarglider.routing.backend import IsochronePolygon, IsochroneResult, RoutedPath
 from sugarglider.routing.errors import (
     RoutingError,
     RoutingPointError,
@@ -34,6 +39,7 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 type JsonObject = dict[str, object]
+type QueryValue = str | int | float | bool
 
 BUILTIN_DETAILS = ("edge_id",)
 OPTIONAL_DETAILS = (
@@ -163,8 +169,17 @@ class GraphHopperClient:
         distance_m: float,
         seed: int,
         profile: str = "hike",
+        *,
+        heading_degrees: float | None = None,
     ) -> RoutedPath:
         """Ask the local GraphHopper instance for one graph-valid proposal loop."""
+        if not isfinite(distance_m) or distance_m <= 0:
+            raise ValueError("round-trip distance must be finite and positive")
+        if heading_degrees is not None and (
+            not isfinite(heading_degrees) or not 0 <= heading_degrees < 360
+        ):
+            raise ValueError("round-trip heading must be within [0, 360)")
+        requested_details = list(await self._details_for_route())
         payload: JsonObject = {
             "points": [[start.lon, start.lat]],
             "profile": profile,
@@ -175,9 +190,39 @@ class GraphHopperClient:
             "instructions": False,
             "calc_points": True,
             "elevation": False,
+            "details": requested_details,
         }
-        response = await self._request("POST", "/route", json=payload)
+        if heading_degrees is not None:
+            payload["headings"] = [heading_degrees]
+        response = await self._request_with_detail_fallback(payload, requested_details)
         return self._parse_route(response, expected_snapped_point_count=None)
+
+    async def isochrone(
+        self,
+        start: Coordinate,
+        profile: str,
+        *,
+        distance_limit_m: float,
+        buckets: int = 1,
+        reverse_flow: bool = False,
+    ) -> IsochroneResult:
+        """Return one validated local reachable envelope from ``/isochrone``."""
+        if not isfinite(distance_limit_m) or distance_limit_m <= 0:
+            raise ValueError("isochrone distance limit must be finite and positive")
+        if buckets < 1:
+            raise ValueError("isochrone buckets must be positive")
+        response = await self._request(
+            "GET",
+            "/isochrone",
+            params={
+                "point": f"{start.lat},{start.lon}",
+                "profile": profile,
+                "distance_limit": distance_limit_m,
+                "buckets": buckets,
+                "reverse_flow": str(reverse_flow).lower(),
+            },
+        )
+        return self._parse_isochrone(response)
 
     async def _details_for_route(self) -> tuple[str, ...]:
         if self._supported_details is not None:
@@ -239,7 +284,12 @@ class GraphHopperClient:
         )
 
     async def _request(
-        self, method: str, path: str, *, json: JsonObject | None = None
+        self,
+        method: str,
+        path: str,
+        *,
+        json: JsonObject | None = None,
+        params: Mapping[str, QueryValue] | None = None,
     ) -> httpx.Response:
         try:
             if self._client is not None:
@@ -247,6 +297,7 @@ class GraphHopperClient:
                     method,
                     f"{self._base_url}{path}",
                     json=json,
+                    params=params,
                     timeout=self._timeout,
                 )
             else:
@@ -255,6 +306,7 @@ class GraphHopperClient:
                         method,
                         f"{self._base_url}{path}",
                         json=json,
+                        params=params,
                         timeout=self._timeout,
                     )
         except httpx.TimeoutException as exc:
@@ -276,6 +328,139 @@ class GraphHopperClient:
         if response.status_code in {502, 503}:
             raise RoutingUnavailableError("GraphHopper is unavailable")
         raise RoutingUpstreamError("GraphHopper returned an unexpected HTTP status")
+
+    def _parse_isochrone(self, response: httpx.Response) -> IsochroneResult:
+        """Parse Polygon/MultiPolygon GeoJSON, repairing only invalid polygons."""
+        payload = self._json_object(response)
+        geometry_values = self._isochrone_geometry_values(payload)
+        geometries: list[BaseGeometry] = []
+        repaired = False
+        for value in geometry_values:
+            try:
+                geometry = shape(cast(dict[str, Any], dict(value)))
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise RoutingUpstreamError(
+                    "GraphHopper isochrone geometry was malformed"
+                ) from exc
+            if geometry.is_empty or not isinstance(geometry, (Polygon, MultiPolygon)):
+                raise RoutingUpstreamError(
+                    "GraphHopper isochrone was not non-empty polygonal geometry"
+                )
+            self._validate_wgs84_polygonal(geometry)
+            if not geometry.is_valid:
+                # ``make_valid`` is deliberately the only repair path. Polygonal
+                # components are retained; arbitrary linework is never promoted.
+                repaired_geometry = make_valid(geometry)
+                repaired = True
+                polygonal_repair = self._polygonal_components(repaired_geometry)
+                if (
+                    polygonal_repair is None
+                    or polygonal_repair.is_empty
+                    or not polygonal_repair.is_valid
+                ):
+                    raise RoutingUpstreamError(
+                        "GraphHopper isochrone geometry could not be repaired"
+                    )
+                geometry = polygonal_repair
+            geometries.append(geometry)
+        combined = unary_union(geometries)
+        polygonal = self._polygonal_components(combined)
+        if polygonal is None or polygonal.is_empty or not polygonal.is_valid:
+            raise RoutingUpstreamError(
+                "GraphHopper isochrone did not contain valid polygonal geometry"
+            )
+        self._validate_wgs84_polygonal(polygonal)
+        polygons = (polygonal,) if isinstance(polygonal, Polygon) else polygonal.geoms
+        return IsochroneResult(
+            polygons=tuple(
+                IsochronePolygon(
+                    exterior=tuple(
+                        (float(lon), float(lat))
+                        for lon, lat, *_rest in polygon.exterior.coords
+                    ),
+                    holes=tuple(
+                        tuple(
+                            (float(lon), float(lat)) for lon, lat, *_rest in ring.coords
+                        )
+                        for ring in polygon.interiors
+                    ),
+                )
+                for polygon in polygons
+            ),
+            geometry_was_repaired=repaired,
+        )
+
+    @staticmethod
+    def _isochrone_geometry_values(
+        payload: JsonObject,
+    ) -> tuple[Mapping[str, object], ...]:
+        candidates: object
+        if payload.get("type") == "FeatureCollection":
+            candidates = payload.get("features")
+        elif "polygons" in payload:
+            candidates = payload.get("polygons")
+        else:
+            candidates = [payload]
+        if not isinstance(candidates, list) or not candidates:
+            raise RoutingUpstreamError("GraphHopper isochrone contained no polygons")
+        values: list[Mapping[str, object]] = []
+        for candidate in candidates:
+            if not isinstance(candidate, Mapping):
+                raise RoutingUpstreamError(
+                    "GraphHopper isochrone feature was malformed"
+                )
+            geometry = (
+                candidate.get("geometry")
+                if candidate.get("type") == "Feature"
+                else candidate
+            )
+            if not isinstance(geometry, Mapping):
+                raise RoutingUpstreamError(
+                    "GraphHopper isochrone geometry was malformed"
+                )
+            values.append(cast(Mapping[str, object], geometry))
+        return tuple(values)
+
+    @staticmethod
+    def _polygonal_components(
+        geometry: BaseGeometry,
+    ) -> Polygon | MultiPolygon | None:
+        if isinstance(geometry, (Polygon, MultiPolygon)):
+            return geometry
+        if isinstance(geometry, GeometryCollection):
+            polygons: list[Polygon] = []
+            for component in geometry.geoms:
+                if isinstance(component, Polygon):
+                    polygons.append(component)
+                elif isinstance(component, MultiPolygon):
+                    polygons.extend(component.geoms)
+            if not polygons:
+                return None
+            combined = unary_union(polygons)
+            return combined if isinstance(combined, (Polygon, MultiPolygon)) else None
+        return None
+
+    @staticmethod
+    def _validate_wgs84_polygonal(geometry: Polygon | MultiPolygon) -> None:
+        polygons = (geometry,) if isinstance(geometry, Polygon) else geometry.geoms
+        for polygon in polygons:
+            rings = (polygon.exterior, *polygon.interiors)
+            for ring in rings:
+                for coordinate in ring.coords:
+                    if len(coordinate) < 2:
+                        raise RoutingUpstreamError(
+                            "GraphHopper isochrone coordinate was malformed"
+                        )
+                    lon, lat = float(coordinate[0]), float(coordinate[1])
+                    if not (
+                        isfinite(lon)
+                        and isfinite(lat)
+                        and -180 <= lon <= 180
+                        and -90 <= lat <= 90
+                    ):
+                        raise RoutingUpstreamError(
+                            "GraphHopper isochrone coordinate was out of bounds"
+                        )
 
     def _parse_route(
         self,

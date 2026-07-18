@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from sugarglider.analysis.route import RouteAnalysisError
 from sugarglider.analysis.visualization import build_route_visualization
 from sugarglider.api.dependencies import (
+    AutoTourServiceDependency,
     GenerationServiceDependency,
     RouteServiceDependency,
 )
@@ -32,6 +33,7 @@ from sugarglider.pois.models import (
     PoiSearchResponse,
 )
 from sugarglider.routing.graphhopper import RoutingError, RoutingUnavailableError
+from sugarglider.tours.models import AutoTourRequest, AutoTourResult
 from sugarglider.web.models import RouteVisualization
 
 router = APIRouter()
@@ -138,6 +140,15 @@ async def generate_route(
     service: GenerationServiceDependency,
 ) -> RouteGenerationResult:
     """Return a baseline and ranked target-distance candidates."""
+    return await service.generate(request)
+
+
+@router.post("/v1/tours/generate", response_model=AutoTourResult)
+async def generate_auto_tour(
+    request: Annotated[AutoTourRequest, Body()],
+    service: AutoTourServiceDependency,
+) -> AutoTourResult:
+    """Build a skeleton-first loop and conservatively collect nearby POIs."""
     return await service.generate(request)
 
 

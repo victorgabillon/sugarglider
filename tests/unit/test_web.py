@@ -43,6 +43,7 @@ BRAND_ASSET_FILENAMES = (
     "sugarglider-compact-icon.png",
     "sugarglider-flying-map.png",
     "sugarglider-map-pin.png",
+    "sugarglider-water-pin.png",
 )
 FONT_GLYPH_HASHES: dict[str, str] = {
     "0-255.pbf": "64da7011e07531351a249a3d26aad76e2f22e4e321e50833f742697b453e8365",
@@ -174,6 +175,10 @@ def test_brand_asset_manifest_is_exact_and_byte_identical() -> None:
         1024,
         1536,
     )
+    assert _png_dimensions(CANONICAL_BRAND_DIRECTORY / "sugarglider-water-pin.png") == (
+        1024,
+        1536,
+    )
 
 
 def test_brand_asset_sync_is_independent_of_current_working_directory(
@@ -300,6 +305,11 @@ async def test_ui_config_uses_injected_map_settings(
         "poi_index_available": False,
         "poi_default_limit": 500,
         "poi_max_limit": 1000,
+        "default_planning_mode": "auto_tour",
+        "auto_tour_max_hard_points": 6,
+        "auto_tour_max_preferred_pois": 8,
+        "auto_tour_scenic_corridor_radius_m": 600.0,
+        "auto_tour_water_corridor_radius_m": 350.0,
     }
 
 
@@ -549,7 +559,7 @@ def test_frontend_exposes_loop_geometry_request_metrics_and_nulls() -> None:
     formatting = (STATIC_DIRECTORY / "format.js").read_text(encoding="utf-8")
     assert 'id="loop-geometry-preference"' in html
     assert "Prefer balanced loops" in html
-    assert "Distance, backtracking and repetition remain more important" in html
+    assert "outbound/return" in app.lower()
     assert 'loopGeometryPreference: "off"' in state
     assert "loop_geometry_preference: state.options.loopGeometryPreference" in state
     assert 'value.loop_geometry_preference ?? "off"' in app
@@ -650,6 +660,142 @@ def test_frontend_places_are_bounded_safe_and_separate_from_routing_state() -> N
     assert 'id="loop-geometry-preference"' in html
     assert 'id="show-nature"' in html
     assert 'id="show-all"' in html
+
+
+def test_frontend_auto_tour_is_default_and_preserves_waypoint_mode() -> None:
+    html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
+    app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
+    api = (STATIC_DIRECTORY / "api.js").read_text(encoding="utf-8")
+    state_code = (STATIC_DIRECTORY / "state.js").read_text(encoding="utf-8")
+    map_code = (STATIC_DIRECTORY / "map.js").read_text(encoding="utf-8")
+
+    assert 'planningMode: "auto_tour"' in state_code
+    assert 'value="auto_tour" checked' in html
+    assert 'value="waypoint_route"' in html
+    assert 'fetch("/v1/tours/generate"' in api
+    assert "currentAutoTourRequest" in app
+    assert "preferred_poi_ids" in state_code
+    assert "direction_preference" in state_code
+    assert "scenic_preference" in state_code
+    assert "drinking_water_preference" in state_code
+    assert "requested_places" in state_code
+    assert 'distancePriority: "flexible"' in state_code
+    assert 'id="distance-priority"' in html
+    assert 'id="requested-places"' in html
+    assert 'if (state.planningMode === "auto_tour")' in app
+    assert "state.autoTour.requestedPlaces = requested.map" in app
+    assert 'switchPlanningMode("waypoint_route")' not in app
+    assert "Prefer in Auto Tour" in map_code
+    assert "Require exact visit" not in html + app + map_code
+    assert (
+        'const VERIFIED_WATER_PIN_URL = "/static/brand/sugarglider-water-pin.png"'
+        in map_code
+    )
+    assert 'map.addImage("poi-water-verified"' in map_code
+    assert '"poi-water-unknown"' in map_code
+    assert '"poi-water-nonpotable"' in map_code
+    assert "selectedPoiId: null" in state_code
+    assert "selectedPointIndex: null" in state_code
+    assert "function selectPoi" in app
+    assert (
+        "state.points"
+        not in app[
+            app.index("function selectPoi") : app.index(
+                "function selectedVisitedPoiIds"
+            )
+        ]
+    )
+
+
+def test_requested_places_have_an_independent_safe_map_lifecycle() -> None:
+    html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
+    app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
+    map_code = (STATIC_DIRECTORY / "map.js").read_text(encoding="utf-8")
+    state_code = (STATIC_DIRECTORY / "state.js").read_text(encoding="utf-8")
+    styles = (STATIC_DIRECTORY / "styles.css").read_text(encoding="utf-8")
+
+    assert 'const REQUESTED_SOURCE = "auto-tour-requested-places"' in map_code
+    assert (
+        'const REQUESTED_RADIUS_SOURCE = "auto-tour-requested-place-radii"' in map_code
+    )
+    assert "requestedPlaceFeatureCollection" in map_code
+    for property_name in (
+        "requested_id",
+        "original_order",
+        "name",
+        "longitude",
+        "latitude",
+        "importance",
+        "visit_radius_m",
+        "status",
+        "measured_distance_m",
+        "visit_reason",
+    ):
+        assert property_name in map_code
+    assert 'visit.satisfied ? "satisfied" : "missed"' in map_code
+    assert '"pending"' in map_code
+    assert "requestedPlaceIdentifier(backendRequestedPlace(visit), index)" in map_code
+    assert "requestedPlaceIdentifier(place, index)" in app
+    assert "selectedRequestedPlaceId: null" in state_code
+    assert "pendingRequestedPlacePopupId: null" in state_code
+
+    requested_layers = map_code[
+        map_code.index("function ensureRequestedPlaceLayers") : map_code.index(
+            "function requestedPlaceStatusLabel"
+        )
+    ]
+    assert 'type: "circle"' in requested_layers
+    assert 'type: "symbol"' in requested_layers
+    assert '"text-allow-overlap": false' in requested_layers
+    assert '"circle-opacity": .98' in requested_layers
+    assert '"satisfied", "#4f8c61"' in requested_layers
+    assert '"missed", "#c94f47"' in requested_layers
+    assert '"#fff1c7"' in requested_layers
+    assert "REQUESTED_PREFERRED_LAYER" in requested_layers
+    assert "poi-water-verified" not in requested_layers
+    assert "map.getSource(REQUESTED_SOURCE)" in map_code
+    assert "map.getLayer(layer.id)" in map_code
+
+    assert "requestedPlaceRadiusCollection" in map_code
+    assert "REQUESTED_RADIUS_SEGMENTS = 48" in map_code
+    assert "feature.properties.visit_radius_m" in map_code
+    assert "showMissed && feature.properties.status" in map_code
+    assert 'id="show-missed-requested-radii"' in html
+    assert "showMissedRequestedRadii: false" in state_code
+
+    popup = map_code[
+        map_code.index("function requestedPlacePopupContent") : map_code.index(
+            "function showRequestedPlacePopup"
+        )
+    ]
+    assert "document.createElement" in popup
+    assert "textContent" in popup
+    assert "innerHTML" not in popup
+    assert "setHTML" not in popup
+    assert "Closest route passage" in popup
+    assert "Required radius" in popup
+
+    assert "candidate?.requested_place_visits ?? []" in app
+    assert "renderRequestedPlaceMarkers(" in app
+    assert "state.pendingRequestedPlacePopupId = null" in app
+    assert "state.selectedRequestedPlaceId = null" in app
+    assert "requested-place-row" in app
+    assert 'item.setAttribute("role", "button")' in app
+    assert "scrollRequestedPlaceIntoView" in app
+    assert "fitCoordinates(imported.points.map" in app
+    assert 'switchPlanningMode("waypoint_route")' not in app
+
+    for legend_class in (
+        "requested-pending",
+        "requested-satisfied",
+        "requested-missed",
+        "mascot-water",
+    ):
+        assert legend_class in html
+        assert legend_class in styles
+    assert "Your plan" in html
+    assert "Mapped OSM discovery" in html
+    assert "max-width: calc(100vw - 24px)" in styles
 
 
 def test_frontend_uses_local_brand_identity_and_accessible_landmarks() -> None:

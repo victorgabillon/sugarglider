@@ -18,6 +18,7 @@ from sugarglider.routing.graphhopper import (
     RoutingUnavailableError,
     RoutingUpstreamError,
 )
+from sugarglider.tours.service import AutoTourNoCandidateError
 
 
 class RouteVisualizationError(ValueError):
@@ -32,6 +33,11 @@ class PublicError:
 
 
 ERRORS: dict[type[Exception], PublicError] = {
+    AutoTourNoCandidateError: PublicError(
+        422,
+        "auto_tour_no_candidate",
+        "No graph-valid Auto Tour control candidate was found.",
+    ),
     PoiSearchLimitError: PublicError(
         422,
         "poi_limit_exceeded",

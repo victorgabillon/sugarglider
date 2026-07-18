@@ -6,6 +6,7 @@ from fastapi import Depends, Request
 
 from sugarglider.generation.service import RouteGenerationService
 from sugarglider.routing.service import RouteService
+from sugarglider.tours.service import AutoTourService
 
 
 def get_route_service(request: Request) -> RouteService:
@@ -26,3 +27,12 @@ def get_generation_service(request: Request) -> RouteGenerationService:
 GenerationServiceDependency = Annotated[
     RouteGenerationService, Depends(get_generation_service)
 ]
+
+
+def get_auto_tour_service(request: Request) -> AutoTourService:
+    """Return the application-scoped skeleton-first tour service."""
+    service: AutoTourService = request.app.state.auto_tour_service
+    return service
+
+
+AutoTourServiceDependency = Annotated[AutoTourService, Depends(get_auto_tour_service)]
