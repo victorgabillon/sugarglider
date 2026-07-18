@@ -8,6 +8,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from sugarglider.analysis.loop_geometry import LoopGeometryRouteAnalyzer
 from sugarglider.analysis.route import RouteAnalyzer
 from sugarglider.api.errors import install_error_handlers
 from sugarglider.api.routes import router
@@ -65,6 +66,7 @@ def create_app(
             nature_index_available=nature_status.available,
             nature_water_buffer_m=runtime_settings.nature_water_buffer_m,
             nature_preference_values=("off", "prefer"),
+            loop_geometry_preference_values=("off", "prefer"),
         )
         app.state.ui_config = ui_config
         app.state.nature_index = nature_index
@@ -83,7 +85,10 @@ def create_app(
                 client,
             )
             result_factory = RouteResultFactory(
-                RouteAnalyzer(nature_analyzer=nature_analyzer)
+                RouteAnalyzer(
+                    nature_analyzer=nature_analyzer,
+                    loop_geometry_analyzer=LoopGeometryRouteAnalyzer(),
+                )
             )
             structural_result_factory = RouteResultFactory(RouteAnalyzer())
             app.state.route_service = RouteService(backend, result_factory)

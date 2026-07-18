@@ -10,9 +10,11 @@ GenerationStatus = Literal["within_tolerance", "best_effort", "infeasible"]
 PointOrderMode = Literal["fixed", "optimize_loop"]
 PathSelectionMode = Literal["shortest", "low_overlap"]
 NaturePreference = Literal["off", "prefer"]
+LoopGeometryPreference = Literal["off", "prefer"]
 CandidateConstruction = Literal[
     "direct_order",
     "round_trip_detour",
+    "sector_balanced_detour",
     "alternative_leg_beam",
 ]
 NonNegativeFloat = Annotated[float, Field(ge=0)]
@@ -34,6 +36,7 @@ class RouteGenerationRequest(ImmutableModel):
     point_order_mode: PointOrderMode = "fixed"
     path_selection_mode: PathSelectionMode = "shortest"
     nature_preference: NaturePreference = "off"
+    loop_geometry_preference: LoopGeometryPreference = "off"
     _required_point_count: int = PrivateAttr()
     _supplied_points: tuple[Coordinate, ...] = PrivateAttr()
 
@@ -142,6 +145,15 @@ class SearchSummary(ImmutableModel):
     nature_index_feature_count: NonNegativeInt | None
     recommended_nature_score: Annotated[float, Field(ge=0, le=100)] | None
     best_available_nature_score: Annotated[float, Field(ge=0, le=100)] | None
+    loop_geometry_requested: bool = False
+    recommended_loop_geometry_penalty: NonNegativeFloat | None = None
+    best_available_loop_geometry_penalty: NonNegativeFloat | None = None
+    derived_proposal_sequence_count: NonNegativeInt = 0
+    base_search_budget: NonNegativeInt = 0
+    loop_geometry_extra_evaluation_budget: NonNegativeInt = 0
+    loop_geometry_extra_evaluated_count: NonNegativeInt = 0
+    loop_geometry_extra_successful_count: NonNegativeInt = 0
+    loop_geometry_extra_rejected_count: NonNegativeInt = 0
     search_budget: Annotated[int, Field(ge=1)]
     search_budget_exhausted: bool
     seed: int

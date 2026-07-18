@@ -74,6 +74,8 @@
             </div>
             <label>Mandatory-point order<select id="point-order-mode"><option value="fixed">Fixed input order</option><option value="optimize_loop">Optimize loop</option></select></label>
             <label>Path selection<select id="path-selection-mode"><option value="shortest">Natural shortest paths</option><option value="low_overlap">Low-overlap alternatives</option></select></label>
+            <label>Loop shape<select id="loop-geometry-preference"><option value="off">Off</option><option value="prefer">Prefer balanced loops</option></select></label>
+            <p class="field-help">Prefers compact, directionally balanced loops with fewer close parallel corridors. Distance, backtracking and repetition remain more important.</p>
             <label>Nature preference<select id="nature-preference"><option value="off">Off</option><option value="prefer">Prefer mapped nature</option></select></label>
             <p id="nature-availability" class="field-help" role="status"></p>
             <input id="seed" type="hidden" value="0">

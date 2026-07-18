@@ -10,6 +10,7 @@ export const state = {
     pointOrderMode: "fixed",
     pathSelectionMode: "shortest",
     naturePreference: "off",
+    loopGeometryPreference: "off",
   },
   generationResult: null,
   selectedSignature: null,
@@ -58,5 +59,6 @@ export function currentRequest() {
     point_order_mode: state.options.pointOrderMode,
     path_selection_mode: state.options.pathSelectionMode,
     nature_preference: state.options.naturePreference,
+    loop_geometry_preference: state.options.loopGeometryPreference,
   };
 }

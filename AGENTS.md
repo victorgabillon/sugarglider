@@ -56,6 +56,22 @@
   validity, and PR5's repetition/backtracking promotion gate remains authoritative.
 - Nature indexes are generated data and must never be committed. GPX output remains
   free of nature-analysis extensions.
+- Loop geometry must use the shared local metric projection and normalized routed
+  edges; GraphHopper distance remains authoritative for shares and compactness.
+- Loop-geometry metrics and penalties must remain explainable and separate from
+  PR3 `CandidateScore.total`; missing analysis remains visibly unknown.
+- Loop-geometry preference defaults off and must preserve PR8 proposal ordering,
+  GraphHopper accounting, route-evaluation counts, signatures, and recommendation.
+- Prefer must complete that exact legacy control lane under the unchanged base
+  budget before using its separate bounded geometry-exploration allowance.
+- Balanced optional points must be sampled only from one GraphHopper round-trip
+  proposal geometry cached by the control lane. Never add a proposal call for the
+  balanced lane; account its derived sequences and complete evaluations separately.
+- Temporary low-overlap beam states must never run Shapely loop-geometry or nature
+  analysis. Only complete routed candidates may receive those enrichments.
+- Loop geometry ranks below tolerance, outside-distance pressure, immediate
+  backtracking, and repetition; it ranks before nature and cannot bypass the PR5
+  natural-improvement gate.
 - `assets/brand` is the canonical editable artwork source. Runtime files under
   `src/sugarglider/web/static/brand` must remain byte-identical synchronized copies.
 - Never recolor, rotate, stretch, tightly crop, or hand-edit divergent copies of

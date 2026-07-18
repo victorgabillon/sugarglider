@@ -12,6 +12,7 @@ from shapely import STRtree, is_empty, is_valid
 from shapely.geometry import MultiPolygon, Polygon, box
 from shapely.geometry.base import BaseGeometry
 
+from sugarglider.analysis.projection import LocalMetricProjection
 from sugarglider.nature.classification import PrimaryNatureClass
 from sugarglider.nature.errors import (
     NatureIndexFormatError,
@@ -25,10 +26,7 @@ from sugarglider.nature.models import (
     NatureIndexStatus,
     PolygonGeometry,
 )
-from sugarglider.nature.projection import (
-    LocalMetricProjection,
-    validate_regional_latitude_span,
-)
+from sugarglider.nature.projection import validate_regional_latitude_span
 
 SUPPORTED_FORMAT_VERSION = 1
 

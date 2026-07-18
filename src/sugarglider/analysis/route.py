@@ -12,18 +12,18 @@ from sugarglider.analysis.backtracking import (
     DirectedEdgeTraversal,
     measure_immediate_backtracking,
 )
+from sugarglider.analysis.projection import EARTH_RADIUS_M
 from sugarglider.domain.analysis import (
     DetailBreakdown,
     DetailBucket,
     DetailValue,
     DistanceMetric,
+    LoopGeometryAnalysis,
     NatureAnalysis,
     RepetitionAnalysis,
     RouteAnalysis,
 )
 from sugarglider.domain.models import GeoJsonPosition, PathDetailSegment
-
-EARTH_RADIUS_M = 6_371_008.8
 
 # GraphHopper enum values are matched case-insensitively while raw breakdown values
 # remain untouched for debugging and forward compatibility.
@@ -74,6 +74,16 @@ class NatureAnalyzer(Protocol):
     ) -> NatureAnalysis: ...
 
 
+class LoopGeometryAnalyzer(Protocol):
+    """Optional structural interface over complete normalized route geometry."""
+
+    def analyze_route(
+        self,
+        edges: tuple["ProjectedGeometryEdge", ...],
+        route_distance_m: float,
+    ) -> LoopGeometryAnalysis: ...
+
+
 @dataclass(frozen=True)
 class ProjectedGeometryEdge:
     from_index: int
@@ -114,8 +124,13 @@ def haversine_distance_m(start: GeoJsonPosition, end: GeoJsonPosition) -> float:
 class RouteAnalyzer:
     """Build deterministic analysis from geometry, distance, and typed details."""
 
-    def __init__(self, nature_analyzer: NatureAnalyzer | None = None) -> None:
+    def __init__(
+        self,
+        nature_analyzer: NatureAnalyzer | None = None,
+        loop_geometry_analyzer: LoopGeometryAnalyzer | None = None,
+    ) -> None:
         self._nature_analyzer = nature_analyzer
+        self._loop_geometry_analyzer = loop_geometry_analyzer
 
     def analyze(
         self,
@@ -172,6 +187,11 @@ class RouteAnalyzer:
             if self._nature_analyzer is not None
             else None
         )
+        loop_geometry = (
+            self._loop_geometry_analyzer.analyze_route(edges, route_distance_m)
+            if self._loop_geometry_analyzer is not None
+            else None
+        )
 
         return RouteAnalysis(
             route_distance_m=route_distance_m,
@@ -208,6 +228,7 @@ class RouteAnalyzer:
                 backtracking.immediate_backtrack_distance_m, route_distance_m
             ),
             backtrack_edge_id_coverage=backtrack_coverage,
+            loop_geometry=loop_geometry,
             nature=nature,
             warnings=tuple(sorted(warnings)),
         )

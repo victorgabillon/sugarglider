@@ -116,6 +116,123 @@ class NatureAnalysis(_ImmutableAnalysisModel):
         return self
 
 
+class LoopGeometryPenaltyBreakdown(_ImmutableAnalysisModel):
+    """Every public fixed input, weight, and component of the shape penalty."""
+
+    crossing_penalty_per_crossing: NonNegativeFloat
+    crossing_count_input: Annotated[int, Field(ge=0, le=8)]
+    crossing_penalty: NonNegativeFloat
+    near_parallel_penalty_weight: NonNegativeFloat
+    near_parallel_share_input: Share
+    near_parallel_penalty: NonNegativeFloat
+    compactness_penalty_weight: NonNegativeFloat
+    compactness_input: Share
+    compactness_penalty: NonNegativeFloat
+    sector_imbalance_penalty_weight: NonNegativeFloat
+    sector_balance_input: Share
+    sector_imbalance_penalty: NonNegativeFloat
+    elongation_penalty_weight: NonNegativeFloat
+    elongation_input: Share
+    elongation_penalty: NonNegativeFloat
+    total: NonNegativeFloat
+
+    @model_validator(mode="after")
+    def validate_total(self) -> Self:
+        components = (
+            self.crossing_penalty
+            + self.near_parallel_penalty
+            + self.compactness_penalty
+            + self.sector_imbalance_penalty
+            + self.elongation_penalty
+        )
+        if not isclose(self.total, components, rel_tol=1e-12, abs_tol=1e-12):
+            raise ValueError("loop geometry penalty components must sum to total")
+        return self
+
+
+class LoopGeometryAnalysis(_ImmutableAnalysisModel):
+    """Explainable projected global-loop geometry without a beauty score."""
+
+    closed: bool
+    start_end_gap_m: NonNegativeFloat
+    enclosed_area_m2: NonNegativeFloat
+    convex_hull_area_m2: NonNegativeFloat
+    compactness: Share
+    sector_count: Annotated[int, Field(ge=1)]
+    sector_distance_shares: tuple[Share, ...]
+    sector_balance: Share
+    mean_radius_m: NonNegativeFloat
+    max_radius_m: NonNegativeFloat
+    elongation: Share
+    self_crossing_count: NonNegativeInt
+    near_parallel: DistanceMetric
+    penalty_breakdown: LoopGeometryPenaltyBreakdown
+    warnings: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def validate_geometry_metrics(self) -> Self:
+        if len(self.sector_distance_shares) != self.sector_count:
+            raise ValueError("sector distance shares must match sector count")
+        sector_total = sum(self.sector_distance_shares)
+        if sector_total > 0 and not isclose(
+            sector_total, 1.0, rel_tol=1e-9, abs_tol=1e-9
+        ):
+            raise ValueError("positive sector distance shares must sum to one")
+        breakdown = self.penalty_breakdown
+        if not (
+            breakdown.crossing_count_input == min(self.self_crossing_count, 8)
+            and isclose(
+                breakdown.near_parallel_share_input,
+                self.near_parallel.share,
+                rel_tol=0,
+                abs_tol=1e-12,
+            )
+            and isclose(
+                breakdown.compactness_input,
+                self.compactness,
+                rel_tol=0,
+                abs_tol=1e-12,
+            )
+            and isclose(
+                breakdown.sector_balance_input,
+                self.sector_balance,
+                rel_tol=0,
+                abs_tol=1e-12,
+            )
+            and isclose(
+                breakdown.elongation_input,
+                self.elongation,
+                rel_tol=0,
+                abs_tol=1e-12,
+            )
+        ):
+            raise ValueError("loop geometry penalty inputs must match public metrics")
+        expected_components = (
+            breakdown.crossing_penalty_per_crossing * breakdown.crossing_count_input,
+            breakdown.near_parallel_penalty_weight
+            * breakdown.near_parallel_share_input,
+            breakdown.compactness_penalty_weight * (1.0 - breakdown.compactness_input),
+            breakdown.sector_imbalance_penalty_weight
+            * (1.0 - breakdown.sector_balance_input),
+            breakdown.elongation_penalty_weight * (1.0 - breakdown.elongation_input),
+        )
+        components = (
+            breakdown.crossing_penalty,
+            breakdown.near_parallel_penalty,
+            breakdown.compactness_penalty,
+            breakdown.sector_imbalance_penalty,
+            breakdown.elongation_penalty,
+        )
+        if not all(
+            isclose(component, expected, rel_tol=1e-12, abs_tol=1e-12)
+            for component, expected in zip(components, expected_components, strict=True)
+        ):
+            raise ValueError(
+                "loop geometry penalty components must match public weights and inputs"
+            )
+        return self
+
+
 class RouteAnalysis(_ImmutableAnalysisModel):
     """Deterministic, raw route-quality measurements without a composite score."""
 
@@ -136,6 +253,7 @@ class RouteAnalysis(_ImmutableAnalysisModel):
     repetition: RepetitionAnalysis
     immediate_backtrack: DistanceMetric
     backtrack_edge_id_coverage: DistanceMetric
+    loop_geometry: LoopGeometryAnalysis | None = None
     nature: NatureAnalysis | None = None
     warnings: tuple[str, ...]
 
