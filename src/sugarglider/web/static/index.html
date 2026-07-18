@@ -3,8 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#173d32">
-    <title>Sugarglider — trail route planner</title>
+    <meta name="theme-color" content="#214b3b">
+    <title>Sugarglider — natural trail loop planner</title>
+    <link rel="icon" type="image/png" href="/static/brand/sugarglider-compact-icon.png">
     <!-- MapLibre GL JS 4.7.1, BSD-3-Clause: https://maplibre.org/ -->
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
     <link rel="stylesheet" href="/static/styles.css">
@@ -13,57 +14,82 @@
   </head>
   <body>
     <a class="skip-link" href="#planner">Skip to route planner</a>
+
     <header class="topbar">
-      <div class="wordmark">Sugarglider <span>trail route planner</span></div>
+      <a class="brand" href="/" aria-label="Sugarglider home">
+        <img src="/static/brand/sugarglider-compact-icon.png" width="52" height="52" alt="">
+        <span class="brand-copy">
+          <strong>Sugarglider</strong>
+          <span>Natural trail loops from the paths you choose.</span>
+        </span>
+      </a>
       <nav aria-label="File and generation actions">
-        <label class="button secondary" for="request-file">Import request JSON</label>
+        <label class="button secondary" for="request-file" data-icon="json">Import JSON</label>
         <input class="visually-hidden" id="request-file" type="file" accept="application/json,.json">
-        <label class="button secondary" for="gpx-file">Import GPX</label>
+        <label class="button secondary" for="gpx-file" data-icon="gpx">Import GPX</label>
         <input class="visually-hidden" id="gpx-file" type="file" accept="application/gpx+xml,.gpx">
-        <button class="button primary" id="generate-top" type="button">Generate</button>
+        <button class="button primary" id="generate-top" type="button" data-icon="generate">Generate</button>
+        <details class="about-panel">
+          <summary data-icon="info">About</summary>
+          <div class="about-content">
+            <img src="/static/brand/sugarglider-banner.png" width="1800" height="498" loading="lazy" alt="Sugarglider trail-planning mascot">
+            <p>Plan graph-valid hiking loops through every point you choose, compare trail and nature context, then export the selected result as a clean GPX track.</p>
+          </div>
+        </details>
       </nav>
     </header>
 
-    <div id="error-banner" class="banner error hidden" role="alert">
-      <span id="error-message"></span>
-      <details><summary>Diagnostic details</summary><pre id="error-details"></pre></details>
-      <button id="dismiss-error" type="button" aria-label="Dismiss error">×</button>
-    </div>
-    <div id="map-error" class="banner warning hidden" role="status"></div>
+    <section id="error-banner" class="notice error hidden" role="alert" aria-labelledby="error-title">
+      <div class="notice-mark" aria-hidden="true">!</div>
+      <div class="notice-copy">
+        <h2 id="error-title">Something needs attention</h2>
+        <p id="error-message"></p>
+        <details><summary>Technical details</summary><pre id="error-details"></pre></details>
+      </div>
+      <button id="dismiss-error" class="icon-button" type="button" data-icon="close" aria-label="Dismiss error" title="Dismiss error"></button>
+    </section>
+    <section id="map-error" class="notice warning hidden" role="status" aria-labelledby="map-error-title">
+      <div class="notice-mark" aria-hidden="true">!</div>
+      <div class="notice-copy"><h2 id="map-error-title">Map display warning</h2><p id="map-error-message"></p></div>
+    </section>
 
     <main id="planner" class="planner">
       <aside class="panel controls" aria-labelledby="controls-title">
         <div class="panel-heading">
-          <div><p class="eyebrow">Plan</p><h1 id="controls-title">Route controls</h1></div>
+          <div><p class="eyebrow">Plan</p><h1 id="controls-title">Build your loop</h1></div>
           <button id="clear-results" class="text-button" type="button">Clear results</button>
         </div>
-        <form id="route-form" novalidate>
-          <label>Route name<input id="route-name" name="name" value="Sugarglider route" maxlength="120" required></label>
-          <div class="field-pair">
-            <label>Target <span>km</span><input id="target-distance" type="number" min="1" max="200" step="0.1" value="20" required></label>
-            <label>Tolerance <span>km</span><input id="tolerance" type="number" min="0.1" max="10" step="0.1" value="2" required></label>
-          </div>
-          <div class="field-pair">
-            <label>Candidates<select id="candidate-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
-            <label>Profile<select id="profile" disabled><option>hike</option></select></label>
-          </div>
-          <label>Mandatory-point order<select id="point-order-mode"><option value="fixed">Fixed input order</option><option value="optimize_loop">Optimize loop</option></select></label>
-          <label>Path selection<select id="path-selection-mode"><option value="shortest">Natural shortest paths</option><option value="low_overlap">Low-overlap alternatives</option></select></label>
-          <label>Nature preference<select id="nature-preference"><option value="off">Off</option><option value="prefer">Prefer mapped nature</option></select></label>
-          <p id="nature-availability" class="field-help" role="status"></p>
-          <input id="seed" type="hidden" value="0">
-        </form>
 
-        <section class="poi-editor" aria-labelledby="poi-title">
-          <div class="section-heading"><h2 id="poi-title">Mandatory POIs</h2><span id="poi-count">0 / 30</span></div>
+        <details class="control-section" open>
+          <summary>Route settings</summary>
+          <form id="route-form" novalidate>
+            <label>Route name<input id="route-name" name="name" value="Sugarglider route" maxlength="120" required></label>
+            <div class="field-pair">
+              <label>Target <span>km</span><input id="target-distance" type="number" min="1" max="200" step="0.1" value="20" required></label>
+              <label>Tolerance <span>km</span><input id="tolerance" type="number" min="0.1" max="10" step="0.1" value="2" required></label>
+            </div>
+            <div class="field-pair">
+              <label>Candidates<select id="candidate-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+              <label>Profile<select id="profile" disabled><option>hike</option></select></label>
+            </div>
+            <label>Mandatory-point order<select id="point-order-mode"><option value="fixed">Fixed input order</option><option value="optimize_loop">Optimize loop</option></select></label>
+            <label>Path selection<select id="path-selection-mode"><option value="shortest">Natural shortest paths</option><option value="low_overlap">Low-overlap alternatives</option></select></label>
+            <label>Nature preference<select id="nature-preference"><option value="off">Off</option><option value="prefer">Prefer mapped nature</option></select></label>
+            <p id="nature-availability" class="field-help" role="status"></p>
+            <input id="seed" type="hidden" value="0">
+          </form>
+        </details>
+
+        <details class="control-section poi-editor" open>
+          <summary><span>Required POIs</span><span id="poi-count">0 / 30</span></summary>
           <p id="poi-validation" class="validation" role="status"></p>
-          <div id="poi-list" class="poi-list"></div>
+          <div id="poi-list" class="poi-list" role="list" aria-label="Ordered required points"></div>
           <div class="button-row">
-            <button id="add-point-mode" class="button secondary" type="button" aria-pressed="false">Add point on map</button>
-            <button id="fit-points" class="button secondary" type="button">Fit points</button>
-            <button id="clear-points" class="text-button danger" type="button">Clear all</button>
+            <button id="add-point-mode" class="button secondary" type="button" data-icon="add" aria-pressed="false">Add on map</button>
+            <button id="fit-points" class="button secondary" type="button" data-icon="fit">Fit points</button>
+            <button id="clear-points" class="text-button danger" type="button" data-icon="clear">Clear all</button>
           </div>
-        </section>
+        </details>
 
         <section id="gpx-summary" class="import-summary hidden" aria-labelledby="gpx-title">
           <div class="section-heading"><h2 id="gpx-title">Imported GPX</h2><button id="clear-gpx" class="text-button" type="button">Clear</button></div>
@@ -71,52 +97,66 @@
         </section>
 
         <div class="generate-actions">
-          <button id="generate" class="button primary wide" type="button" disabled>Generate routes</button>
-          <button id="cancel" class="button danger hidden" type="button">Cancel</button>
-          <button id="copy-request" class="text-button" type="button">Copy request JSON</button>
+          <button id="generate" class="button primary wide" type="button" data-icon="generate" disabled>Generate routes</button>
+          <button id="cancel" class="button danger hidden" type="button" data-icon="cancel">Cancel</button>
+          <button id="copy-request" class="text-button" type="button" data-icon="copy">Copy request JSON</button>
         </div>
+
+        <section id="generation-state" class="generation-state hidden" aria-labelledby="generation-title" aria-live="polite">
+          <img src="/static/brand/sugarglider-compact-icon.png" width="48" height="48" alt="">
+          <div><h2 id="generation-title">Planning your loop…</h2><p>Checking the requested points and route alternatives. This may take a little while for low-overlap or nature-aware searches.</p></div>
+        </section>
         <p id="request-status" class="status" aria-live="polite">Add at least two mandatory points.</p>
       </aside>
 
       <section class="map-panel" aria-labelledby="map-title">
         <h2 id="map-title" class="visually-hidden">Interactive route map</h2>
         <div id="map" role="application" aria-label="Interactive trail route map"></div>
-        <div class="map-tools">
-          <label><input id="show-all" type="checkbox" checked> Show all candidates</label>
-          <label><input id="show-nature" type="checkbox"> Show nature context</label>
+        <section id="planner-empty" class="map-empty-state" aria-labelledby="empty-title">
+          <img src="/static/brand/sugarglider-flying-map.png" width="1024" height="1024" loading="lazy" alt="">
+          <div><h2 id="empty-title">Choose the paths that matter</h2><p>Import a request, inspect a GPX, or add at least two required points directly on the map.</p></div>
+        </section>
+        <div class="map-tools" aria-label="Map display controls">
+          <label data-icon="alternatives"><input id="show-all" type="checkbox" checked> Show alternatives</label>
+          <label data-icon="nature"><input id="show-nature" type="checkbox"> Show nature</label>
         </div>
-        <div class="legend" aria-label="Map legend">
-          <span><i class="line selected"></i>Selected route</span>
-          <span><i class="line alternative"></i>Alternative</span>
-          <span><i class="line repeated"></i>Repeated</span>
-          <span><i class="line backtrack"></i>Immediate out-and-back</span>
-          <span><i class="marker mandatory">1</i>Mandatory POI</span>
-          <span><i class="marker optional"></i>Generated optional point</span>
-          <span><i class="line imported"></i>Imported GPX</span>
-          <span class="nature-legend"><i class="line woodland"></i>Woodland</span>
-          <span class="nature-legend"><i class="line open-natural"></i>Open natural</span>
-          <span class="nature-legend"><i class="line agriculture"></i>Agriculture</span>
-          <span class="nature-legend"><i class="line urban"></i>Urban/developed</span>
-          <span class="nature-legend"><i class="line water"></i>Water crossing</span>
-          <span class="nature-legend"><i class="line nature-unknown"></i>Unknown land cover</span>
-        </div>
+        <details class="legend">
+          <summary>Map legend</summary>
+          <div class="legend-items">
+            <span><i class="line selected"></i>Selected route</span>
+            <span><i class="line alternative"></i>Alternative</span>
+            <span><i class="line repeated"></i>Repeated</span>
+            <span><i class="line backtrack"></i>Immediate out-and-back</span>
+            <span><i class="marker mandatory">1</i>Required mascot pin</span>
+            <span><i class="marker start">1</i>Start/end</span>
+            <span><i class="marker optional"></i>Generated point</span>
+            <span><i class="marker waypoint"></i>GPX waypoint</span>
+            <span><i class="line imported"></i>Imported GPX</span>
+            <span class="nature-legend"><i class="line woodland"></i>Woodland</span>
+            <span class="nature-legend"><i class="line open-natural"></i>Open natural</span>
+            <span class="nature-legend"><i class="line agriculture"></i>Agriculture</span>
+            <span class="nature-legend"><i class="line urban"></i>Urban/developed</span>
+            <span class="nature-legend"><i class="line water"></i>Water crossing</span>
+            <span class="nature-legend"><i class="line nature-unknown"></i>Unknown land cover</span>
+          </div>
+        </details>
       </section>
 
       <aside class="panel metrics" aria-labelledby="metrics-title">
-        <div class="panel-heading"><div><p class="eyebrow">Inspect</p><h2 id="metrics-title">Candidate metrics</h2></div></div>
-        <div id="metrics-empty" class="empty-state"><p>Generate a route to inspect its quality.</p></div>
+        <div class="panel-heading"><div><p class="eyebrow">Inspect</p><h2 id="metrics-title">Candidate details</h2></div></div>
+        <div id="metrics-empty" class="metrics-empty"><p>Select a generated candidate to inspect exact route, trail, repetition, and mapped-nature metrics.</p></div>
         <div id="metrics-content" class="hidden"></div>
         <div class="export-actions">
-          <button id="download-gpx" class="button primary wide" type="button" disabled>Download selected GPX</button>
+          <button id="download-gpx" class="button primary wide" type="button" data-icon="download" disabled>Download selected GPX</button>
         </div>
       </aside>
 
       <section class="candidate-strip" aria-labelledby="candidates-title">
-        <div class="section-heading"><h2 id="candidates-title">Candidates</h2><span id="search-summary"></span></div>
+        <div class="section-heading"><div><p class="eyebrow">Compare</p><h2 id="candidates-title">Candidate routes</h2></div><span id="search-summary"></span></div>
         <div id="candidate-list" class="candidate-list"><p class="empty-copy">Returned routes will appear here in ranked order.</p></div>
       </section>
     </main>
 
-    <footer>Routes use OpenStreetMap data through your configured GraphHopper service. Map attribution must remain visible.</footer>
+    <footer>Routes use OpenStreetMap data through your configured GraphHopper service. Map attribution remains visible on the map.</footer>
   </body>
 </html>

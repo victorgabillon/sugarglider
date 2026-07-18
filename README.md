@@ -16,12 +16,13 @@ Sugarglider is an open-source trail-running route generator in development. The
 long-term product will combine required waypoints, target distance, trail and nature
 preferences, popularity signals, access rules, and limits on repeated sections.
 
-The implemented PR1–PR7 scope accepts mandatory latitude/longitude anchors, asks a
+The implemented PR1–PR8 scope accepts mandatory latitude/longitude anchors, asks a
 self-hosted GraphHopper 11.0 instance to route them along real OpenStreetMap edges,
 analyzes the routed edges, and can search for several closed-loop candidates near a
 target distance. A local browser interface supports planning, comparison, local GPX
-inspection, mapped-nature comparison, and clean GPX 1.1 export of an already
-selected candidate.
+inspection, mapped-nature comparison, synchronized named POI editing, and clean GPX
+1.1 export of an already selected candidate. Its browser interface uses the local
+Sugarglider identity and mascot pins without adding a frontend build system.
 
 ## Current scope and architecture
 
@@ -39,6 +40,8 @@ browser -> FastAPI -> RouteService ----------> routing backend -> GraphHopper / 
 local OSM PBF -> pyosmium index builder -> deterministic gzip JSON
            |
            +-> packaged HTML/CSS/ES modules -> MapLibre -> configured raster tiles
+
+assets/brand -> deterministic byte-copy sync -> packaged /static/brand assets
 ```
 
 The public API uses named `lat` and `lon` fields. The adapter converts anchors to
@@ -99,6 +102,18 @@ Then open `http://localhost:8000/`. The same FastAPI process serves both the API
 the packaged browser application; no Node runtime or separate frontend server is
 used.
 
+Canonical editable artwork lives in `assets/brand`. Synchronize its explicit asset
+manifest into the packaged application after any approved artwork update:
+
+```sh
+make brand-assets
+```
+
+The synchronization script resolves paths from its own location, rejects missing
+or unexpected PNGs, and copies the permitted files byte-for-byte without Pillow,
+resizing, or recompression. The runtime copies under
+`src/sugarglider/web/static/brand` are generated mirrors and must not be edited.
+
 ## Web route planner
 
 The GUI supports a complete local planning workflow:
@@ -106,8 +121,9 @@ The GUI supports a complete local planning workflow:
 1. Use **Import request JSON** to load a generation request such as
    `examples/marly/all-pois-generation-request.json`, or enable **Add point on map**
    and click once per mandatory place.
-2. Rename, edit, drag, remove, or reorder POIs. The first is the fixed loop
-   start/end; do not add a closing duplicate.
+2. Rename, edit, drag, remove, select, or reorder POIs. The first is the fixed loop
+   start/end; do not add a closing duplicate. Names imported from JSON—including
+   accents—remain attached to their coordinates through editing and export.
 3. Choose target and tolerance in kilometres, point ordering, candidate count, and
    natural-shortest or low-overlap path selection. Optionally choose **Prefer mapped
    nature** when the local nature index is available, then generate.
@@ -123,6 +139,44 @@ The GUI supports a complete local planning workflow:
 breaks, optional waypoints, and a locally calculated approximate distance are shown
 without uploading the file. Imported GPX and generated candidates can coexist on
 the map.
+
+### Branded markers, labels, and selection
+
+Required POIs use draggable HTML markers composed from the single locally cached
+`sugarglider-map-pin.png`. Every pin retains a visible current visit-order badge;
+point 1 also carries an explicit start/end badge. The complete high-resolution PNG
+is scaled with its aspect ratio intact. Pins use a compact 40 × 60 px footprint
+(48 × 72 px for the start) on larger screens and 36 × 54 px (44 × 66 px
+for the start) on phones, while a bottom-anchor offset aligns the painted pin tip
+without cropping its transparent canvas. Generated routing points use small orange
+diamonds, while imported GPX waypoints use asymmetric blue marks.
+
+Names are shown through a coordinated hybrid system. DOM markers provide dragging,
+keyboard focus, safe detail popups, and persistent numeric identity. One MapLibre
+GeoJSON source supplies collision-aware symbol labels; ordinary names may hide when
+space is tight and appear from zoom 10.5, while the selected name is promoted from
+zoom 7, wraps within a bounded width, and remains above collisions. The selected
+point is shared by the marker, symbol label, and POI editor, and map-originated
+selection scrolls only the internal POI list. Explicit marker, label, POI-row,
+Enter, or Space activation opens a detail popup once; dragging, candidate changes,
+and nature or display redraws never reopen it. Optimized candidates update marker
+and editor badges to their returned visit order without changing the stored request
+points. The map legend starts collapsed so it does not cover dense routes.
+
+MapLibre 4.7.1 uses three packaged Open Sans Semibold glyph ranges for Latin,
+Latin-extended, and general-punctuation labels, so no runtime glyph service is
+introduced. Their exact source revisions, retrieval date, covered chunks, hashes,
+missing-range behavior, and Apache 2.0 license are recorded in the
+[font provenance](<src/sugarglider/web/static/fonts/Open Sans Semibold/README.md>).
+Names using other scripts remain fully recoverable in marker popups and the POI
+editor even when the map symbol layer lacks that glyph range.
+
+The interface uses semantic landmarks, visible keyboard focus, a semantic POI list
+whose compound list items expose the current point with `aria-current`,
+keyboard-selectable POI rows and candidate cards, text-safe DOM APIs for point
+names, `aria-live` generation feedback, and reduced-motion handling. At tablet and
+phone widths the map moves ahead of the controls, panels stack, candidate cards
+scroll horizontally, and the POI editor retains its own bounded vertical scroll.
 
 The basemap requires network access to the configured raster tile service and to
 the pinned MapLibre GL JS 4.7.1 CDN distribution. MapLibre GL JS is distributed
@@ -582,7 +636,13 @@ ground.
 ### Manual browser-test checklist
 
 - [ ] Open `/`; confirm the map and visible attribution load.
-- [ ] Import the 23-POI Marly JSON; confirm list and marker order match.
+- [ ] Confirm the branded header, local favicon, and initial mascot guidance.
+- [ ] Import the 23-POI Marly JSON; confirm exactly 23 mascot pins numbered 1–23.
+- [ ] Confirm full accented names remain available while ordinary labels avoid
+      collisions and the selected label stays visible.
+- [ ] Select through a marker, map label, POI row, and keyboard; confirm synchronized
+      state and internal-list scrolling.
+- [ ] Reorder POIs and confirm every displayed visit-order number updates.
 - [ ] Drag a marker and confirm its coordinate inputs update.
 - [ ] Generate candidates in shortest and low-overlap modes.
 - [ ] Select cards and map lines; compare metrics with generation JSON.
@@ -595,7 +655,8 @@ ground.
 - [ ] Download selected GPX and confirm no second generation request occurs.
 - [ ] Confirm the downloaded GPX has one track/segment and no nature extensions.
 - [ ] Check the downloaded track in gpx.studio.
-- [ ] Check narrow responsive layout and keyboard navigation.
+- [ ] Check 1440, 1024, 768, and 390 px layouts, keyboard navigation, image aspect
+      ratios, and the browser console.
 ---
 
 <p align="center">
