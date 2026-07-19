@@ -5,6 +5,7 @@ from math import atan2, hypot, pi
 
 from sugarglider.analysis.projection import LocalMetricProjection
 from sugarglider.analysis.route import RouteAnalyzer, haversine_distance_m
+from sugarglider.domain.endpoints import validated_endpoint_visits
 from sugarglider.domain.generation import (
     CandidateConstruction,
     GeneratedCandidate,
@@ -32,7 +33,9 @@ from sugarglider.generation.ordering import (
     MAX_ORDER_PROPOSALS,
     PointOrder,
     generate_order_proposals,
+    generate_path_order_proposals,
     ordered_closed_points,
+    ordered_open_points,
 )
 from sugarglider.generation.scoring import (
     NATURAL_IMPROVEMENT_EPSILON,
@@ -211,6 +214,10 @@ class RouteGenerationService:
 
     async def generate(self, request: RouteGenerationRequest) -> RouteGenerationResult:
         """Generate distinct candidates while preserving every mandatory point."""
+        if request.resolved_endpoints.topology == "point_to_point":
+            return await self._generate_open_path(request)
+        if len(request.routing_points) == 2:
+            return await self._generate_single_endpoint_loop(request)
         nature_preference = self._effective_nature_preference(request)
         initial_warnings = self._nature_warnings(request)
         supplied_points = request.supplied_required_points
@@ -295,6 +302,19 @@ class RouteGenerationService:
                         else None
                     ),
                 ),
+                topology="loop",
+                effective_start=request.resolved_endpoints.start,
+                effective_end=request.resolved_endpoints.end,
+                endpoint_visits=validated_endpoint_visits(
+                    request.resolved_endpoints,
+                    baseline.snapped_points,
+                    maximum_snap_distance_m=self._max_optional_snap_displacement_m,
+                )[0],
+                endpoint_warnings=validated_endpoint_visits(
+                    request.resolved_endpoints,
+                    baseline.snapped_points,
+                    maximum_snap_distance_m=self._max_optional_snap_displacement_m,
+                )[1],
             )
 
         drafts: list[GeneratedCandidate] = []
@@ -546,6 +566,13 @@ class RouteGenerationService:
             if any(candidate.within_tolerance for candidate in final_candidates)
             else "best_effort"
         )
+        visits, endpoint_warnings = validated_endpoint_visits(
+            request.resolved_endpoints,
+            final_candidates[0].route.snapped_points
+            if final_candidates
+            else baseline.snapped_points,
+            maximum_snap_distance_m=self._max_optional_snap_displacement_m,
+        )
         return RouteGenerationResult(
             baseline=baseline,
             candidates=final_candidates,
@@ -560,6 +587,266 @@ class RouteGenerationService:
                 candidates=final_candidates,
                 analyzed_candidates=all_drafts,
             ),
+            topology="loop",
+            effective_start=request.resolved_endpoints.start,
+            effective_end=request.resolved_endpoints.end,
+            endpoint_visits=visits,
+            endpoint_warnings=endpoint_warnings,
+        )
+
+    async def _generate_open_path(
+        self, request: RouteGenerationRequest
+    ) -> RouteGenerationResult:
+        """Route and optionally reorder a genuinely open endpoint-fixed path."""
+        points = request.routing_points
+        baseline_path = await self._backend.route(
+            points, request.profile, pass_through=True
+        )
+        baseline = _without_loop_geometry(
+            self._result_factory.create(
+                name=request.name,
+                path=baseline_path,
+                input_point_count=request.required_point_count,
+            )
+        )
+        state = _SearchState(self._max_evaluations, 0)
+        state.path_cache[point_sequence_key(points)] = baseline_path
+        visits, endpoint_warnings = validated_endpoint_visits(
+            request.resolved_endpoints,
+            baseline.snapped_points,
+            maximum_snap_distance_m=self._max_optional_snap_displacement_m,
+        )
+        warnings = set(self._nature_warnings(request))
+        warnings.update(endpoint_warnings)
+        if request.target_distance_m < baseline.summary.distance_m:
+            warnings.add("target_below_point_to_point_lower_bound")
+
+        fixed_visits = tuple(
+            RequiredPointVisit(original_index=index, coordinate=point)
+            for index, point in enumerate(request.interior_points)
+        )
+        drafts: list[GeneratedCandidate] = [
+            self._candidate(
+                request,
+                baseline,
+                (),
+                fixed_visits,
+                points,
+                "open_path_direct",
+            )
+        ]
+        best_order_route = baseline
+        if request.point_order_mode == "optimize_path" and len(points) > 3:
+            for order in generate_path_order_proposals(points)[1:]:
+                if state.evaluated >= state.base_search_budget:
+                    state.base_budget_exhausted = True
+                    break
+                ordered = ordered_open_points(points, order)
+                key = point_sequence_key(ordered)
+                if key in state.path_cache:
+                    continue
+                state.evaluated += 1
+                state.evaluated_order_count += 1
+                try:
+                    path = await self._backend.route(
+                        ordered, request.profile, pass_through=True
+                    )
+                except RoutingPointError:
+                    state.rejected += 1
+                    state.rejected_order_count += 1
+                    state.path_cache[key] = None
+                    continue
+                state.path_cache[key] = path
+                if path.snapped_points is None or len(path.snapped_points) != len(
+                    ordered
+                ):
+                    state.rejected += 1
+                    state.rejected_order_count += 1
+                    continue
+                route = _without_loop_geometry(
+                    self._result_factory.create(
+                        name=request.name,
+                        path=path,
+                        input_point_count=request.required_point_count,
+                    )
+                )
+                state.successful += 1
+                state.successful_order_count += 1
+                order_visits = tuple(
+                    RequiredPointVisit(
+                        original_index=index - 1,
+                        coordinate=points[index],
+                    )
+                    for index in order[1:-1]
+                )
+                drafts.append(
+                    self._candidate(
+                        request,
+                        route,
+                        (),
+                        order_visits,
+                        ordered,
+                        "open_path_optimized",
+                    )
+                )
+            best_order_route = min(
+                (candidate.route for candidate in drafts),
+                key=lambda route: (
+                    abs(route.summary.distance_m - request.target_distance_m),
+                    candidate_signature(route, topology="point_to_point"),
+                ),
+            )
+
+        low_overlap = _LowOverlapSummary()
+        if request.path_selection_mode == "low_overlap":
+            search = LowOverlapBeamSearch(
+                self._backend,
+                self._structural_result_factory,
+                self._low_overlap_settings,
+            )
+            result = await search.assemble(
+                name=request.name,
+                routing_points=points,
+                profile=request.profile,
+                target_distance_m=request.target_distance_m,
+                input_point_count=request.required_point_count,
+                close_loop=False,
+            )
+            warnings.update(result.warnings)
+            known = {candidate.signature for candidate in drafts}
+            for beam_state in result.states:
+                route = _without_loop_geometry(
+                    self._result_factory.create(
+                        name=request.name,
+                        path=beam_state.composed_path,
+                        input_point_count=request.required_point_count,
+                    )
+                )
+                candidate = self._candidate(
+                    request,
+                    route,
+                    (),
+                    fixed_visits,
+                    points,
+                    "open_path_alternative_leg_beam",
+                )
+                if candidate.signature not in known:
+                    known.add(candidate.signature)
+                    drafts.append(candidate)
+            low_overlap = _LowOverlapSummary(
+                alternative_leg_request_count=search.request_count,
+                alternative_path_count=search.alternative_path_count,
+                refined_source_count=int(bool(result.states)),
+                candidate_count=max(0, len(drafts) - 1),
+                request_budget=search.settings.max_leg_requests,
+                budget_exhausted=search.budget_exhausted,
+                pre_repeated_share=baseline.analysis.repetition.repeated_distance.share,
+                best_repeated_share=min(
+                    candidate.route.analysis.repetition.repeated_distance.share
+                    for candidate in drafts
+                ),
+                pre_backtrack_share=baseline.analysis.immediate_backtrack.share,
+                best_backtrack_share=min(
+                    candidate.route.analysis.immediate_backtrack.share
+                    for candidate in drafts
+                ),
+            )
+
+        unique = {candidate.signature: candidate for candidate in drafts}
+        ranked = tuple(
+            candidate.model_copy(update={"rank": rank})
+            for rank, candidate in enumerate(
+                sorted(
+                    unique.values(),
+                    key=lambda candidate: (
+                        0 if candidate.within_tolerance else 1,
+                        candidate.route.analysis.immediate_backtrack.share,
+                        candidate.route.analysis.repetition.repeated_distance.share,
+                        candidate.target_error_m,
+                        candidate.signature,
+                    ),
+                )[: request.candidate_count],
+                start=1,
+            )
+        )
+        status: GenerationStatus = (
+            "within_tolerance"
+            if any(candidate.within_tolerance for candidate in ranked)
+            else "best_effort"
+        )
+        return RouteGenerationResult(
+            baseline=baseline,
+            candidates=ranked,
+            search=self._summary(
+                request,
+                baseline,
+                best_order_route,
+                state,
+                status=status,
+                warnings=tuple(sorted(warnings)),
+                low_overlap=low_overlap,
+                candidates=ranked,
+                analyzed_candidates=tuple(drafts),
+            ),
+            topology="point_to_point",
+            effective_start=request.resolved_endpoints.start,
+            effective_end=request.resolved_endpoints.end,
+            endpoint_visits=visits,
+            endpoint_warnings=endpoint_warnings,
+        )
+
+    async def _generate_single_endpoint_loop(
+        self, request: RouteGenerationRequest
+    ) -> RouteGenerationResult:
+        """Generate a GraphHopper round trip for an explicit same-point endpoint."""
+        start = request.resolved_endpoints.start
+        path = await self._backend.round_trip(
+            start,
+            request.target_distance_m,
+            request.seed,
+            request.profile,
+        )
+        route = self._result_factory.create(
+            name=request.name,
+            path=path,
+            input_point_count=request.required_point_count,
+        )
+        candidate = self._candidate(
+            request,
+            route,
+            (),
+            (),
+            (start,),
+            "round_trip_detour",
+        )
+        candidate = candidate.model_copy(update={"rank": 1})
+        state = _SearchState(self._max_evaluations, 0, proposal_count=1)
+        visits, warnings = validated_endpoint_visits(
+            request.resolved_endpoints,
+            path.snapped_points,
+            maximum_snap_distance_m=self._max_optional_snap_displacement_m,
+        )
+        status: GenerationStatus = (
+            "within_tolerance" if candidate.within_tolerance else "best_effort"
+        )
+        return RouteGenerationResult(
+            baseline=route,
+            candidates=(candidate,),
+            search=self._summary(
+                request,
+                route,
+                route,
+                state,
+                status=status,
+                warnings=warnings,
+                candidates=(candidate,),
+                analyzed_candidates=(candidate,),
+            ),
+            topology="loop",
+            effective_start=start,
+            effective_end=start,
+            endpoint_visits=visits,
+            endpoint_warnings=warnings,
         )
 
     async def _evaluate_order_sources(
@@ -950,7 +1237,14 @@ class RouteGenerationService:
             target_error_m=target_error,
             within_tolerance=target_error <= request.tolerance_m,
             score=score_route(route, request.target_distance_m),
-            signature=candidate_signature(route),
+            signature=candidate_signature(
+                route,
+                topology=(
+                    "point_to_point"
+                    if request.resolved_endpoints.topology == "point_to_point"
+                    else None
+                ),
+            ),
         )
 
     async def _refine_low_overlap(
@@ -1800,3 +2094,12 @@ class RouteGenerationService:
 def _circular_sector_distance(left: int, right: int) -> int:
     difference = abs(left - right)
     return min(difference, GLOBAL_SECTOR_COUNT - difference)
+
+
+def _without_loop_geometry(route: RouteResult) -> RouteResult:
+    """Mark loop-only analysis not applicable on a public open route."""
+    if route.analysis.loop_geometry is None:
+        return route
+    return route.model_copy(
+        update={"analysis": route.analysis.model_copy(update={"loop_geometry": None})}
+    )

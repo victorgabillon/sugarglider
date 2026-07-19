@@ -27,6 +27,7 @@ VERIFIED_WATER_ONE_TIME_BONUS = 2.0
 PREFERRED_POI_ID_BOOST = 3.0
 REPEATED_CATEGORY_DIMINISHING_FACTOR = 0.5
 CONTROL_GATE_EPSILON = 1e-12
+GLOBAL_AUTO_TOUR_MAXIMUM_DISTANCE_M = 200_000.0
 FLEXIBLE_BACKTRACK_REGRESSION_LIMIT = 0.02
 BALANCED_BACKTRACK_REGRESSION_LIMIT = 0.01
 FLEXIBLE_REPETITION_REGRESSION_LIMIT = 0.08
@@ -38,9 +39,22 @@ BALANCED_GEOMETRY_REGRESSION_LIMIT = 0.20
 def maximum_auto_tour_distance_m(
     target_distance_m: float,
     tolerance_m: float,
+    *,
+    priority: DistancePriority = "balanced",
+    requested_maximum_distance_m: float | None = None,
 ) -> float:
-    """Return the server-controlled upper bound for soft-distance searches."""
-    return target_distance_m + max(2.0 * tolerance_m, 0.25 * target_distance_m)
+    """Return the mode-aware hard route ceiling, capped by server policy."""
+    target_derived = target_distance_m + max(
+        2.0 * tolerance_m, 0.25 * target_distance_m
+    )
+    mode_maximum = (
+        GLOBAL_AUTO_TOUR_MAXIMUM_DISTANCE_M
+        if priority == "flexible"
+        else target_derived
+    )
+    if requested_maximum_distance_m is not None:
+        mode_maximum = min(mode_maximum, requested_maximum_distance_m)
+    return min(mode_maximum, GLOBAL_AUTO_TOUR_MAXIMUM_DISTANCE_M)
 
 
 def soft_distance_penalty(
@@ -250,31 +264,19 @@ def auto_tour_ranking_key(candidate: AutoTourCandidate) -> tuple[object, ...]:
         analysis.immediate_backtrack.distance_m > 300.0
         and analysis.immediate_backtrack.share > 0.02
     )
-    balanced_distance_value = (
-        candidate.soft_distance_penalty
-        - 0.75 * candidate.satisfied_preferred_place_count
-        - 0.05 * candidate.total_poi_reward
-    )
     return (
         0 if hard_feasible else 1,
         0 if closed else 1,
+        0 if candidate.route.summary.distance_m <= candidate.maximum_distance_m else 1,
+        -candidate.satisfied_must_visit_count,
         1 if severe_backtracking else 0,
         1 if highly_mixed or incoherent_corridor else 0,
-        -candidate.satisfied_must_visit_count,
+        -candidate.satisfied_preferred_place_count,
         analysis.immediate_backtrack.share,
         (geometry.outbound_return_proximity.share if geometry is not None else 1.0),
         analysis.repetition.repeated_distance.share,
         (0, geometry.penalty_breakdown.total) if geometry is not None else (1, 0.0),
-        (
-            balanced_distance_value
-            if candidate.distance_priority == "balanced"
-            else -candidate.satisfied_preferred_place_count
-        ),
-        (
-            0.0
-            if candidate.distance_priority == "balanced"
-            else -candidate.total_poi_reward
-        ),
+        -candidate.total_poi_reward,
         (0, -nature.nature_score) if nature is not None else (1, 0.0),
         candidate.soft_distance_penalty,
         0 if candidate.control_eligible else 1,

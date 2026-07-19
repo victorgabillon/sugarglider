@@ -4,6 +4,12 @@ export const formatCount = (value) => new Intl.NumberFormat().format(Number(valu
 
 const labels = {
   direct_order: "Direct mandatory order",
+  open_path_direct: "Direct open path",
+  open_path_optimized: "Endpoint-fixed optimized path",
+  open_path_alternative_leg_beam: "Open alternative-leg beam",
+  point_to_point_direct: "Direct point-to-point control",
+  point_to_point_hard_points: "Point-to-point hard-point route",
+  point_to_point_alternative: "Point-to-point alternative",
   round_trip_detour: "Round-trip detour",
   sector_balanced_detour: "Sector-balanced detour",
   alternative_leg_beam: "Alternative-leg beam",

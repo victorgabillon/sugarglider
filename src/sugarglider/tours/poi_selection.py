@@ -246,8 +246,11 @@ def build_poi_visits(
             and match.feature.potability == "verified"
         ):
             water_seen = True
-        already = match.feature.id in base_already_ids
         inserted = record is not None
+        # A deliberate insertion record is authoritative for this candidate. A POI
+        # can also be present in a family's incidental baseline set after route
+        # topology changes, but the public flags remain mutually exclusive.
+        already = match.feature.id in base_already_ids and not inserted
         visits.append(
             TourPoiVisit(
                 poi=match.feature,

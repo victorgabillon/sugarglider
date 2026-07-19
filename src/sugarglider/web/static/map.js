@@ -22,6 +22,7 @@ const REQUESTED_RADIUS_SOURCE = "auto-tour-requested-place-radii";
 const REQUESTED_RADIUS_FILL_LAYER = "auto-tour-requested-radius-fill";
 const REQUESTED_RADIUS_LINE_LAYER = "auto-tour-requested-radius-line";
 const REQUESTED_MARKER_LAYER = "auto-tour-requested-markers";
+const REQUESTED_MASCOT_LAYER = "auto-tour-requested-mascots";
 const REQUESTED_PREFERRED_LAYER = "auto-tour-requested-preferred-ring";
 const REQUESTED_ORDER_LAYER = "auto-tour-requested-order";
 const REQUESTED_LABEL_LAYER = "auto-tour-requested-labels";
@@ -40,6 +41,7 @@ const POI_ICON_SVGS = {
 let map = null;
 let ready = false;
 let requiredMarkers = [];
+let endpointMarkers = [];
 let optionalMarkers = [];
 let waypointMarkers = [];
 let candidateClickHandler = null;
@@ -110,6 +112,7 @@ export function initializeMap(config, handlers) {
       REQUESTED_ORDER_LAYER,
       REQUESTED_PREFERRED_LAYER,
       REQUESTED_MARKER_LAYER,
+      REQUESTED_MASCOT_LAYER,
     ].filter((id) => map.getLayer(id));
     const requested = requestedLayers.length
       ? map.queryRenderedFeatures(event.point, { layers: requestedLayers })[0]
@@ -161,6 +164,7 @@ export function initializeMap(config, handlers) {
         REQUESTED_ORDER_LAYER,
         REQUESTED_PREFERRED_LAYER,
         REQUESTED_MARKER_LAYER,
+        REQUESTED_MASCOT_LAYER,
       ].filter((id) => map.getLayer(id)),
       ...[POI_SELECTED_MARKER_LAYER, POI_MARKER_LAYER, POI_CLUSTER_LAYER]
         .filter((id) => map.getLayer(id)),
@@ -244,6 +248,11 @@ function loadRasterImage(url) {
 }
 
 async function installPoiImages() {
+  if (!map.hasImage("requested-sugarglider")) {
+    map.addImage("requested-sugarglider", await loadRasterImage(REQUIRED_PIN_URL), {
+      pixelRatio: 32,
+    });
+  }
   if (!map.hasImage("poi-water-verified")) {
     map.addImage("poi-water-verified", await loadRasterImage(VERIFIED_WATER_PIN_URL), {
       pixelRatio: 32,
@@ -510,6 +519,7 @@ function showPoiPopup(feature) {
 function backendRequestedPlace(visit) {
   const place = visit?.requested_place ?? {};
   return {
+    id: place.id,
     name: place.name,
     coordinate: place.coordinate,
     importance: place.importance,
@@ -551,6 +561,11 @@ export function requestedPlaceFeatureCollection(places, visits = [], selectedId 
             ? measuredDistance
             : null,
           visit_reason: visit?.reason ?? null,
+          deliberately_considered: visit?.deliberately_considered ?? false,
+          deliberately_routed: visit?.deliberately_routed ?? false,
+          deliberately_routed_elsewhere: visit?.deliberately_routed_in_another_retained_candidate ?? false,
+          graph_snap_distance_m: visit?.graph_snap_distance_m ?? null,
+          failure_reason: visit?.failure_reason ?? null,
           selected: id === selectedId,
         },
       };
@@ -662,12 +677,26 @@ function ensureRequestedPlaceLayers() {
     },
     paint: {
       "circle-radius": [
-        "case", ["==", ["get", "importance"], "prefer"], 9, 12,
+        "case", ["==", ["get", "importance"], "prefer"], 16, 19,
       ],
       "circle-color": statusColor,
       "circle-stroke-color": "#25372f",
-      "circle-stroke-width": 2.5,
-      "circle-opacity": .98,
+      "circle-stroke-width": 3,
+      "circle-opacity": .42,
+    },
+  });
+  addRequestedMarkerLayer({
+    id: REQUESTED_MASCOT_LAYER,
+    type: "symbol",
+    source: REQUESTED_SOURCE,
+    layout: {
+      "icon-image": "requested-sugarglider",
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 8, .78, 14, 1],
+      "icon-anchor": "bottom",
+      "icon-offset": [0, 10],
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
+      "symbol-sort-key": ["case", ["get", "selected"], 0, 1],
     },
   });
   addRequestedMarkerLayer({
@@ -700,15 +729,6 @@ function ensureRequestedPlaceLayers() {
     id: REQUESTED_ORDER_LAYER,
     type: "symbol",
     source: REQUESTED_SOURCE,
-    layout: {
-      "text-field": [
-        "concat", "R", ["to-string", ["get", "original_order"]],
-      ],
-      "text-font": ["Open Sans Semibold"],
-      "text-size": 10,
-      "text-allow-overlap": true,
-      "text-ignore-placement": true,
-    },
     paint: {
       "text-color": [
         "match", ["get", "status"],
@@ -721,6 +741,17 @@ function ensureRequestedPlaceLayers() {
         "rgba(0,0,0,0)",
       ],
       "text-halo-width": 1,
+    },
+    layout: {
+      "text-field": [
+        "concat", "R", ["to-string", ["get", "original_order"]],
+      ],
+      "text-font": ["Open Sans Semibold"],
+      "text-size": 10,
+      "text-offset": [0, -1.75],
+      "text-allow-overlap": true,
+      "text-ignore-placement": true,
+      "symbol-sort-key": ["case", ["get", "selected"], 0, 1],
     },
   });
   addRequestedMarkerLayer({
@@ -785,7 +816,14 @@ function requestedPlacePopupContent(feature) {
     );
   }
   popupRow(content, "Required radius", `${Number(properties.visit_radius_m)} m`);
+  popupRow(content, "Deliberately considered", properties.deliberately_considered ? "Yes" : "No");
+  popupRow(content, "Deliberately routed", properties.deliberately_routed ? "Yes" : "No");
+  popupRow(content, "Routed in another candidate", properties.deliberately_routed_elsewhere ? "Yes" : "No");
+  if (Number.isFinite(properties.graph_snap_distance_m)) {
+    popupRow(content, "Graph snap distance", `${Number(properties.graph_snap_distance_m).toFixed(1)} m`);
+  }
   popupRow(content, "Visit result", requestedVisitReason(properties.visit_reason));
+  popupRow(content, "Failure reason", properties.failure_reason);
   return content;
 }
 
@@ -794,6 +832,7 @@ function showRequestedPlacePopup(feature, reveal = false) {
   requestedPlacePopupId = feature.id;
   requestedPlacePopup = new window.maplibregl.Popup({
     offset: 22,
+    anchor: "bottom",
     closeButton: true,
     focusAfterOpen: false,
     maxWidth: "min(300px, calc(100vw - 24px))",
@@ -808,6 +847,7 @@ function showRequestedPlacePopup(feature, reveal = false) {
   if (reveal) {
     map.easeTo({
       center: feature.geometry.coordinates,
+      offset: window.innerWidth <= 600 ? [0, 120] : [0, 0],
       duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches
         ? 0
         : 350,
@@ -825,6 +865,7 @@ function moveRequestedPlaceLayersIntoOrder() {
     REQUESTED_MARKER_LAYER,
     REQUESTED_PREFERRED_LAYER,
     REQUESTED_SELECTED_LAYER,
+    REQUESTED_MASCOT_LAYER,
     REQUESTED_ORDER_LAYER,
     REQUESTED_LABEL_LAYER,
   ]) {
@@ -883,14 +924,15 @@ export function requestedPlaceMapDiagnostics() {
     REQUESTED_RADIUS_FILL_LAYER,
     REQUESTED_RADIUS_LINE_LAYER,
     REQUESTED_MARKER_LAYER,
+    REQUESTED_MASCOT_LAYER,
     REQUESTED_PREFERRED_LAYER,
     REQUESTED_SELECTED_LAYER,
     REQUESTED_ORDER_LAYER,
     REQUESTED_LABEL_LAYER,
   ];
   const styleLayerIds = (map?.getStyle()?.layers ?? []).map((layer) => layer.id);
-  const visible = ready && map?.getLayer(REQUESTED_MARKER_LAYER)
-    ? map.queryRenderedFeatures(undefined, { layers: [REQUESTED_MARKER_LAYER] })
+  const visible = ready && map?.getLayer(REQUESTED_MASCOT_LAYER)
+    ? map.queryRenderedFeatures(undefined, { layers: [REQUESTED_MASCOT_LAYER] })
     : [];
   return {
     sourceExists: Boolean(map?.getSource(REQUESTED_SOURCE)),
@@ -900,6 +942,8 @@ export function requestedPlaceMapDiagnostics() {
       visible.map((feature) => feature.properties?.requested_id),
     ).size,
     radiusFeatureCount: requestedRadiusFeatureCount,
+    mascotImageLoaded: Boolean(map?.hasImage("requested-sugarglider")),
+    verifiedWaterImageLoaded: Boolean(map?.hasImage("poi-water-verified")),
     statuses,
     duplicateLayerCount: requestedLayerIds.reduce(
       (count, id) => count + Math.max(
@@ -1044,6 +1088,50 @@ export function clearRoutes() {
 function clearMarkers(markers) {
   markers.forEach((marker) => marker.remove());
   markers.length = 0;
+}
+
+function endpointMarkerElement(kind, point) {
+  const label = kind === "start" ? "START" : "END";
+  const element = document.createElement("button");
+  element.type = "button";
+  element.className = `required-marker endpoint-marker ${kind}`;
+  element.setAttribute("aria-label", `${label}: ${point.name || `Hard ${kind}`}`);
+  const visual = document.createElement("span");
+  visual.className = "required-marker-visual";
+  const image = document.createElement("img");
+  image.src = REQUIRED_PIN_URL;
+  image.alt = "";
+  image.width = 40;
+  image.height = 60;
+  image.draggable = false;
+  const badge = document.createElement("span");
+  badge.className = kind === "start" ? "required-marker-start" : "required-marker-end";
+  badge.textContent = label;
+  visual.append(image, badge);
+  element.append(visual);
+  return element;
+}
+
+export function renderHardEndpoints(start, end, handlers = {}) {
+  if (!map) return;
+  clearMarkers(endpointMarkers);
+  for (const [kind, point] of [["start", start], ["end", end]]) {
+    if (!validCoordinate(point)) continue;
+    const element = endpointMarkerElement(kind, point);
+    element.addEventListener("click", (event) => {
+      event.stopPropagation();
+      handlers.onActivate?.(kind);
+    });
+    const marker = new window.maplibregl.Marker({
+      element,
+      draggable: false,
+      anchor: "bottom",
+      offset: [0, 16],
+    })
+      .setLngLat([point.lon, point.lat])
+      .addTo(map);
+    endpointMarkers.push(marker);
+  }
 }
 
 function displayName(point, orderIndex) {
@@ -1216,7 +1304,7 @@ function renderRequiredLabels(entries, selectedIndex) {
   moveRequiredLabelsToTop();
 }
 
-export function renderRequiredMarkers(points, visits, selectedIndex, popupIndex, disabled, handlers) {
+export function renderRequiredMarkers(points, visits, selectedIndex, popupIndex, disabled, handlers, firstIsStart = true) {
   if (!map) return;
   clearMarkers(requiredMarkers);
   requiredPointActivateHandler = handlers.onActivate;
@@ -1224,7 +1312,7 @@ export function renderRequiredMarkers(points, visits, selectedIndex, popupIndex,
   entries.forEach(({ point, sourceIndex }, orderIndex) => {
     if (!validCoordinate(point)) return;
     const selected = sourceIndex === selectedIndex;
-    const start = orderIndex === 0;
+    const start = firstIsStart && orderIndex === 0;
     const element = requiredMarkerElement(point, sourceIndex, orderIndex + 1, selected, start, disabled);
     const marker = new window.maplibregl.Marker({
       element,

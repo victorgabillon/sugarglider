@@ -171,6 +171,29 @@ async def test_exact_repeated_edge_and_immediate_reverse_are_measured_globally()
 
 
 @pytest.mark.asyncio
+async def test_open_beam_never_appends_the_start() -> None:
+    start = Coordinate(lat=48.85, lon=2.36)
+    end = Coordinate(lat=48.88, lon=2.10)
+    key = (start.lat, start.lon, end.lat, end.lon)
+    backend = AlternativeBackend(
+        {key: (routed_leg(start, end, edge_id=1, distance_m=20_000),)}
+    )
+    result = await LowOverlapBeamSearch(
+        backend, RouteResultFactory(), LowOverlapSettings()
+    ).assemble(
+        name="open",
+        routing_points=(start, end),
+        profile="hike",
+        target_distance_m=25_000,
+        input_point_count=2,
+        close_loop=False,
+    )
+    assert backend.calls == [key]
+    assert result.states[0].composed_path.geometry[0] == (start.lon, start.lat)
+    assert result.states[0].composed_path.geometry[-1] == (end.lon, end.lat)
+
+
+@pytest.mark.asyncio
 async def test_distance_progress_competitive_and_primary_states_survive_pruning() -> (
     None
 ):

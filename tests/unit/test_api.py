@@ -399,3 +399,27 @@ async def test_application_errors_are_mapped(
     assert response.status_code == status
     assert response.json()["error"]["code"] == code
     assert "Traceback" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_endpoint_validation_errors_use_stable_safe_codes(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.post(
+        "/v1/routes/generate",
+        json={
+            "start": {"lat": 48.85, "lon": 2.36},
+            "points": [],
+            "route_topology": "point_to_point",
+            "target_distance_m": 10_000,
+        },
+    )
+    assert response.status_code == 422
+    assert response.json() == {
+        "error": {
+            "code": "endpoint_end_unresolved",
+            "message": "A hard end could not be resolved.",
+        }
+    }
+    assert "traceback" not in response.text.lower()
+    assert "graphhopper" not in response.text.lower()

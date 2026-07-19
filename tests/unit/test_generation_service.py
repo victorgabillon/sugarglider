@@ -1908,3 +1908,74 @@ async def test_low_overlap_without_standard_candidate_keeps_metrics_unknown() ->
     assert result.search.best_low_overlap_repeated_share is None
     assert result.search.pre_low_overlap_backtrack_share is None
     assert result.search.best_low_overlap_backtrack_share is None
+
+
+@pytest.mark.asyncio
+async def test_direct_open_path_keeps_endpoints_and_reports_lower_bound() -> None:
+    backend = FakeRoutingBackend(baseline_distance_m=12_000)
+    start = Coordinate(lat=48.85, lon=2.36, name="Bastille")
+    end = Coordinate(lat=48.88, lon=2.10, name="Marly")
+    request = RouteGenerationRequest(
+        start=start,
+        end=end,
+        points=[],
+        route_topology="point_to_point",
+        target_distance_m=10_000,
+        path_selection_mode="shortest",
+    )
+    result = await RouteGenerationService(backend).generate(request)
+
+    assert result.topology == "point_to_point"
+    assert result.effective_start == start
+    assert result.effective_end == end
+    assert backend.candidate_sequences == [(start, end)]
+    assert result.candidates[0].routing_points == (start, end)
+    assert result.candidates[0].route.geometry[0] == (start.lon, start.lat)
+    assert result.candidates[0].route.geometry[-1] == (end.lon, end.lat)
+    assert result.baseline.analysis.loop_geometry is None
+    assert result.candidates[0].route.analysis.loop_geometry is None
+    assert (
+        result.candidates[0].route.geometry[-1]
+        != result.candidates[0].route.geometry[0]
+    )
+    assert "target_below_point_to_point_lower_bound" in result.search.warnings
+
+
+@pytest.mark.asyncio
+async def test_open_fixed_order_preserves_only_interior_order() -> None:
+    backend = FakeRoutingBackend()
+    start = Coordinate(lat=48.85, lon=2.36)
+    first = Coordinate(lat=48.86, lon=2.30)
+    second = Coordinate(lat=48.87, lon=2.20)
+    end = Coordinate(lat=48.88, lon=2.10)
+    request = RouteGenerationRequest(
+        start=start,
+        end=end,
+        points=[first, second],
+        route_topology="point_to_point",
+        target_distance_m=40_000,
+        path_selection_mode="shortest",
+    )
+    await RouteGenerationService(backend).generate(request)
+    assert backend.candidate_sequences[0] == (start, first, second, end)
+
+
+@pytest.mark.asyncio
+async def test_same_explicit_endpoints_use_one_graphhopper_round_trip() -> None:
+    backend = FakeRoutingBackend()
+    start = Coordinate(lat=48.85, lon=2.36)
+    request = RouteGenerationRequest(
+        start=start,
+        end=start,
+        points=[],
+        target_distance_m=20_000,
+        path_selection_mode="shortest",
+    )
+    result = await RouteGenerationService(backend).generate(request)
+    assert result.topology == "loop"
+    assert backend.round_trip_calls == 1
+    assert backend.candidate_route_calls == 0
+    assert (
+        result.candidates[0].route.geometry[0]
+        == (result.candidates[0].route.geometry[-1])
+    )

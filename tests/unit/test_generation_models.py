@@ -76,11 +76,14 @@ def test_adjacent_duplicate_required_points_are_rejected() -> None:
         RouteGenerationRequest(points=[point, point], target_distance_m=41_000)
 
 
-def test_open_generation_is_rejected() -> None:
-    with pytest.raises(ValidationError, match="close_loop=true"):
-        RouteGenerationRequest(
-            points=points(), target_distance_m=41_000, close_loop=False
-        )
+def test_legacy_close_loop_false_resolves_a_genuine_open_path() -> None:
+    supplied = points()
+    request = RouteGenerationRequest(
+        points=supplied, target_distance_m=41_000, close_loop=False
+    )
+    assert request.resolved_endpoints.topology == "point_to_point"
+    assert request.routing_points == tuple(supplied)
+    assert request.routing_points[-1] != request.routing_points[0]
 
 
 def test_thirty_required_points_are_supported() -> None:

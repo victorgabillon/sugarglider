@@ -480,6 +480,42 @@ def test_packaged_static_directory_contains_application() -> None:
     assert (STATIC_DIRECTORY / "app.js").is_file()
 
 
+def test_frontend_exposes_separate_optional_endpoints_and_open_metrics() -> None:
+    html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
+    app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
+    state_code = (STATIC_DIRECTORY / "state.js").read_text(encoding="utf-8")
+    map_code = (STATIC_DIRECTORY / "map.js").read_text(encoding="utf-8")
+
+    for control_id in (
+        "route-topology",
+        "hard-start-enabled",
+        "hard-start-name",
+        "hard-start-lat",
+        "hard-start-lon",
+        "set-hard-start",
+        "clear-hard-start",
+        "hard-end-enabled",
+        "hard-end-name",
+        "hard-end-lat",
+        "hard-end-lon",
+        "set-hard-end",
+        "clear-hard-end",
+    ):
+        assert f'id="{control_id}"' in html
+    assert "waypointEndpoints" in state_code
+    assert 'routeTopology: "auto"' in state_code
+    assert "...(endpoints.start ?" in state_code
+    assert "...(endpoints.end ?" in state_code
+    assert "endpointSetMode" in state_code
+    assert "state.endpointSetMode" in app
+    assert "renderHardEndpoints" in app
+    assert "badge.textContent = label" in map_code
+    assert 'kind === "start" ? "START" : "END"' in map_code
+    assert "Direct control distance" in app
+    assert "Destination-progress monotonicity" in app
+    assert 'open ? "" : loopGeometrySection' in app
+
+
 def test_font_license_provenance_and_glyphs_are_in_wheel(tmp_path: Path) -> None:
     provenance = (FONT_DIRECTORY / "README.md").read_text(encoding="utf-8")
     license_text = (FONT_DIRECTORY / "LICENSE.txt").read_text(encoding="utf-8")
@@ -683,7 +719,14 @@ def test_frontend_auto_tour_is_default_and_preserves_waypoint_mode() -> None:
     assert 'id="distance-priority"' in html
     assert 'id="requested-places"' in html
     assert 'if (state.planningMode === "auto_tour")' in app
-    assert "state.autoTour.requestedPlaces = requested.map" in app
+    assert "state.autoTour.requestedPlaces = imported.requestedPlaces" in app
+    assert "supplied_json_point_count" in app
+    assert "imported_requested_place_count" in app
+    assert "consumed_as_start_count" in app
+    assert "deduplicated_count" in app
+    assert "discarded_count" in app
+    assert "legacyRequestedPoints.forEach" in app
+    assert "(value.requested_places ?? []).forEach" in app
     assert 'switchPlanningMode("waypoint_route")' not in app
     assert "Prefer in Auto Tour" in map_code
     assert "Require exact visit" not in html + app + map_code
@@ -747,7 +790,10 @@ def test_requested_places_have_an_independent_safe_map_lifecycle() -> None:
     assert 'type: "circle"' in requested_layers
     assert 'type: "symbol"' in requested_layers
     assert '"text-allow-overlap": false' in requested_layers
-    assert '"circle-opacity": .98' in requested_layers
+    assert '"icon-image": "requested-sugarglider"' in requested_layers
+    assert 'map.hasImage("requested-sugarglider")' in map_code
+    assert "REQUIRED_PIN_URL" in map_code
+    assert '"circle-opacity": .42' in requested_layers
     assert '"satisfied", "#4f8c61"' in requested_layers
     assert '"missed", "#c94f47"' in requested_layers
     assert '"#fff1c7"' in requested_layers
@@ -782,7 +828,8 @@ def test_requested_places_have_an_independent_safe_map_lifecycle() -> None:
     assert "requested-place-row" in app
     assert 'item.setAttribute("role", "button")' in app
     assert "scrollRequestedPlaceIntoView" in app
-    assert "fitCoordinates(imported.points.map" in app
+    assert "...imported.requestedPlaces.map" in app
+    assert "fitCoordinates([" in app
     assert 'switchPlanningMode("waypoint_route")' not in app
 
     for legend_class in (
@@ -796,6 +843,45 @@ def test_requested_places_have_an_independent_safe_map_lifecycle() -> None:
     assert "Your plan" in html
     assert "Mapped OSM discovery" in html
     assert "max-width: calc(100vw - 24px)" in styles
+
+
+def test_bastille_to_marly_example_preserves_source_points_and_consumes_end() -> None:
+    original = json.loads(
+        Path("examples/marly/all-pois-generation-request.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    example = json.loads(
+        Path("examples/marly/bastille-to-marly-22-places-auto-tour.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
+    state = (STATIC_DIRECTORY / "state.js").read_text(encoding="utf-8")
+    html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
+
+    assert example["points"] == original["points"]
+    assert len(example["points"]) == 23
+    assert example["route_topology"] == "point_to_point"
+    assert example["maximum_distance_m"] is None
+    assert (
+        sum(
+            point["lat"] == example["end"]["lat"]
+            and point["lon"] == example["end"]["lon"]
+            for point in example["points"]
+        )
+        == 1
+    )
+    supplied_locations = {
+        (point["lat"], point["lon"], point["name"])
+        for point in (example["start"], example["end"], *example["points"])
+    }
+    assert len(supplied_locations) == 24
+    assert "supplied_location_count" in app
+    assert "consumedLocation" in app
+    assert "consumed_as_end_count" in app
+    assert 'id="maximum-distance"' in html
+    assert "maximum_distance_m" in state
 
 
 def test_frontend_uses_local_brand_identity_and_accessible_landmarks() -> None:

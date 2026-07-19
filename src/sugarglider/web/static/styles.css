@@ -114,6 +114,12 @@ label span { color: var(--muted-text); font-weight: 500; }
 input, select { width: 100%; min-height: var(--control-height); padding: .48rem .58rem; border: 1px solid #aaa99b; border-radius: 6px; color: var(--text); background: #fff; }
 input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d; }
 .field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.endpoint-controls { display: grid; gap: .65rem; margin: .75rem 0; }
+.endpoint-control { min-width: 0; padding: .7rem; border: 1px solid var(--border); border-radius: 12px; background: rgb(255 255 255 / 45%); }
+.endpoint-control legend { padding: 0 .25rem; font-weight: 800; }
+.endpoint-control legend label { display: inline-flex; flex-direction: row; align-items: center; gap: .4rem; margin: 0; }
+.endpoint-control legend input { width: auto; min-height: 0; margin: 0; padding: 0; }
+.endpoint-control .button-row { margin-top: .35rem; }
 
 .places-controls form { margin: .25rem 0 .6rem; display: grid; gap: .38rem; }
 .places-controls .check-control { margin: 0; display: flex; align-items: flex-start; gap: .45rem; font-size: .71rem; line-height: 1.35; }
@@ -225,6 +231,8 @@ input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d;
 .required-marker:disabled .required-marker-visual { opacity: .55; filter: grayscale(.55); }
 .required-marker-number { position: absolute; z-index: 2; top: -3px; left: -7px; min-width: 20px; height: 20px; padding: 0 4px; display: grid; place-items: center; border: 2px solid #fff; border-radius: 999px; color: #27251f; background: #fff8dd; box-shadow: 0 1px 4px rgb(0 0 0 / 45%); font-size: 10px; font-weight: 900; line-height: 1; }
 .required-marker-start { position: absolute; z-index: 2; top: -4px; right: -13px; padding: 3px 5px; border: 2px solid #fff; border-radius: 999px; color: #fff; background: var(--primary-action); box-shadow: 0 1px 4px rgb(0 0 0 / 40%); font-size: 7px; font-weight: 900; letter-spacing: .04em; line-height: 1; }
+.required-marker-end { position: absolute; z-index: 2; top: -4px; right: -11px; padding: 3px 5px; border: 2px solid #fff; border-radius: 4px 10px 10px 4px; color: #fff; background: #9b3f39; box-shadow: 0 1px 4px rgb(0 0 0 / 40%); font-size: 7px; font-weight: 900; letter-spacing: .06em; line-height: 1; }
+.endpoint-marker.end .required-marker-visual img { filter: drop-shadow(0 2px 2px rgb(0 0 0 / 28%)); }
 .map-marker.optional { width: 16px; height: 16px; border: 2px solid #fff; border-radius: 3px; background: var(--accent-orange); box-shadow: 0 1px 4px rgb(0 0 0 / 55%); transform: rotate(45deg); }
 .map-marker.waypoint { width: 19px; height: 19px; border: 2px solid #fff; border-radius: 3px 9px 3px 9px; background: var(--import-blue); box-shadow: 0 1px 4px rgb(0 0 0 / 55%); }
 .maplibregl-popup-content { padding: 0; border-radius: 8px; box-shadow: var(--shadow-medium); }

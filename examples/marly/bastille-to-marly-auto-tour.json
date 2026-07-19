@@ -1,0 +1,29 @@
+{
+  "name": "Bastille to Gare de Marly-le-Roi",
+  "start": {
+    "lat": 48.853,
+    "lon": 2.369,
+    "name": "Place de la Bastille"
+  },
+  "end": {
+    "lat": 48.871389,
+    "lon": 2.096667,
+    "name": "Gare de Marly-le-Roi"
+  },
+  "route_topology": "point_to_point",
+  "target_distance_m": 26000,
+  "tolerance_m": 2000,
+  "candidate_count": 3,
+  "seed": 0,
+  "hard_points": [],
+  "requested_places": [],
+  "preferred_poi_ids": [],
+  "distance_priority": "flexible",
+  "direction_preference": "any",
+  "scenic_preference": "prefer",
+  "drinking_water_preference": "prefer",
+  "nature_preference": "prefer",
+  "path_selection_mode": "low_overlap",
+  "loop_geometry_preference": "off",
+  "profile": "hike"
+}

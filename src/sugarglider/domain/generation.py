@@ -4,15 +4,27 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, PrivateAttr, model_validator
 
+from sugarglider.domain.endpoints import (
+    EndpointSelection,
+    EndpointVisit,
+    ResolvedEndpoints,
+    ResolvedRouteTopology,
+    RouteTopology,
+    resolve_waypoint_endpoints,
+    routing_sequence,
+)
 from sugarglider.domain.models import Coordinate, ImmutableModel, RouteResult
 
 GenerationStatus = Literal["within_tolerance", "best_effort", "infeasible"]
-PointOrderMode = Literal["fixed", "optimize_loop"]
+PointOrderMode = Literal["fixed", "optimize_loop", "optimize_path"]
 PathSelectionMode = Literal["shortest", "low_overlap"]
 NaturePreference = Literal["off", "prefer"]
 LoopGeometryPreference = Literal["off", "prefer"]
 CandidateConstruction = Literal[
     "direct_order",
+    "open_path_direct",
+    "open_path_optimized",
+    "open_path_alternative_leg_beam",
     "round_trip_detour",
     "sector_balanced_detour",
     "alternative_leg_beam",
@@ -26,12 +38,17 @@ class RouteGenerationRequest(ImmutableModel):
     """Ordered mandatory anchors and bounded deterministic search parameters."""
 
     name: str = "Sugarglider generated route"
-    points: Annotated[list[Coordinate], Field(min_length=2, max_length=30)]
+    start: Coordinate | None = None
+    end: Coordinate | None = None
+    points: Annotated[list[Coordinate], Field(max_length=30)] = Field(
+        default_factory=list
+    )
+    route_topology: RouteTopology = "auto"
     target_distance_m: Annotated[float, Field(ge=1_000, le=200_000)]
     tolerance_m: Annotated[float, Field(ge=100, le=10_000)] = 2_000
     candidate_count: Annotated[int, Field(ge=1, le=5)] = 3
     seed: int = 0
-    close_loop: bool = True
+    close_loop: bool | None = True
     profile: Literal["hike"] = "hike"
     point_order_mode: PointOrderMode = "fixed"
     path_selection_mode: PathSelectionMode = "shortest"
@@ -39,23 +56,91 @@ class RouteGenerationRequest(ImmutableModel):
     loop_geometry_preference: LoopGeometryPreference = "off"
     _required_point_count: int = PrivateAttr()
     _supplied_points: tuple[Coordinate, ...] = PrivateAttr()
+    _endpoint_selection: EndpointSelection = PrivateAttr()
+    _routing_points: tuple[Coordinate, ...] = PrivateAttr()
+    _interior_points: tuple[Coordinate, ...] = PrivateAttr()
 
     @model_validator(mode="after")
     def validate_and_close_required_points(self) -> Self:
-        """Preserve supplied order and append the start exactly once."""
-        if not self.close_loop:
-            raise ValueError("PR3 route generation requires close_loop=true")
-        self._required_point_count = len(self.points)
-        self._supplied_points = tuple(self.points)
-        for previous, current in zip(self.points, self.points[1:], strict=False):
+        """Resolve topology while retaining the exact legacy loop representation."""
+        supplied = tuple(self.points)
+        requested_topology = self.route_topology
+        topology_was_supplied = "route_topology" in self.model_fields_set
+        close_loop_was_supplied = "close_loop" in self.model_fields_set
+        if not topology_was_supplied and self.close_loop is False:
+            requested_topology = "point_to_point"
+        if topology_was_supplied and close_loop_was_supplied:
+            conflicts = (
+                self.close_loop is True and requested_topology == "point_to_point"
+            ) or (self.close_loop is False and requested_topology == "loop")
+            if conflicts:
+                from sugarglider.domain.endpoints import endpoint_error
+
+                raise endpoint_error(
+                    "route_topology_conflicts_with_close_loop",
+                    "route_topology conflicts with the legacy close_loop value.",
+                )
+        for previous, current in zip(supplied, supplied[1:], strict=False):
             if (previous.lat, previous.lon) == (current.lat, current.lon):
                 raise ValueError(
                     "adjacent required points must not have equal coordinates"
                 )
-        first = self.points[0]
-        last = self.points[-1]
-        if (first.lat, first.lon) != (last.lat, last.lon):
-            object.__setattr__(self, "points", [*self.points, first])
+        endpoint_points = supplied
+        if (
+            self.start is None
+            and self.end is None
+            and len(supplied) > 1
+            and (supplied[0].lat, supplied[0].lon)
+            == (supplied[-1].lat, supplied[-1].lon)
+            and requested_topology != "point_to_point"
+        ):
+            endpoint_points = supplied[:-1]
+        selection = resolve_waypoint_endpoints(
+            start=self.start,
+            end=self.end,
+            points=endpoint_points,
+            route_topology=requested_topology,
+        )
+        interior = tuple(
+            point
+            for index, point in enumerate(endpoint_points)
+            if index not in selection.consumed_point_indices
+        )
+        if (
+            selection.resolved.topology == "loop"
+            and not interior
+            and not (
+                self.start is not None
+                and self.end is not None
+                and (self.start.lat, self.start.lon) == (self.end.lat, self.end.lon)
+            )
+        ):
+            raise ValueError("a Waypoint loop requires at least one interior point")
+        route_points = routing_sequence(selection.resolved, interior)
+        if (
+            self.point_order_mode == "optimize_loop"
+            and selection.resolved.topology != "loop"
+        ):
+            raise ValueError("optimize_loop is only valid for loop topology")
+        if (
+            self.point_order_mode == "optimize_path"
+            and selection.resolved.topology != "point_to_point"
+        ):
+            raise ValueError("optimize_path is only valid for point-to-point topology")
+        self._required_point_count = (
+            len(supplied) + int(self.start is not None) + int(self.end is not None)
+        )
+        self._supplied_points = supplied
+        self._endpoint_selection = selection
+        self._routing_points = route_points
+        self._interior_points = interior
+        # Preserve the historical public points-only closed-loop model shape.
+        if (
+            self.start is None
+            and self.end is None
+            and selection.resolved.topology == "loop"
+        ):
+            object.__setattr__(self, "points", list(route_points))
         return self
 
     @property
@@ -65,14 +150,24 @@ class RouteGenerationRequest(ImmutableModel):
 
     @property
     def supplied_required_points(self) -> tuple[Coordinate, ...]:
-        """Caller-supplied mandatory points without a closing duplicate."""
-        points = self._supplied_points
-        if len(points) > 1 and (points[0].lat, points[0].lon) == (
-            points[-1].lat,
-            points[-1].lon,
-        ):
-            return points[:-1]
-        return points
+        """All effective mandatory points without a closing duplicate."""
+        return (self.resolved_endpoints.start, *self._interior_points)
+
+    @property
+    def resolved_endpoints(self) -> ResolvedEndpoints:
+        return self._endpoint_selection.resolved
+
+    @property
+    def routing_points(self) -> tuple[Coordinate, ...]:
+        return self._routing_points
+
+    @property
+    def interior_points(self) -> tuple[Coordinate, ...]:
+        return self._interior_points
+
+    @property
+    def caller_supplied_points(self) -> tuple[Coordinate, ...]:
+        return self._supplied_points
 
 
 class RequiredPointVisit(ImmutableModel):
@@ -166,3 +261,8 @@ class RouteGenerationResult(ImmutableModel):
     baseline: RouteResult
     candidates: tuple[GeneratedCandidate, ...]
     search: SearchSummary
+    topology: ResolvedRouteTopology = "loop"
+    effective_start: Coordinate | None = None
+    effective_end: Coordinate | None = None
+    endpoint_visits: tuple[EndpointVisit, EndpointVisit] | tuple[()] = ()
+    endpoint_warnings: tuple[str, ...] = ()

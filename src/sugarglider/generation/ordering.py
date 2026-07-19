@@ -158,3 +158,94 @@ def generate_order_proposals(
     for proposal in bases:
         add(two_opt_refine(points, proposal))
     return tuple(proposals)
+
+
+def ordered_open_points(
+    points: tuple[Coordinate, ...], order: PointOrder
+) -> tuple[Coordinate, ...]:
+    """Apply an endpoint-fixed order to an open mandatory-point sequence."""
+    validate_path_order(order, len(points))
+    return tuple(points[index] for index in order)
+
+
+def validate_path_order(order: PointOrder, point_count: int) -> None:
+    """Reject open orders that move either endpoint or lose interior points."""
+    if point_count < 2:
+        raise ValueError("open point ordering requires two endpoints")
+    if len(order) != point_count or set(order) != set(range(point_count)):
+        raise ValueError("path order must contain every original index exactly once")
+    if order[0] != 0 or order[-1] != point_count - 1:
+        raise ValueError("path order must keep both endpoints fixed")
+
+
+def path_distance_m(points: tuple[Coordinate, ...], order: PointOrder) -> float:
+    validate_path_order(order, len(points))
+    return sum(
+        haversine_distance_m(
+            (points[left].lon, points[left].lat),
+            (points[right].lon, points[right].lat),
+        )
+        for left, right in zip(order, order[1:], strict=False)
+    )
+
+
+def generate_path_order_proposals(
+    points: tuple[Coordinate, ...], *, limit: int = MAX_ORDER_PROPOSALS
+) -> tuple[PointOrder, ...]:
+    """Return bounded deterministic endpoint-fixed open-path permutations."""
+    if not 1 <= limit <= MAX_ORDER_PROPOSALS:
+        raise ValueError(
+            f"order proposal limit must be between 1 and {MAX_ORDER_PROPOSALS}"
+        )
+    original = tuple(range(len(points)))
+    validate_path_order(original, len(points))
+    if len(points) <= 3:
+        return (original,)
+    proposals: list[PointOrder] = [original]
+    seen = {original}
+
+    def add(order: PointOrder) -> None:
+        validate_path_order(order, len(points))
+        if order not in seen and len(proposals) < limit:
+            seen.add(order)
+            proposals.append(order)
+
+    # Greedy progress from the fixed start, always reserving the fixed end.
+    remaining = set(range(1, len(points) - 1))
+    nearest: list[int] = [0]
+    while remaining:
+        current = points[nearest[-1]]
+        next_index = min(
+            remaining,
+            key=lambda index: (
+                haversine_distance_m(
+                    (current.lon, current.lat),
+                    (points[index].lon, points[index].lat),
+                ),
+                index,
+            ),
+        )
+        nearest.append(next_index)
+        remaining.remove(next_index)
+    nearest.append(len(points) - 1)
+    add(tuple(nearest))
+    add((0, *reversed(range(1, len(points) - 1)), len(points) - 1))
+
+    best = min(proposals, key=lambda order: (path_distance_m(points, order), order))
+    for _pass in range(MAX_TWO_OPT_PASSES):
+        improvements: list[tuple[float, PointOrder]] = []
+        for start in range(1, len(best) - 2):
+            for end in range(start + 1, len(best) - 1):
+                proposal = (
+                    *best[:start],
+                    *reversed(best[start : end + 1]),
+                    *best[end + 1 :],
+                )
+                distance = path_distance_m(points, proposal)
+                if distance < path_distance_m(points, best) - 1e-6:
+                    improvements.append((distance, proposal))
+                add(proposal)
+        if not improvements:
+            break
+        _, best = min(improvements, key=lambda item: (item[0], item[1]))
+    return tuple(proposals)
