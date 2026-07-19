@@ -136,12 +136,21 @@ close-enough places, defaulting to a 100 m visit radius and `must_visit` importa
 the browser does not switch modes. Castle, viewpoint, or verified-water metadata may
 select the documented 200 m, 125 m, or 50 m radii. In an explicitly selected
 Waypoint Route, the same JSON retains its old exact mandatory-coordinate semantics.
+When an Auto Tour document also provides explicit `start`, `end`, or `hard_points`,
+those coordinates retain exact semantics while every unconsumed legacy `points`
+entry is merged with `requested_places`. Explicit requested-place metadata wins;
+stable IDs, or otherwise exact normalized coordinate-and-name pairs, provide
+deterministic deduplication. The import message reports the exact requested-place
+count and discarded-coordinate count, which is normally zero.
 Imported requested places immediately appear through their own MapLibre GeoJSON
-source as numbered `R` markers: cream while pending, green when the selected
-candidate satisfies them, and red when missed. Selecting a marker or its keyboard-
-accessible list row opens a DOM-safe measured-result popup and displays its actual
-visit-radius circle. An advanced map toggle can display every missed-place radius;
-these circles are proximity thresholds, not routing-access polygons.
+source as reusable Sugarglider mascot pins with compact `R1`, `R2`, … badges. A
+cream, green, or red halo shows pending, satisfied, or missed status; preferred
+places receive a secondary ring, and the selected pin is raised above its peers.
+Selecting a marker or its keyboard-accessible list row opens a DOM-safe measured-
+result popup and displays its actual visit-radius circle. An advanced map toggle can
+display every missed-place radius; these circles are proximity thresholds, not
+routing-access polygons. Verified drinking water continues to use its separate blue
+water mascot sprite.
 
 The Waypoint Route workflow remains:
 
@@ -449,11 +458,16 @@ attraction 1.5, plus a 1.0 category-diversity bonus, diminishing returns for rep
 categories, a one-time 2.0 verified-water bonus, and a 3.0 preferred-ID boost.
 
 In default `distance_priority="flexible"`, graph validity and exact hard anchors come
-first, followed by feasible must-visit requested places, immediate backtracking,
-global loop coherence, preferred requested places, total discovered-POI value,
-nature/trail quality, and a continuous distance penalty. Flexible searches enforce
-`target + max(2 × tolerance, 25% × target)` as a public safety maximum. `balanced`
-uses the same coherence protections with a stronger continuous distance charge;
+first, followed by feasible must-visit requested places, severe immediate
+backtracking and loop-coherence gates, preferred requested places, repetition and
+corridor quality, total discovered-POI value, nature/trail quality, and a continuous
+distance penalty. A separate bounded requested-place candidate family runs before
+discovered-POI insertion, tries deterministic imported, spatial, cheapest-insertion,
+and bounded relocate/2-opt orders, and records complete-set attempt, success,
+distance, safety, and rejection diagnostics. Flexible treats target distance as a
+late preference: an optional user maximum applies when supplied, otherwise the
+200 km server safety maximum applies. `balanced` retains
+`target + max(2 × tolerance, 25% × target)` and a stronger distance charge;
 explicit `strict` preserves tolerance-first selection. Flexible and balanced gates
 allow bounded quality trade-offs but never a large immediate out-and-back. Relative
 to a family control, flexible caps backtracking at +2 percentage points, repetition
@@ -651,6 +665,45 @@ generated points in construction order without the automatic closing duplicate,
 and a `construction` value: `direct_order`, `round_trip_detour`,
 `sector_balanced_detour`, or `alternative_leg_beam`. For optimized requests,
 `baseline` is deliberately the original fixed-order route.
+
+### Optional endpoints and route topology
+
+Waypoint Route and Auto Tour accept optional `start`, `end`, and
+`route_topology` (`auto`, `loop`, or `point_to_point`). Explicit endpoints are hard
+constraints. Automatic topology remains a loop unless a distinct explicit end is
+present, so legacy points-only Waypoint requests and start-only Auto Tours retain
+their closed-loop behavior. `close_loop` remains a deprecated Waypoint input:
+omitted topology derives its old meaning, while contradictory new/legacy fields
+are rejected.
+
+For Waypoint Route, `points` are ordered interior mandatory waypoints whenever
+explicit endpoints are present. With no explicit start, the first point is consumed
+as the inferred start; an open route can similarly consume the last distinct point
+as its inferred end. `optimize_path` keeps both endpoints fixed and reorders only
+interior waypoints. Open routing passes the actual `start → interiors → end`
+sequence to GraphHopper and never generates a loop and cuts it.
+
+Auto Tour resolves an omitted start from the lowest-index requested place and then
+the first hard point. An explicitly selected point-to-point topology resolves an
+omitted end from the highest-index distinct requested place and then the last
+distinct hard point. Consumed places remain visible in public accounting as
+endpoint-satisfied. Open Auto Tour retains the direct routed control, bounded
+alternative routes, and endpoint-fixed hard-point routes; POI and requested-place
+insertions can change only the interior sequence. Its response reports direct
+distance, detour ratio, reverse destination progress, monotonicity, and lateral
+deviation instead of applying loop-direction or closure diagnostics.
+
+Both generation responses expose resolved topology, effective endpoints, endpoint
+sources, snapped coordinates, snap distances, and safe endpoint warnings. Endpoint
+snaps beyond the configured maximum are rejected. Selected-candidate GPX remains
+one track and one segment: loop geometry stays closed, while point-to-point GPX ends
+at the hard destination without re-appending the start.
+
+The deterministic 45 km Flexible acceptance example consumes Gare de Marly-le-Roi
+as the hard END from the unchanged original 23-place list, leaving exactly 22
+requested places between Bastille and Marly. Import
+`examples/marly/bastille-to-marly-22-places-auto-tour.json` in the browser so its
+mixed endpoint/legacy-point schema is normalized before API submission.
 
 Low-overlap optimization uses exact GraphHopper edge IDs. It cannot recognize nearby
 parallel corridors as overlap, does not guarantee zero repetition, and cannot avoid
@@ -999,6 +1052,13 @@ neighborhood; this still does not prove a usable entrance or current access.
       available with its former defaults and imported 23-point request behavior.
 - [ ] Set the station start by map click and coordinate inputs; add up to six hard
       anchors and confirm the separate limits.
+- [ ] In each planning mode, set and clear Hard start/Hard end independently; switch
+      modes and confirm neither mode overwrites the other's endpoint markers.
+- [ ] Generate Automatic, Loop, and Point-to-point requests; confirm open routes end
+      at the END pin, show progress metrics, and never show loop direction as route
+      quality.
+- [ ] Import `examples/marly/bastille-to-marly-auto-tour.json`; confirm the START and
+      END pins appear immediately and repeated imports do not duplicate markers.
 - [ ] Confirm Auto Tour defaults prefer low overlap, balanced loops, mapped nature,
       scenic places, and verified water.
 - [ ] Confirm the branded header, local favicon, and initial mascot guidance.

@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from sugarglider.domain.endpoints import EndpointSnapTooFarError
 from sugarglider.generation.service import (
     RouteGenerationNoCandidateError,
     TargetDistanceInfeasibleError,
@@ -18,7 +19,10 @@ from sugarglider.routing.graphhopper import (
     RoutingUnavailableError,
     RoutingUpstreamError,
 )
-from sugarglider.tours.service import AutoTourNoCandidateError
+from sugarglider.tours.service import (
+    AutoTourMaximumBelowDirectLowerBoundError,
+    AutoTourNoCandidateError,
+)
 
 
 class RouteVisualizationError(ValueError):
@@ -33,6 +37,16 @@ class PublicError:
 
 
 ERRORS: dict[type[Exception], PublicError] = {
+    AutoTourMaximumBelowDirectLowerBoundError: PublicError(
+        422,
+        "auto_tour_maximum_below_direct_lower_bound",
+        "Maximum distance is below the graph-valid direct endpoint route.",
+    ),
+    EndpointSnapTooFarError: PublicError(
+        422,
+        "endpoint_snap_too_far",
+        "A hard endpoint is too far from the routed hiking network.",
+    ),
     AutoTourNoCandidateError: PublicError(
         422,
         "auto_tour_no_candidate",
@@ -93,8 +107,38 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def validation_handler(
-        _request: Request, _exception: RequestValidationError
+        _request: Request, exception: RequestValidationError
     ) -> JSONResponse:
+        endpoint_codes = {
+            "endpoint_start_unresolved",
+            "endpoint_end_unresolved",
+            "endpoint_coordinates_equal_for_point_to_point",
+            "distinct_end_not_allowed_for_loop",
+            "adjacent_duplicate_routing_points",
+            "route_topology_conflicts_with_close_loop",
+        }
+        first_code = next(
+            (
+                str(error["type"])
+                for error in exception.errors()
+                if str(error["type"]) in endpoint_codes
+            ),
+            None,
+        )
+        if first_code is not None:
+            return _response(
+                PublicError(
+                    422,
+                    first_code,
+                    str(
+                        next(
+                            error["msg"]
+                            for error in exception.errors()
+                            if str(error["type"]) == first_code
+                        )
+                    ),
+                )
+            )
         return _response(
             PublicError(422, "invalid_request", "The route request is invalid.")
         )

@@ -3,8 +3,16 @@
 from math import isclose
 from typing import Annotated, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, PrivateAttr, model_validator
 
+from sugarglider.domain.endpoints import (
+    EndpointSelection,
+    EndpointVisit,
+    ResolvedEndpoints,
+    ResolvedRouteTopology,
+    RouteTopology,
+    resolve_auto_tour_endpoints,
+)
 from sugarglider.domain.generation import (
     CandidateScore,
     LoopGeometryPreference,
@@ -23,6 +31,18 @@ type TourDirection = Literal["clockwise", "counterclockwise", "mixed"]
 type DirectionPreference = Literal["any", "clockwise", "counterclockwise"]
 type DistancePriority = Literal["flexible", "balanced", "strict"]
 type RequestedPlaceImportance = Literal["must_visit", "prefer"]
+type RequestedPlaceFailureReason = Literal[
+    "requested_place_snap_too_far",
+    "requested_place_graph_unreachable",
+    "requested_place_private_or_restricted",
+    "requested_place_route_budget_exhausted",
+    "requested_place_safety_rejected",
+    "requested_place_distance_ceiling_rejected",
+    "requested_place_user_maximum_rejected",
+    "requested_place_server_maximum_rejected",
+    "requested_place_search_budget_exhausted",
+    "requested_place_lower_utility_subset",
+]
 type TourConstruction = Literal[
     "isochrone_ellipse",
     "graphhopper_round_trip",
@@ -31,11 +51,18 @@ type TourConstruction = Literal[
     "local_repair",
     "corridor_continuation",
     "alternative_leg_repair",
+    "point_to_point_direct",
+    "point_to_point_hard_points",
+    "point_to_point_alternative",
+    "requested_place_family",
 ]
 type SkeletonMethod = Literal[
     "isochrone_ellipse",
     "graphhopper_round_trip",
     "graphhopper_round_trip_sampled",
+    "point_to_point_direct",
+    "point_to_point_hard_points",
+    "point_to_point_alternative",
 ]
 type PoiRejectionReason = Literal[
     "private_access",
@@ -59,6 +86,7 @@ Share = Annotated[float, Field(ge=0, le=1)]
 class RequestedTourPlace(ImmutableModel):
     """A user-requested place satisfied by a measured close-enough route pass."""
 
+    id: Annotated[str, Field(min_length=1, max_length=240)] | None = None
     name: Annotated[str, Field(min_length=1, max_length=200)]
     coordinate: Coordinate
     visit_radius_m: Annotated[float, Field(ge=25, le=500)] = 100.0
@@ -69,9 +97,15 @@ class RequestedTourPlace(ImmutableModel):
 class RequestedTourPlaceVisit(ImmutableModel):
     requested_place: RequestedTourPlace
     measured_distance_m: NonNegativeFloat
+    closest_route_distance_m: NonNegativeFloat = 0.0
+    visit_radius_m: Annotated[float, Field(ge=25, le=500)] = 100.0
     route_progress_share: Share
     satisfied: bool
     deliberately_routed: bool
+    deliberately_routed_in_another_retained_candidate: bool = False
+    deliberately_considered: bool = True
+    graph_snap_distance_m: NonNegativeFloat | None = None
+    failure_reason: RequestedPlaceFailureReason | None = None
     reason: Literal[
         "already_on_route",
         "deliberately_routed_close_enough",
@@ -79,8 +113,36 @@ class RequestedTourPlaceVisit(ImmutableModel):
         "snapped_outside_visit_radius",
     ]
 
+    @model_validator(mode="before")
+    @classmethod
+    def populate_compatibility_fields(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        result = dict(value)
+        result.setdefault("closest_route_distance_m", result.get("measured_distance_m"))
+        requested = result.get("requested_place")
+        if isinstance(requested, RequestedTourPlace):
+            result.setdefault("visit_radius_m", requested.visit_radius_m)
+        elif isinstance(requested, dict):
+            result.setdefault("visit_radius_m", requested.get("visit_radius_m"))
+        return result
+
     @model_validator(mode="after")
     def validate_satisfaction(self) -> Self:
+        if not isclose(
+            self.measured_distance_m,
+            self.closest_route_distance_m,
+            rel_tol=0,
+            abs_tol=1e-9,
+        ):
+            raise ValueError("closest route distance must match measured distance")
+        if not isclose(
+            self.visit_radius_m,
+            self.requested_place.visit_radius_m,
+            rel_tol=0,
+            abs_tol=1e-9,
+        ):
+            raise ValueError("visit radius must match the requested place")
         expected = self.measured_distance_m <= self.requested_place.visit_radius_m
         if self.satisfied != expected:
             raise ValueError(
@@ -88,6 +150,8 @@ class RequestedTourPlaceVisit(ImmutableModel):
             )
         if self.reason.endswith("close_enough") and not self.satisfied:
             raise ValueError("close-enough reason requires a satisfied requested place")
+        if self.satisfied and self.failure_reason is not None:
+            raise ValueError("a satisfied requested place cannot have a failure reason")
         return self
 
 
@@ -95,9 +159,12 @@ class AutoTourRequest(ImmutableModel):
     """A fixed start, optional hard anchors, and soft touring preferences."""
 
     name: str = "Sugarglider Auto Tour"
-    start: Coordinate
+    start: Coordinate | None = None
+    end: Coordinate | None = None
+    route_topology: RouteTopology = "auto"
     target_distance_m: Annotated[float, Field(ge=1_000, le=200_000)]
     tolerance_m: Annotated[float, Field(ge=100, le=10_000)] = 2_000
+    maximum_distance_m: Annotated[float, Field(gt=0, le=200_000)] | None = None
     candidate_count: Annotated[int, Field(ge=1, le=5)] = 3
     seed: int = 0
     profile: Literal["hike"] = "hike"
@@ -113,13 +180,14 @@ class AutoTourRequest(ImmutableModel):
     nature_preference: NaturePreference = "prefer"
     loop_geometry_preference: LoopGeometryPreference = "prefer"
     path_selection_mode: PathSelectionMode = "low_overlap"
+    _endpoint_selection: EndpointSelection = PrivateAttr()
 
     @model_validator(mode="after")
     def validate_stable_points_and_ids(self) -> Self:
         point_keys = tuple((point.lat, point.lon) for point in self.hard_points)
         if len(point_keys) != len(set(point_keys)):
             raise ValueError("Auto Tour hard points must be unique")
-        if (self.start.lat, self.start.lon) in point_keys:
+        if self.start is not None and (self.start.lat, self.start.lon) in point_keys:
             raise ValueError("Auto Tour hard points must not duplicate the start")
         if any(not value.strip() for value in self.preferred_poi_ids):
             raise ValueError("preferred POI IDs must not be empty")
@@ -127,6 +195,7 @@ class AutoTourRequest(ImmutableModel):
             raise ValueError("preferred POI IDs must be unique")
         requested_keys = tuple(
             (
+                place.id,
                 place.name,
                 place.coordinate.lat,
                 place.coordinate.lon,
@@ -136,7 +205,56 @@ class AutoTourRequest(ImmutableModel):
         )
         if len(requested_keys) != len(set(requested_keys)):
             raise ValueError("requested Auto Tour places must be unique")
+        self._endpoint_selection = resolve_auto_tour_endpoints(
+            start=self.start,
+            end=self.end,
+            requested_places=tuple(
+                (place.coordinate, place.original_index)
+                for place in self.requested_places
+            ),
+            hard_points=self.hard_points,
+            route_topology=self.route_topology,
+        )
         return self
+
+    @property
+    def resolved_endpoints(self) -> ResolvedEndpoints:
+        return self._endpoint_selection.resolved
+
+    @property
+    def effective_start(self) -> Coordinate:
+        return self.resolved_endpoints.start
+
+    @property
+    def effective_end(self) -> Coordinate:
+        return self.resolved_endpoints.end
+
+    @property
+    def interior_hard_points(self) -> tuple[Coordinate, ...]:
+        consumed = self._endpoint_selection.consumed_hard_point_indices
+        return tuple(
+            point
+            for index, point in enumerate(self.hard_points)
+            if index not in consumed
+        )
+
+    @property
+    def interior_requested_places(self) -> tuple[RequestedTourPlace, ...]:
+        consumed = self._endpoint_selection.consumed_requested_indices
+        return tuple(
+            place
+            for index, place in enumerate(self.requested_places)
+            if index not in consumed
+        )
+
+    @property
+    def interior_requested_place_indices(self) -> tuple[int, ...]:
+        consumed = self._endpoint_selection.consumed_requested_indices
+        return tuple(
+            index
+            for index in range(len(self.requested_places))
+            if index not in consumed
+        )
 
 
 class TourHardPointVisit(ImmutableModel):
@@ -267,6 +385,13 @@ class AutoTourCandidate(ImmutableModel):
     route_score: CandidateScore
     repair: TourRepairExplanation | None = None
     warnings: tuple[str, ...] = ()
+    direct_distance_m: NonNegativeFloat | None = None
+    detour_ratio: NonNegativeFloat | None = None
+    destination_progress_monotonicity: Share | None = None
+    reverse_progress_distance_m: NonNegativeFloat | None = None
+    reverse_progress_share: Share | None = None
+    endpoint_axis_lateral_deviation_m: NonNegativeFloat | None = None
+    near_parallel_corridor_share: Share | None = None
 
     @model_validator(mode="after")
     def validate_candidate_accounting(self) -> Self:
@@ -326,7 +451,11 @@ class AutoTourSearchSummary(ImmutableModel):
     retained_skeleton_count: Annotated[int, Field(ge=0, le=6)]
     poi_index_candidate_count: NonNegativeInt
     already_collected_poi_count: NonNegativeInt
-    poi_route_evaluation_count: Annotated[int, Field(ge=0, le=24)]
+    poi_route_evaluation_count: Annotated[int, Field(ge=0, le=84)]
+    requested_place_route_evaluations: Annotated[int, Field(ge=0, le=60)] = 0
+    discovered_poi_route_evaluations: Annotated[int, Field(ge=0, le=24)] = 0
+    requested_place_budget_exhausted: bool = False
+    discovered_poi_budget_exhausted: bool = False
     local_repair_evaluation_count: Annotated[int, Field(ge=0, le=12)]
     corridor_repair_evaluation_count: Annotated[int, Field(ge=0, le=12)] = 0
     alternative_leg_request_count: Annotated[int, Field(ge=0, le=24)]
@@ -340,6 +469,12 @@ class AutoTourSearchSummary(ImmutableModel):
     selected_verified_water_count: NonNegativeInt
     requested_place_satisfied_count: NonNegativeInt = 0
     requested_place_missed_count: NonNegativeInt = 0
+    complete_set_candidate_distance_m: NonNegativeFloat | None = None
+    full_set_route_attempted: bool = False
+    full_set_route_succeeded: bool = False
+    full_set_distance_m: NonNegativeFloat | None = None
+    full_set_safety_eligible: bool | None = None
+    full_set_rejection_reason: str | None = None
     maximum_distance_m: NonNegativeFloat = 0.0
     route_cache_hit_count: NonNegativeInt = 0
     timings: AutoTourTimings
@@ -347,6 +482,11 @@ class AutoTourSearchSummary(ImmutableModel):
 
     @model_validator(mode="after")
     def validate_accounting(self) -> Self:
+        if self.poi_route_evaluation_count != (
+            self.requested_place_route_evaluations
+            + self.discovered_poi_route_evaluations
+        ):
+            raise ValueError("requested and discovered POI evaluations must sum")
         expected = (
             self.round_trip_control_request_count
             + self.skeleton_route_request_count
@@ -362,6 +502,12 @@ class AutoTourSearchSummary(ImmutableModel):
             raise ValueError("corridor repairs must be part of the local repair budget")
         if self.warnings != tuple(sorted(set(self.warnings))):
             raise ValueError("Auto Tour warnings must be sorted and unique")
+        if self.full_set_route_succeeded and not self.full_set_route_attempted:
+            raise ValueError("a successful full-set route must have been attempted")
+        if self.full_set_route_succeeded != (self.full_set_distance_m is not None):
+            raise ValueError("full-set success and distance must agree")
+        if self.full_set_route_succeeded and self.full_set_safety_eligible is None:
+            raise ValueError("a successful full-set route requires safety status")
         return self
 
 
@@ -371,6 +517,11 @@ class AutoTourResult(ImmutableModel):
     control: AutoTourCandidate
     candidates: tuple[AutoTourCandidate, ...]
     search: AutoTourSearchSummary
+    topology: ResolvedRouteTopology = "loop"
+    effective_start: Coordinate | None = None
+    effective_end: Coordinate | None = None
+    endpoint_visits: tuple[EndpointVisit, EndpointVisit] | tuple[()] = ()
+    endpoint_warnings: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def validate_result(self) -> Self:

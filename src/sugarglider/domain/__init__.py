@@ -9,6 +9,12 @@ from sugarglider.domain.analysis import (
     RepetitionAnalysis,
     RouteAnalysis,
 )
+from sugarglider.domain.endpoints import (
+    EndpointSource,
+    EndpointVisit,
+    ResolvedEndpoints,
+    RouteTopology,
+)
 from sugarglider.domain.generation import (
     CandidateConstruction,
     CandidateScore,
@@ -30,6 +36,8 @@ from sugarglider.domain.models import (
 
 __all__ = [
     "Coordinate",
+    "EndpointSource",
+    "EndpointVisit",
     "CandidateScore",
     "CandidateConstruction",
     "DetailBreakdown",
@@ -49,5 +57,7 @@ __all__ = [
     "RouteRequest",
     "RouteResult",
     "RouteSummary",
+    "RouteTopology",
+    "ResolvedEndpoints",
     "SearchSummary",
 ]

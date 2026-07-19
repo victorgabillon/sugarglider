@@ -1,5 +1,6 @@
 """Opt-in integration test against a locally running GraphHopper 11 instance."""
 
+import json
 import math
 import os
 from pathlib import Path
@@ -8,13 +9,16 @@ from xml.etree import ElementTree
 import httpx
 import pytest
 
-from sugarglider.analysis.route import haversine_distance_m
+from sugarglider.analysis.route import RouteAnalyzer, haversine_distance_m
 from sugarglider.domain.generation import RouteGenerationRequest
 from sugarglider.domain.models import Coordinate, RouteRequest
 from sugarglider.generation.service import RouteGenerationService
 from sugarglider.gpx.writer import GPX_NAMESPACE, write_gpx
 from sugarglider.routing.graphhopper import GraphHopperClient
+from sugarglider.routing.result import RouteResultFactory
 from sugarglider.routing.service import RouteService
+from sugarglider.tours.models import AutoTourRequest
+from sugarglider.tours.service import AutoTourService
 
 pytestmark = pytest.mark.integration
 
@@ -147,6 +151,129 @@ async def test_live_marly_target_distance_generation() -> None:
     assert len(root.findall("g:trk/g:trkseg", namespace)) == 1
     assert len(root.findall("g:trk/g:trkseg/g:trkpt", namespace)) > 1
     assert root.findall("g:rte", namespace) == []
+
+
+@pytest.mark.asyncio
+async def test_live_bastille_to_marly_is_a_genuine_open_path() -> None:
+    if os.getenv("RUN_GRAPHHOPPER_INTEGRATION") != "1":
+        pytest.skip("set RUN_GRAPHHOPPER_INTEGRATION=1 to use live GraphHopper")
+
+    start = Coordinate(lat=48.853, lon=2.369, name="Place de la Bastille")
+    end = Coordinate(lat=48.871389, lon=2.096667, name="Gare de Marly-le-Roi")
+    request = RouteGenerationRequest(
+        name="Bastille to Marly",
+        start=start,
+        end=end,
+        points=[],
+        route_topology="point_to_point",
+        target_distance_m=26_000,
+        tolerance_m=2_000,
+        candidate_count=3,
+        path_selection_mode="low_overlap",
+        loop_geometry_preference="off",
+    )
+    base_url = os.getenv("GRAPHHOPPER_URL", "http://localhost:8989")
+    async with httpx.AsyncClient() as http_client:
+        result = await RouteGenerationService(
+            GraphHopperClient(base_url, client=http_client), max_evaluations=48
+        ).generate(request)
+
+    assert result.topology == "point_to_point"
+    assert result.endpoint_warnings == ()
+    assert all(visit.satisfied for visit in result.endpoint_visits)
+    best = result.candidates[0]
+    assert result.baseline.analysis.loop_geometry is None
+    assert best.route.analysis.loop_geometry is None
+    assert best.route.geometry[0] != best.route.geometry[-1]
+    assert haversine_distance_m(best.route.geometry[0], (start.lon, start.lat)) < 300
+    assert haversine_distance_m(best.route.geometry[-1], (end.lon, end.lat)) < 300
+    root = ElementTree.fromstring(write_gpx(best.route))
+    namespace = {"g": GPX_NAMESPACE}
+    points = root.findall("g:trk/g:trkseg/g:trkpt", namespace)
+    assert len(root.findall("g:trk", namespace)) == 1
+    assert len(root.findall("g:trk/g:trkseg", namespace)) == 1
+    assert root.findall("g:rte", namespace) == []
+    assert points[0].attrib != points[-1].attrib
+
+
+@pytest.mark.asyncio
+async def test_live_bastille_to_marly_45km_attempts_all_22_requested_places() -> None:
+    if os.getenv("RUN_GRAPHHOPPER_INTEGRATION") != "1":
+        pytest.skip("set RUN_GRAPHHOPPER_INTEGRATION=1 to use live GraphHopper")
+
+    document = json.loads(
+        Path("examples/marly/bastille-to-marly-22-places-auto-tour.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    points = document.pop("points")
+    end = document["end"]
+    requested_points = [
+        point
+        for point in points
+        if (point["lat"], point["lon"]) != (end["lat"], end["lon"])
+    ]
+    document["requested_places"] = [
+        {
+            "id": f"marly-{index}",
+            "name": point["name"],
+            "coordinate": {"lat": point["lat"], "lon": point["lon"]},
+            "visit_radius_m": 100,
+            "importance": "must_visit",
+            "original_index": index,
+        }
+        for index, point in enumerate(requested_points, start=1)
+    ]
+    request = AutoTourRequest.model_validate(document)
+    assert len(request.requested_places) == 22
+    assert all(
+        place.coordinate != request.effective_end for place in request.requested_places
+    )
+
+    base_url = os.getenv("GRAPHHOPPER_URL", "http://localhost:8989")
+    async with httpx.AsyncClient(timeout=240) as http_client:
+        result = await AutoTourService(
+            GraphHopperClient(base_url, client=http_client),
+            RouteResultFactory(RouteAnalyzer()),
+        ).generate(request)
+
+    recommended = result.candidates[0]
+    visits = recommended.requested_place_visits
+    missed = tuple(visit for visit in visits if not visit.satisfied)
+    assert len(visits) == 22
+    assert result.topology == "point_to_point"
+    assert result.effective_start == request.start
+    assert result.effective_end == request.end
+    assert recommended.route.geometry[0] != recommended.route.geometry[-1]
+    assert (
+        haversine_distance_m(
+            recommended.route.geometry[0],
+            (request.effective_start.lon, request.effective_start.lat),
+        )
+        < 300
+    )
+    assert (
+        haversine_distance_m(
+            recommended.route.geometry[-1],
+            (request.effective_end.lon, request.effective_end.lat),
+        )
+        < 300
+    )
+    assert all(visit.deliberately_considered for visit in visits)
+    assert any(visit.deliberately_routed for visit in visits)
+    assert recommended.satisfied_must_visit_count > 0
+    assert recommended.route.summary.distance_m <= recommended.maximum_distance_m
+    assert result.search.requested_place_route_evaluations > 0
+    assert result.search.discovered_poi_route_evaluations == 0
+    assert result.search.complete_set_candidate_distance_m is not None
+    assert result.search.full_set_route_attempted
+    assert result.search.maximum_distance_m == 200_000
+    assert all(visit.failure_reason is not None for visit in missed)
+    root = ElementTree.fromstring(write_gpx(recommended.route))
+    namespace = {"g": GPX_NAMESPACE}
+    track_points = root.findall("g:trk/g:trkseg/g:trkpt", namespace)
+    assert root.findall("g:rte", namespace) == []
+    assert track_points[0].attrib != track_points[-1].attrib
 
 
 @pytest.mark.asyncio

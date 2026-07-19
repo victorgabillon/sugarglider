@@ -16,12 +16,32 @@ from sugarglider.tours.models import (
     TourPoiVisit,
 )
 from sugarglider.tours.scoring import (
+    GLOBAL_AUTO_TOUR_MAXIMUM_DISTANCE_M,
     auto_tour_ranking_key,
     compare_with_control,
     control_comparison,
+    maximum_auto_tour_distance_m,
     poi_reward,
     soft_distance_penalty,
 )
+
+
+def test_distance_maximum_is_mode_aware_and_user_bounded() -> None:
+    assert maximum_auto_tour_distance_m(45_000, 2_000, priority="flexible") == (
+        GLOBAL_AUTO_TOUR_MAXIMUM_DISTANCE_M
+    )
+    assert maximum_auto_tour_distance_m(45_000, 2_000, priority="balanced") == (56_250)
+    assert maximum_auto_tour_distance_m(45_000, 2_000, priority="strict") == 56_250
+    assert (
+        maximum_auto_tour_distance_m(
+            45_000,
+            2_000,
+            priority="flexible",
+            requested_maximum_distance_m=61_000,
+        )
+        == 61_000
+    )
+
 
 RING = (
     (2.05, 48.86),

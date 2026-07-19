@@ -5,13 +5,21 @@ export const state = {
   waypointPoints: [],
   autoTour: {
     start: null,
+    end: null,
+    routeTopology: "auto",
     hardPoints: [],
     requestedPlaces: [],
+    maximumDistanceKm: null,
     preferredPoiIds: [],
     distancePriority: "flexible",
     directionPreference: "any",
     scenicPreference: "prefer",
     drinkingWaterPreference: "prefer",
+  },
+  waypointEndpoints: {
+    start: null,
+    end: null,
+    routeTopology: "auto",
   },
   options: {
     name: "Sugarglider route",
@@ -25,6 +33,7 @@ export const state = {
     loopGeometryPreference: "prefer",
   },
   autoTourOptions: null,
+  importDiagnostics: null,
   waypointOptions: {
     name: "Sugarglider route",
     targetDistanceKm: 20,
@@ -47,6 +56,7 @@ export const state = {
   abortController: null,
   visualizationCache: new Map(),
   addPointMode: false,
+  endpointSetMode: null,
   showAllCandidates: true,
   showNatureContext: false,
   showMissedRequestedRadii: false,
@@ -68,8 +78,12 @@ export const state = {
 
 export function saveActivePoints() {
   if (state.planningMode === "auto_tour") {
-    state.autoTour.start = state.points[0] ?? null;
-    state.autoTour.hardPoints = state.points.slice(1);
+    if (state.autoTour.start) {
+      state.autoTour.start = state.points[0] ?? state.autoTour.start;
+      state.autoTour.hardPoints = state.points.slice(1);
+    } else {
+      state.autoTour.hardPoints = [...state.points];
+    }
     state.autoTourOptions = { ...state.options };
   } else {
     state.waypointPoints = [...state.points];
@@ -99,6 +113,8 @@ export function invalidateCandidates() {
 }
 
 export function requestedPlaceIdentifier(place, fallbackIndex = 0) {
+  const stableId = place?.id ?? place?.stable_id;
+  if (typeof stableId === "string" && stableId.trim()) return stableId.trim();
   const coordinate = place?.coordinate ?? {};
   const originalIndex = place?.originalIndex
     ?? place?.original_index
@@ -120,8 +136,11 @@ export function pointDisplayName(point, index) {
 }
 
 export function currentRequest() {
+  const endpoints = state.waypointEndpoints;
   return {
     name: state.options.name,
+    ...(endpoints.start ? { start: coordinatePayload(endpoints.start, "Hard start") } : {}),
+    ...(endpoints.end ? { end: coordinatePayload(endpoints.end, "Hard end") } : {}),
     points: state.points.map((point, index) => ({
       name: pointDisplayName(point, index),
       lat: point.lat,
@@ -131,7 +150,7 @@ export function currentRequest() {
     tolerance_m: state.options.toleranceKm * 1000,
     candidate_count: state.options.candidateCount,
     seed: state.options.seed,
-    close_loop: true,
+    route_topology: endpoints.routeTopology,
     profile: "hike",
     point_order_mode: state.options.pointOrderMode,
     path_selection_mode: state.options.pathSelectionMode,
@@ -142,16 +161,20 @@ export function currentRequest() {
 
 export function currentAutoTourRequest() {
   saveActivePoints();
-  if (!state.autoTour.start) throw new Error("Auto Tour needs a valid start point.");
   return {
     name: state.options.name,
-    start: {
-      name: pointDisplayName(state.autoTour.start, 0),
-      lat: state.autoTour.start.lat,
-      lon: state.autoTour.start.lon,
-    },
+    ...(state.autoTour.start
+      ? { start: coordinatePayload(state.autoTour.start, "Hard start") }
+      : {}),
+    ...(state.autoTour.end
+      ? { end: coordinatePayload(state.autoTour.end, "Hard end") }
+      : {}),
+    route_topology: state.autoTour.routeTopology,
     target_distance_m: state.options.targetDistanceKm * 1000,
     tolerance_m: state.options.toleranceKm * 1000,
+    ...(state.autoTour.maximumDistanceKm == null
+      ? {}
+      : { maximum_distance_m: state.autoTour.maximumDistanceKm * 1000 }),
     candidate_count: state.options.candidateCount,
     seed: state.options.seed,
     hard_points: state.autoTour.hardPoints.map((point, index) => ({
@@ -160,6 +183,7 @@ export function currentAutoTourRequest() {
       lon: point.lon,
     })),
     requested_places: state.autoTour.requestedPlaces.map((place, index) => ({
+      ...(place.id ? { id: place.id } : {}),
       name: place.name || `Requested place ${index + 1}`,
       coordinate: {
         name: place.name || `Requested place ${index + 1}`,
@@ -179,5 +203,15 @@ export function currentAutoTourRequest() {
     path_selection_mode: state.options.pathSelectionMode,
     loop_geometry_preference: state.options.loopGeometryPreference,
     profile: "hike",
+  };
+}
+
+function coordinatePayload(point, fallbackName) {
+  return {
+    name: typeof point.name === "string" && point.name.trim()
+      ? point.name.trim()
+      : fallbackName,
+    lat: point.lat,
+    lon: point.lon,
   };
 }

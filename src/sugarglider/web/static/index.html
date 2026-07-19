@@ -78,20 +78,42 @@
               <label>Candidates<select id="candidate-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
               <label>Profile<select id="profile" disabled><option>hike</option></select></label>
             </div>
+            <label>Route topology<select id="route-topology"><option value="auto">Automatic</option><option value="loop">Loop</option><option value="point_to_point">Point to point</option></select></label>
+            <section class="endpoint-controls" aria-label="Optional hard endpoints">
+              <fieldset class="endpoint-control" id="hard-start-control">
+                <legend><label><input id="hard-start-enabled" type="checkbox"> Hard start</label></legend>
+                <label>Name<input id="hard-start-name" maxlength="200" placeholder="Hard start"></label>
+                <div class="field-pair">
+                  <label>Latitude<input id="hard-start-lat" type="number" min="-90" max="90" step="0.000001" placeholder="Optional"></label>
+                  <label>Longitude<input id="hard-start-lon" type="number" min="-180" max="180" step="0.000001" placeholder="Optional"></label>
+                </div>
+                <div class="button-row"><button id="set-hard-start" class="button secondary" type="button">Set on map</button><button id="clear-hard-start" class="text-button" type="button">Clear</button></div>
+              </fieldset>
+              <fieldset class="endpoint-control" id="hard-end-control">
+                <legend><label><input id="hard-end-enabled" type="checkbox"> Hard end</label></legend>
+                <label>Name<input id="hard-end-name" maxlength="200" placeholder="Hard end"></label>
+                <div class="field-pair">
+                  <label>Latitude<input id="hard-end-lat" type="number" min="-90" max="90" step="0.000001" placeholder="Optional"></label>
+                  <label>Longitude<input id="hard-end-lon" type="number" min="-180" max="180" step="0.000001" placeholder="Optional"></label>
+                </div>
+                <div class="button-row"><button id="set-hard-end" class="button secondary" type="button">Set on map</button><button id="clear-hard-end" class="text-button" type="button">Clear</button></div>
+              </fieldset>
+            </section>
             <section id="auto-tour-fields" class="mode-fields" aria-label="Auto Tour preferences">
               <p class="auto-tour-explanation">Builds graph-routed loop skeletons, links requested close-enough places, then evaluates nearby scenic and verified-water opportunities inside a fixed search budget.</p>
-              <div class="field-pair">
-                <label>Start latitude<input id="auto-start-lat" type="number" min="-90" max="90" step="0.000001" placeholder="Click the map"></label>
-                <label>Start longitude<input id="auto-start-lon" type="number" min="-180" max="180" step="0.000001" placeholder="Click the map"></label>
-              </div>
               <label>Direction<select id="direction-preference"><option value="any">Any</option><option value="clockwise">Clockwise</option><option value="counterclockwise">Counter-clockwise</option></select></label>
               <label>Distance priority<select id="distance-priority"><option value="flexible" selected>Flexible — places and coherence first</option><option value="balanced">Balanced</option><option value="strict">Strict — tolerance first</option></select></label>
+              <details class="places-advanced">
+                <summary>Advanced Auto Tour limits</summary>
+                <label>Maximum distance (optional) <span>km</span><input id="maximum-distance" type="number" min="0.1" max="200" step="0.1" placeholder="Server safety maximum"></label>
+                <p class="field-help">Blank means no user maximum; the server safety maximum applies.</p>
+              </details>
               <div class="field-pair">
                 <label>Scenic places<select id="scenic-preference"><option value="prefer">Prefer</option><option value="off">Off</option></select></label>
                 <label>Verified drinking water<select id="water-preference"><option value="prefer">Prefer</option><option value="off">Off</option></select></label>
               </div>
             </section>
-            <label id="waypoint-order-field">Mandatory-point order<select id="point-order-mode"><option value="fixed">Fixed input order</option><option value="optimize_loop">Optimize loop</option></select></label>
+            <label id="waypoint-order-field">Mandatory-point order<select id="point-order-mode"><option value="fixed">Fixed input order</option><option value="optimize_loop" data-optimized="true">Optimize loop</option></select></label>
             <label>Path selection<select id="path-selection-mode"><option value="shortest">Natural shortest paths</option><option value="low_overlap">Low-overlap alternatives</option></select></label>
             <label>Loop shape<select id="loop-geometry-preference"><option value="off">Off</option><option value="prefer">Prefer balanced loops</option></select></label>
             <p class="field-help">Prefers compact, directionally balanced loops with fewer close parallel corridors. Distance, backtracking and repetition remain more important.</p>

@@ -1,9 +1,14 @@
 """Bounded skeleton-first Auto Tour generation and conservative POI insertion."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from time import perf_counter
 
+from shapely.geometry import Point
+
+from sugarglider.analysis.open_route import analyze_open_route
+from sugarglider.analysis.projection import LocalMetricProjection
 from sugarglider.analysis.route import haversine_distance_m
+from sugarglider.domain.endpoints import validated_endpoint_visits
 from sugarglider.domain.models import Coordinate, RouteResult
 from sugarglider.generation.low_overlap import LowOverlapBeamSearch, LowOverlapSettings
 from sugarglider.generation.scoring import score_route
@@ -13,6 +18,10 @@ from sugarglider.routing.backend import (
     AutoTourRoutingBackend,
     IsochroneResult,
     RoutedPath,
+)
+from sugarglider.routing.composition import (
+    RouteCompositionError,
+    compose_routed_segments,
 )
 from sugarglider.routing.errors import (
     RoutingError,
@@ -30,6 +39,7 @@ from sugarglider.tours.models import (
     AutoTourTimings,
     PoiRejectionReason,
     RejectedPoiOpportunity,
+    RequestedPlaceFailureReason,
     SkeletonMethod,
     TourConstruction,
     TourControlComparison,
@@ -49,9 +59,9 @@ from sugarglider.tours.poi_selection import (
 )
 from sugarglider.tours.requested_places import (
     insert_coordinate_after,
-    insert_requested_place_opportunities,
     measure_requested_place_visits,
     requested_place_opportunities,
+    requested_place_order_proposals,
 )
 from sugarglider.tours.scoring import (
     auto_tour_ranking_key,
@@ -77,6 +87,7 @@ RETAINED_SKELETON_LIMIT = 6
 MAX_INSERTED_POIS = 4
 POI_BEAM_WIDTH = 6
 POI_ROUTE_EVALUATION_BUDGET = 24
+REQUESTED_PLACE_ROUTE_EVALUATION_BUDGET = 60
 POI_EXPANSIONS_PER_STATE = 4
 LOCAL_REPAIR_ROUTE_EVALUATION_BUDGET = 12
 ALTERNATIVE_LEG_REQUEST_BUDGET = 24
@@ -92,6 +103,10 @@ class AutoTourNoCandidateError(ValueError):
     """No graph-valid control survived the bounded Auto Tour search."""
 
 
+class AutoTourMaximumBelowDirectLowerBoundError(ValueError):
+    """A user maximum cannot contain the graph-valid endpoint control."""
+
+
 @dataclass(frozen=True)
 class AutoTourSettings:
     """Strict named request budgets and server-controlled POI behavior."""
@@ -102,6 +117,9 @@ class AutoTourSettings:
     max_inserted_pois: int = MAX_INSERTED_POIS
     poi_beam_width: int = POI_BEAM_WIDTH
     poi_route_evaluation_budget: int = POI_ROUTE_EVALUATION_BUDGET
+    requested_place_route_evaluation_budget: int = (
+        REQUESTED_PLACE_ROUTE_EVALUATION_BUDGET
+    )
     local_repair_route_evaluation_budget: int = LOCAL_REPAIR_ROUTE_EVALUATION_BUDGET
     alternative_leg_request_budget: int = ALTERNATIVE_LEG_REQUEST_BUDGET
     max_snap_displacement_m: float = MAX_SNAP_DISPLACEMENT_M
@@ -120,6 +138,8 @@ class AutoTourSettings:
             raise ValueError("POI beam width must be between 1 and 6")
         if not 0 <= self.poi_route_evaluation_budget <= 24:
             raise ValueError("POI route budget must be between 0 and 24")
+        if not 0 <= self.requested_place_route_evaluation_budget <= 60:
+            raise ValueError("requested-place route budget must be between 0 and 60")
         if not 0 <= self.local_repair_route_evaluation_budget <= 12:
             raise ValueError("local repair route budget must be between 0 and 12")
         if not 0 <= self.alternative_leg_request_budget <= 24:
@@ -133,6 +153,7 @@ class AutoTourSettings:
             self.round_trip_control_budget
             + self.skeleton_route_budget
             + self.poi_route_evaluation_budget
+            + self.requested_place_route_evaluation_budget
             + self.local_repair_route_evaluation_budget
             + self.alternative_leg_request_budget
         )
@@ -149,15 +170,24 @@ class _SearchState:
     skeleton_requests: int = 0
     skeleton_candidates: int = 0
     poi_requests: int = 0
+    requested_place_requests: int = 0
     repair_requests: int = 0
     alternative_requests: int = 0
     sampled_fallback_skeletons: int = 0
     corridor_repair_requests: int = 0
     route_cache_hits: int = 0
     budget_exhausted: bool = False
+    requested_place_budget_exhausted: bool = False
+    discovered_poi_budget_exhausted: bool = False
     route_call_seconds: float = 0.0
     poi_index_candidate_count: int = 0
     already_collected_count: int = 0
+    complete_set_candidate_distance_m: float | None = None
+    full_set_route_attempted: bool = False
+    full_set_route_succeeded: bool = False
+    full_set_distance_m: float | None = None
+    full_set_safety_eligible: bool | None = None
+    full_set_rejection_reason: str | None = None
     rejected_by_skeleton: dict[str, list[RejectedPoiOpportunity]] = field(
         default_factory=dict
     )
@@ -198,6 +228,13 @@ class _ContinuationOption:
     route_progress_share: float
     poi_opportunity: PoiOpportunity | None = None
     requested_index: int | None = None
+
+
+@dataclass(frozen=True)
+class _RequestedRouteOutcome:
+    path: RoutedPath
+    points: tuple[Coordinate, ...]
+    removed_requested_indices: frozenset[int] = frozenset()
 
 
 class AutoTourService:
@@ -242,6 +279,8 @@ class AutoTourService:
 
     async def generate(self, request: AutoTourRequest) -> AutoTourResult:
         """Return a retained no-POI control and conservative ranked candidates."""
+        if request.resolved_endpoints.topology == "point_to_point":
+            return await self._generate_open_tour(request)
         started = perf_counter()
         state = _SearchState()
         warnings: set[str] = set()
@@ -257,7 +296,7 @@ class AutoTourService:
         skeleton_started = perf_counter()
         skeletons = (
             generate_isochrone_skeletons(
-                start=request.start,
+                start=request.effective_start,
                 target_distance_m=request.target_distance_m,
                 envelope=envelope.geometry,
                 direction_preference=request.direction_preference,
@@ -305,6 +344,7 @@ class AutoTourService:
         insertion_started = perf_counter()
         base_candidates: dict[str, AutoTourCandidate] = {}
         all_insertions: list[_InsertionState] = []
+        initial_families: list[tuple[_InsertionState, PoiShortlist]] = []
         for control in retained:
             query_started = perf_counter()
             shortlist = shortlist_route_pois(
@@ -344,6 +384,12 @@ class AutoTourService:
                 deliberately_routed_requested_indices=frozenset(),
                 candidate=base_candidate,
             )
+            initial_families.append((start_state, shortlist))
+
+        requested_families: list[
+            tuple[_InsertionState, PoiShortlist, _InsertionState]
+        ] = []
+        for start_state, shortlist in initial_families:
             requested_states = await self._insert_requested_places(
                 request=request,
                 initial=start_state,
@@ -352,36 +398,37 @@ class AutoTourService:
             for requested_state in requested_states:
                 if request.requested_places and requested_state is start_state:
                     continue
-                if requested_state.draft.route.summary.distance_m > (
-                    maximum_auto_tour_distance_m(
-                        request.target_distance_m, request.tolerance_m
-                    )
-                ):
-                    all_insertions.append(requested_state)
-                    continue
-                state_shortlist = (
-                    shortlist
-                    if requested_state is start_state
-                    else shortlist_route_pois(
-                        index=self._poi_index,
-                        route_geometry=requested_state.draft.route.geometry,
-                        routing_points=requested_state.draft.routing_points,
-                        request=request,
-                        settings=self._settings.poi,
-                    )
-                )
-                family_states = await self._insert_pois(
+                requested_families.append((requested_state, shortlist, start_state))
+
+        for requested_state, shortlist, start_state in requested_families:
+            if requested_state.draft.route.summary.distance_m > _maximum_distance(
+                request
+            ):
+                all_insertions.append(requested_state)
+                continue
+            state_shortlist = (
+                shortlist
+                if requested_state is start_state
+                else shortlist_route_pois(
+                    index=self._poi_index,
+                    route_geometry=requested_state.draft.route.geometry,
+                    routing_points=requested_state.draft.routing_points,
                     request=request,
-                    initial=requested_state,
-                    initial_shortlist=state_shortlist,
-                    state=state,
+                    settings=self._settings.poi,
                 )
-                all_insertions.extend(
-                    family_state
-                    for family_state in family_states
-                    if family_state.selected_poi_ids
-                    or family_state.deliberately_routed_requested_indices
-                )
+            )
+            family_states = await self._insert_pois(
+                request=request,
+                initial=requested_state,
+                initial_shortlist=state_shortlist,
+                state=state,
+            )
+            all_insertions.extend(
+                family_state
+                for family_state in family_states
+                if family_state.selected_poi_ids
+                or family_state.deliberately_routed_requested_indices
+            )
         poi_insertion_seconds = perf_counter() - insertion_started
 
         local_repair_started = perf_counter()
@@ -416,9 +463,7 @@ class AutoTourService:
             for insertion in all_insertions
             if insertion.candidate.control_eligible
         ]
-        maximum_distance = maximum_auto_tour_distance_m(
-            request.target_distance_m, request.tolerance_m
-        )
+        maximum_distance = _maximum_distance(request)
         recommendation_pool = _deduplicate_candidates(
             (
                 *base_candidates.values(),
@@ -461,6 +506,11 @@ class AutoTourService:
         ):
             selected[-1] = requested_representative
             selected.sort(key=auto_tour_ranking_key)
+        selected = list(
+            _mark_cross_candidate_requested_routing(
+                _apply_requested_search_failure_context(tuple(selected), state)
+            )
+        )
         ranked = tuple(
             candidate.model_copy(update={"rank": rank})
             for rank, candidate in enumerate(selected, start=1)
@@ -469,12 +519,14 @@ class AutoTourService:
 
         if (
             self._poi_index is not None
+            and not request.requested_places
             and request.scenic_preference == "prefer"
             and not any(candidate.inserted_poi_reward > 0 for candidate in eligible)
         ):
             warnings.add("auto_tour_no_safe_poi_improvement")
         if (
             self._poi_index is not None
+            and not request.requested_places
             and request.drinking_water_preference == "prefer"
             and not any(
                 visit.poi.category == "drinking_water"
@@ -487,6 +539,11 @@ class AutoTourService:
             warnings.add("auto_tour_no_safe_water_insertion")
         if state.budget_exhausted:
             warnings.add("auto_tour_route_budget_exhausted")
+        if (
+            state.complete_set_candidate_distance_m is not None
+            and state.complete_set_candidate_distance_m > _maximum_distance(request)
+        ):
+            warnings.add("auto_tour_requested_complete_set_exceeds_safety_ceiling")
         warnings.update(
             warning
             for candidate in ranked
@@ -514,7 +571,13 @@ class AutoTourService:
             retained_skeleton_count=len(retained),
             poi_index_candidate_count=state.poi_index_candidate_count,
             already_collected_poi_count=state.already_collected_count,
-            poi_route_evaluation_count=state.poi_requests,
+            poi_route_evaluation_count=(
+                state.requested_place_requests + state.poi_requests
+            ),
+            requested_place_route_evaluations=state.requested_place_requests,
+            discovered_poi_route_evaluations=state.poi_requests,
+            requested_place_budget_exhausted=(state.requested_place_budget_exhausted),
+            discovered_poi_budget_exhausted=state.discovered_poi_budget_exhausted,
             local_repair_evaluation_count=state.repair_requests,
             corridor_repair_evaluation_count=state.corridor_repair_requests,
             alternative_leg_request_count=state.alternative_requests,
@@ -522,6 +585,7 @@ class AutoTourService:
             total_route_request_count=(
                 state.round_trip_requests
                 + state.skeleton_requests
+                + state.requested_place_requests
                 + state.poi_requests
                 + state.repair_requests
                 + state.alternative_requests
@@ -538,17 +602,394 @@ class AutoTourService:
             requested_place_missed_count=sum(
                 not visit.satisfied for visit in recommended.requested_place_visits
             ),
-            maximum_distance_m=maximum_auto_tour_distance_m(
-                request.target_distance_m, request.tolerance_m
-            ),
+            complete_set_candidate_distance_m=(state.complete_set_candidate_distance_m),
+            full_set_route_attempted=state.full_set_route_attempted,
+            full_set_route_succeeded=state.full_set_route_succeeded,
+            full_set_distance_m=state.full_set_distance_m,
+            full_set_safety_eligible=state.full_set_safety_eligible,
+            full_set_rejection_reason=state.full_set_rejection_reason,
+            maximum_distance_m=_maximum_distance(request),
             route_cache_hit_count=state.route_cache_hits,
             timings=timings,
             warnings=tuple(sorted(warnings)),
+        )
+        visits, endpoint_warnings = validated_endpoint_visits(
+            request.resolved_endpoints,
+            recommended.route.snapped_points,
+            maximum_snap_distance_m=self._settings.max_snap_displacement_m,
         )
         return AutoTourResult(
             control=control_ranked,
             candidates=ranked,
             search=summary,
+            topology="loop",
+            effective_start=request.effective_start,
+            effective_end=request.effective_end,
+            endpoint_visits=visits,
+            endpoint_warnings=endpoint_warnings,
+        )
+
+    async def _generate_open_tour(self, request: AutoTourRequest) -> AutoTourResult:
+        """Run the bounded endpoint-fixed Auto Tour lane without round trips."""
+        started = perf_counter()
+        state = _SearchState()
+        warnings: set[str] = set()
+        if self._poi_index is None:
+            warnings.add("auto_tour_poi_index_unavailable")
+        if request.nature_preference == "prefer" and not self._nature_index_available:
+            warnings.add("auto_tour_nature_index_unavailable")
+
+        direct_points = (request.effective_start, request.effective_end)
+        direct_path = await self._route_points(
+            direct_points, request.profile, "skeleton", state
+        )
+        if direct_path is None or not self._valid_complete_path(
+            direct_path, direct_points
+        ):
+            raise AutoTourNoCandidateError
+        direct_route = self._result_factory.create(
+            name=request.name,
+            path=direct_path,
+            input_point_count=2,
+        )
+        if (
+            request.maximum_distance_m is not None
+            and request.maximum_distance_m < direct_route.summary.distance_m
+        ):
+            raise AutoTourMaximumBelowDirectLowerBoundError
+        direct_draft = _Draft(
+            route=direct_route,
+            routing_points=direct_points,
+            signature=candidate_signature(direct_route, topology="point_to_point"),
+            construction="point_to_point_direct",
+            skeleton_id="point-to-point-direct",
+            skeleton_method="point_to_point_direct",
+            direction="mixed",
+            direction_warnings=(),
+            hard_point_visits=self._hard_point_visits(
+                request, direct_points, direct_path.snapped_points
+            ),
+        )
+        state.skeleton_candidates += 1
+        if request.target_distance_m < direct_route.summary.distance_m:
+            warnings.add("target_below_point_to_point_lower_bound")
+
+        control_drafts: list[_Draft] = [direct_draft]
+        exact_points = (
+            request.effective_start,
+            *_hard_points_by_direct_progress(
+                request.interior_hard_points, direct_route.geometry
+            ),
+            request.effective_end,
+        )
+        primary_draft = direct_draft
+        if exact_points != direct_points:
+            exact_path = await self._route_points(
+                exact_points, request.profile, "skeleton", state
+            )
+            if exact_path is None or not self._valid_complete_path(
+                exact_path, exact_points
+            ):
+                raise AutoTourNoCandidateError
+            exact_route = self._result_factory.create(
+                name=request.name,
+                path=exact_path,
+                input_point_count=len(exact_points),
+            )
+            primary_draft = _Draft(
+                route=exact_route,
+                routing_points=exact_points,
+                signature=candidate_signature(exact_route, topology="point_to_point"),
+                construction="point_to_point_hard_points",
+                skeleton_id="point-to-point-hard-points",
+                skeleton_method="point_to_point_hard_points",
+                direction="mixed",
+                direction_warnings=(),
+                hard_point_visits=self._hard_point_visits(
+                    request, exact_points, exact_path.snapped_points
+                ),
+            )
+            state.skeleton_candidates += 1
+            control_drafts.append(primary_draft)
+
+        original_hard_points = (
+            request.effective_start,
+            *request.interior_hard_points,
+            request.effective_end,
+        )
+        if (
+            len(request.interior_hard_points) > 1
+            and original_hard_points != exact_points
+        ):
+            original_path = await self._route_points(
+                original_hard_points, request.profile, "skeleton", state
+            )
+            if original_path is not None and self._valid_complete_path(
+                original_path, original_hard_points
+            ):
+                original_route = self._result_factory.create(
+                    name=request.name,
+                    path=original_path,
+                    input_point_count=len(original_hard_points),
+                )
+                control_drafts.append(
+                    _Draft(
+                        route=original_route,
+                        routing_points=original_hard_points,
+                        signature=candidate_signature(
+                            original_route, topology="point_to_point"
+                        ),
+                        construction="point_to_point_hard_points",
+                        skeleton_id="point-to-point-hard-points-original-order",
+                        skeleton_method="point_to_point_hard_points",
+                        direction="mixed",
+                        direction_warnings=(),
+                        hard_point_visits=self._hard_point_visits(
+                            request,
+                            original_hard_points,
+                            original_path.snapped_points,
+                        ),
+                    )
+                )
+                state.skeleton_candidates += 1
+
+        if (
+            not request.interior_hard_points
+            and self._settings.alternative_leg_request_budget
+        ):
+            alternative_started = perf_counter()
+            state.alternative_requests += 1
+            try:
+                alternatives = await self._backend.alternative_routes(
+                    request.effective_start,
+                    request.effective_end,
+                    request.profile,
+                    max_paths=self._low_overlap_settings.max_paths,
+                    max_weight_factor=self._low_overlap_settings.max_weight_factor,
+                    max_share_factor=self._low_overlap_settings.max_share_factor,
+                )
+            except RoutingPointError:
+                alternatives = ()
+            finally:
+                state.route_call_seconds += perf_counter() - alternative_started
+            for index, path in enumerate(alternatives):
+                if not self._valid_complete_path(path, direct_points):
+                    continue
+                route = self._result_factory.create(
+                    name=request.name,
+                    path=path,
+                    input_point_count=2,
+                )
+                control_drafts.append(
+                    _Draft(
+                        route=route,
+                        routing_points=direct_points,
+                        signature=candidate_signature(route, topology="point_to_point"),
+                        construction="point_to_point_alternative",
+                        skeleton_id=f"point-to-point-alternative-{index}",
+                        skeleton_method="point_to_point_alternative",
+                        direction="mixed",
+                        direction_warnings=(),
+                        hard_point_visits=self._hard_point_visits(
+                            request, direct_points, path.snapped_points
+                        ),
+                    )
+                )
+
+        control_drafts = list(_deduplicate_drafts(tuple(control_drafts)))
+        base_candidates: list[AutoTourCandidate] = []
+        insertion_states: list[_InsertionState] = []
+        poi_query_seconds = 0.0
+        insertion_started = perf_counter()
+        for draft in control_drafts:
+            query_started = perf_counter()
+            shortlist = shortlist_route_pois(
+                index=self._poi_index,
+                route_geometry=draft.route.geometry,
+                routing_points=draft.routing_points,
+                request=request,
+                settings=self._settings.poi,
+            )
+            poi_query_seconds += perf_counter() - query_started
+            state.poi_index_candidate_count += len(shortlist.matches)
+            state.already_collected_count += len(shortlist.already_collected)
+            candidate = self._public_candidate(
+                request=request,
+                draft=draft,
+                visits=shortlist.already_collected,
+                rejected=shortlist.rejected,
+                family_control=draft,
+                inserted=False,
+            )
+            candidate = _with_open_metrics(candidate, direct_route)
+            base_candidates.append(candidate)
+            initial = _InsertionState(
+                draft=draft,
+                family_control=draft,
+                base_already_ids=frozenset(
+                    visit.poi.id for visit in shortlist.already_collected
+                ),
+                selected_poi_ids=(),
+                selected_progress=(),
+                inserted_records={},
+                deliberately_routed_requested_indices=frozenset(),
+                candidate=candidate,
+            )
+            requested_states = await self._insert_requested_places(
+                request=request,
+                initial=initial,
+                state=state,
+            )
+            for requested_state in requested_states:
+                normalized_requested = replace(
+                    requested_state,
+                    candidate=_with_open_metrics(
+                        requested_state.candidate, direct_route
+                    ),
+                )
+                insertion_states.append(normalized_requested)
+                routed_shortlist = shortlist_route_pois(
+                    index=self._poi_index,
+                    route_geometry=normalized_requested.draft.route.geometry,
+                    routing_points=normalized_requested.draft.routing_points,
+                    request=request,
+                    settings=self._settings.poi,
+                )
+                poi_states = await self._insert_pois(
+                    request=request,
+                    initial=normalized_requested,
+                    initial_shortlist=routed_shortlist,
+                    state=state,
+                )
+                insertion_states.extend(
+                    replace(
+                        value,
+                        candidate=_with_open_metrics(value.candidate, direct_route),
+                    )
+                    for value in poi_states
+                )
+        poi_insertion_seconds = perf_counter() - insertion_started
+
+        public_control = next(
+            candidate
+            for candidate in base_candidates
+            if candidate.signature == direct_draft.signature
+        ).model_copy(update={"rank": 1})
+        pool = _deduplicate_candidates(
+            (
+                *base_candidates,
+                *(value.candidate for value in insertion_states),
+            )
+        )
+        hard_valid = tuple(
+            candidate
+            for candidate in pool
+            if all(visit.satisfied for visit in candidate.hard_point_visits)
+        )
+        selected = _open_candidate_portfolio(
+            hard_valid or pool,
+            request=request,
+            control=public_control,
+        )
+        selected = tuple(
+            _with_requested_coverage_warning(candidate, request, public_control)
+            for candidate in selected
+        )
+        selected = _apply_requested_search_failure_context(selected, state)
+        selected = _mark_cross_candidate_requested_routing(selected)
+        ranked = tuple(
+            candidate.model_copy(update={"rank": rank})
+            for rank, candidate in enumerate(selected, start=1)
+        )
+        if not ranked:
+            raise AutoTourNoCandidateError
+        recommended = ranked[0]
+        if state.budget_exhausted:
+            warnings.add("auto_tour_route_budget_exhausted")
+        if any(
+            "target_distance_exceeded_for_requested_coverage" in candidate.warnings
+            for candidate in ranked
+        ):
+            warnings.add("target_distance_exceeded_for_requested_coverage")
+        if (
+            state.complete_set_candidate_distance_m is not None
+            and state.complete_set_candidate_distance_m > _maximum_distance(request)
+        ):
+            warnings.add("auto_tour_requested_complete_set_exceeds_safety_ceiling")
+        visits, endpoint_warnings = validated_endpoint_visits(
+            request.resolved_endpoints,
+            recommended.route.snapped_points,
+            maximum_snap_distance_m=self._settings.max_snap_displacement_m,
+        )
+        warnings.update(endpoint_warnings)
+        total_seconds = perf_counter() - started
+        timings = AutoTourTimings(
+            isochrone_seconds=0.0,
+            skeleton_construction_seconds=0.0,
+            route_call_seconds=state.route_call_seconds,
+            poi_corridor_query_seconds=poi_query_seconds,
+            poi_insertion_search_seconds=poi_insertion_seconds,
+            local_repair_seconds=0.0,
+            total_seconds=total_seconds,
+        )
+        summary = AutoTourSearchSummary(
+            isochrone_request_count=0,
+            round_trip_control_request_count=0,
+            sampled_fallback_skeleton_count=0,
+            skeleton_route_request_count=state.skeleton_requests,
+            skeleton_candidate_count=state.skeleton_candidates,
+            retained_skeleton_count=len(control_drafts),
+            poi_index_candidate_count=state.poi_index_candidate_count,
+            already_collected_poi_count=state.already_collected_count,
+            poi_route_evaluation_count=(
+                state.requested_place_requests + state.poi_requests
+            ),
+            requested_place_route_evaluations=state.requested_place_requests,
+            discovered_poi_route_evaluations=state.poi_requests,
+            requested_place_budget_exhausted=(state.requested_place_budget_exhausted),
+            discovered_poi_budget_exhausted=state.discovered_poi_budget_exhausted,
+            local_repair_evaluation_count=0,
+            corridor_repair_evaluation_count=0,
+            alternative_leg_request_count=state.alternative_requests,
+            total_route_request_budget=self._settings.total_route_request_budget,
+            total_route_request_count=(
+                state.skeleton_requests
+                + state.requested_place_requests
+                + state.poi_requests
+                + state.alternative_requests
+            ),
+            budget_exhausted=state.budget_exhausted,
+            control_signature=public_control.signature,
+            recommended_signature=recommended.signature,
+            control_retained=True,
+            selected_scenic_count=recommended.selected_scenic_count,
+            selected_verified_water_count=recommended.selected_verified_water_count,
+            requested_place_satisfied_count=sum(
+                visit.satisfied for visit in recommended.requested_place_visits
+            ),
+            requested_place_missed_count=sum(
+                not visit.satisfied for visit in recommended.requested_place_visits
+            ),
+            complete_set_candidate_distance_m=(state.complete_set_candidate_distance_m),
+            full_set_route_attempted=state.full_set_route_attempted,
+            full_set_route_succeeded=state.full_set_route_succeeded,
+            full_set_distance_m=state.full_set_distance_m,
+            full_set_safety_eligible=state.full_set_safety_eligible,
+            full_set_rejection_reason=state.full_set_rejection_reason,
+            maximum_distance_m=_maximum_distance(request),
+            route_cache_hit_count=state.route_cache_hits,
+            timings=timings,
+            warnings=tuple(sorted(warnings)),
+        )
+        return AutoTourResult(
+            control=public_control,
+            candidates=ranked,
+            search=summary,
+            topology="point_to_point",
+            effective_start=request.effective_start,
+            effective_end=request.effective_end,
+            endpoint_visits=visits,
+            endpoint_warnings=endpoint_warnings,
         )
 
     async def _load_isochrone(
@@ -560,7 +1001,7 @@ class AutoTourService:
         state.isochrone_requests += 1
         try:
             result = await self._backend.isochrone(
-                request.start,
+                request.effective_start,
                 request.profile,
                 distance_limit_m=request.target_distance_m / 2,
                 buckets=1,
@@ -581,7 +1022,9 @@ class AutoTourService:
         skeleton: LoopSkeleton,
         state: _SearchState,
     ) -> _Draft | None:
-        points = routing_points_with_hard_anchors(skeleton, request.hard_points)
+        points = routing_points_with_hard_anchors(
+            skeleton, request.interior_hard_points
+        )
         path = await self._route_points(points, request.profile, "skeleton", state)
         if path is None or not self._valid_complete_path(path, points):
             return None
@@ -642,7 +1085,7 @@ class AutoTourService:
             direction = classify_route_direction(route.geometry)
             raw = _Draft(
                 route=route,
-                routing_points=(request.start,),
+                routing_points=(request.effective_start,),
                 signature=candidate_signature(route),
                 construction="graphhopper_round_trip",
                 skeleton_id=f"round-trip-h{heading:g}",
@@ -650,21 +1093,21 @@ class AutoTourService:
                 direction=direction.direction,
                 direction_warnings=direction.warnings,
                 hard_point_visits=self._hard_point_visits(
-                    request, (request.start,), None
+                    request, (request.effective_start,), None
                 ),
             )
             drafts.append(raw)
             if not sample_fallback:
                 continue
             sampled = sample_round_trip_routing_points(
-                start=request.start,
+                start=request.effective_start,
                 geometry=path.geometry,
                 route_distance_m=path.distance_m,
             )
             if sampled is None:
                 continue
             points = routing_points_with_sampled_hard_anchors(
-                sampled, request.hard_points
+                sampled, request.interior_hard_points
             )
             sampled_path = await self._route_points(
                 points, request.profile, "skeleton", state
@@ -708,54 +1151,148 @@ class AutoTourService:
         initial: _InsertionState,
         state: _SearchState,
     ) -> tuple[_InsertionState, ...]:
-        """Evaluate every missed requested place together before discovered POIs."""
-        opportunities = requested_place_opportunities(
-            route_geometry=initial.draft.route.geometry,
-            routing_points=initial.draft.routing_points,
-            requested_places=request.requested_places,
+        """Evaluate bounded complete requested-place families before discovered POIs."""
+        indexed_places = tuple(
+            (index, request.requested_places[index])
+            for index in request.interior_requested_place_indices
         )
-        if not opportunities:
+        if not indexed_places:
             return (initial,)
-        deliberately_routed = frozenset(
-            opportunity.original_index for opportunity in opportunities
-        )
-        augmented = insert_requested_place_opportunities(
-            initial.draft.routing_points, opportunities
-        )
-        requested_driven = (
-            request.start,
-            *(opportunity.place.coordinate for opportunity in opportunities),
-            request.start,
-        )
-        requested_driven = routing_points_with_sampled_hard_anchors(
-            requested_driven, request.hard_points
-        )
-        proposals = (
-            (
-                requested_driven,
-                (request.start, *request.hard_points, request.start),
+        deliberately_routed = frozenset(index for index, _place in indexed_places)
+        coordinate_by_index = {
+            index: place.coordinate for index, place in indexed_places
+        }
+        orders = requested_place_order_proposals(
+            start=request.effective_start,
+            end=request.effective_end,
+            indexed_places=indexed_places,
+            topology=request.resolved_endpoints.topology,
+            direct_geometry=(
+                initial.family_control.route.geometry
+                if request.resolved_endpoints.topology == "point_to_point"
+                else ()
             ),
-            (augmented, initial.draft.routing_points),
+        )
+        stable_points = (
+            request.effective_start,
+            *request.interior_hard_points,
+            request.effective_end,
+        )
+        control_anchors: tuple[Coordinate, ...] = ()
+        if request.resolved_endpoints.topology == "loop" and len(indexed_places) <= 2:
+            candidate_anchors = initial.draft.routing_points
+            if len(candidate_anchors) < 4:
+                sampled = sample_round_trip_routing_points(
+                    start=request.effective_start,
+                    geometry=initial.draft.route.geometry,
+                    route_distance_m=initial.draft.route.summary.distance_m,
+                )
+                candidate_anchors = sampled or ()
+            excluded = {
+                (request.effective_start.lat, request.effective_start.lon),
+                *((point.lat, point.lon) for point in coordinate_by_index.values()),
+                *((point.lat, point.lon) for point in request.interior_hard_points),
+            }
+            control_anchors = tuple(
+                point
+                for point in candidate_anchors
+                if (point.lat, point.lon) not in excluded
+            )
+        proposals = tuple(
+            routing_points_with_sampled_hard_anchors(
+                (
+                    request.effective_start,
+                    *(coordinate_by_index[index] for index in order),
+                    *control_anchors,
+                    request.effective_end,
+                ),
+                request.interior_hard_points,
+            )
+            for order in orders
         )
         children: list[_InsertionState] = []
         signatures: set[tuple[tuple[float, float], ...]] = set()
-        for points, stable_points in proposals:
+        requested_index_by_coordinate = {
+            (coordinate.lat, coordinate.lon): index
+            for index, coordinate in coordinate_by_index.items()
+        }
+        for proposal_index, points in enumerate(proposals):
             point_signature = tuple((point.lat, point.lon) for point in points)
             if point_signature in signatures:
                 continue
             signatures.add(point_signature)
-            path = await self._route_points(points, request.profile, "poi", state)
-            if path is None or not self._valid_requested_path(
-                path,
+            state.full_set_route_attempted = True
+            outcome = await self._route_requested_sequence(
                 points,
+                request.profile,
+                state,
+                requested_index_by_coordinate=requested_index_by_coordinate,
+            )
+            failure_reasons: dict[int, RequestedPlaceFailureReason] = {}
+            if outcome is not None:
+                complete = not outcome.removed_requested_indices
+                if complete:
+                    state.full_set_route_succeeded = True
+                    state.full_set_distance_m = min(
+                        outcome.path.distance_m,
+                        state.full_set_distance_m or outcome.path.distance_m,
+                    )
+                    eligible = outcome.path.distance_m <= _maximum_distance(request)
+                    if not eligible:
+                        state.full_set_safety_eligible = False
+                    if not eligible and state.full_set_rejection_reason is None:
+                        state.full_set_rejection_reason = _maximum_rejection_reason(
+                            request
+                        )
+                state.complete_set_candidate_distance_m = min(
+                    outcome.path.distance_m,
+                    state.complete_set_candidate_distance_m or outcome.path.distance_m,
+                )
+                failure_reasons.update(
+                    {
+                        index: "requested_place_graph_unreachable"
+                        for index in outcome.removed_requested_indices
+                    }
+                )
+                (
+                    outcome,
+                    ceiling_removed,
+                ) = await self._repair_requested_distance_ceiling(
+                    outcome,
+                    profile=request.profile,
+                    state=state,
+                    requested_index_by_coordinate=requested_index_by_coordinate,
+                    maximum_distance_m=_maximum_distance(request),
+                )
+                failure_reasons.update(
+                    {
+                        index: _maximum_rejection_reason(request)
+                        for index in ceiling_removed
+                    }
+                )
+            elif (
+                not state.full_set_route_succeeded
+                and state.full_set_rejection_reason is None
+            ):
+                state.full_set_rejection_reason = (
+                    "requested_place_search_budget_exhausted"
+                    if state.requested_place_budget_exhausted
+                    else "requested_place_graph_unreachable"
+                )
+            if outcome is None or not self._valid_requested_path(
+                outcome.path,
+                outcome.points,
                 stable_points=stable_points,
             ):
                 continue
+            path = outcome.path
+            routed_points = outcome.points
+            routed_requested = deliberately_routed.difference(failure_reasons)
             try:
                 route = self._result_factory.create(
                     name=request.name,
                     path=path,
-                    input_point_count=len(points),
+                    input_point_count=len(routed_points),
                 )
             except RoutingUpstreamError:
                 continue
@@ -778,15 +1315,18 @@ class AutoTourService:
             direction = classify_route_direction(route.geometry)
             draft = _Draft(
                 route=route,
-                routing_points=points,
-                signature=candidate_signature(route),
-                construction="poi_insertion",
-                skeleton_id=initial.draft.skeleton_id,
+                routing_points=routed_points,
+                signature=candidate_signature(
+                    route,
+                    topology=request.resolved_endpoints.topology,
+                ),
+                construction="requested_place_family",
+                skeleton_id=(f"{initial.draft.skeleton_id}-requested-{proposal_index}"),
                 skeleton_method=initial.draft.skeleton_method,
                 direction=direction.direction,
                 direction_warnings=direction.warnings,
                 hard_point_visits=self._hard_point_visits(
-                    request, points, path.snapped_points
+                    request, routed_points, path.snapped_points
                 ),
                 ellipse_bearing_degrees=initial.draft.ellipse_bearing_degrees,
                 ellipse_aspect_ratio=initial.draft.ellipse_aspect_ratio,
@@ -800,8 +1340,30 @@ class AutoTourService:
                 rejected=(),
                 family_control=initial.family_control,
                 inserted=True,
-                deliberately_routed_requested_indices=deliberately_routed,
+                deliberately_routed_requested_indices=routed_requested,
+                requested_failure_reasons=failure_reasons,
             )
+            if not failure_reasons and len(routed_requested) == len(indexed_places):
+                severe_backtracking = (
+                    route.analysis.immediate_backtrack.distance_m > 1_000.0
+                    and route.analysis.immediate_backtrack.share > 0.10
+                )
+                candidate_safe = (
+                    route.summary.distance_m <= _maximum_distance(request)
+                    and not severe_backtracking
+                )
+                state.full_set_safety_eligible = (
+                    candidate_safe
+                    if state.full_set_safety_eligible is None
+                    else state.full_set_safety_eligible or candidate_safe
+                )
+                if candidate_safe:
+                    state.full_set_rejection_reason = None
+                elif (
+                    route.summary.distance_m <= _maximum_distance(request)
+                    and state.full_set_rejection_reason is None
+                ):
+                    state.full_set_rejection_reason = "requested_place_safety_rejected"
             children.append(
                 _InsertionState(
                     draft=draft,
@@ -810,11 +1372,136 @@ class AutoTourService:
                     selected_poi_ids=(),
                     selected_progress=(),
                     inserted_records={},
-                    deliberately_routed_requested_indices=deliberately_routed,
+                    deliberately_routed_requested_indices=routed_requested,
                     candidate=candidate,
                 )
             )
         return (*children, initial)
+
+    async def _repair_requested_distance_ceiling(
+        self,
+        outcome: _RequestedRouteOutcome,
+        *,
+        profile: str,
+        state: _SearchState,
+        requested_index_by_coordinate: dict[tuple[float, float], int],
+        maximum_distance_m: float,
+    ) -> tuple[_RequestedRouteOutcome | None, frozenset[int]]:
+        """Greedily remove the fewest high-detour requested hooks within budget."""
+        current = outcome
+        removed: set[int] = set()
+        while current.path.distance_m > maximum_distance_m:
+            points = current.points
+            removable: list[tuple[float, int, int]] = []
+            for position in range(1, len(points) - 1):
+                point = points[position]
+                requested_index = requested_index_by_coordinate.get(
+                    (point.lat, point.lon)
+                )
+                if requested_index is None:
+                    continue
+                left = points[position - 1]
+                right = points[position + 1]
+                left_path = state.route_cache.get(
+                    (
+                        profile,
+                        ((left.lat, left.lon), (point.lat, point.lon)),
+                        True,
+                    )
+                )
+                right_path = state.route_cache.get(
+                    (
+                        profile,
+                        ((point.lat, point.lon), (right.lat, right.lon)),
+                        True,
+                    )
+                )
+                left_distance = (
+                    left_path.distance_m
+                    if left_path is not None
+                    else haversine_distance_m(
+                        (left.lon, left.lat), (point.lon, point.lat)
+                    )
+                )
+                right_distance = (
+                    right_path.distance_m
+                    if right_path is not None
+                    else haversine_distance_m(
+                        (point.lon, point.lat), (right.lon, right.lat)
+                    )
+                )
+                direct_lower_bound = haversine_distance_m(
+                    (left.lon, left.lat), (right.lon, right.lat)
+                )
+                estimated_saving = left_distance + right_distance - direct_lower_bound
+                removable.append((-estimated_saving, requested_index, position))
+            if not removable:
+                return None, frozenset(removed)
+            _saving, requested_index, position = min(removable)
+            reduced_points = (*points[:position], *points[position + 1 :])
+            repaired = await self._route_requested_sequence(
+                reduced_points,
+                profile,
+                state,
+                requested_index_by_coordinate=requested_index_by_coordinate,
+            )
+            if repaired is None:
+                return None, frozenset(removed)
+            removed.add(requested_index)
+            removed.update(repaired.removed_requested_indices)
+            current = repaired
+        return current, frozenset(removed)
+
+    async def _route_requested_sequence(
+        self,
+        points: tuple[Coordinate, ...],
+        profile: str,
+        state: _SearchState,
+        *,
+        requested_index_by_coordinate: dict[tuple[float, float], int],
+    ) -> _RequestedRouteOutcome | None:
+        """Route one order, composing only exact routed legs on node-cap failure."""
+        if len(points) <= 12:
+            path = await self._route_points(points, profile, "requested", state)
+            if path is not None:
+                return _RequestedRouteOutcome(path=path, points=points)
+        routed_points = list(points)
+        removed: set[int] = set()
+        while len(routed_points) >= 2:
+            segments: list[RoutedPath] = []
+            failed_pair: tuple[Coordinate, Coordinate] | None = None
+            for left, right in zip(routed_points, routed_points[1:], strict=False):
+                segment = await self._route_points(
+                    (left, right), profile, "requested", state
+                )
+                if segment is None:
+                    failed_pair = (left, right)
+                    break
+                segments.append(segment)
+            if failed_pair is None:
+                try:
+                    return _RequestedRouteOutcome(
+                        path=compose_routed_segments(tuple(segments)),
+                        points=tuple(routed_points),
+                        removed_requested_indices=frozenset(removed),
+                    )
+                except RouteCompositionError:
+                    return None
+            if state.requested_place_budget_exhausted:
+                return None
+            removable = next(
+                (
+                    point
+                    for point in (failed_pair[1], failed_pair[0])
+                    if (point.lat, point.lon) in requested_index_by_coordinate
+                ),
+                None,
+            )
+            if removable is None:
+                return None
+            removed.add(requested_index_by_coordinate[(removable.lat, removable.lon)])
+            routed_points.remove(removable)
+        return None
 
     async def _insert_pois(
         self,
@@ -824,7 +1511,11 @@ class AutoTourService:
         initial_shortlist: PoiShortlist,
         state: _SearchState,
     ) -> tuple[_InsertionState, ...]:
-        if self._poi_index is None or self._settings.max_inserted_pois == 0:
+        if (
+            self._poi_index is None
+            or self._settings.max_inserted_pois == 0
+            or request.requested_places
+        ):
             return (initial,)
         beam: tuple[_InsertionState, ...] = (initial,)
         retained: list[_InsertionState] = [initial]
@@ -1213,6 +1904,7 @@ class AutoTourService:
                     profile=request.profile,
                     target_distance_m=request.target_distance_m,
                     input_point_count=len(source.draft.routing_points),
+                    close_loop=request.resolved_endpoints.topology == "loop",
                 )
                 for beam_state in result.states:
                     try:
@@ -1317,10 +2009,7 @@ class AutoTourService:
                 for source in states
                 if source.deliberately_routed_requested_indices
                 and source.draft.route.analysis.immediate_backtrack.distance_m > 300.0
-                and source.draft.route.summary.distance_m
-                <= maximum_auto_tour_distance_m(
-                    request.target_distance_m, request.tolerance_m
-                )
+                and source.draft.route.summary.distance_m <= _maximum_distance(request)
             ),
             key=lambda source: (
                 -source.candidate.satisfied_must_visit_count,
@@ -1880,9 +2569,7 @@ class AutoTourService:
                 - source.candidate.satisfied_preferred_place_count
             ),
             distance_priority=request.distance_priority,
-            maximum_distance_m=maximum_auto_tour_distance_m(
-                request.target_distance_m, request.tolerance_m
-            ),
+            maximum_distance_m=_maximum_distance(request),
         )
         if (
             not candidate.control_eligible
@@ -1917,9 +2604,20 @@ class AutoTourService:
         family_control: _Draft,
         inserted: bool,
         deliberately_routed_requested_indices: frozenset[int] = frozenset(),
+        requested_failure_reasons: dict[int, RequestedPlaceFailureReason] | None = None,
         repair: TourRepairExplanation | None = None,
     ) -> AutoTourCandidate:
-        target_error = abs(draft.route.summary.distance_m - request.target_distance_m)
+        public_route = (
+            _without_loop_geometry(draft.route)
+            if request.resolved_endpoints.topology == "point_to_point"
+            else draft.route
+        )
+        control_route = (
+            _without_loop_geometry(family_control.route)
+            if request.resolved_endpoints.topology == "point_to_point"
+            else family_control.route
+        )
+        target_error = abs(public_route.summary.distance_m - request.target_distance_m)
         within = target_error <= request.tolerance_m
         total_reward = sum(visit.reward for visit in visits)
         inserted_reward = sum(visit.reward for visit in visits if visit.inserted)
@@ -1927,6 +2625,9 @@ class AutoTourService:
             route_geometry=draft.route.geometry,
             requested_places=request.requested_places,
             deliberately_routed_indices=deliberately_routed_requested_indices,
+            routing_points=draft.routing_points,
+            snapped_routing_points=draft.route.snapped_points,
+            failure_reasons=requested_failure_reasons,
         )
         family_requested_visits = measure_requested_place_visits(
             route_geometry=family_control.route.geometry,
@@ -1935,22 +2636,17 @@ class AutoTourService:
         requested_gain = sum(visit.satisfied for visit in requested_visits) - sum(
             visit.satisfied for visit in family_requested_visits
         )
-        maximum_distance = maximum_auto_tour_distance_m(
-            request.target_distance_m, request.tolerance_m
-        )
+        maximum_distance = _maximum_distance(request)
         comparison: TourControlComparison
         if inserted:
             comparison = compare_with_control(
-                route=draft.route,
+                route=public_route,
                 within_tolerance=within,
                 hard_points_satisfied=_hard_points_satisfied(draft),
                 inserted_poi_reward=inserted_reward,
-                control=family_control.route,
+                control=control_route,
                 control_within_tolerance=(
-                    abs(
-                        family_control.route.summary.distance_m
-                        - request.target_distance_m
-                    )
+                    abs(control_route.summary.distance_m - request.target_distance_m)
                     <= request.tolerance_m
                 ),
                 control_signature=family_control.signature,
@@ -1959,7 +2655,8 @@ class AutoTourService:
                 maximum_distance_m=maximum_distance,
             )
             if (
-                request.direction_preference != "any"
+                request.resolved_endpoints.topology == "loop"
+                and request.direction_preference != "any"
                 and draft.direction != request.direction_preference
             ):
                 comparison = comparison.model_copy(
@@ -1976,7 +2673,7 @@ class AutoTourService:
                     }
                 )
         else:
-            comparison = control_comparison(draft.route, draft.signature)
+            comparison = control_comparison(public_route, draft.signature)
         scenic_count = sum(visit.poi.group == "scenic" for visit in visits)
         water_count = sum(
             visit.poi.category == "drinking_water"
@@ -1985,7 +2682,7 @@ class AutoTourService:
         )
         return AutoTourCandidate(
             rank=1,
-            route=draft.route,
+            route=public_route,
             signature=draft.signature,
             construction=draft.construction,
             direction=draft.direction,
@@ -1996,7 +2693,7 @@ class AutoTourService:
             ellipse_perimeter_scale=draft.ellipse_perimeter_scale,
             ellipse_containment_scale=draft.ellipse_containment_scale,
             routing_points=draft.routing_points,
-            snapped_routing_points=draft.route.snapped_points,
+            snapped_routing_points=public_route.snapped_points,
             hard_point_visits=draft.hard_point_visits,
             poi_visits=visits,
             requested_place_visits=requested_visits,
@@ -2005,7 +2702,7 @@ class AutoTourService:
             within_tolerance=within,
             distance_priority=request.distance_priority,
             soft_distance_penalty=soft_distance_penalty(
-                distance_m=draft.route.summary.distance_m,
+                distance_m=public_route.summary.distance_m,
                 target_distance_m=request.target_distance_m,
                 tolerance_m=request.tolerance_m,
                 priority=request.distance_priority,
@@ -2025,7 +2722,7 @@ class AutoTourService:
                 visit.satisfied and visit.requested_place.importance == "prefer"
                 for visit in requested_visits
             ),
-            route_score=score_route(draft.route, request.target_distance_m),
+            route_score=score_route(public_route, request.target_distance_m),
             repair=repair,
             warnings=tuple(sorted(set(draft.direction_warnings))),
         )
@@ -2048,6 +2745,10 @@ class AutoTourService:
         current, maximum = _phase_budget(phase, state, self._settings)
         if current >= maximum:
             state.budget_exhausted = True
+            if phase == "requested":
+                state.requested_place_budget_exhausted = True
+            elif phase == "poi":
+                state.discovered_poi_budget_exhausted = True
             return None
         _increment_phase(phase, state)
         started = perf_counter()
@@ -2069,8 +2770,8 @@ class AutoTourService:
         state: _SearchState,
     ) -> RoutedPath | None:
         key: RoundTripCacheKey = (
-            request.start.lat,
-            request.start.lon,
+            request.effective_start.lat,
+            request.effective_start.lon,
             request.target_distance_m,
             derived_seed,
             request.profile,
@@ -2086,7 +2787,7 @@ class AutoTourService:
         started = perf_counter()
         try:
             path = await self._backend.round_trip(
-                request.start,
+                request.effective_start,
                 request.target_distance_m,
                 derived_seed,
                 request.profile,
@@ -2104,7 +2805,8 @@ class AutoTourService:
     ) -> bool:
         if path.snapped_points is None or len(path.snapped_points) != len(points):
             return False
-        if not _valid_closed_geometry(path):
+        expects_loop = _same_coordinate(points[0], points[-1])
+        if expects_loop != _valid_closed_geometry(path):
             return False
         return all(
             haversine_distance_m(
@@ -2112,9 +2814,7 @@ class AutoTourService:
                 snapped,
             )
             <= self._settings.max_snap_displacement_m
-            for point, snapped in zip(
-                points[1:-1], path.snapped_points[1:-1], strict=True
-            )
+            for point, snapped in zip(points, path.snapped_points, strict=True)
         )
 
     def _valid_requested_path(
@@ -2127,9 +2827,10 @@ class AutoTourService:
         """Validate full accounting while allowing soft places to miss their radius."""
         if path.snapped_points is None or len(path.snapped_points) != len(points):
             return False
-        if not _valid_closed_geometry(path):
+        expects_loop = _same_coordinate(points[0], points[-1])
+        if expects_loop != _valid_closed_geometry(path):
             return False
-        stable_keys = {(point.lat, point.lon) for point in stable_points[1:-1]}
+        stable_keys = {(point.lat, point.lon) for point in stable_points}
         return all(
             haversine_distance_m((point.lon, point.lat), snapped)
             <= self._settings.max_snap_displacement_m
@@ -2187,6 +2888,11 @@ def _phase_budget(
         return state.skeleton_requests, settings.skeleton_route_budget
     if phase == "poi":
         return state.poi_requests, settings.poi_route_evaluation_budget
+    if phase == "requested":
+        return (
+            state.requested_place_requests,
+            settings.requested_place_route_evaluation_budget,
+        )
     if phase == "repair":
         return state.repair_requests, settings.local_repair_route_evaluation_budget
     raise ValueError(f"unknown Auto Tour route phase {phase}")
@@ -2197,6 +2903,8 @@ def _increment_phase(phase: str, state: _SearchState) -> None:
         state.skeleton_requests += 1
     elif phase == "poi":
         state.poi_requests += 1
+    elif phase == "requested":
+        state.requested_place_requests += 1
     elif phase == "repair":
         state.repair_requests += 1
     else:
@@ -2408,6 +3116,275 @@ def _deduplicate_candidates(
     for candidate in candidates:
         distinct.setdefault(candidate.signature, candidate)
     return tuple(distinct.values())
+
+
+def _with_open_metrics(
+    candidate: AutoTourCandidate, direct_route: RouteResult
+) -> AutoTourCandidate:
+    metrics = analyze_open_route(
+        geometry=candidate.route.geometry,
+        route_distance_m=candidate.route.summary.distance_m,
+        direct_geometry=direct_route.geometry,
+        direct_distance_m=direct_route.summary.distance_m,
+    )
+    return candidate.model_copy(
+        update={
+            "direct_distance_m": metrics.direct_distance_m,
+            "detour_ratio": metrics.detour_ratio,
+            "destination_progress_monotonicity": (
+                metrics.destination_progress_monotonicity
+            ),
+            "reverse_progress_distance_m": metrics.reverse_progress_distance_m,
+            "reverse_progress_share": metrics.reverse_progress_share,
+            "endpoint_axis_lateral_deviation_m": (
+                metrics.endpoint_axis_lateral_deviation_m
+            ),
+            "near_parallel_corridor_share": metrics.near_parallel_corridor_share,
+        }
+    )
+
+
+def _without_loop_geometry(route: RouteResult) -> RouteResult:
+    """Mark loop-only analysis not applicable on a public open route."""
+    if route.analysis.loop_geometry is None:
+        return route
+    return route.model_copy(
+        update={"analysis": route.analysis.model_copy(update={"loop_geometry": None})}
+    )
+
+
+def _hard_points_by_direct_progress(
+    points: tuple[Coordinate, ...],
+    direct_geometry: tuple[tuple[float, float], ...],
+) -> tuple[Coordinate, ...]:
+    """Deterministically seed open hard-point order from direct-route progress."""
+    if len(points) < 2:
+        return points
+    projection = LocalMetricProjection(
+        sum(latitude for _, latitude in direct_geometry) / len(direct_geometry)
+    )
+    line = projection.project_line(direct_geometry)
+    return tuple(
+        point
+        for _, _, point in sorted(
+            (
+                line.project(
+                    Point(projection.project_position((point.lon, point.lat)))
+                ),
+                index,
+                point,
+            )
+            for index, point in enumerate(points)
+        )
+    )
+
+
+def _maximum_distance(request: AutoTourRequest) -> float:
+    return maximum_auto_tour_distance_m(
+        request.target_distance_m,
+        request.tolerance_m,
+        priority=request.distance_priority,
+        requested_maximum_distance_m=request.maximum_distance_m,
+    )
+
+
+def _maximum_rejection_reason(
+    request: AutoTourRequest,
+) -> RequestedPlaceFailureReason:
+    if request.maximum_distance_m is not None:
+        return "requested_place_user_maximum_rejected"
+    if request.distance_priority == "flexible":
+        return "requested_place_server_maximum_rejected"
+    return "requested_place_lower_utility_subset"
+
+
+def _open_tour_key(
+    candidate: AutoTourCandidate, request: AutoTourRequest
+) -> tuple[object, ...]:
+    """Rank endpoint-valid open paths without applying loop-only shape gates."""
+    severe_backtracking = (
+        candidate.route.analysis.immediate_backtrack.distance_m > 1_000.0
+        and candidate.route.analysis.immediate_backtrack.share > 0.10
+    )
+    if request.distance_priority == "strict":
+        return (
+            0 if candidate.within_tolerance else 1,
+            candidate.target_error_m,
+            0
+            if candidate.route.summary.distance_m <= _maximum_distance(request)
+            else 1,
+            1 if severe_backtracking else 0,
+            -candidate.satisfied_must_visit_count,
+            -candidate.satisfied_preferred_place_count,
+            candidate.signature,
+        )
+    nature = candidate.route.analysis.nature
+    return (
+        0 if candidate.route.summary.distance_m <= _maximum_distance(request) else 1,
+        1 if severe_backtracking else 0,
+        -candidate.satisfied_must_visit_count,
+        -candidate.satisfied_preferred_place_count,
+        candidate.route.analysis.immediate_backtrack.share,
+        candidate.reverse_progress_share
+        if candidate.reverse_progress_share is not None
+        else 1.0,
+        candidate.route.analysis.repetition.repeated_distance.share,
+        candidate.near_parallel_corridor_share
+        if candidate.near_parallel_corridor_share is not None
+        else 1.0,
+        -candidate.total_poi_reward,
+        (0, -nature.nature_score) if nature is not None else (1, 0.0),
+        candidate.soft_distance_penalty,
+        candidate.signature,
+    )
+
+
+def _open_candidate_portfolio(
+    candidates: tuple[AutoTourCandidate, ...],
+    *,
+    request: AutoTourRequest,
+    control: AutoTourCandidate,
+) -> tuple[AutoTourCandidate, ...]:
+    """Reserve coverage, near-target, and direct-control open-route roles."""
+    ordered = tuple(
+        sorted(candidates, key=lambda value: _open_tour_key(value, request))
+    )
+    if request.distance_priority != "flexible" or request.candidate_count == 1:
+        return ordered[: request.candidate_count]
+    selected: list[AutoTourCandidate] = []
+
+    def retain(candidate: AutoTourCandidate | None) -> None:
+        if candidate is None or candidate.signature in {
+            value.signature for value in selected
+        }:
+            return
+        selected.append(candidate)
+
+    retain(ordered[0] if ordered else None)
+    target_maximum = maximum_auto_tour_distance_m(
+        request.target_distance_m,
+        request.tolerance_m,
+        priority="balanced",
+        requested_maximum_distance_m=request.maximum_distance_m,
+    )
+    near_target = tuple(
+        candidate
+        for candidate in candidates
+        if candidate.route.summary.distance_m <= target_maximum
+    )
+    retain(
+        min(
+            near_target,
+            key=lambda candidate: (
+                -candidate.satisfied_must_visit_count,
+                -candidate.satisfied_preferred_place_count,
+                candidate.target_error_m,
+                _open_tour_key(candidate, request),
+            ),
+            default=None,
+        )
+    )
+    retain(control)
+    for candidate in ordered:
+        if len(selected) >= request.candidate_count:
+            break
+        retain(candidate)
+    return tuple(selected[: request.candidate_count])
+
+
+def _with_requested_coverage_warning(
+    candidate: AutoTourCandidate,
+    request: AutoTourRequest,
+    control: AutoTourCandidate,
+) -> AutoTourCandidate:
+    requested_count = (
+        candidate.satisfied_must_visit_count + candidate.satisfied_preferred_place_count
+    )
+    control_count = (
+        control.satisfied_must_visit_count + control.satisfied_preferred_place_count
+    )
+    if (
+        request.distance_priority != "flexible"
+        or candidate.route.summary.distance_m
+        <= request.target_distance_m + request.tolerance_m
+        or requested_count <= control_count
+    ):
+        return candidate
+    return candidate.model_copy(
+        update={
+            "warnings": tuple(
+                sorted(
+                    {
+                        *candidate.warnings,
+                        "target_distance_exceeded_for_requested_coverage",
+                    }
+                )
+            )
+        }
+    )
+
+
+def _mark_cross_candidate_requested_routing(
+    candidates: tuple[AutoTourCandidate, ...],
+) -> tuple[AutoTourCandidate, ...]:
+    routed_indices = {
+        index
+        for candidate in candidates
+        for index, visit in enumerate(candidate.requested_place_visits)
+        if visit.deliberately_routed
+    }
+    return tuple(
+        candidate.model_copy(
+            update={
+                "requested_place_visits": tuple(
+                    visit.model_copy(
+                        update={
+                            "deliberately_routed_in_another_retained_candidate": (
+                                not visit.deliberately_routed
+                                and index in routed_indices
+                            )
+                        }
+                    )
+                    for index, visit in enumerate(candidate.requested_place_visits)
+                )
+            }
+        )
+        for candidate in candidates
+    )
+
+
+def _apply_requested_search_failure_context(
+    candidates: tuple[AutoTourCandidate, ...],
+    state: _SearchState,
+) -> tuple[AutoTourCandidate, ...]:
+    reason = state.full_set_rejection_reason
+    if reason not in {
+        "requested_place_user_maximum_rejected",
+        "requested_place_server_maximum_rejected",
+        "requested_place_graph_unreachable",
+        "requested_place_search_budget_exhausted",
+    }:
+        return candidates
+    return tuple(
+        candidate.model_copy(
+            update={
+                "requested_place_visits": tuple(
+                    visit.model_copy(update={"failure_reason": reason})
+                    if not visit.satisfied
+                    and not visit.deliberately_routed
+                    and visit.failure_reason
+                    in {
+                        "requested_place_safety_rejected",
+                        "requested_place_lower_utility_subset",
+                        "requested_place_distance_ceiling_rejected",
+                    }
+                    else visit
+                    for visit in candidate.requested_place_visits
+                )
+            }
+        )
+        for candidate in candidates
+    )
 
 
 def _remove_coordinate(

@@ -78,6 +78,13 @@ def test_low_coverage_uses_rounded_geometry_fallback() -> None:
     assert candidate_signature(route).startswith("geometry:")
 
 
+def test_signature_namespace_distinguishes_open_and_closed_topology() -> None:
+    route = route_for_edges([1, 2, 3])
+    assert candidate_signature(route, topology="loop") != candidate_signature(
+        route, topology="point_to_point"
+    )
+
+
 def test_jaccard_similarity() -> None:
     assert jaccard_similarity(frozenset({1, 2}), frozenset({2, 3})) == 1 / 3
     assert jaccard_similarity(frozenset(), frozenset()) == 1.0

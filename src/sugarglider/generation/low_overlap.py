@@ -96,21 +96,24 @@ class LowOverlapBeamSearch:
         profile: str,
         target_distance_m: float,
         input_point_count: int,
+        close_loop: bool = True,
     ) -> LowOverlapSearchResult:
-        """Close and refine one exact candidate routing-point sequence."""
+        """Refine one exact open or closed candidate routing-point sequence."""
         if len(routing_points) < 2:
             raise ValueError("low-overlap assembly requires at least two points")
-        closed_points = (
-            routing_points
-            if _same_coordinate(routing_points[0], routing_points[-1])
-            else (*routing_points, routing_points[0])
-        )
-        total_leg_count = len(closed_points) - 1
+        assembled_points = routing_points
+        if close_loop and not _same_coordinate(routing_points[0], routing_points[-1]):
+            assembled_points = (*routing_points, routing_points[0])
+        if not close_loop and _same_coordinate(
+            assembled_points[0], assembled_points[-1]
+        ):
+            raise ValueError("open low-overlap assembly cannot close at its start")
+        total_leg_count = len(assembled_points) - 1
         beam: tuple[BeamState, ...] = ()
         warnings: set[str] = set()
 
         for leg_index, (start, end) in enumerate(
-            zip(closed_points, closed_points[1:], strict=False)
+            zip(assembled_points, assembled_points[1:], strict=False)
         ):
             alternatives = await self._alternatives(start, end, profile)
             if alternatives is None:

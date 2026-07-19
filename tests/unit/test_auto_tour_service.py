@@ -14,7 +14,7 @@ from sugarglider.routing.backend import (
     IsochroneResult,
     RoutedPath,
 )
-from sugarglider.routing.errors import RoutingUpstreamError
+from sugarglider.routing.errors import RoutingPointError, RoutingUpstreamError
 from sugarglider.routing.result import RouteResultFactory
 from sugarglider.tours.models import AutoTourRequest, RequestedTourPlace
 from sugarglider.tours.poi_selection import TourPoiSettings
@@ -25,6 +25,7 @@ from sugarglider.tours.service import (
     POI_ROUTE_EVALUATION_BUDGET,
     ROUND_TRIP_CONTROL_REQUEST_BUDGET,
     SKELETON_ROUTE_REQUEST_BUDGET,
+    AutoTourMaximumBelowDirectLowerBoundError,
     AutoTourService,
     AutoTourSettings,
 )
@@ -129,6 +130,24 @@ class _Backend:
     ) -> tuple[RoutedPath, ...]:
         geometry = ((start.lon, start.lat), (end.lon, end.lat))
         return (_path(geometry, haversine_distance_m(*geometry), snapped=geometry),)
+
+
+class _LegOnlyBackend(_Backend):
+    def __init__(self) -> None:
+        super().__init__(fail_isochrone=True)
+        self.point_counts: list[int] = []
+
+    async def route(
+        self,
+        points: tuple[Coordinate, ...],
+        profile: str = "hike",
+        *,
+        pass_through: bool = False,
+    ) -> RoutedPath:
+        self.point_counts.append(len(points))
+        if len(points) > 2:
+            raise RoutingPointError("synthetic multi-point traversal cap")
+        return await super().route(points, profile, pass_through=pass_through)
 
 
 class _CorridorBackend(_Backend):
@@ -388,7 +407,8 @@ def test_named_default_budgets_are_exact_and_bounded() -> None:
     assert (
         settings.alternative_leg_request_budget == ALTERNATIVE_LEG_REQUEST_BUDGET == 24
     )
-    assert settings.total_route_request_budget == 92
+    assert settings.requested_place_route_evaluation_budget == 60
+    assert settings.total_route_request_budget == 152
 
 
 @pytest.mark.asyncio
@@ -476,6 +496,138 @@ async def test_requested_place_outside_poi_corridor_drives_fallback_route() -> N
     assert recommended.requested_place_visits[0].satisfied
     assert recommended.requested_place_visits[0].deliberately_routed
     assert result.search.poi_route_evaluation_count > 0
+
+
+@pytest.mark.asyncio
+async def test_flexible_complete_requested_family_accounts_for_all_22_places() -> None:
+    requested = tuple(
+        RequestedTourPlace(
+            id=f"imported-{index + 1}",
+            name=f"Imported place {index + 1}",
+            coordinate=_coordinate(400 + index * 55, 250 + (index % 4) * 80),
+            visit_radius_m=100,
+            importance="must_visit",
+            original_index=index + 1,
+        )
+        for index in range(22)
+    )
+    service = AutoTourService(
+        _Backend(fail_isochrone=True),
+        RouteResultFactory(RouteAnalyzer()),
+        poi_index=None,
+        settings=_settings(max_inserted_pois=0),
+    )
+    result = await service.generate(
+        AutoTourRequest(
+            start=START,
+            target_distance_m=45_000,
+            tolerance_m=2_000,
+            candidate_count=3,
+            requested_places=requested,
+            distance_priority="flexible",
+            scenic_preference="off",
+            drinking_water_preference="off",
+            nature_preference="off",
+        )
+    )
+
+    recommended = result.candidates[0]
+    assert len(recommended.requested_place_visits) == 22
+    assert recommended.satisfied_must_visit_count == 22
+    assert all(
+        visit.deliberately_considered for visit in recommended.requested_place_visits
+    )
+    assert all(
+        visit.deliberately_routed for visit in recommended.requested_place_visits
+    )
+    assert all(
+        visit.failure_reason is None for visit in recommended.requested_place_visits
+    )
+    assert result.search.requested_place_route_evaluations > 0
+    assert result.search.discovered_poi_route_evaluations == 0
+
+    nearby_result = await service.generate(
+        AutoTourRequest(
+            start=START,
+            target_distance_m=46_000,
+            tolerance_m=2_000,
+            candidate_count=3,
+            requested_places=requested,
+            distance_priority="flexible",
+            scenic_preference="off",
+            drinking_water_preference="off",
+            nature_preference="off",
+        )
+    )
+    nearby_visits = nearby_result.candidates[0].requested_place_visits
+    assert len(nearby_visits) == 22
+    assert all(visit.deliberately_considered for visit in nearby_visits)
+
+
+@pytest.mark.asyncio
+async def test_requested_family_composes_legs_after_multi_point_failure() -> None:
+    backend = _LegOnlyBackend()
+    requested = tuple(
+        RequestedTourPlace(
+            name=f"Requested {index + 1}",
+            coordinate=_coordinate(500 + index * 100, 250),
+            importance="must_visit",
+            original_index=index + 1,
+        )
+        for index in range(4)
+    )
+    result = await _service(backend, poi_index=None).generate(
+        AutoTourRequest(
+            start=START,
+            target_distance_m=10_000,
+            requested_places=requested,
+            scenic_preference="off",
+            drinking_water_preference="off",
+            nature_preference="off",
+        )
+    )
+
+    assert result.candidates[0].satisfied_must_visit_count == 4
+    assert any(count > 2 for count in backend.point_counts)
+    assert sum(count == 2 for count in backend.point_counts) >= 5
+
+
+@pytest.mark.asyncio
+async def test_distance_ceiling_keeps_maximum_requested_subset_with_reasons() -> None:
+    requested = tuple(
+        RequestedTourPlace(
+            name=f"Far requested {index + 1}",
+            coordinate=_coordinate(6_000 + index * 1_000, 0),
+            importance="must_visit",
+            original_index=index + 1,
+        )
+        for index in range(3)
+    )
+    result = await _service(_Backend(fail_isochrone=True), poi_index=None).generate(
+        AutoTourRequest(
+            start=START,
+            target_distance_m=10_000,
+            maximum_distance_m=15_000,
+            requested_places=requested,
+            scenic_preference="off",
+            drinking_water_preference="off",
+            nature_preference="off",
+        )
+    )
+
+    recommended = result.candidates[0]
+    assert 0 < recommended.satisfied_must_visit_count < 3
+    assert recommended.route.summary.distance_m <= recommended.maximum_distance_m
+    assert result.search.complete_set_candidate_distance_m is not None
+    assert (
+        result.search.complete_set_candidate_distance_m
+        > result.search.maximum_distance_m
+    )
+    assert all(
+        visit.failure_reason == "requested_place_user_maximum_rejected"
+        for visit in recommended.requested_place_visits
+        if not visit.satisfied
+    )
 
 
 @pytest.mark.asyncio
@@ -608,3 +760,206 @@ async def test_explicit_direction_preference_is_respected_after_route_analysis()
     )
     assert result.control.direction == "clockwise"
     assert all(candidate.direction == "clockwise" for candidate in result.candidates)
+
+
+@pytest.mark.asyncio
+async def test_open_auto_tour_uses_direct_graph_route_and_never_returns_to_start() -> (
+    None
+):
+    backend = _Backend()
+    end = _coordinate(12_000, 2_000)
+    request = AutoTourRequest(
+        start=START,
+        end=end,
+        route_topology="point_to_point",
+        target_distance_m=8_000,
+        scenic_preference="off",
+        drinking_water_preference="off",
+        nature_preference="off",
+        path_selection_mode="shortest",
+    )
+    result = await AutoTourService(
+        backend,
+        RouteResultFactory(RouteAnalyzer()),
+        settings=AutoTourSettings(
+            max_inserted_pois=0,
+            poi_route_evaluation_budget=0,
+            local_repair_route_evaluation_budget=0,
+        ),
+    ).generate(request)
+
+    recommended = result.candidates[0]
+    assert result.topology == "point_to_point"
+    assert result.effective_start == START
+    assert result.effective_end == end
+    assert backend.isochrone_calls == 0
+    assert backend.round_trip_calls == 0
+    assert recommended.route.geometry[0] == (START.lon, START.lat)
+    assert recommended.route.geometry[-1] == (end.lon, end.lat)
+    assert recommended.route.geometry[-1] != recommended.route.geometry[0]
+    assert result.control.route.analysis.loop_geometry is None
+    assert recommended.route.analysis.loop_geometry is None
+    assert recommended.direct_distance_m == recommended.route.summary.distance_m
+    assert recommended.detour_ratio == pytest.approx(1.0)
+    assert recommended.destination_progress_monotonicity == pytest.approx(1.0)
+    assert "target_below_point_to_point_lower_bound" in result.search.warnings
+
+
+@pytest.mark.asyncio
+async def test_flexible_open_route_retains_complete_coverage_above_old_ceiling() -> (
+    None
+):
+    end = _coordinate(12_000, 0)
+    requested = tuple(
+        RequestedTourPlace(
+            id=f"cluster-{index}",
+            name=f"Cluster place {index}",
+            coordinate=_coordinate(3_000 + index * 2_000, 5_000),
+            importance="must_visit",
+            original_index=index,
+        )
+        for index in range(1, 4)
+    )
+    request = AutoTourRequest(
+        start=START,
+        end=end,
+        route_topology="point_to_point",
+        target_distance_m=12_000,
+        tolerance_m=2_000,
+        candidate_count=3,
+        requested_places=requested,
+        distance_priority="flexible",
+        scenic_preference="off",
+        drinking_water_preference="off",
+        nature_preference="off",
+        path_selection_mode="shortest",
+    )
+    result = await _service(_Backend(), poi_index=None).generate(request)
+
+    recommended = result.candidates[0]
+    old_target_ceiling = 15_000
+    assert recommended.satisfied_must_visit_count == 3
+    assert recommended.route.summary.distance_m > old_target_ceiling
+    assert recommended.maximum_distance_m == 200_000
+    assert result.search.full_set_route_attempted
+    assert result.search.full_set_route_succeeded
+    assert result.search.full_set_safety_eligible is True
+    assert result.search.full_set_distance_m is not None
+    assert result.control.signature in {
+        candidate.signature for candidate in result.candidates
+    }
+    assert "target_distance_exceeded_for_requested_coverage" in (result.search.warnings)
+
+
+@pytest.mark.asyncio
+async def test_open_user_maximum_prunes_with_specific_reasons() -> None:
+    end = _coordinate(12_000, 0)
+    requested = tuple(
+        RequestedTourPlace(
+            name=f"Far place {index}",
+            coordinate=_coordinate(3_000 + index * 2_000, 5_000),
+            importance="must_visit",
+            original_index=index,
+        )
+        for index in range(1, 4)
+    )
+    result = await _service(_Backend(), poi_index=None).generate(
+        AutoTourRequest(
+            start=START,
+            end=end,
+            route_topology="point_to_point",
+            target_distance_m=12_000,
+            maximum_distance_m=15_000,
+            requested_places=requested,
+            scenic_preference="off",
+            drinking_water_preference="off",
+            nature_preference="off",
+        )
+    )
+
+    recommended = result.candidates[0]
+    assert recommended.route.summary.distance_m <= 15_000
+    assert recommended.satisfied_must_visit_count < 3
+    assert all(
+        visit.failure_reason == "requested_place_user_maximum_rejected"
+        for visit in recommended.requested_place_visits
+        if not visit.satisfied
+    )
+
+
+@pytest.mark.asyncio
+async def test_open_user_maximum_below_direct_route_is_rejected() -> None:
+    with pytest.raises(AutoTourMaximumBelowDirectLowerBoundError):
+        await _service(_Backend(), poi_index=None).generate(
+            AutoTourRequest(
+                start=START,
+                end=_coordinate(12_000, 0),
+                route_topology="point_to_point",
+                target_distance_m=12_000,
+                maximum_distance_m=10_000,
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_open_flexible_server_maximum_has_specific_rejection_reason() -> None:
+    requested = RequestedTourPlace(
+        name="Remote requested place",
+        coordinate=_coordinate(150_000, 150_000),
+        importance="must_visit",
+        original_index=1,
+    )
+    result = await _service(_Backend(), poi_index=None).generate(
+        AutoTourRequest(
+            start=START,
+            end=_coordinate(30_000, 0),
+            route_topology="point_to_point",
+            target_distance_m=45_000,
+            requested_places=(requested,),
+            scenic_preference="off",
+            drinking_water_preference="off",
+            nature_preference="off",
+        )
+    )
+
+    assert result.search.maximum_distance_m == 200_000
+    assert result.search.full_set_safety_eligible is False
+    assert (
+        result.search.full_set_rejection_reason
+        == "requested_place_server_maximum_rejected"
+    )
+    assert (
+        result.candidates[0].requested_place_visits[0].failure_reason
+        == "requested_place_server_maximum_rejected"
+    )
+
+
+@pytest.mark.asyncio
+async def test_open_balanced_retains_target_derived_maximum() -> None:
+    requested = tuple(
+        RequestedTourPlace(
+            name=f"Balanced place {index}",
+            coordinate=_coordinate(3_000 + index * 2_000, 5_000),
+            importance="must_visit",
+            original_index=index,
+        )
+        for index in range(1, 4)
+    )
+    result = await _service(_Backend(), poi_index=None).generate(
+        AutoTourRequest(
+            start=START,
+            end=_coordinate(12_000, 0),
+            route_topology="point_to_point",
+            target_distance_m=12_000,
+            tolerance_m=2_000,
+            distance_priority="balanced",
+            requested_places=requested,
+            scenic_preference="off",
+            drinking_water_preference="off",
+            nature_preference="off",
+        )
+    )
+
+    assert result.search.maximum_distance_m == 16_000
+    assert result.candidates[0].route.summary.distance_m <= 16_000
+    assert result.candidates[0].satisfied_must_visit_count < 3

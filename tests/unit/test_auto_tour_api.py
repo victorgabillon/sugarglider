@@ -22,7 +22,10 @@ from sugarglider.tours.models import (
     AutoTourTimings,
 )
 from sugarglider.tours.scoring import control_comparison
-from sugarglider.tours.service import AutoTourService
+from sugarglider.tours.service import (
+    AutoTourMaximumBelowDirectLowerBoundError,
+    AutoTourService,
+)
 
 
 class _FakeAutoTourService(AutoTourService):
@@ -174,6 +177,8 @@ async def test_auto_tour_endpoint_uses_independent_defaults_and_accounting(
     [
         {"direction_preference": "north"},
         {"scenic_preference": "required"},
+        {"maximum_distance_m": 0},
+        {"maximum_distance_m": 200_001},
         {
             "hard_points": [
                 {"lat": 48.8 + index / 100, "lon": 2.0} for index in range(7)
@@ -232,6 +237,49 @@ async def test_requested_close_enough_place_is_preserved_by_api(
     assert request.requested_places[0].name == "Château de Monte-Cristo"
     assert request.requested_places[0].visit_radius_m == 200
     assert request.requested_places[0].original_index == 7
+
+
+@pytest.mark.asyncio
+async def test_optional_user_maximum_is_preserved_by_api(
+    auto_tour_client: httpx.AsyncClient,
+    fake_auto_tour_service: _FakeAutoTourService,
+) -> None:
+    response = await auto_tour_client.post(
+        "/v1/tours/generate",
+        json={
+            "start": {"lat": 48.87, "lon": 2.09},
+            "target_distance_m": 45_000,
+            "maximum_distance_m": 61_000,
+        },
+    )
+    assert response.status_code == 200
+    assert fake_auto_tour_service.requests[-1].maximum_distance_m == 61_000
+
+
+@pytest.mark.asyncio
+async def test_maximum_below_direct_lower_bound_is_structured(
+    auto_tour_client: httpx.AsyncClient,
+    fake_auto_tour_service: _FakeAutoTourService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def reject(_request: AutoTourRequest) -> AutoTourResult:
+        raise AutoTourMaximumBelowDirectLowerBoundError
+
+    monkeypatch.setattr(fake_auto_tour_service, "generate", reject)
+    response = await auto_tour_client.post(
+        "/v1/tours/generate",
+        json={
+            "start": {"lat": 48.87, "lon": 2.09},
+            "end": {"lat": 48.88, "lon": 2.10},
+            "route_topology": "point_to_point",
+            "target_distance_m": 45_000,
+            "maximum_distance_m": 1_000,
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == (
+        "auto_tour_maximum_below_direct_lower_bound"
+    )
 
 
 @pytest.mark.asyncio

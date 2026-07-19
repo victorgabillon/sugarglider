@@ -17,6 +17,8 @@ def test_gpx_contains_one_track_and_exact_geometry(route_result: RouteResult) ->
     points = root.findall("g:trk/g:trkseg/g:trkpt", namespace)
     assert len(points) == len(route_result.geometry)
     assert points[0].attrib == {"lat": "48.87138900", "lon": "2.09666700"}
+    assert points[-1].attrib == {"lat": "48.87145400", "lon": "2.12442100"}
+    assert points[-1].attrib != points[0].attrib
     assert root.findall("g:rte", namespace) == []
     assert root.findall(".//g:ele", namespace) == []
 
