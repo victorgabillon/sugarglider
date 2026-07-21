@@ -56,7 +56,7 @@ class EndpointVisit(ImmutableModel):
     snapped_coordinate: GeoJsonPosition | None
     snap_distance_m: float | None = Field(default=None, ge=0)
     source: EndpointSource
-    satisfied: bool
+    reached: bool
 
 
 @dataclass(frozen=True)
@@ -97,7 +97,7 @@ def resolve_waypoint_endpoints(
     start: Coordinate | None,
     end: Coordinate | None,
     points: tuple[Coordinate, ...],
-    route_topology: RouteTopology,
+    topology: RouteTopology,
 ) -> EndpointSelection:
     """Resolve Waypoint Route endpoints without changing caller-owned points."""
     effective_start = start
@@ -114,7 +114,7 @@ def resolve_waypoint_endpoints(
         start_index = 0
         consumed.add(0)
 
-    topology = _resolved_topology(route_topology, start=effective_start, end=end)
+    topology = _resolved_topology(topology, start=effective_start, end=end)
     effective_end: Coordinate | None
     if topology == "loop":
         if end is not None and not same_coordinate(effective_start, end):
@@ -168,9 +168,9 @@ def resolve_auto_tour_endpoints(
     *,
     start: Coordinate | None,
     end: Coordinate | None,
-    requested_places: tuple[tuple[Coordinate, int | None], ...],
-    hard_points: tuple[Coordinate, ...],
-    route_topology: RouteTopology,
+    requested_stops: tuple[tuple[Coordinate, int | None], ...],
+    hard_waypoints: tuple[Coordinate, ...],
+    topology: RouteTopology,
 ) -> EndpointSelection:
     """Resolve Auto Tour endpoints with one shared deterministic precedence."""
     consumed_requested: set[int] = set()
@@ -178,22 +178,22 @@ def resolve_auto_tour_endpoints(
     effective_start = start
     start_source: EndpointSource = "explicit"
     start_index: int | None = None
-    if effective_start is None and requested_places:
+    if effective_start is None and requested_stops:
         request_index = min(
-            range(len(requested_places)),
+            range(len(requested_stops)),
             key=lambda index: (
-                requested_places[index][1]
-                if requested_places[index][1] is not None
+                requested_stops[index][1]
+                if requested_stops[index][1] is not None
                 else index,
                 index,
             ),
         )
-        effective_start = requested_places[request_index][0]
+        effective_start = requested_stops[request_index][0]
         start_source = "inferred_from_requested_place"
-        start_index = requested_places[request_index][1]
+        start_index = requested_stops[request_index][1]
         consumed_requested.add(request_index)
-    if effective_start is None and hard_points:
-        effective_start = hard_points[0]
+    if effective_start is None and hard_waypoints:
+        effective_start = hard_waypoints[0]
         start_source = "inferred_from_hard_point"
         start_index = 0
         consumed_hard.add(0)
@@ -203,7 +203,7 @@ def resolve_auto_tour_endpoints(
             "An Auto Tour hard start could not be resolved.",
         )
 
-    topology = _resolved_topology(route_topology, start=effective_start, end=end)
+    topology = _resolved_topology(topology, start=effective_start, end=end)
     effective_end: Coordinate | None
     if topology == "loop":
         if end is not None and not same_coordinate(effective_start, end):
@@ -218,19 +218,19 @@ def resolve_auto_tour_endpoints(
         effective_end = end
         end_source = "explicit"
         end_index = None
-        if effective_end is None and requested_places:
+        if effective_end is None and requested_stops:
             ordered = sorted(
-                range(len(requested_places)),
+                range(len(requested_stops)),
                 key=lambda index: (
-                    requested_places[index][1]
-                    if requested_places[index][1] is not None
+                    requested_stops[index][1]
+                    if requested_stops[index][1] is not None
                     else index,
                     index,
                 ),
                 reverse=True,
             )
             for request_index in ordered:
-                coordinate, original_index = requested_places[request_index]
+                coordinate, original_index = requested_stops[request_index]
                 if request_index not in consumed_requested and not same_coordinate(
                     coordinate, effective_start
                 ):
@@ -240,8 +240,8 @@ def resolve_auto_tour_endpoints(
                     consumed_requested.add(request_index)
                     break
         if effective_end is None:
-            for hard_index in range(len(hard_points) - 1, -1, -1):
-                coordinate = hard_points[hard_index]
+            for hard_index in range(len(hard_waypoints) - 1, -1, -1):
+                coordinate = hard_waypoints[hard_index]
                 if hard_index not in consumed_hard and not same_coordinate(
                     coordinate, effective_start
                 ):
@@ -318,7 +318,7 @@ def endpoint_visits(
             snapped_coordinate=first,
             snap_distance_m=start_distance,
             source=resolved.start_source,
-            satisfied=(
+            reached=(
                 start_distance is not None and start_distance <= maximum_snap_distance_m
             ),
         ),
@@ -327,7 +327,7 @@ def endpoint_visits(
             snapped_coordinate=last,
             snap_distance_m=end_distance,
             source=resolved.end_source,
-            satisfied=(
+            reached=(
                 end_distance is not None and end_distance <= maximum_snap_distance_m
             ),
         ),
@@ -339,7 +339,7 @@ def endpoint_visits(
             ("endpoint_start_snap_too_far", "endpoint_end_snap_too_far"),
             strict=True,
         )
-        if not visit.satisfied
+        if not visit.reached
     )
     return visits, warnings
 
@@ -350,7 +350,7 @@ def validated_endpoint_visits(
     *,
     maximum_snap_distance_m: float,
 ) -> tuple[tuple[EndpointVisit, EndpointVisit], tuple[str, ...]]:
-    """Return endpoint accounting or reject an unsatisfied hard endpoint."""
+    """Return endpoint accounting or reject an unreached hard endpoint."""
     visits, warnings = endpoint_visits(
         resolved,
         snapped_points,

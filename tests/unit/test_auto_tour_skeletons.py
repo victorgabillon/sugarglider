@@ -5,7 +5,7 @@ from shapely.geometry import Point, Polygon, box
 
 from sugarglider.analysis.projection import LocalMetricProjection
 from sugarglider.domain.models import Coordinate
-from sugarglider.tours.skeletons import (
+from sugarglider.planning.auto_tour.controls import (
     ELLIPSE_VERTEX_COUNT,
     classify_route_direction,
     ellipse_vertices,
@@ -120,7 +120,7 @@ def test_skeleton_is_rejected_below_minimum_without_boundary_projection() -> Non
     )
 
 
-def test_hard_points_are_inserted_monotonically_and_start_remains_fixed() -> None:
+def test_hard_waypoints_are_inserted_monotonically_and_start_remains_fixed() -> None:
     skeleton = generate_isochrone_skeletons(
         start=START,
         target_distance_m=20_000,

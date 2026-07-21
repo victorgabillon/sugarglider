@@ -26,6 +26,7 @@
       <nav aria-label="File and generation actions">
         <label class="button secondary" for="request-file" data-icon="json">Import JSON</label>
         <input class="visually-hidden" id="request-file" type="file" accept="application/json,.json">
+        <button class="button secondary" id="export-plan" type="button" data-icon="json">Export plan JSON</button>
         <label class="button secondary" for="gpx-file" data-icon="gpx">Import GPX</label>
         <input class="visually-hidden" id="gpx-file" type="file" accept="application/gpx+xml,.gpx">
         <button class="button primary" id="generate-top" type="button" data-icon="generate">Generate</button>
@@ -78,7 +79,7 @@
               <label>Candidates<select id="candidate-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
               <label>Profile<select id="profile" disabled><option>hike</option></select></label>
             </div>
-            <label>Route topology<select id="route-topology"><option value="auto">Automatic</option><option value="loop">Loop</option><option value="point_to_point">Point to point</option></select></label>
+            <label>Route topology<select id="route-topology"><option value="loop">Loop</option><option value="point_to_point">Point to point</option></select></label>
             <section class="endpoint-controls" aria-label="Optional hard endpoints">
               <fieldset class="endpoint-control" id="hard-start-control">
                 <legend><label><input id="hard-start-enabled" type="checkbox"> Hard start</label></legend>
@@ -100,20 +101,22 @@
               </fieldset>
             </section>
             <section id="auto-tour-fields" class="mode-fields" aria-label="Auto Tour preferences">
-              <p class="auto-tour-explanation">Builds graph-routed loop skeletons, links requested close-enough places, then evaluates nearby scenic and verified-water opportunities inside a fixed search budget.</p>
+              <p class="auto-tour-explanation">Builds graph-routed skeletons, resolves meaningful access approaches for requested places, then evaluates nearby scenic and verified-water opportunities inside a fixed search budget. A selected stop is guaranteed within its strict approach tolerance.</p>
               <label>Direction<select id="direction-preference"><option value="any">Any</option><option value="clockwise">Clockwise</option><option value="counterclockwise">Counter-clockwise</option></select></label>
               <label>Distance priority<select id="distance-priority"><option value="flexible" selected>Flexible — places and coherence first</option><option value="balanced">Balanced</option><option value="strict">Strict — tolerance first</option></select></label>
               <details class="places-advanced">
                 <summary>Advanced Auto Tour limits</summary>
                 <label>Maximum distance (optional) <span>km</span><input id="maximum-distance" type="number" min="0.1" max="200" step="0.1" placeholder="Server safety maximum"></label>
                 <p class="field-help">Blank means no user maximum; the server safety maximum applies.</p>
+                <label>Free POI out-and-back distance (total) <span>m</span><input id="free-poi-spur" type="number" min="0" max="1000" step="25" value="200"></label>
+                <p class="field-help">One verified physical POI excursion gets a 200 m allowance—approximately 100 m out and 100 m back on the same path.</p>
               </details>
               <div class="field-pair">
                 <label>Scenic places<select id="scenic-preference"><option value="prefer">Prefer</option><option value="off">Off</option></select></label>
                 <label>Verified drinking water<select id="water-preference"><option value="prefer">Prefer</option><option value="off">Off</option></select></label>
               </div>
             </section>
-            <label id="waypoint-order-field">Mandatory-point order<select id="point-order-mode"><option value="fixed">Fixed input order</option><option value="optimize_loop" data-optimized="true">Optimize loop</option></select></label>
+            <label id="waypoint-order-field">Waypoint order<select id="point-order-mode"><option value="fixed">Fixed input order</option><option value="optimize" data-optimized="true">Optimize loop waypoints</option></select></label>
             <label>Path selection<select id="path-selection-mode"><option value="shortest">Natural shortest paths</option><option value="low_overlap">Low-overlap alternatives</option></select></label>
             <label>Loop shape<select id="loop-geometry-preference"><option value="off">Off</option><option value="prefer">Prefer balanced loops</option></select></label>
             <p class="field-help">Prefers compact, directionally balanced loops with fewer close parallel corridors. Distance, backtracking and repetition remain more important.</p>
@@ -148,8 +151,8 @@
             <p id="preferred-poi-empty" class="field-help">Choose “Prefer in Auto Tour” from an eligible place popup.</p>
             <ul id="preferred-poi-list"></ul>
           </section>
-          <section id="requested-places" class="preferred-pois" aria-label="Requested close-enough places">
-            <div class="section-heading"><strong>Requested close-enough places</strong><span id="requested-place-count">0 / 30</span></div>
+          <section id="requested-places" class="preferred-pois" aria-label="Requested places and approaches">
+            <div class="section-heading"><strong>Requested places and approaches</strong><span id="requested-place-count">0 / 30</span></div>
             <p id="requested-place-empty" class="field-help">In Auto Tour mode, imported request points after the start appear here instead of becoming exact waypoints.</p>
             <ul id="requested-place-list"></ul>
           </section>
@@ -190,7 +193,7 @@
         <div class="map-tools" aria-label="Map display controls">
           <label data-icon="alternatives"><input id="show-all" type="checkbox" checked> Show alternatives</label>
           <label data-icon="nature"><input id="show-nature" type="checkbox"> Show nature</label>
-          <label id="show-missed-requested-radii-control" class="advanced-map-control" title="Advanced requested-place display"><input id="show-missed-requested-radii" type="checkbox"> Missed radii</label>
+          <label id="show-dropped-requested-radii-control" class="advanced-map-control" title="Advanced requested-stop display"><input id="show-dropped-requested-radii" type="checkbox"> Dropped access-search areas</label>
         </div>
         <details class="legend">
           <summary>Map legend</summary>
@@ -203,8 +206,9 @@
             <span><i class="marker start">1</i>Start/end</span>
             <span class="legend-group">Your plan</span>
             <span><i class="marker requested-pending">R1</i>Requested, pending</span>
-            <span><i class="marker requested-satisfied">R1</i>Requested, satisfied</span>
-            <span><i class="marker requested-missed">R1</i>Requested, missed</span>
+            <span><i class="marker requested-selected">R1</i>Requested, selected</span>
+            <span><i class="marker requested-dropped">R1</i>Requested, dropped</span>
+            <span><i class="marker access"></i>Selected approach</span>
             <span><i class="marker optional"></i>Generated point</span>
             <span><i class="marker waypoint"></i>GPX waypoint</span>
             <span class="legend-group">Mapped OSM discovery</span>

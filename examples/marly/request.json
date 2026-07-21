@@ -1,14 +1,54 @@
 {
+  "candidate_count": 3,
+  "distance_objective": {
+    "maximum_m": null,
+    "priority": "flexible",
+    "target_m": 41000.0,
+    "tolerance_m": 2000.0
+  },
+  "end": null,
+  "kind": "waypoint_route",
   "name": "Marly ordered-anchor example",
-  "points": [
-    {"lat": 48.871389, "lon": 2.096667, "name": "Marly-le-Roi station"},
-    {"lat": 48.871454, "lon": 2.124421, "name": "Machine de Marly"},
-    {"lat": 48.861560, "lon": 2.108330, "name": "Aqueduc de Louveciennes"},
-    {"lat": 48.862849, "lon": 2.099448, "name": "Domaine de Marly"},
-    {"lat": 48.871500, "lon": 2.043000, "name": "Croix Saint-Michel"},
-    {"lat": 48.890810, "lon": 2.021530, "name": "Entrance of the Désert de Retz"}
-  ],
-  "close_loop": true,
-  "profile": "hike"
+  "preferences": {
+    "loop_geometry": "off",
+    "nature": "off",
+    "path_selection": "shortest"
+  },
+  "routing_profile": "hike",
+  "schema_version": 1,
+  "seed": 0,
+  "start": {
+    "lat": 48.871389,
+    "lon": 2.096667,
+    "name": "Marly-le-Roi station"
+  },
+  "topology": "loop",
+  "waypoint_order": "fixed",
+  "waypoints": [
+    {
+      "lat": 48.871454,
+      "lon": 2.124421,
+      "name": "Machine de Marly"
+    },
+    {
+      "lat": 48.86156,
+      "lon": 2.10833,
+      "name": "Aqueduc de Louveciennes"
+    },
+    {
+      "lat": 48.862849,
+      "lon": 2.099448,
+      "name": "Domaine de Marly"
+    },
+    {
+      "lat": 48.8715,
+      "lon": 2.043,
+      "name": "Croix Saint-Michel"
+    },
+    {
+      "lat": 48.89081,
+      "lon": 2.02153,
+      "name": "Entrance of the Désert de Retz"
+    }
+  ]
 }
-

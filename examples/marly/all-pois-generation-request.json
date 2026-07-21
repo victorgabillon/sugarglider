@@ -1,11 +1,30 @@
 {
+  "candidate_count": 3,
+  "distance_objective": {
+    "maximum_m": null,
+    "priority": "flexible",
+    "target_m": 41000.0,
+    "tolerance_m": 2000.0
+  },
+  "end": null,
+  "kind": "waypoint_route",
   "name": "Marly 41 km — all original GPX POIs",
-  "points": [
-    {
-      "lat": 48.867778,
-      "lon": 2.051111,
-      "name": "Gare de Saint-Nom-la-Bretèche"
-    },
+  "preferences": {
+    "loop_geometry": "off",
+    "nature": "prefer",
+    "path_selection": "low_overlap"
+  },
+  "routing_profile": "hike",
+  "schema_version": 1,
+  "seed": 42,
+  "start": {
+    "lat": 48.867778,
+    "lon": 2.051111,
+    "name": "Gare de Saint-Nom-la-Bretèche"
+  },
+  "topology": "loop",
+  "waypoint_order": "optimize",
+  "waypoints": [
     {
       "lat": 48.8715,
       "lon": 2.043,
@@ -116,15 +135,5 @@
       "lon": 2.0745,
       "name": "Batterie du Champ de Mars"
     }
-  ],
-  "target_distance_m": 41000,
-  "tolerance_m": 2000,
-  "candidate_count": 3,
-  "seed": 42,
-  "close_loop": true,
-  "point_order_mode": "optimize_loop",
-  "path_selection_mode": "low_overlap",
-  "nature_preference": "prefer",
-  "loop_geometry_preference": "off",
-  "profile": "hike"
+  ]
 }

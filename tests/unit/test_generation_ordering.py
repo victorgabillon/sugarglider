@@ -3,7 +3,7 @@
 import pytest
 
 from sugarglider.domain.models import Coordinate
-from sugarglider.generation.ordering import (
+from sugarglider.planning.waypoint.ordering import (
     MAX_ORDER_PROPOSALS,
     cycle_distance_m,
     generate_order_proposals,

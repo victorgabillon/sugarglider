@@ -6,16 +6,16 @@ import pytest
 
 from sugarglider.analysis.projection import LocalMetricProjection
 from sugarglider.domain.models import Coordinate
-from sugarglider.pois.index import PoiIndex
-from sugarglider.pois.models import PoiFeature, PoiIndexDocument
-from sugarglider.tours.models import AutoTourRequest
-from sugarglider.tours.poi_selection import (
+from sugarglider.planning.auto_tour.discovered_pois import (
     POI_VISIT_RADII_M,
     TourPoiSettings,
     build_poi_visits,
     shortlist_route_pois,
 )
-from sugarglider.tours.scoring import poi_reward
+from sugarglider.planning.auto_tour.models import AutoTourSearchRequest
+from sugarglider.planning.auto_tour.ranking import poi_reward
+from sugarglider.pois.index import PoiIndex
+from sugarglider.pois.models import PoiFeature, PoiIndexDocument
 
 PROJECTION = LocalMetricProjection(48.87)
 ORIGIN = PROJECTION.project_position((2.09, 48.87))
@@ -93,24 +93,24 @@ def _route() -> tuple[tuple[float, float], ...]:
     )
 
 
-def _request(**updates: object) -> AutoTourRequest:
+def _request(**updates: object) -> AutoTourSearchRequest:
     values: dict[str, object] = {
         "start": _coordinate(0, 0),
         "target_distance_m": 14_000,
     }
     values.update(updates)
-    return AutoTourRequest.model_validate(values)
+    return AutoTourSearchRequest.model_validate(values)
 
 
 def test_exact_category_visit_radii() -> None:
     assert POI_VISIT_RADII_M == {
-        "viewpoint": 150.0,
-        "observation_tower": 120.0,
-        "castle": 200.0,
-        "ruins": 150.0,
-        "archaeological_site": 150.0,
-        "tourism_attraction": 120.0,
-        "drinking_water": 50.0,
+        "viewpoint": 20.0,
+        "observation_tower": 20.0,
+        "castle": 20.0,
+        "ruins": 20.0,
+        "archaeological_site": 20.0,
+        "tourism_attraction": 25.0,
+        "drinking_water": 15.0,
         "fountain": 0.0,
         "water_tap": 0.0,
     }
@@ -164,12 +164,12 @@ def test_route_corridor_uses_exact_distance_order_and_safe_filters() -> None:
 
 def test_zero_cost_overlapping_neighborhoods_and_verified_water_collection() -> None:
     features = (
-        _feature(1, x=1_000, y=100, category="viewpoint", name="View"),
-        _feature(2, x=1_020, y=120, category="castle", name="Castle"),
+        _feature(1, x=1_000, y=10, category="viewpoint", name="View"),
+        _feature(2, x=1_020, y=10, category="castle", name="Castle"),
         _feature(
             3,
             x=2_000,
-            y=40,
+            y=10,
             category="drinking_water",
             name="Water",
             potability="verified",
@@ -250,8 +250,8 @@ def test_shortlist_detour_rewards_preferred_boost_and_progress_order() -> None:
 
 def test_build_visits_is_deterministic_and_route_progress_ordered() -> None:
     features = (
-        _feature(1, x=3_000, y=20, category="castle", name="Later"),
-        _feature(2, x=1_000, y=20, category="viewpoint", name="Earlier"),
+        _feature(1, x=3_000, y=10, category="castle", name="Later"),
+        _feature(2, x=1_000, y=10, category="viewpoint", name="Earlier"),
     )
     index = _index(features)
     matches = index.query_near_route(
@@ -277,7 +277,7 @@ def test_round_trip_control_collects_incidental_pois_without_inventing_anchors()
 ):
     index = _index(
         (
-            _feature(1, x=1_000, y=100, category="viewpoint", name="Incidental"),
+            _feature(1, x=1_000, y=10, category="viewpoint", name="Incidental"),
             _feature(2, x=2_000, y=300, category="castle", name="Opportunity"),
         )
     )

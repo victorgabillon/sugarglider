@@ -135,7 +135,7 @@ async def test_status_available_and_safe(available_client: httpx.AsyncClient) ->
         "configured": True,
         "available": True,
         "index_path_basename": "local-pois.json.gz",
-        "format_version": 1,
+        "format_version": 2,
         "source_basename": "region.osm.pbf",
         "feature_count": 3,
         "category_counts": {"drinking_water": 1, "fountain": 1, "viewpoint": 1},
@@ -145,6 +145,7 @@ async def test_status_available_and_safe(available_client: httpx.AsyncClient) ->
             "verified": 1,
         },
         "access_counts": {"private": 1, "public": 2},
+        "approach_counts": {},
         "warnings": [],
     }
 

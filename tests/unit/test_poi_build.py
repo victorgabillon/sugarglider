@@ -163,3 +163,176 @@ def test_builder_rejects_missing_unsupported_and_invalid_positions(
         _validated_position(181, 0)
     with pytest.raises(ValueError):
         _validated_position(0, float("nan"))
+
+
+def test_polygon_approaches_keep_public_entrance_and_exclude_private(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "approaches.osm"
+    source.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="test">
+  <bounds minlat="48.0" minlon="2.0" maxlat="48.1" maxlon="2.1"/>
+  <node id="1" lat="48.01" lon="2.01">
+    <tag k="entrance" v="main"/><tag k="access" v="yes"/>
+  </node>
+  <node id="2" lat="48.01" lon="2.02">
+    <tag k="entrance" v="yes"/><tag k="access" v="private"/>
+  </node>
+  <node id="3" lat="48.02" lon="2.02"/>
+  <node id="4" lat="48.02" lon="2.01"/>
+  <way id="10">
+    <nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="1"/>
+    <tag k="historic" v="castle"/><tag k="name" v="Castle"/>
+  </way>
+</osm>
+""",
+        encoding="utf-8",
+    )
+    output = tmp_path / "approaches.json.gz"
+    report = build_poi_index(source, output)
+    with gzip.open(output, "rt", encoding="utf-8") as stream:
+        document = PoiIndexDocument.model_validate(json.load(stream))
+
+    castle = next(feature for feature in document.features if feature.id == "way/10")
+    assert tuple(approach.kind for approach in castle.approach_candidates) == (
+        "mapped_entrance",
+    )
+    assert castle.approach_candidates[0].osm_id == 1
+    assert report.approach_counts == {"mapped_entrance": 1}
+
+
+def test_private_polygon_never_inherits_a_public_approach(tmp_path: Path) -> None:
+    source = tmp_path / "private-area.osm"
+    source.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="test">
+  <bounds minlat="48.0" minlon="2.0" maxlat="48.1" maxlon="2.1"/>
+  <node id="1" lat="48.01" lon="2.01">
+    <tag k="entrance" v="main"/><tag k="access" v="yes"/>
+  </node>
+  <node id="2" lat="48.01" lon="2.02"/>
+  <node id="3" lat="48.02" lon="2.02"/>
+  <node id="4" lat="48.02" lon="2.01"/>
+  <way id="10">
+    <nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="1"/>
+    <tag k="historic" v="castle"/><tag k="name" v="Private castle"/>
+    <tag k="access" v="private"/>
+  </way>
+</osm>
+""",
+        encoding="utf-8",
+    )
+    output = tmp_path / "private-area.json.gz"
+    report = build_poi_index(source, output)
+    with gzip.open(output, "rt", encoding="utf-8") as stream:
+        document = PoiIndexDocument.model_validate(json.load(stream))
+
+    castle = next(feature for feature in document.features if feature.id == "way/10")
+    assert castle.access_status == "private"
+    assert castle.approach_candidates == ()
+    assert report.approach_counts == {}
+
+
+def test_polygon_gate_and_public_path_are_meaningful_bounded_approaches(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "gate-and-path.osm"
+    source.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="test">
+  <bounds minlat="48.0" minlon="2.0" maxlat="48.1" maxlon="2.1"/>
+  <node id="1" lat="48.01" lon="2.01">
+    <tag k="barrier" v="gate"/><tag k="access" v="yes"/>
+  </node>
+  <node id="2" lat="48.01" lon="2.02"/>
+  <node id="3" lat="48.02" lon="2.02"/>
+  <node id="4" lat="48.02" lon="2.01"/>
+  <node id="5" lat="48.015" lon="2.005"/>
+  <node id="6" lat="48.015" lon="2.025"/>
+  <node id="10" lat="48.04" lon="2.04"/>
+  <node id="11" lat="48.04" lon="2.05"/>
+  <node id="12" lat="48.05" lon="2.05"/>
+  <node id="13" lat="48.05" lon="2.04"/>
+  <way id="20">
+    <nd ref="4"/><nd ref="3"/><tag k="highway" v="footway"/>
+    <tag k="access" v="yes"/>
+  </way>
+  <way id="30">
+    <nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="1"/>
+    <tag k="historic" v="castle"/><tag k="name" v="Accessible castle"/>
+  </way>
+  <way id="31">
+    <nd ref="10"/><nd ref="11"/><nd ref="12"/><nd ref="13"/><nd ref="10"/>
+    <tag k="historic" v="castle"/><tag k="name" v="Castle without access"/>
+  </way>
+</osm>
+""",
+        encoding="utf-8",
+    )
+    output = tmp_path / "gate-and-path.json.gz"
+    build_poi_index(source, output)
+    with gzip.open(output, "rt", encoding="utf-8") as stream:
+        document = PoiIndexDocument.model_validate(json.load(stream))
+
+    by_id = {feature.id: feature for feature in document.features}
+    approaches = by_id["way/30"].approach_candidates
+    assert "mapped_gate" in {approach.kind for approach in approaches}
+    assert sum(approach.kind == "public_path_boundary" for approach in approaches) == 2
+    assert len(approaches) <= 8
+    assert by_id["way/31"].approach_candidates == ()
+
+
+def test_access_provenance_is_topological_cautious_and_truthful(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "provenance.osm"
+    source.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="test">
+  <bounds minlat="48.0" minlon="2.0" maxlat="48.1" maxlon="2.1"/>
+  <node id="1" lat="48.010" lon="2.010">
+    <tag k="entrance" v="main"/><tag k="access" v="yes"/>
+  </node>
+  <node id="2" lat="48.010" lon="2.020"/>
+  <node id="3" lat="48.020" lon="2.020"/>
+  <node id="4" lat="48.020" lon="2.010"/>
+  <node id="5" lat="48.015" lon="2.00995">
+    <tag k="entrance" v="yes"/><tag k="access" v="yes"/>
+  </node>
+  <node id="6" lat="48.016" lon="2.009995">
+    <tag k="entrance" v="yes"/>
+  </node>
+  <node id="7" lat="48.030" lon="2.030"/>
+  <way id="20"><nd ref="4"/><nd ref="3"/><tag k="highway" v="footway"/></way>
+  <way id="21">
+    <nd ref="1"/><nd ref="2"/><tag k="highway" v="footway"/>
+    <tag k="bridge" v="yes"/><tag k="access" v="yes"/>
+  </way>
+  <way id="30">
+    <nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="1"/>
+    <tag k="historic" v="castle"/><tag k="name" v="Castle"/>
+  </way>
+</osm>
+""",
+        encoding="utf-8",
+    )
+    output = tmp_path / "provenance.json.gz"
+    build_poi_index(source, output)
+    with gzip.open(output, "rt", encoding="utf-8") as stream:
+        document = PoiIndexDocument.model_validate(json.load(stream))
+
+    castle = next(feature for feature in document.features if feature.id == "way/30")
+    by_osm = {approach.osm_id: approach for approach in castle.approach_candidates}
+
+    assert by_osm[1].provenance == "way_boundary_node"
+    assert 5 not in by_osm  # A nearby feature's entrance is not inherited.
+    assert by_osm[6].access == "unknown"
+    assert by_osm[6].provenance == "spatial_boundary_inferred"
+    assert by_osm[6].warnings == ("spatial_boundary_association_unverified",)
+    unknown_path = next(
+        approach for approach in castle.approach_candidates if approach.osm_id == 20
+    )
+    assert unknown_path.access == "unknown"
+    assert unknown_path.provenance == "shared_path_boundary_node"
+    assert not any(approach.osm_id == 21 for approach in castle.approach_candidates)

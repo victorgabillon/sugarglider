@@ -78,7 +78,21 @@
 - Temporary insertion and low-overlap beam states must use structural analysis only;
   expensive nature and loop-geometry enrichment belongs only on complete candidates.
 - Auto Tour GPX export remains a clean single track/segment with no POI, nature,
-  route-analysis, or Auto Tour extensions.
+  route-analysis, or Auto Tour extensions. Selected approaches are standard ordered
+  GPX waypoints; dropped POIs are never exported.
+- A selected POI must have a meaningful approach and the final routed geometry must
+  reach it within the server-controlled strict arrival tolerance. Semantic-centroid
+  proximity is never proof of arrival; every other considered POI is dropped with
+  one explicit reason.
+- POI index format 2 stores at most eight deterministic meaningful approaches per
+  feature. Private, access=no, restricted, and locked approaches are excluded;
+  missing or old indexes must fail safely without disabling routing or health.
+- Imported requested places resolve by stable OSM ID, then exact normalized name,
+  then a strict 25 m graph target. User approach overrides must remain within the
+  server-controlled 1,000 m semantic bound and normal snap validation.
+- POI excursion analysis must keep raw repetition visible. The default first 200 m
+  of total repeated distance per excursion is penalty-free; excess `x` has penalty
+  `x + x² / 400`, and a shared excursion is charged only once.
 - Loop geometry must use the shared local metric projection and normalized routed
   edges; GraphHopper distance remains authoritative for shares and compactness.
 - Loop-geometry metrics and penalties must remain explainable and separate from
@@ -113,3 +127,16 @@
 - Never commit generated GPX files or browser validation screenshots.
 - Popularity signals remain future work.
 - Never commit PBF map data, GraphHopper caches, secrets, or generated GPX files.
+- Runtime planning must not contain compatibility adapters or import the removed
+  `generation` and `tours` packages.
+- Every planning request owns exactly one planning search context. Only its cached
+  routing gateway may reserve typed route-call budget or call the routing backend.
+- Cache diagnostics must satisfy lookup = hit + miss, entry = successful + failed,
+  and backend call = miss; pre-backend budget rejection is counted separately.
+- Mode searches produce shared immutable candidate drafts. Shared evaluation creates
+  unranked public candidates, and the shared portfolio alone assigns roles and ranks.
+- Auto Tour temporary controls, beams, insertions, approaches, and repairs use
+  structural analysis only. Retained routed paths receive expensive final enrichment
+  exactly once through the shared candidate evaluator.
+- Auto Tour algorithm diagnostics must never reconstruct route calls or cache facts;
+  phase usage and cache snapshots from the request context are authoritative.

@@ -1,29 +1,37 @@
 {
-  "name": "Bastille to Gare de Marly-le-Roi",
-  "start": {
-    "lat": 48.853,
-    "lon": 2.369,
-    "name": "Place de la Bastille"
+  "candidate_count": 3,
+  "distance_objective": {
+    "maximum_m": null,
+    "priority": "flexible",
+    "target_m": 26000.0,
+    "tolerance_m": 2000.0
   },
   "end": {
     "lat": 48.871389,
     "lon": 2.096667,
     "name": "Gare de Marly-le-Roi"
   },
-  "route_topology": "point_to_point",
-  "target_distance_m": 26000,
-  "tolerance_m": 2000,
-  "candidate_count": 3,
+  "free_poi_spur_physical_m": 200.0,
+  "hard_waypoints": [],
+  "kind": "auto_tour",
+  "name": "Bastille to Gare de Marly-le-Roi",
+  "preferences": {
+    "direction": "any",
+    "drinking_water": "prefer",
+    "loop_geometry": "off",
+    "nature": "prefer",
+    "path_selection": "low_overlap",
+    "scenic": "prefer"
+  },
+  "preferred_discovered_poi_ids": [],
+  "requested_stops": [],
+  "routing_profile": "hike",
+  "schema_version": 1,
   "seed": 0,
-  "hard_points": [],
-  "requested_places": [],
-  "preferred_poi_ids": [],
-  "distance_priority": "flexible",
-  "direction_preference": "any",
-  "scenic_preference": "prefer",
-  "drinking_water_preference": "prefer",
-  "nature_preference": "prefer",
-  "path_selection_mode": "low_overlap",
-  "loop_geometry_preference": "off",
-  "profile": "hike"
+  "start": {
+    "lat": 48.853,
+    "lon": 2.369,
+    "name": "Place de la Bastille"
+  },
+  "topology": "point_to_point"
 }

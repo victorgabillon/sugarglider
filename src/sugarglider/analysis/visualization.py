@@ -13,15 +13,15 @@ from sugarglider.analysis.route import (
     known_edge_id,
     project_geometry_edges,
 )
-from sugarglider.domain.analysis import DetailValue
-from sugarglider.domain.models import GeoJsonPosition, RouteResult
-from sugarglider.nature.analysis import NatureEdgeContext, NatureRouteAnalyzer
-from sugarglider.web.models import (
+from sugarglider.analysis.visualization_models import (
     LineStringGeometry,
     RouteSectionFeature,
     RouteSectionProperties,
     RouteVisualization,
 )
+from sugarglider.domain.analysis import DetailValue
+from sugarglider.domain.models import GeoJsonPosition, RouteResult
+from sugarglider.nature.analysis import NatureEdgeContext, NatureRouteAnalyzer
 
 
 @dataclass(frozen=True)

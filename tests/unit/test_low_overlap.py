@@ -1,17 +1,24 @@
 """Deterministic bounded low-overlap beam-search tests."""
 
 from collections.abc import Mapping
+from typing import cast
 
 import pytest
 
 from sugarglider.domain.models import Coordinate, PathDetailSegment
-from sugarglider.generation.low_overlap import (
+from sugarglider.planning.alternative_legs import (
     BeamState,
     LowOverlapBeamSearch,
     LowOverlapSettings,
     _prune_beam,
 )
-from sugarglider.routing.backend import RoutedPath
+from sugarglider.planning.budget import SearchBudget, SearchPhase
+from sugarglider.planning.routing_gateway import CachedRoutingGateway
+from sugarglider.routing.backend import (
+    AutoTourRoutingBackend,
+    RoutedPath,
+    RoutingBackend,
+)
 from sugarglider.routing.result import RouteResultFactory
 
 type LegKey = tuple[float, float, float, float]
@@ -186,7 +193,7 @@ async def test_open_beam_never_appends_the_start() -> None:
         profile="hike",
         target_distance_m=25_000,
         input_point_count=2,
-        close_loop=False,
+        closed=False,
     )
     assert backend.calls == [key]
     assert result.states[0].composed_path.geometry[0] == (start.lon, start.lat)
@@ -322,8 +329,13 @@ async def test_duplicate_partial_signatures_are_removed() -> None:
 @pytest.mark.asyncio
 async def test_exact_leg_cache_does_not_consume_budget_twice() -> None:
     backend, points = closed_two_leg_backend(return_alternatives=((2, 60),))
+    limits = {phase: 0 for phase in SearchPhase}
+    limits[SearchPhase.ALTERNATIVE_LEG] = 2
+    gateway = CachedRoutingGateway(
+        cast(AutoTourRoutingBackend, backend), SearchBudget(limits)
+    )
     search = LowOverlapBeamSearch(
-        backend,
+        cast(RoutingBackend, gateway),
         RouteResultFactory(),
         LowOverlapSettings(max_leg_requests=2),
     )
@@ -336,15 +348,19 @@ async def test_exact_leg_cache_does_not_consume_budget_twice() -> None:
             input_point_count=2,
         )
         assert result.states
-    assert search.request_count == 2
     assert len(backend.calls) == 2
+    assert gateway.cache_snapshot().hit_count == 2
 
 
 @pytest.mark.asyncio
 async def test_leg_budget_is_strict_and_exposed() -> None:
     backend, points = closed_two_leg_backend(return_alternatives=((2, 60),))
+    limits = {phase: 0 for phase in SearchPhase}
+    limits[SearchPhase.ALTERNATIVE_LEG] = 1
+    budget = SearchBudget(limits)
+    gateway = CachedRoutingGateway(cast(AutoTourRoutingBackend, backend), budget)
     search = LowOverlapBeamSearch(
-        backend,
+        cast(RoutingBackend, gateway),
         RouteResultFactory(),
         LowOverlapSettings(max_leg_requests=1),
     )
@@ -356,8 +372,8 @@ async def test_leg_budget_is_strict_and_exposed() -> None:
         input_point_count=2,
     )
     assert result.states == ()
-    assert search.request_count == 1
-    assert search.budget_exhausted
+    assert budget.used(SearchPhase.ALTERNATIVE_LEG) == 1
+    assert gateway.cache_snapshot().pre_backend_rejection_count == 1
     assert result.warnings == ("low_overlap_leg_budget_exhausted",)
 
 
