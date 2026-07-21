@@ -8,21 +8,21 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from sugarglider.analysis.route import project_geometry_edges
-from sugarglider.domain.generation import RouteGenerationResult
 from sugarglider.domain.models import RouteResult
 from sugarglider.nature.analysis import NatureRouteAnalyzer
 from sugarglider.nature.index import load_nature_index
+from sugarglider.planning.result import PlanResult
 
 
 def _route(path: Path) -> RouteResult:
     payload = path.read_text(encoding="utf-8")
     try:
-        generation = RouteGenerationResult.model_validate_json(payload)
+        plan = PlanResult.model_validate_json(payload)
     except ValidationError:
         return RouteResult.model_validate_json(payload)
-    if not generation.candidates:
-        raise ValueError("generation result contains no candidate")
-    return generation.candidates[0].route
+    if not plan.candidates:
+        raise ValueError("plan result contains no candidate")
+    return plan.candidates[0].route
 
 
 def main() -> int:
