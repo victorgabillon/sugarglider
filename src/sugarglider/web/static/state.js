@@ -1,4 +1,11 @@
 export const state = {
+  plan: {
+    schema_version: 1,
+    kind: "auto_tour",
+    common: null,
+    auto_tour: null,
+    waypoint_route: null,
+  },
   config: null,
   planningMode: "auto_tour",
   points: [],
@@ -6,7 +13,7 @@ export const state = {
   autoTour: {
     start: null,
     end: null,
-    routeTopology: "auto",
+    routeTopology: "loop",
     hardPoints: [],
     requestedPlaces: [],
     maximumDistanceKm: null,
@@ -19,7 +26,7 @@ export const state = {
   waypointEndpoints: {
     start: null,
     end: null,
-    routeTopology: "auto",
+    routeTopology: "loop",
   },
   options: {
     name: "Sugarglider route",
@@ -27,10 +34,11 @@ export const state = {
     toleranceKm: 2,
     candidateCount: 3,
     seed: 0,
-    pointOrderMode: "fixed",
+    waypointOrder: "fixed",
     pathSelectionMode: "low_overlap",
     naturePreference: "prefer",
     loopGeometryPreference: "prefer",
+    freePoiSpurRepeatedM: 200,
   },
   autoTourOptions: null,
   importDiagnostics: null,
@@ -40,7 +48,7 @@ export const state = {
     toleranceKm: 2,
     candidateCount: 3,
     seed: 0,
-    pointOrderMode: "fixed",
+    waypointOrder: "fixed",
     pathSelectionMode: "shortest",
     naturePreference: "off",
     loopGeometryPreference: "off",
@@ -51,6 +59,7 @@ export const state = {
   pendingPointPopupIndex: null,
   selectedRequestedPlaceId: null,
   pendingRequestedPlacePopupId: null,
+  settingRequestedApproachId: null,
   importedGpx: null,
   request: { status: "idle", id: 0, startedAt: null },
   abortController: null,
@@ -59,7 +68,7 @@ export const state = {
   endpointSetMode: null,
   showAllCandidates: true,
   showNatureContext: false,
-  showMissedRequestedRadii: false,
+  showDroppedRequestedRadii: false,
   poiFeatures: [],
   selectedPoiId: null,
   poiIndexStatus: null,
@@ -126,7 +135,7 @@ export function requestedPlaceIdentifier(place, fallbackIndex = 0) {
 
 export function selectedCandidate() {
   return state.generationResult?.candidates.find(
-    (candidate) => candidate.signature === state.selectedSignature,
+    (candidate) => candidate.id === state.selectedSignature,
   ) ?? null;
 }
 
@@ -135,74 +144,99 @@ export function pointDisplayName(point, index) {
   return name || `Point ${index + 1}`;
 }
 
-export function currentRequest() {
-  const endpoints = state.waypointEndpoints;
+function commonPlanState(endpoints) {
+  const priority = state.planningMode === "auto_tour"
+    ? state.autoTour.distancePriority
+    : "flexible";
   return {
     name: state.options.name,
-    ...(endpoints.start ? { start: coordinatePayload(endpoints.start, "Hard start") } : {}),
-    ...(endpoints.end ? { end: coordinatePayload(endpoints.end, "Hard end") } : {}),
-    points: state.points.map((point, index) => ({
-      name: pointDisplayName(point, index),
-      lat: point.lat,
-      lon: point.lon,
-    })),
-    target_distance_m: state.options.targetDistanceKm * 1000,
-    tolerance_m: state.options.toleranceKm * 1000,
+    topology: endpoints.routeTopology,
+    start: coordinatePayload(endpoints.start, "Start"),
+    end: endpoints.routeTopology === "point_to_point"
+      ? coordinatePayload(endpoints.end, "End")
+      : null,
+    routing_profile: "hike",
     candidate_count: state.options.candidateCount,
     seed: state.options.seed,
-    route_topology: endpoints.routeTopology,
-    profile: "hike",
-    point_order_mode: state.options.pointOrderMode,
-    path_selection_mode: state.options.pathSelectionMode,
-    nature_preference: state.options.naturePreference,
-    loop_geometry_preference: state.options.loopGeometryPreference,
+    distance_objective: {
+      target_m: state.options.targetDistanceKm * 1000,
+      tolerance_m: state.options.toleranceKm * 1000,
+      maximum_m: state.planningMode === "auto_tour"
+        ? state.autoTour.maximumDistanceKm == null
+          ? null
+          : state.autoTour.maximumDistanceKm * 1000
+        : null,
+      priority,
+    },
+    preferences: state.planningMode === "auto_tour" ? {
+      nature: state.options.naturePreference,
+      path_selection: state.options.pathSelectionMode,
+      scenic: state.autoTour.scenicPreference,
+      drinking_water: state.autoTour.drinkingWaterPreference,
+      loop_geometry: endpoints.routeTopology === "loop"
+        ? state.options.loopGeometryPreference
+        : "off",
+      direction: endpoints.routeTopology === "loop"
+        ? state.autoTour.directionPreference
+        : "any",
+    } : {
+      nature: state.options.naturePreference,
+      path_selection: state.options.pathSelectionMode,
+      loop_geometry: endpoints.routeTopology === "loop"
+        ? state.options.loopGeometryPreference
+        : "off",
+    },
   };
 }
 
-export function currentAutoTourRequest() {
+export function currentPlanRequest() {
   saveActivePoints();
+  const endpoints = state.planningMode === "auto_tour"
+    ? state.autoTour
+    : state.waypointEndpoints;
+  const common = commonPlanState(endpoints);
+  const modeState = state.planningMode === "auto_tour"
+    ? {
+      hard_waypoints: state.autoTour.hardPoints.map((point, index) => coordinatePayload(
+        point,
+        pointDisplayName(point, index + 1),
+      )),
+      requested_stops: state.autoTour.requestedPlaces.map((place, index) => ({
+        id: requestedPlaceIdentifier(place, index),
+        name: place.name || `Requested stop ${index + 1}`,
+        semantic_coordinate: coordinatePayload(
+          place.coordinate,
+          place.name || `Requested stop ${index + 1}`,
+        ),
+        importance: place.importance,
+        osm_reference: place.osmReference ?? null,
+        access_search_radius_m: place.accessSearchRadiusM ?? 500,
+        approach_override: place.approachOverride
+          ? coordinatePayload(place.approachOverride, "Approach override")
+          : null,
+      })),
+      preferred_discovered_poi_ids: [...state.autoTour.preferredPoiIds],
+      free_poi_spur_physical_m: state.options.freePoiSpurRepeatedM ?? 200,
+    }
+    : {
+      waypoints: state.points.map((point, index) => coordinatePayload(
+        point,
+        pointDisplayName(point, index),
+      )),
+      waypoint_order: state.options.waypointOrder,
+    };
+  state.plan = {
+    schema_version: 1,
+    kind: state.planningMode,
+    common,
+    auto_tour: state.planningMode === "auto_tour" ? modeState : null,
+    waypoint_route: state.planningMode === "waypoint_route" ? modeState : null,
+  };
   return {
-    name: state.options.name,
-    ...(state.autoTour.start
-      ? { start: coordinatePayload(state.autoTour.start, "Hard start") }
-      : {}),
-    ...(state.autoTour.end
-      ? { end: coordinatePayload(state.autoTour.end, "Hard end") }
-      : {}),
-    route_topology: state.autoTour.routeTopology,
-    target_distance_m: state.options.targetDistanceKm * 1000,
-    tolerance_m: state.options.toleranceKm * 1000,
-    ...(state.autoTour.maximumDistanceKm == null
-      ? {}
-      : { maximum_distance_m: state.autoTour.maximumDistanceKm * 1000 }),
-    candidate_count: state.options.candidateCount,
-    seed: state.options.seed,
-    hard_points: state.autoTour.hardPoints.map((point, index) => ({
-      name: pointDisplayName(point, index + 1),
-      lat: point.lat,
-      lon: point.lon,
-    })),
-    requested_places: state.autoTour.requestedPlaces.map((place, index) => ({
-      ...(place.id ? { id: place.id } : {}),
-      name: place.name || `Requested place ${index + 1}`,
-      coordinate: {
-        name: place.name || `Requested place ${index + 1}`,
-        lat: place.coordinate.lat,
-        lon: place.coordinate.lon,
-      },
-      visit_radius_m: place.visitRadiusM,
-      importance: place.importance,
-      original_index: place.originalIndex ?? index + 1,
-    })),
-    preferred_poi_ids: [...state.autoTour.preferredPoiIds],
-    distance_priority: state.autoTour.distancePriority,
-    direction_preference: state.autoTour.directionPreference,
-    scenic_preference: state.autoTour.scenicPreference,
-    drinking_water_preference: state.autoTour.drinkingWaterPreference,
-    nature_preference: state.options.naturePreference,
-    path_selection_mode: state.options.pathSelectionMode,
-    loop_geometry_preference: state.options.loopGeometryPreference,
-    profile: "hike",
+    schema_version: 1,
+    kind: state.planningMode,
+    ...common,
+    ...modeState,
   };
 }
 

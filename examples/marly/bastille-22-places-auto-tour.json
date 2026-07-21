@@ -1,45 +1,320 @@
 {
+  "candidate_count": 3,
+  "distance_objective": {
+    "maximum_m": null,
+    "priority": "flexible",
+    "target_m": 45000.0,
+    "tolerance_m": 2000.0
+  },
+  "end": null,
+  "free_poi_spur_physical_m": 200.0,
+  "hard_waypoints": [],
+  "kind": "auto_tour",
   "name": "Bastille plus 22 imported Marly places",
+  "preferences": {
+    "direction": "any",
+    "drinking_water": "prefer",
+    "loop_geometry": "off",
+    "nature": "prefer",
+    "path_selection": "low_overlap",
+    "scenic": "prefer"
+  },
+  "preferred_discovered_poi_ids": [],
+  "requested_stops": [
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-0",
+      "importance": "must_visit",
+      "name": "Croix Saint-Michel",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.8715,
+        "lon": 2.043,
+        "name": "Croix Saint-Michel"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-1",
+      "importance": "must_visit",
+      "name": "Abbaye de Joyenval",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.887496,
+        "lon": 2.034384,
+        "name": "Abbaye de Joyenval"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-2",
+      "importance": "must_visit",
+      "name": "Entrée du Désert de Retz",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.89081,
+        "lon": 2.02153,
+        "name": "Entrée du Désert de Retz"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-3",
+      "importance": "must_visit",
+      "name": "Étoile de Montaigu",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.889861,
+        "lon": 2.044635,
+        "name": "Étoile de Montaigu"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-4",
+      "importance": "must_visit",
+      "name": "Étoile des Chasseurs",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.8848,
+        "lon": 2.0402,
+        "name": "Étoile des Chasseurs"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-5",
+      "importance": "must_visit",
+      "name": "Étoile du Compas",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.8562,
+        "lon": 2.083,
+        "name": "Étoile du Compas"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-6",
+      "importance": "must_visit",
+      "name": "Lisière du Trou d'Enfer — rester hors domaine",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.8512,
+        "lon": 2.0915,
+        "name": "Lisière du Trou d'Enfer — rester hors domaine"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-7",
+      "importance": "must_visit",
+      "name": "Étoile Douteuse",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.864,
+        "lon": 2.074,
+        "name": "Étoile Douteuse"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-8",
+      "importance": "must_visit",
+      "name": "Batterie de l'Auberderie",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.861,
+        "lon": 2.071,
+        "name": "Batterie de l'Auberderie"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-9",
+      "importance": "must_visit",
+      "name": "Gare de Marly-le-Roi",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.871389,
+        "lon": 2.096667,
+        "name": "Gare de Marly-le-Roi"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-10",
+      "importance": "must_visit",
+      "name": "Église Saint-Vigor / Vieux Marly",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.8667,
+        "lon": 2.0954,
+        "name": "Église Saint-Vigor / Vieux Marly"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-11",
+      "importance": "must_visit",
+      "name": "Abreuvoir de Marly",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.862484,
+        "lon": 2.099204,
+        "name": "Abreuvoir de Marly"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-12",
+      "importance": "must_visit",
+      "name": "Grille du Cœur-Volant",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.863976,
+        "lon": 2.103777,
+        "name": "Grille du Cœur-Volant"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-13",
+      "importance": "must_visit",
+      "name": "Machine de Marly",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.871454,
+        "lon": 2.124421,
+        "name": "Machine de Marly"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-14",
+      "importance": "must_visit",
+      "name": "Tour du Levant",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.8644,
+        "lon": 2.1135,
+        "name": "Tour du Levant"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-15",
+      "importance": "must_visit",
+      "name": "Aqueduc de Louveciennes — milieu",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.86156,
+        "lon": 2.10833,
+        "name": "Aqueduc de Louveciennes — milieu"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-16",
+      "importance": "must_visit",
+      "name": "Tour du Jongleur",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.8587,
+        "lon": 2.104,
+        "name": "Tour du Jongleur"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-17",
+      "importance": "must_visit",
+      "name": "Entrée sud du Domaine",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.854245,
+        "lon": 2.107372,
+        "name": "Entrée sud du Domaine"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-18",
+      "importance": "must_visit",
+      "name": "Grand Miroir",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.8588,
+        "lon": 2.1017,
+        "name": "Grand Miroir"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-19",
+      "importance": "must_visit",
+      "name": "Emplacement du château de Marly",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.862849,
+        "lon": 2.099448,
+        "name": "Emplacement du château de Marly"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-20",
+      "importance": "must_visit",
+      "name": "Tapis Vert haut",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.8597,
+        "lon": 2.095,
+        "name": "Tapis Vert haut"
+      }
+    },
+    {
+      "access_search_radius_m": 500.0,
+      "approach_override": null,
+      "id": "migrated-requested-stop-21",
+      "importance": "must_visit",
+      "name": "Batterie du Champ de Mars",
+      "osm_reference": null,
+      "semantic_coordinate": {
+        "lat": 48.8698,
+        "lon": 2.0745,
+        "name": "Batterie du Champ de Mars"
+      }
+    }
+  ],
+  "routing_profile": "hike",
+  "schema_version": 1,
+  "seed": 0,
   "start": {
     "lat": 48.853,
     "lon": 2.369,
     "name": "Place de la Bastille"
   },
-  "route_topology": "loop",
-  "target_distance_m": 45000,
-  "tolerance_m": 2000,
-  "candidate_count": 3,
-  "seed": 0,
-  "distance_priority": "flexible",
-  "direction_preference": "any",
-  "scenic_preference": "prefer",
-  "drinking_water_preference": "prefer",
-  "nature_preference": "prefer",
-  "path_selection_mode": "low_overlap",
-  "loop_geometry_preference": "off",
-  "profile": "hike",
-  "points": [
-    {"lat": 48.871500, "lon": 2.043000, "name": "Croix Saint-Michel"},
-    {"lat": 48.887496, "lon": 2.034384, "name": "Abbaye de Joyenval"},
-    {"lat": 48.890810, "lon": 2.021530, "name": "Entrée du Désert de Retz"},
-    {"lat": 48.889861, "lon": 2.044635, "name": "Étoile de Montaigu"},
-    {"lat": 48.884800, "lon": 2.040200, "name": "Étoile des Chasseurs"},
-    {"lat": 48.856200, "lon": 2.083000, "name": "Étoile du Compas"},
-    {"lat": 48.851200, "lon": 2.091500, "name": "Lisière du Trou d'Enfer — rester hors domaine"},
-    {"lat": 48.864000, "lon": 2.074000, "name": "Étoile Douteuse"},
-    {"lat": 48.861000, "lon": 2.071000, "name": "Batterie de l'Auberderie"},
-    {"lat": 48.871389, "lon": 2.096667, "name": "Gare de Marly-le-Roi"},
-    {"lat": 48.866700, "lon": 2.095400, "name": "Église Saint-Vigor / Vieux Marly"},
-    {"lat": 48.862484, "lon": 2.099204, "name": "Abreuvoir de Marly"},
-    {"lat": 48.863976, "lon": 2.103777, "name": "Grille du Cœur-Volant"},
-    {"lat": 48.871454, "lon": 2.124421, "name": "Machine de Marly"},
-    {"lat": 48.864400, "lon": 2.113500, "name": "Tour du Levant"},
-    {"lat": 48.861560, "lon": 2.108330, "name": "Aqueduc de Louveciennes — milieu"},
-    {"lat": 48.858700, "lon": 2.104000, "name": "Tour du Jongleur"},
-    {"lat": 48.854245, "lon": 2.107372, "name": "Entrée sud du Domaine"},
-    {"lat": 48.858800, "lon": 2.101700, "name": "Grand Miroir"},
-    {"lat": 48.862849, "lon": 2.099448, "name": "Emplacement du château de Marly"},
-    {"lat": 48.859700, "lon": 2.095000, "name": "Tapis Vert haut"},
-    {"lat": 48.869800, "lon": 2.074500, "name": "Batterie du Champ de Mars"}
-  ]
+  "topology": "loop"
 }

@@ -27,6 +27,63 @@ type OsmType = Literal["node", "way", "relation"]
 type NameSource = Literal["name", "category_fallback"]
 type Wgs84BoundingBox = tuple[float, float, float, float]
 type PublicTags = tuple[tuple[str, str], ...]
+type PoiApproachKind = Literal[
+    "exact_feature",
+    "drinking_water_source",
+    "viewpoint_location",
+    "mapped_entrance",
+    "mapped_gate",
+    "public_path_boundary",
+    "nearby_public_path",
+    "user_override",
+    "strict_graph_snap",
+]
+type PoiApproachSource = Literal[
+    "osm_feature",
+    "osm_entrance",
+    "osm_gate",
+    "osm_path_intersection",
+    "osm_spatial_boundary_inference",
+    "imported_coordinate",
+    "user_override",
+]
+type PoiApproachProvenance = Literal[
+    "feature_geometry",
+    "way_boundary_node",
+    "relation_boundary_node",
+    "shared_path_boundary_node",
+    "spatial_boundary_inferred",
+    "imported_coordinate",
+    "user_override",
+]
+
+
+class PoiApproachCandidate(ImmutableModel):
+    """One bounded, meaningful route target distinct from a POI centroid."""
+
+    id: Annotated[str, Field(min_length=1, max_length=320)]
+    coordinate: Coordinate
+    kind: PoiApproachKind
+    source: PoiApproachSource
+    access: AccessStatus
+    semantic_distance_m: Annotated[float, Field(ge=0)]
+    graph_snap_distance_m: Annotated[float, Field(ge=0)] | None = None
+    arrival_tolerance_m: Annotated[float, Field(gt=0, le=100)]
+    name: Annotated[str, Field(min_length=1, max_length=200)] | None = None
+    osm_type: OsmType | None = None
+    osm_id: Annotated[int, Field(ge=0)] | None = None
+    provenance: PoiApproachProvenance = "feature_geometry"
+    warnings: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_osm_reference(self) -> Self:
+        if (self.osm_type is None) != (self.osm_id is None):
+            raise ValueError("approach OSM type and ID must be supplied together")
+        if self.coordinate.name is not None:
+            raise ValueError("approach coordinates must not contain a duplicate name")
+        if self.warnings != tuple(sorted(set(self.warnings))):
+            raise ValueError("approach warnings must be sorted and unique")
+        return self
 
 
 class PoiFeature(ImmutableModel):
@@ -48,6 +105,9 @@ class PoiFeature(ImmutableModel):
     tags: PublicTags = ()
     source_updated_at: str | None = None
     warnings: tuple[str, ...] = ()
+    approach_candidates: Annotated[
+        tuple[PoiApproachCandidate, ...], Field(max_length=8)
+    ] = ()
 
     @model_validator(mode="after")
     def validate_identity_and_stable_collections(self) -> Self:
@@ -64,6 +124,18 @@ class PoiFeature(ImmutableModel):
             raise ValueError("POI secondary categories must be unique and non-primary")
         if self.warnings != tuple(sorted(set(self.warnings))):
             raise ValueError("POI warnings must be sorted and unique")
+        approach_ids = tuple(approach.id for approach in self.approach_candidates)
+        if approach_ids != tuple(sorted(approach_ids)) or len(approach_ids) != len(
+            set(approach_ids)
+        ):
+            raise ValueError("POI approaches must have unique sorted IDs")
+        if any(
+            approach.access in {"private", "restricted"}
+            for approach in self.approach_candidates
+        ):
+            raise ValueError("private or restricted approaches must not be published")
+        if self.access_status in {"private", "restricted"} and self.approach_candidates:
+            raise ValueError("private or restricted features cannot publish approaches")
         expected_group: PoiGroup = (
             "hydration"
             if self.category in {"drinking_water", "fountain", "water_tap"}
@@ -78,9 +150,9 @@ class PoiBuildConfiguration(ImmutableModel):
     """Stable builder choices recorded inside deterministic index bytes."""
 
     classifier_version: Literal["1"] = "1"
-    geometry_policy: Literal[
-        "node-coordinate_polygon-representative-point_way-metric-midpoint"
-    ] = "node-coordinate_polygon-representative-point_way-metric-midpoint"
+    geometry_policy: Literal["semantic-point_with-bounded-public-approaches"] = (
+        "semantic-point_with-bounded-public-approaches"
+    )
     identity_policy: Literal["osm-type-and-id"] = "osm-type-and-id"
     include_non_potable: bool = True
 
@@ -88,13 +160,16 @@ class PoiBuildConfiguration(ImmutableModel):
 class PoiIndexMetadata(ImmutableModel):
     """Deterministic POI index metadata without a wall-clock build timestamp."""
 
-    format_version: Literal[1] = 1
+    format_version: Literal[2] = 2
     source_basename: Annotated[str, Field(min_length=1)]
     source_size_bytes: Annotated[int, Field(ge=0)] | None = None
     feature_count: Annotated[int, Field(ge=0)]
     category_counts: dict[PoiCategory, Annotated[int, Field(ge=0)]]
     potability_counts: dict[Potability, Annotated[int, Field(ge=0)]]
     access_counts: dict[AccessStatus, Annotated[int, Field(ge=0)]]
+    approach_counts: dict[PoiApproachKind, Annotated[int, Field(ge=0)]] = Field(
+        default_factory=dict
+    )
     bounding_box: Wgs84BoundingBox
     skipped_invalid_count: Annotated[int, Field(ge=0)]
     build_configuration: PoiBuildConfiguration = PoiBuildConfiguration()
@@ -129,6 +204,8 @@ class PoiIndexDocument(ImmutableModel):
             raise ValueError("POI potability counts do not match features")
         if _counts(self.features, "access_status") != self.metadata.access_counts:
             raise ValueError("POI access counts do not match features")
+        if _approach_counts(self.features) != self.metadata.approach_counts:
+            raise ValueError("POI approach counts do not match features")
         return self
 
 
@@ -144,6 +221,9 @@ class PoiIndexStatus(ImmutableModel):
     category_counts: dict[str, Annotated[int, Field(ge=0)]]
     potability_counts: dict[str, Annotated[int, Field(ge=0)]]
     access_counts: dict[str, Annotated[int, Field(ge=0)]]
+    approach_counts: dict[str, Annotated[int, Field(ge=0)]] = Field(
+        default_factory=dict
+    )
     warnings: tuple[str, ...]
 
 
@@ -214,4 +294,12 @@ def _counts(
     for feature in features:
         key = str(getattr(feature, field))
         counts[key] = counts.get(key, 0) + 1
+    return {key: counts[key] for key in sorted(counts)}
+
+
+def _approach_counts(features: tuple[PoiFeature, ...]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for feature in features:
+        for approach in feature.approach_candidates:
+            counts[approach.kind] = counts.get(approach.kind, 0) + 1
     return {key: counts[key] for key in sorted(counts)}

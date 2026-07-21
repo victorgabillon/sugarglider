@@ -31,7 +31,7 @@ class RouteRequest(ImmutableModel):
 
     name: str = "Sugarglider route"
     points: Annotated[list[Coordinate], Field(min_length=2)]
-    close_loop: bool = False
+    closed: bool = False
     profile: Literal["hike"] = "hike"
     _input_point_count: int = PrivateAttr()
 
@@ -45,7 +45,7 @@ class RouteRequest(ImmutableModel):
                     "adjacent route points must not have equal coordinates"
                 )
 
-        if self.close_loop:
+        if self.closed:
             first = self.points[0]
             last = self.points[-1]
             if (first.lat, first.lon) != (last.lat, last.lon):

@@ -19,6 +19,8 @@ const POI_SELECTED_LABEL_LAYER = "places-poi-selected-label";
 const POI_VISITED_LAYER = "places-poi-visited";
 const REQUESTED_SOURCE = "auto-tour-requested-places";
 const REQUESTED_RADIUS_SOURCE = "auto-tour-requested-place-radii";
+const REQUESTED_APPROACH_SOURCE = "auto-tour-requested-approaches";
+const REQUESTED_CONNECTOR_SOURCE = "auto-tour-requested-approach-connectors";
 const REQUESTED_RADIUS_FILL_LAYER = "auto-tour-requested-radius-fill";
 const REQUESTED_RADIUS_LINE_LAYER = "auto-tour-requested-radius-line";
 const REQUESTED_MARKER_LAYER = "auto-tour-requested-markers";
@@ -56,6 +58,7 @@ let requestedPlaceById = new Map();
 let requestedPlacePopup = null;
 let requestedPlacePopupId = null;
 let requestedRadiusFeatureCount = 0;
+let requestedConnectorFeatureCount = 0;
 
 export function initializeMap(config, handlers) {
   if (!window.maplibregl) {
@@ -468,7 +471,7 @@ function poiPopupContent(feature) {
   const explanation = document.createElement("p");
   explanation.className = "place-explanation";
   if (feature.potability === "verified") {
-    explanation.textContent = "Mapped in OpenStreetMap as drinking water.";
+    explanation.textContent = "Mapped in OpenStreetMap as drinking water. Current operation and water quality are not guaranteed.";
   } else if (feature.potability === "unknown") {
     explanation.textContent = "Potability is not specified in the mapped data.";
   } else if (feature.potability === "non_potable") {
@@ -491,7 +494,7 @@ function poiPopupContent(feature) {
   popupRow(content, "OSM object", `${feature.osm_type}/${feature.osm_id}`);
   const scenic = ["viewpoint", "observation_tower", "castle", "archaeological_site", "ruins", "tourism_attraction"].includes(feature.category);
   const verifiedWater = feature.category === "drinking_water" && feature.potability === "verified";
-  const eligibleAccess = ["public", "restricted"].includes(feature.access_status);
+  const eligibleAccess = ["public", "unknown"].includes(feature.access_status);
   if (eligibleAccess && (scenic || verifiedWater) && feature.potability !== "non_potable") {
     const prefer = document.createElement("button");
     prefer.type = "button";
@@ -516,15 +519,12 @@ function showPoiPopup(feature) {
     .addTo(map);
 }
 
-function backendRequestedPlace(visit) {
-  const place = visit?.requested_place ?? {};
+function backendRequestedPlace(stop) {
   return {
-    id: place.id,
-    name: place.name,
-    coordinate: place.coordinate,
-    importance: place.importance,
-    visitRadiusM: place.visit_radius_m,
-    originalIndex: place.original_index,
+    id: stop?.id,
+    name: stop?.name,
+    coordinate: stop?.semantic_coordinate,
+    importance: stop?.importance,
   };
 }
 
@@ -538,9 +538,13 @@ export function requestedPlaceFeatureCollection(places, visits = [], selectedId 
     features: places.map((place, index) => {
       const id = place.id ?? requestedPlaceIdentifier(place, index);
       const visit = visitsById.get(id);
-      const status = visit ? (visit.satisfied ? "satisfied" : "missed") : "pending";
+      const status = visit?.selection_method
+        ? "selected"
+        : visit?.reason
+          ? "dropped"
+          : "pending";
       const originalOrder = Number(place.originalIndex ?? index + 1);
-      const measuredDistance = Number(visit?.measured_distance_m);
+      const measuredDistance = Number(visit?.route_to_approach_m);
       return {
         type: "Feature",
         id,
@@ -555,17 +559,17 @@ export function requestedPlaceFeatureCollection(places, visits = [], selectedId 
           longitude: place.coordinate.lon,
           latitude: place.coordinate.lat,
           importance: place.importance,
-          visit_radius_m: place.visitRadiusM,
+          access_search_radius_m: place.accessSearchRadiusM ?? place.visitRadiusM ?? 500,
           status,
           measured_distance_m: Number.isFinite(measuredDistance)
             ? measuredDistance
             : null,
-          visit_reason: visit?.reason ?? null,
-          deliberately_considered: visit?.deliberately_considered ?? false,
-          deliberately_routed: visit?.deliberately_routed ?? false,
-          deliberately_routed_elsewhere: visit?.deliberately_routed_in_another_retained_candidate ?? false,
-          graph_snap_distance_m: visit?.graph_snap_distance_m ?? null,
-          failure_reason: visit?.failure_reason ?? null,
+          visit_reason: visit?.selection_method ?? null,
+          failure_reason: visit?.reason ?? null,
+          approach: visit?.resolved_approach ?? (place.approachOverride ? {
+            coordinate: place.approachOverride,
+            kind: "user_override",
+          } : null),
           selected: id === selectedId,
         },
       };
@@ -592,12 +596,12 @@ function destinationCoordinate(longitude, latitude, distanceM, bearingRadians) {
   ];
 }
 
-export function requestedPlaceRadiusCollection(collection, showMissed = false) {
+export function requestedPlaceRadiusCollection(collection, showDropped = false) {
   return {
     type: "FeatureCollection",
     features: collection.features
       .filter((feature) => feature.properties.selected
-        || (showMissed && feature.properties.status === "missed"))
+        || (showDropped && feature.properties.status === "dropped"))
       .map((feature) => {
         const [longitude, latitude] = feature.geometry.coordinates;
         const coordinates = Array.from(
@@ -605,7 +609,7 @@ export function requestedPlaceRadiusCollection(collection, showMissed = false) {
           (_value, index) => destinationCoordinate(
             longitude,
             latitude,
-            feature.properties.visit_radius_m,
+            feature.properties.access_search_radius_m,
             2 * Math.PI * index / REQUESTED_RADIUS_SEGMENTS,
           ),
         );
@@ -616,7 +620,7 @@ export function requestedPlaceRadiusCollection(collection, showMissed = false) {
           properties: {
             requested_id: feature.id,
             status: feature.properties.status,
-            visit_radius_m: feature.properties.visit_radius_m,
+            access_search_radius_m: feature.properties.access_search_radius_m,
           },
         };
       }),
@@ -642,10 +646,32 @@ function ensureRequestedPlaceLayers() {
       data: EMPTY_COLLECTION,
     });
   }
+  if (!map.getSource(REQUESTED_APPROACH_SOURCE)) {
+    map.addSource(REQUESTED_APPROACH_SOURCE, { type: "geojson", data: EMPTY_COLLECTION });
+  }
+  if (!map.getSource(REQUESTED_CONNECTOR_SOURCE)) {
+    map.addSource(REQUESTED_CONNECTOR_SOURCE, { type: "geojson", data: EMPTY_COLLECTION });
+  }
+  if (!map.getLayer("auto-tour-requested-approach-connectors")) {
+    map.addLayer({
+      id: "auto-tour-requested-approach-connectors",
+      type: "line",
+      source: REQUESTED_CONNECTOR_SOURCE,
+      paint: { "line-color": "#59786b", "line-width": 2, "line-opacity": .65, "line-dasharray": [2, 2] },
+    }, firstRouteLayerId());
+  }
+  if (!map.getLayer("auto-tour-requested-approach-markers")) {
+    map.addLayer({
+      id: "auto-tour-requested-approach-markers",
+      type: "circle",
+      source: REQUESTED_APPROACH_SOURCE,
+      paint: { "circle-radius": 5, "circle-color": "#fffef9", "circle-stroke-color": "#214b3b", "circle-stroke-width": 2 },
+    });
+  }
   const statusColor = [
     "match", ["get", "status"],
-    "satisfied", "#4f8c61",
-    "missed", "#c94f47",
+    "selected", "#4f8c61",
+    "dropped", "#c94f47",
     "#fff1c7",
   ];
   addRequestedRadiusLayer({
@@ -779,17 +805,16 @@ function ensureRequestedPlaceLayers() {
 }
 
 function requestedPlaceStatusLabel(status) {
-  if (status === "satisfied") return "Satisfied";
-  if (status === "missed") return "Missed";
+  if (status === "selected") return "Selected";
+  if (status === "dropped") return "Dropped";
   return "Pending route generation";
 }
 
 function requestedVisitReason(reason) {
   const values = {
     already_on_route: "Already on the routed path",
-    deliberately_routed_close_enough: "Deliberately routed close enough",
+    deliberately_routed_close_enough: "Deliberately routed to the approach",
     not_reached: "The selected route did not reach this place",
-    snapped_outside_visit_radius: "The routed snap remained outside the visit radius",
   };
   return values[reason] ?? null;
 }
@@ -811,19 +836,27 @@ function requestedPlacePopupContent(feature) {
   if (Number.isFinite(properties.measured_distance_m)) {
     popupRow(
       content,
-      "Closest route passage",
+      "Route-to-approach distance",
       `${Number(properties.measured_distance_m).toFixed(1)} m`,
     );
   }
-  popupRow(content, "Required radius", `${Number(properties.visit_radius_m)} m`);
+  popupRow(content, "Access-search area", `${Number(properties.access_search_radius_m)} m`);
+  if (properties.approach) {
+    popupRow(content, "Approach kind", properties.approach.kind);
+    popupRow(content, "Arrival tolerance", `${Number(properties.approach.arrival_tolerance_m ?? 25)} m`);
+  }
   popupRow(content, "Deliberately considered", properties.deliberately_considered ? "Yes" : "No");
   popupRow(content, "Deliberately routed", properties.deliberately_routed ? "Yes" : "No");
   popupRow(content, "Routed in another candidate", properties.deliberately_routed_elsewhere ? "Yes" : "No");
   if (Number.isFinite(properties.graph_snap_distance_m)) {
     popupRow(content, "Graph snap distance", `${Number(properties.graph_snap_distance_m).toFixed(1)} m`);
   }
-  popupRow(content, "Visit result", requestedVisitReason(properties.visit_reason));
-  popupRow(content, "Failure reason", properties.failure_reason);
+  popupRow(content, "Selection reason", requestedVisitReason(properties.visit_reason));
+  popupRow(content, "Drop reason", properties.failure_reason);
+  const caution = document.createElement("p");
+  caution.className = "context-note";
+  caution.textContent = "Verify current access and opening conditions.";
+  content.append(caution);
   return content;
 }
 
@@ -885,7 +918,7 @@ export function renderRequestedPlaces(
   places,
   visits,
   selectedId,
-  showMissedRadii,
+  showDroppedRadii,
   onSelect,
   revealId = null,
 ) {
@@ -898,7 +931,49 @@ export function renderRequestedPlaces(
   ]));
   requestedPlaceActivateHandler = onSelect;
   map.getSource(REQUESTED_SOURCE).setData(collection);
-  const radii = requestedPlaceRadiusCollection(collection, showMissedRadii);
+  const selectedApproaches = collection.features.filter((feature) => (
+    feature.properties.approach
+    && (feature.properties.status === "selected" || feature.properties.selected)
+  ));
+  requestedConnectorFeatureCount = selectedApproaches.filter(
+    (feature) => feature.properties.status === "selected",
+  ).length;
+  map.getSource(REQUESTED_APPROACH_SOURCE).setData({
+    type: "FeatureCollection",
+    features: selectedApproaches.map((feature) => ({
+      type: "Feature",
+      id: `${feature.id}-approach`,
+      geometry: {
+        type: "Point",
+        coordinates: [
+          feature.properties.approach.coordinate.lon,
+          feature.properties.approach.coordinate.lat,
+        ],
+      },
+      properties: { requested_id: feature.id },
+    })),
+  });
+  map.getSource(REQUESTED_CONNECTOR_SOURCE).setData({
+    type: "FeatureCollection",
+    features: selectedApproaches
+      .filter((feature) => feature.properties.status === "selected")
+      .map((feature) => ({
+        type: "Feature",
+        id: `${feature.id}-connector`,
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            feature.geometry.coordinates,
+            [
+              feature.properties.approach.coordinate.lon,
+              feature.properties.approach.coordinate.lat,
+            ],
+          ],
+        },
+        properties: { requested_id: feature.id },
+      })),
+  });
+  const radii = requestedPlaceRadiusCollection(collection, showDroppedRadii);
   requestedRadiusFeatureCount = radii.features.length;
   map.getSource(REQUESTED_RADIUS_SOURCE).setData(radii);
   const selected = selectedId ? requestedPlaceById.get(selectedId) : null;
@@ -918,7 +993,7 @@ export function renderRequestedPlaces(
 
 export function requestedPlaceMapDiagnostics() {
   const features = [...requestedPlaceById.values()];
-  const statuses = { pending: 0, satisfied: 0, missed: 0 };
+  const statuses = { pending: 0, selected: 0, dropped: 0 };
   for (const feature of features) statuses[feature.properties.status] += 1;
   const requestedLayerIds = [
     REQUESTED_RADIUS_FILL_LAYER,
@@ -937,6 +1012,11 @@ export function requestedPlaceMapDiagnostics() {
   return {
     sourceExists: Boolean(map?.getSource(REQUESTED_SOURCE)),
     radiusSourceExists: Boolean(map?.getSource(REQUESTED_RADIUS_SOURCE)),
+    connectorSourceExists: Boolean(map?.getSource(REQUESTED_CONNECTOR_SOURCE)),
+    connectorLayerExists: Boolean(
+      map?.getLayer("auto-tour-requested-approach-connectors"),
+    ),
+    connectorFeatureCount: requestedConnectorFeatureCount,
     featureCount: features.length,
     visibleFeatureCount: new Set(
       visible.map((feature) => feature.properties?.requested_id),
@@ -985,19 +1065,19 @@ export function currentViewportBounds() {
   };
 }
 
-export function renderCandidates(candidates, selectedSignature, showAll, onSelect) {
+export function renderCandidates(candidates, selectedCandidateId, showAll, onSelect) {
   if (!ready || !map) return;
   clearByPrefix("candidate-");
   candidateClickHandler = onSelect;
   candidates.forEach((candidate, index) => {
-    if (!showAll && candidate.signature !== selectedSignature) return;
+    if (!showAll && candidate.id !== selectedCandidateId) return;
     const sourceId = `candidate-${index}`;
     sourceData(sourceId, {
       type: "Feature",
-      properties: { signature: candidate.signature },
+      properties: { signature: candidate.id },
       geometry: { type: "LineString", coordinates: candidate.route.geometry },
     });
-    const selected = candidate.signature === selectedSignature;
+    const selected = candidate.id === selectedCandidateId;
     map.addLayer({
       id: `${sourceId}-casing`,
       type: "line",
@@ -1424,6 +1504,15 @@ export function fitCoordinates(coordinates) {
     padding: 70,
     maxZoom: 15,
     duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 500,
+  });
+}
+
+export function focusCoordinate(coordinate) {
+  if (!map || !Array.isArray(coordinate) || coordinate.length < 2) return;
+  if (!Number.isFinite(coordinate[0]) || !Number.isFinite(coordinate[1])) return;
+  map.easeTo({
+    center: coordinate,
+    duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 350,
   });
 }
 

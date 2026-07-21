@@ -1,9 +1,9 @@
-import { ApiError, exportRoute, generateAutoTour, generateRoutes, getConfig, getPoiStatus, searchPois, visualizeRoute } from "./api.js";
+import { ApiError, exportPlanCandidate, generatePlan, getConfig, getPoiStatus, searchPois, visualizeRoute } from "./api.js";
 import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
-import { clearRoutes, currentViewportBounds, fitCoordinates, initializeMap, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderVisualization, resizeMap } from "./map.js";
-import { currentAutoTourRequest, currentRequest, invalidateCandidates, pointDisplayName, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, state, switchPlanningMode } from "./state.js";
+import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, initializeMap, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderVisualization, resizeMap } from "./map.js";
+import { currentPlanRequest, invalidateCandidates, pointDisplayName, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, state, switchPlanningMode } from "./state.js";
 
 const byId = (id) => document.getElementById(id);
 let elapsedTimer = null;
@@ -112,10 +112,18 @@ function poiRequestBody(bounds) {
   };
 }
 
-function selectPoi(id) {
-  if (!state.poiFeatures.some((feature) => feature.id === id)) return;
+function selectPoi(id, { revealMap = false } = {}) {
+  const visitFeatures = (selectedCandidate()?.poi_visits ?? []).map((visit) => visit.poi);
+  const allFeatures = [...new Map(
+    [...state.poiFeatures, ...visitFeatures].map((feature) => [feature.id, feature]),
+  ).values()];
+  const feature = allFeatures.find((value) => value.id === id);
+  if (!feature) return;
   state.selectedPoiId = id;
-  renderPois(state.poiFeatures, state.selectedPoiId, selectPoi, poiRenderOptions());
+  renderPois(allFeatures, state.selectedPoiId, selectPoi, poiRenderOptions());
+  if (revealMap) {
+    focusCoordinate([feature.coordinate.lon, feature.coordinate.lat]);
+  }
 }
 
 function selectedVisitedPoiIds() {
@@ -131,7 +139,7 @@ function poiRenderOptions() {
 }
 
 function preferPoi(feature) {
-  const eligibleAccess = ["public", "restricted"].includes(feature.access_status);
+  const eligibleAccess = ["public", "unknown"].includes(feature.access_status);
   const scenic = PRIMARY_SCENIC_CATEGORIES.includes(feature.category) || feature.category === "tourism_attraction";
   const verifiedWater = feature.category === "drinking_water" && feature.potability === "verified";
   if (!eligibleAccess || (!scenic && !verifiedWater) || feature.potability === "non_potable") return;
@@ -204,10 +212,11 @@ function updateOptionsFromControls() {
     toleranceKm: Number(byId("tolerance").value),
     candidateCount: Number(byId("candidate-count").value),
     seed: Number(byId("seed").value),
-    pointOrderMode: byId("point-order-mode").value,
+    waypointOrder: byId("point-order-mode").value,
     pathSelectionMode: byId("path-selection-mode").value,
     naturePreference: byId("nature-preference").value,
     loopGeometryPreference: byId("loop-geometry-preference").value,
+    freePoiSpurRepeatedM: Number(byId("free-poi-spur").value),
   };
   state.autoTour.directionPreference = byId("direction-preference").value;
   state.autoTour.distancePriority = byId("distance-priority").value;
@@ -225,10 +234,11 @@ function updateControlsFromOptions() {
   byId("tolerance").value = state.options.toleranceKm;
   byId("candidate-count").value = state.options.candidateCount;
   byId("seed").value = state.options.seed;
-  byId("point-order-mode").value = state.options.pointOrderMode;
+  byId("point-order-mode").value = state.options.waypointOrder;
   byId("path-selection-mode").value = state.options.pathSelectionMode;
   byId("nature-preference").value = state.options.naturePreference;
   byId("loop-geometry-preference").value = state.options.loopGeometryPreference;
+  byId("free-poi-spur").value = state.options.freePoiSpurRepeatedM ?? 200;
   byId("direction-preference").value = state.autoTour.directionPreference;
   byId("distance-priority").value = state.autoTour.distancePriority;
   byId("maximum-distance").value = state.autoTour.maximumDistanceKm ?? "";
@@ -244,11 +254,7 @@ function activeEndpoints() {
 
 function isOpenPlan() {
   const endpoints = activeEndpoints();
-  if (endpoints.routeTopology === "point_to_point") return true;
-  return endpoints.routeTopology === "auto"
-    && endpoints.start
-    && endpoints.end
-    && (endpoints.start.lat !== endpoints.end.lat || endpoints.start.lon !== endpoints.end.lon);
+  return endpoints.routeTopology === "point_to_point";
 }
 
 function assignActiveEndpoint(kind, point) {
@@ -290,17 +296,11 @@ function updateEndpointControls() {
   const topology = endpoints.routeTopology;
   const orderSelect = byId("point-order-mode");
   if (state.planningMode === "waypoint_route") {
-    const open = topology === "point_to_point"
-      || (topology === "auto" && endpoints.start && endpoints.end
-        && (endpoints.start.lat !== endpoints.end.lat || endpoints.start.lon !== endpoints.end.lon));
-    const desired = open ? "optimize_path" : "optimize_loop";
     const optimized = orderSelect.querySelector('option[data-optimized="true"]');
-    optimized.value = desired;
-    optimized.textContent = open ? "Optimize route" : "Optimize loop";
-    if (!["fixed", desired].includes(state.options.pointOrderMode)) {
-      state.options.pointOrderMode = "fixed";
-    }
-    orderSelect.value = state.options.pointOrderMode;
+    optimized.textContent = topology === "point_to_point"
+      ? "Optimize interior waypoints"
+      : "Optimize loop waypoints";
+    orderSelect.value = state.options.waypointOrder;
   }
 }
 
@@ -329,20 +329,21 @@ function renderPreferredPois() {
 }
 
 function selectedRequestedVisits() {
-  return new Map((selectedCandidate()?.requested_place_visits ?? []).map(
-    (visit, index) => [
-      requestedPlaceIdentifier({
-        coordinate: visit.requested_place.coordinate,
-        originalIndex: visit.requested_place.original_index,
-      }, index),
-      visit,
-    ],
-  ));
+  const candidate = selectedCandidate();
+  const decisions = [
+    ...(candidate?.selected_stops ?? [])
+      .filter((stop) => stop.selection_origin === "requested")
+      .map((stop) => [stop.id, { decision: "selected" }]),
+    ...(candidate?.dropped_stops ?? [])
+      .filter((stop) => stop.selection_origin === "requested")
+      .map((stop) => [stop.id, { decision: "dropped" }]),
+  ];
+  return new Map(decisions);
 }
 
 function requestedPlaceStatus(place, index, visits = selectedRequestedVisits()) {
   const visit = visits.get(place.id ?? requestedPlaceIdentifier(place, index));
-  return visit ? (visit.satisfied ? "satisfied" : "missed") : "pending";
+  return visit?.decision ?? "pending";
 }
 
 function scrollRequestedPlaceIntoView(id) {
@@ -384,7 +385,7 @@ function renderRequestedPlacesList() {
     item.setAttribute("aria-label", `Show requested place ${index + 1}, ${place.name}, ${status}`);
     if (id === state.selectedRequestedPlaceId) item.setAttribute("aria-current", "true");
     const label = document.createElement("span");
-    label.textContent = `${index + 1}. ${place.name} · ${place.visitRadiusM} m · ${friendlyLabel(place.importance)}`;
+    label.textContent = `${index + 1}. ${place.name} · access search ${place.accessSearchRadiusM ?? place.visitRadiusM ?? 500} m · ${friendlyLabel(place.importance)}`;
     const statusLabel = document.createElement("span");
     statusLabel.className = "requested-place-status";
     statusLabel.textContent = friendlyLabel(status);
@@ -412,7 +413,25 @@ function renderRequestedPlacesList() {
     const details = document.createElement("span");
     details.className = "requested-place-copy";
     details.append(label, statusLabel);
-    item.append(details, remove);
+    const approach = document.createElement("button");
+    approach.type = "button";
+    approach.className = "text-button";
+    approach.textContent = "Set approach on map";
+    approach.addEventListener("click", () => {
+      state.settingRequestedApproachId = id;
+      state.selectedRequestedPlaceId = id;
+      approach.textContent = "Click map once…";
+    });
+    const clearApproach = document.createElement("button");
+    clearApproach.type = "button";
+    clearApproach.className = "text-button";
+    clearApproach.textContent = "Clear approach";
+    clearApproach.disabled = !place.approachOverride;
+    clearApproach.addEventListener("click", () => {
+      place.approachOverride = null;
+      invalidateAndRender();
+    });
+    item.append(details, approach, clearApproach, remove);
     list.append(item);
   });
 }
@@ -434,7 +453,7 @@ function renderModeControls() {
     : "Discovery only: shown places never alter mandatory points, generation, ranking, or GPX output.";
   updateEndpointControls();
   renderPreferredPois();
-  byId("show-missed-requested-radii-control").classList.toggle("hidden", !auto);
+  byId("show-dropped-requested-radii-control").classList.toggle("hidden", !auto);
   renderRequestedPlacesList();
 }
 
@@ -461,6 +480,13 @@ function pointValidation() {
     return "Every point needs valid latitude and longitude coordinates.";
   }
   const endpoints = activeEndpoints();
+  if (!endpoints.start) return "Choose an explicit start.";
+  if (endpoints.routeTopology === "loop" && endpoints.end) {
+    return "Loop plans must not contain an end.";
+  }
+  if (endpoints.routeTopology === "point_to_point" && !endpoints.end) {
+    return "Point-to-point plans require an explicit end.";
+  }
   for (const [label, point] of [["Hard start", endpoints.start], ["Hard end", endpoints.end]]) {
     if (point && !validPoint(point)) return `${label} needs valid coordinates.`;
   }
@@ -510,7 +536,7 @@ function iconButton(action, icon, label, disabled = false) {
 function candidateVisitOrders() {
   const candidate = selectedCandidate();
   return new Map(
-    (candidate?.required_point_order ?? []).map((visit, index) => [
+    (candidate?.diagnostics.details.required_waypoint_order ?? []).map((visit, index) => [
       visit.original_index,
       index + 1,
     ]),
@@ -691,7 +717,7 @@ function renderMapData() {
   state.pendingRequestedPlacePopupId = null;
   renderRequiredMarkers(
     state.points,
-    candidate?.required_point_order,
+    candidate?.diagnostics.details.required_waypoint_order,
     state.selectedPointIndex,
     popupIndex,
     state.request.status === "running",
@@ -722,21 +748,23 @@ function renderMapData() {
     selectCandidate,
   );
   renderVisualization(
-    candidate ? state.visualizationCache.get(candidate.signature) ?? null : null,
+    candidate ? state.visualizationCache.get(candidate.id) ?? null : null,
     state.showNatureContext,
   );
-  const visitFeatures = (candidate?.poi_visits ?? []).map((visit) => visit.poi);
-  const allFeatures = [...new Map(
-    [...state.poiFeatures, ...visitFeatures].map((feature) => [feature.id, feature]),
-  ).values()];
+  const allFeatures = state.poiFeatures;
   renderPois(allFeatures, state.selectedPoiId, selectPoi, poiRenderOptions());
   renderRequestedPlaceMarkers(
     state.planningMode === "auto_tour" ? state.autoTour.requestedPlaces : [],
     state.planningMode === "auto_tour"
-      ? candidate?.requested_place_visits ?? []
+      ? [
+        ...(candidate?.selected_stops ?? [])
+          .filter((stop) => stop.selection_origin === "requested"),
+        ...(candidate?.dropped_stops ?? [])
+          .filter((stop) => stop.selection_origin === "requested"),
+      ]
       : [],
     state.selectedRequestedPlaceId,
-    state.showMissedRequestedRadii,
+    state.showDroppedRequestedRadii,
     (id) => selectRequestedPlace(id, { scrollList: true }),
     requestedPopupId,
   );
@@ -744,12 +772,11 @@ function renderMapData() {
 
 function candidateBadges(candidate, search) {
   const values = [];
-  if (candidate.rank === 1) values.push('<span class="badge recommended">Recommended</span>');
-  values.push(`<span class="badge ${candidate.within_tolerance ? "good" : "warn"}">${candidate.within_tolerance ? "Within tolerance" : "Outside tolerance"}</span>`);
-  if (search.low_overlap_requested) values.push(`<span class="badge">${escapeHtml(lowOverlapLabel(candidate))}</span>`);
-  if (search.control_signature && candidate.signature === search.control_signature) {
-    values.push('<span class="badge">No-POI control</span>');
+  for (const role of candidate.roles) {
+    values.push(`<span class="badge">${escapeHtml(friendlyLabel(role))}</span>`);
   }
+  if (candidate.rank === 1) values.push('<span class="badge recommended">Recommended</span>');
+  values.push(`<span class="badge ${candidate.diagnostics.within_tolerance ? "good" : "warn"}">${candidate.diagnostics.within_tolerance ? "Within tolerance" : "Outside tolerance"}</span>`);
   return values.join("");
 }
 
@@ -757,9 +784,18 @@ function autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare
   const analysis = candidate.route.analysis;
   const targetDifference = candidate.route.summary.distance_m - state.options.targetDistanceKm * 1000;
   const targetDifferenceLabel = `${targetDifference >= 0 ? "+" : "−"}${formatDistance(Math.abs(targetDifference))}`;
-  const requestedTotal = candidate.requested_place_visits?.length ?? 0;
-  const requestedSatisfied = candidate.requested_place_visits?.filter((visit) => visit.satisfied).length ?? 0;
-  return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate, result.search)}</div><p class="candidate-construction">${escapeHtml(`${friendlyLabel(candidate.skeleton_method)} · ${friendlyLabel(candidate.direction)}`)}</p><div class="candidate-key-metrics"><span>Requested places</span><strong>${formatCount(requestedSatisfied)} / ${formatCount(requestedTotal)}</strong><span>Distance</span><strong>${formatDistance(candidate.route.summary.distance_m)}</strong><span>Target difference</span><strong>${targetDifferenceLabel}</strong><span>Requested preferences</span><strong>${formatCount(candidate.satisfied_preferred_place_count)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Backtracking</span><strong>${formatPercent(analysis.immediate_backtrack.share)}</strong><span>Scenic visits</span><strong>${formatCount(candidate.selected_scenic_count)}</strong><span>Verified water</span><strong>${formatCount(candidate.selected_verified_water_count)}</strong><span>POI reward</span><strong>${Number(candidate.total_poi_reward).toFixed(2)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${metricBar("Outbound/return proximity", analysis.loop_geometry?.outbound_return_proximity.share ?? null, "backtrack", analysis.loop_geometry ? formatPercent(analysis.loop_geometry.outbound_return_proximity.share) : "not evaluated")}${metricBar("Mapped nature", analysis.nature ? analysis.nature.nature_score / 100 : null, "nature", analysis.nature ? `${analysis.nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(analysis.loop_geometry)}`;
+  const requestedTotal = candidate.selected_stops.filter((stop) => stop.selection_origin === "requested").length
+    + candidate.dropped_stops.filter((stop) => stop.selection_origin === "requested").length;
+  const requestedSelected = candidate.diagnostics.requested_stop_count;
+  const discoveredSelected = candidate.selected_stops.filter((stop) => stop.selection_origin !== "requested").length;
+  const metrics = [
+    ["Selected requested stops", `${formatCount(requestedSelected)} / ${formatCount(requestedTotal)}`],
+    ["Selected discovered stops", formatCount(discoveredSelected)],
+    ["Distance", formatDistance(candidate.route.summary.distance_m)],
+    ["Target difference", targetDifferenceLabel],
+    ["Immediate backtracking", formatDistance(candidate.diagnostics.immediate_backtracking_m)],
+  ].map(([label, value]) => `<span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong>`).join("");
+  return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate, result.search_diagnostics)}</div><p class="candidate-construction">${escapeHtml(friendlyLabel(candidate.diagnostics.details.construction ?? result.kind))}</p><div class="candidate-key-metrics">${metrics}</div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${metricBar("Outbound/return proximity", analysis.loop_geometry?.outbound_return_proximity.share ?? null, "backtrack", analysis.loop_geometry ? formatPercent(analysis.loop_geometry.outbound_return_proximity.share) : "not evaluated")}${metricBar("Mapped nature", analysis.nature ? analysis.nature.nature_score / 100 : null, "nature", analysis.nature ? `${analysis.nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(analysis.loop_geometry)}`;
 }
 
 function metricBar(label, share, className, displayValue) {
@@ -804,13 +840,11 @@ function renderCandidatesPanel() {
   if (!result?.candidates.length) {
     container.innerHTML = '<p class="empty-copy">Returned routes will appear here in ranked order.</p>';
     byId("search-summary").textContent = result
-      ? (state.planningMode === "auto_tour" ? "No Auto Tour candidates returned" : friendlyLabel(result.search.status))
+      ? "No safe planning candidates returned"
       : "";
     return;
   }
-  byId("search-summary").textContent = state.planningMode === "auto_tour"
-    ? `${result.candidates.length} returned · no-POI control ${result.search.control_retained ? "retained" : "unavailable"}`
-    : `${friendlyLabel(result.search.status)} · ${result.candidates.length} returned`;
+  byId("search-summary").textContent = `${result.candidates.length} canonical candidate${result.candidates.length === 1 ? "" : "s"} returned`;
   container.replaceChildren();
   result.candidates.forEach((candidate) => {
     const analysis = candidate.route.analysis;
@@ -821,7 +855,7 @@ function renderCandidatesPanel() {
     const nonImmediateShare = candidate.route.summary.distance_m > 0
       ? nonImmediate / candidate.route.summary.distance_m
       : 0;
-    const selected = candidate.signature === state.selectedSignature;
+    const selected = candidate.id === state.selectedSignature;
     const card = document.createElement("article");
     card.className = `candidate-card${selected ? " selected" : ""}${candidate.rank === 1 ? " recommended" : ""}`;
     card.setAttribute("aria-label", `Candidate ${candidate.rank}${candidate.rank === 1 ? ", recommended" : ""}`);
@@ -833,14 +867,13 @@ function renderCandidatesPanel() {
     selector.setAttribute("aria-label", `Select candidate ${candidate.rank}, ${formatDistance(candidate.route.summary.distance_m)}`);
     selector.innerHTML = state.planningMode === "auto_tour"
       ? autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare)
-      : `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate, result.search)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.construction))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.target_error_m)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Major road</span><strong>${formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${metricBar("Trail-like", analysis.trail_like.share, "trail", formatPercent(analysis.trail_like.share))}${metricBar("Paved", analysis.paved.share, "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}`;
-    selector.addEventListener("click", () => selectCandidate(candidate.signature));
+      : `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate, result.search_diagnostics)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.diagnostics.details.construction ?? "route"))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.diagnostics.target_error_m)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Major road</span><strong>${formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${metricBar("Trail-like", analysis.trail_like.share, "trail", formatPercent(analysis.trail_like.share))}${metricBar("Paved", analysis.paved.share, "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}`;
+    selector.addEventListener("click", () => selectCandidate(candidate.id));
     card.append(selector);
     card.append(loopGeometryCardDetails(loopGeometry));
 
     const warningCodes = [...new Set([
-      ...result.search.warnings,
-      ...(candidate.warnings ?? []),
+      ...result.search_diagnostics.warnings,
       ...analysis.warnings,
       ...(loopGeometry?.warnings ?? []),
       ...(nature?.warnings ?? []),
@@ -960,12 +993,14 @@ function loopGeometrySection(geometry) {
 }
 
 function autoTourItinerary(candidate) {
-  const requested = (candidate.requested_place_visits ?? []).map((visit) => `<li><strong>${escapeHtml(visit.requested_place.name)}</strong><span>${visit.satisfied ? "satisfied" : "missed"} · ${visit.deliberately_routed ? "deliberately routed" : visit.satisfied ? "satisfied incidentally" : visit.deliberately_considered ? "considered but missed" : "not considered"} · closest ${Number(visit.closest_route_distance_m ?? visit.measured_distance_m).toFixed(1)} m / ${Number(visit.visit_radius_m ?? visit.requested_place.visit_radius_m).toFixed(0)} m · ${escapeHtml(friendlyLabel(visit.requested_place.importance))} · ${escapeHtml(friendlyLabel(visit.failure_reason ?? visit.reason))}</span></li>`).join("");
-  const discovered = candidate.poi_visits.map((visit) => `<li><strong>${escapeHtml(visit.poi.display_name)}</strong><span>${formatPercent(visit.route_progress_share)} around route · ${escapeHtml(friendlyLabel(visit.poi.category))} · ${visit.inserted ? "inserted" : "already on route"} · reward ${Number(visit.reward).toFixed(2)}</span></li>`).join("");
-  if (!requested && !discovered) {
-    return '<section><h3>Accepted-place itinerary</h3><p class="context-note">No scenic or hydration POI is claimed for this route.</p></section>';
+  const selected = (candidate.selected_stops ?? []).map((stop, index) => {
+    return `<li class="itinerary-stop" role="button" tabindex="0" data-itinerary-stop-id="${escapeHtml(stop.id)}" data-itinerary-origin="${escapeHtml(stop.selection_origin)}"><strong>${index + 1}. ${escapeHtml(stop.name)}</strong><span>${escapeHtml(friendlyLabel(stop.category))} · ${escapeHtml(friendlyLabel(stop.resolved_approach.kind))} · arrival ${Number(stop.route_to_approach_m).toFixed(1)} m / ${Number(stop.resolved_approach.arrival_tolerance_m).toFixed(0)} m · ${escapeHtml(friendlyLabel(stop.selection_method))}</span></li>`;
+  }).join("");
+  const dropped = (candidate.dropped_stops ?? []).map((stop) => `<li><strong>${escapeHtml(stop.name)}</strong><span>Drop reason: ${escapeHtml(friendlyLabel(stop.reason))}</span></li>`).join("");
+  if (!selected && !dropped) {
+    return '<section><h3>Selected itinerary</h3><p class="context-note">No scenic or hydration POI is selected for this route.</p></section>';
   }
-  return `<section><h3>Requested and accepted places</h3><ol class="tour-itinerary">${requested}${discovered}</ol></section>`;
+  return `<section><h3>Selected itinerary</h3><ol class="tour-itinerary">${selected}</ol>${dropped ? `<details><summary>Dropped stops (${candidate.dropped_stops.length})</summary><ul class="tour-itinerary dropped">${dropped}</ul></details>` : ""}</section>`;
 }
 
 function endpointSection(result) {
@@ -981,82 +1016,14 @@ function endpointSection(result) {
     ["Start source", friendlyLabel(startVisit?.source ?? "explicit")],
     ["Start snap distance", startVisit?.snap_distance_m == null ? "Unknown" : formatDistance(startVisit.snap_distance_m)],
     ["Effective end", coordinate(result.effective_end)],
-    ["End source", friendlyLabel(endVisit?.source ?? "loop_closure")],
+    [
+      "End source",
+      friendlyLabel(
+        endVisit?.source ?? (result.topology === "point_to_point" ? "explicit" : "loop_closure"),
+      ),
+    ],
     ["End snap distance", endVisit?.snap_distance_m == null ? "Unknown" : formatDistance(endVisit.snap_distance_m)],
   ]);
-}
-
-function renderAutoTourMetrics(candidate, result) {
-  const analysis = candidate.route.analysis;
-  const search = result.search;
-  const open = result.topology === "point_to_point";
-  const warnings = [...new Set([
-    ...search.warnings,
-    ...(candidate.warnings ?? []),
-    ...analysis.warnings,
-    ...(open ? [] : (analysis.loop_geometry?.warnings ?? [])),
-    ...(analysis.nature?.warnings ?? []),
-  ])];
-  const warningItems = warnings.map((warning) => `<li>${escapeHtml(friendlyLabel(warning))}</li>`).join("") || "<li>No route or search warnings.</li>";
-  const openMetrics = open ? section("Point-to-point quality", [
-    ["Direct control distance", candidate.direct_distance_m == null ? "Unknown" : formatDistance(candidate.direct_distance_m)],
-    ["Detour ratio", candidate.detour_ratio == null ? "Unknown" : Number(candidate.detour_ratio).toFixed(3)],
-    ["Destination-progress monotonicity", candidate.destination_progress_monotonicity == null ? "Unknown" : formatPercent(candidate.destination_progress_monotonicity)],
-    ["Reverse progress", candidate.reverse_progress_distance_m == null ? "Unknown" : `${formatDistance(candidate.reverse_progress_distance_m)} · ${formatPercent(candidate.reverse_progress_share)}`],
-    ["Endpoint-axis lateral deviation", candidate.endpoint_axis_lateral_deviation_m == null ? "Unknown" : formatDistance(candidate.endpoint_axis_lateral_deviation_m)],
-    ["Near-parallel corridor share", candidate.near_parallel_corridor_share == null ? "Unknown" : formatPercent(candidate.near_parallel_corridor_share)],
-    ["Lower-bound warning", search.warnings.includes("target_below_point_to_point_lower_bound") ? "Target is below the direct routed lower bound" : "No"],
-  ]) : "";
-  byId("metrics-content").innerHTML = endpointSection(result) + section("Auto Tour", [
-    ["Distance", formatDistance(candidate.route.summary.distance_m)],
-    ["Target error", formatDistance(candidate.target_error_m)],
-    ["Within tolerance", candidate.within_tolerance ? "Yes" : "No"],
-    ["Distance priority", friendlyLabel(candidate.distance_priority)],
-    ["Soft-distance penalty", Number(candidate.soft_distance_penalty).toFixed(6)],
-    ["Safety maximum", formatDistance(candidate.maximum_distance_m)],
-    ["Direction", open ? "Not applicable to an open route" : friendlyLabel(candidate.direction)],
-    ["Skeleton", `${friendlyLabel(candidate.skeleton_method)} · ${candidate.skeleton_id}`],
-    ["Construction", friendlyLabel(candidate.construction)],
-    ["No-POI control retained", search.control_retained ? "Yes" : "No"],
-    ["This candidate is control", candidate.signature === search.control_signature ? "Yes" : "No"],
-  ]) + section("Places", [
-    ["Scenic POIs visited", formatCount(candidate.selected_scenic_count)],
-    ["Verified water visited", formatCount(candidate.selected_verified_water_count)],
-    ["Total POI reward", Number(candidate.total_poi_reward).toFixed(3)],
-    ["Inserted POI reward", Number(candidate.inserted_poi_reward).toFixed(3)],
-    ["Must-visit requested places", `${candidate.satisfied_must_visit_count} satisfied`],
-    ["Preferred requested places", `${candidate.satisfied_preferred_place_count} satisfied`],
-    ["Safe against control", candidate.control_comparison.eligible ? "Yes" : "No"],
-  ]) + autoTourItinerary(candidate) + section(open ? "Open route quality" : "Natural loop quality", [
-    ["Total repetition", `${formatDistance(analysis.repetition.repeated_distance.distance_m)} · ${formatPercent(analysis.repetition.repeated_distance.share)}`],
-    ["Immediate backtracking", `${formatDistance(analysis.immediate_backtrack.distance_m)} · ${formatPercent(analysis.immediate_backtrack.share)}`],
-    ["Major roads", formatPercent(analysis.major_road.share)],
-  ]) + openMetrics + (open ? "" : loopGeometrySection(analysis.loop_geometry)) + natureSection(analysis.nature, {
-    nature_index_available: Boolean(analysis.nature),
-  }) + section("Bounded search accounting", [
-    ["Isochrone requests", `${search.isochrone_request_count} / 1`],
-    ["Round-trip controls", `${search.round_trip_control_request_count} / 8`],
-    ["Sampled fallback skeletons", search.sampled_fallback_skeleton_count],
-    ["Skeleton route calls", `${search.skeleton_route_request_count} / 24`],
-    ["Retained skeletons", `${search.retained_skeleton_count} / 6`],
-    ["Requested-place route evaluations", `${search.requested_place_route_evaluations ?? 0} / 60`],
-    ["Requested-place budget exhausted", search.requested_place_budget_exhausted ? "Yes" : "No"],
-    ["Complete requested-set distance", search.complete_set_candidate_distance_m == null ? "Unavailable" : formatDistance(search.complete_set_candidate_distance_m)],
-    ["Full requested set attempted", search.full_set_route_attempted ? "Yes" : "No"],
-    ["Full requested set succeeded", search.full_set_route_succeeded ? "Yes" : "No"],
-    ["Full requested-set distance", search.full_set_distance_m == null ? "Unavailable" : formatDistance(search.full_set_distance_m)],
-    ["Full requested set safety eligible", search.full_set_safety_eligible == null ? "Unknown" : search.full_set_safety_eligible ? "Yes" : "No"],
-    ["Full requested-set rejection", search.full_set_rejection_reason == null ? "None" : friendlyLabel(search.full_set_rejection_reason)],
-    ["Discovered-POI route evaluations", `${search.discovered_poi_route_evaluations ?? search.poi_route_evaluation_count} / 24`],
-    ["Discovered-POI budget exhausted", search.discovered_poi_budget_exhausted ? "Yes" : "No"],
-    ["Local repairs", `${search.local_repair_evaluation_count} / 12`],
-    ["Corridor continuation repairs", search.corridor_repair_evaluation_count],
-    ["Alternative-leg requests", `${search.alternative_leg_request_count} / 24`],
-    ["Total route requests", `${search.total_route_request_count} / ${search.total_route_request_budget}`],
-    ["Route-cache hits", search.route_cache_hit_count],
-    ["Budget exhausted", search.budget_exhausted ? "Yes" : "No"],
-    ["Total time", `${Number(search.timings.total_seconds).toFixed(3)} s`],
-  ]) + `<section><h3>Warnings</h3><ul class="warning-list">${warningItems}</ul></section>`;
 }
 
 function renderMetrics() {
@@ -1065,82 +1032,52 @@ function renderMetrics() {
   byId("metrics-empty").classList.toggle("hidden", Boolean(candidate));
   byId("metrics-content").classList.toggle("hidden", !candidate);
   byId("download-gpx").disabled = !candidate || state.request.status === "running";
-  if (!candidate || !result) return;
-  if (state.planningMode === "auto_tour") {
-    renderAutoTourMetrics(candidate, result);
-    return;
-  }
+  if (candidate && result) renderCanonicalMetrics(candidate, result);
+}
+function renderCanonicalMetrics(candidate, result) {
   const analysis = candidate.route.analysis;
-  const search = result.search;
-  const open = result.topology === "point_to_point";
-  const otherRepeated = Math.max(
-    analysis.repetition.repeated_distance.distance_m - analysis.immediate_backtrack.distance_m,
-    0,
-  );
-  const nullable = (value, formatter = formatPercent) => value === null || value === undefined
-    ? "Not evaluated"
-    : formatter(value);
-  const warningCodes = [...new Set([
-    ...search.warnings,
+  const diagnostics = result.search_diagnostics;
+  const phaseRows = Object.entries(diagnostics.budget.phases).map(([phase, usage]) => [
+    `${friendlyLabel(phase)} budget`,
+    `${usage.used} / ${usage.limit}${usage.exhausted ? " · exhausted" : ""}`,
+  ]);
+  const scoreRows = Object.entries(candidate.score.components).map(([component, value]) => [
+    friendlyLabel(component),
+    Number(value).toFixed(6),
+  ]);
+  const warnings = [...new Set([
+    ...diagnostics.warnings,
     ...analysis.warnings,
-    ...(open ? [] : (analysis.loop_geometry?.warnings ?? [])),
+    ...(analysis.loop_geometry?.warnings ?? []),
     ...(analysis.nature?.warnings ?? []),
   ])];
-  const warnings = warningCodes
-    .map((warning) => `<li>${escapeHtml(friendlyLabel(warning))}</li>`)
-    .join("") || "<li>No route or search warnings.</li>";
-  byId("metrics-content").innerHTML = endpointSection(result) + section("Route", [
-    ["Distance", formatDistance(candidate.route.summary.distance_m)],
-    ["Target", formatDistance(search.target_distance_m)],
-    ["Target error", formatDistance(candidate.target_error_m)],
-    ["Tolerance", formatDistance(search.tolerance_m)],
-    ["Construction", constructionLabel(candidate.construction)],
-    ["Mandatory POIs", candidate.route.summary.input_point_count],
-    ["Routing points", candidate.routing_points.length],
-  ]) + section(open ? "Open route quality" : "Natural loop quality", [
-    ["Total repeated", `${formatDistance(analysis.repetition.repeated_distance.distance_m)} · ${formatPercent(analysis.repetition.repeated_distance.share)}`],
-    ["Immediate backtracking", `${formatDistance(analysis.immediate_backtrack.distance_m)} · ${formatPercent(analysis.immediate_backtrack.share)}`],
-    ["Non-immediate repeated", formatDistance(otherRepeated)],
-    ["Repeated edge-ID coverage", formatPercent(analysis.repetition.edge_id_coverage.share)],
-    ["Backtracking coverage", formatPercent(analysis.backtrack_edge_id_coverage.share)],
-  ]) + section("Trail quality", [
-    ["Paved", `${formatDistance(analysis.paved.distance_m)} · ${formatPercent(analysis.paved.share)}`],
-    ["Unpaved", `${formatDistance(analysis.unpaved.distance_m)} · ${formatPercent(analysis.unpaved.share)}`],
-    ["Unknown surface", `${formatDistance(analysis.unknown_surface.distance_m)} · ${formatPercent(analysis.unknown_surface.share)}`],
-    ["Trail-like", formatPercent(analysis.trail_like.share)],
-    ["Official hiking network", formatPercent(analysis.official_hiking_network.share)],
-    ["Major roads", formatPercent(analysis.major_road.share)],
-    ["Car-accessible", formatDistance(analysis.car_accessible.distance_m)],
-  ]) + (open ? "" : loopGeometrySection(analysis.loop_geometry)) + natureSection(analysis.nature, search) + section("Search diagnostics", [
-    ["Status", friendlyLabel(search.status)],
-    ["Loop shape requested", search.loop_geometry_requested ? "Yes" : "No"],
-    ["Recommended shape penalty", nullable(search.recommended_loop_geometry_penalty, (value) => Number(value).toFixed(6))],
-    ["Best available shape penalty", nullable(search.best_available_loop_geometry_penalty, (value) => Number(value).toFixed(6))],
-    ["Nature preference requested", search.nature_requested ? "Yes" : "No"],
-    ["Nature index available", search.nature_index_available ? "Yes" : "No"],
-    ["Nature index features", nullable(search.nature_index_feature_count, formatCount)],
-    ["Recommended nature score", nullable(search.recommended_nature_score, (value) => `${Number(value).toFixed(1)} / 100`)],
-    ["Best available nature score", nullable(search.best_available_nature_score, (value) => `${Number(value).toFixed(1)} / 100`)],
-    ["Full-route evaluations", `${formatCount(search.evaluated_candidate_count)} / ${formatCount(search.search_budget)}`],
-    ["Base evaluation budget", formatCount(search.base_search_budget)],
-    ["Base evaluations", formatCount(search.evaluated_candidate_count - search.loop_geometry_extra_evaluated_count)],
-    ["Geometry extra budget", formatCount(search.loop_geometry_extra_evaluation_budget)],
-    ["Geometry extra evaluations", formatCount(search.loop_geometry_extra_evaluated_count)],
-    ["Geometry extra successes", formatCount(search.loop_geometry_extra_successful_count)],
-    ["Geometry extra rejections", formatCount(search.loop_geometry_extra_rejected_count)],
-    ["Round-trip proposal calls", search.round_trip_proposal_count],
-    ["Derived proposal sequences", search.derived_proposal_sequence_count],
-    ["Mandatory-order evaluations", search.evaluated_order_count],
-    ["Alternative-leg requests", `${search.alternative_leg_request_count} / ${search.low_overlap_request_budget}`],
-    ["Alternative paths", search.alternative_path_count],
-    ["Refined sources", search.low_overlap_refined_source_count],
-    ["Low-overlap candidates", search.low_overlap_candidate_count],
-    ["Leg budget exhausted", search.low_overlap_budget_exhausted ? "Yes" : "No"],
-    ["Pre-refinement repetition", nullable(search.pre_low_overlap_repeated_share)],
-    ["Best low-overlap repetition", nullable(search.best_low_overlap_repeated_share)],
-    ["Pre-refinement backtracking", nullable(search.pre_low_overlap_backtrack_share)],
-    ["Best low-overlap backtracking", nullable(search.best_low_overlap_backtrack_share)],
-  ]) + `<section><h3>Warnings</h3><ul class="warning-list">${warnings}</ul><details><summary>Raw warning codes</summary><pre>${escapeHtml(JSON.stringify({ search: search.warnings, route: analysis.warnings, loop_geometry: analysis.loop_geometry?.warnings ?? [], nature: analysis.nature?.warnings ?? [] }, null, 2))}</pre></details></section>`;
+  byId("metrics-content").innerHTML = endpointSection(result)
+    + section("Canonical candidate", [
+      ["Candidate ID", candidate.id],
+      ["Roles", candidate.roles.map(friendlyLabel).join(", ") || "None"],
+      ["Distance", formatDistance(candidate.route.summary.distance_m)],
+      ["Target error", formatDistance(candidate.diagnostics.target_error_m)],
+      ["Within tolerance", candidate.diagnostics.within_tolerance ? "Yes" : "No"],
+      ["Safety eligible", candidate.diagnostics.safety_eligible ? "Yes" : "No"],
+      ["Selected / dropped stops", `${candidate.selected_stops.length} / ${candidate.dropped_stops.length}`],
+    ])
+    + (result.kind === "auto_tour" ? autoTourItinerary(candidate) : "")
+    + section("Route quality", [
+      ["Total repetition", `${formatDistance(analysis.repetition.repeated_distance.distance_m)} · ${formatPercent(analysis.repetition.repeated_distance.share)}`],
+      ["Immediate backtracking", `${formatDistance(analysis.immediate_backtrack.distance_m)} · ${formatPercent(analysis.immediate_backtrack.share)}`],
+      ["Trail-like", formatPercent(analysis.trail_like.share)],
+      ["Paved", formatPercent(analysis.paved.share)],
+      ["Major roads", formatPercent(analysis.major_road.share)],
+    ])
+    + section("Score", [["Total", Number(candidate.score.total).toFixed(6)], ...scoreRows])
+    + (result.topology === "loop" ? loopGeometrySection(analysis.loop_geometry) : "")
+    + natureSection(analysis.nature, { nature_index_available: Boolean(analysis.nature) })
+    + section("Search budget", [
+      ["Total used", `${diagnostics.budget.total_used} / ${diagnostics.budget.total_limit}`],
+      ["Cache hits / misses", `${diagnostics.cache.hit_count} / ${diagnostics.cache.miss_count}`],
+      ...phaseRows,
+    ])
+    + `<section><h3>Warnings</h3><ul class="warning-list">${warnings.length ? warnings.map((warning) => `<li>${escapeHtml(friendlyLabel(warning))}</li>`).join("") : "<li>No route or search warnings.</li>"}</ul></section>`;
 }
 
 function renderStatus() {
@@ -1149,14 +1086,11 @@ function renderStatus() {
   const open = isOpenPlan();
   byId("controls-title").textContent = open ? "Build your route" : "Build your loop";
   byId("generation-title").textContent = open ? "Planning your route…" : "Planning your loop…";
-  const resolvable = state.planningMode === "auto_tour"
-    ? Boolean(endpoints.start || state.autoTour.requestedPlaces.length || state.points.length)
-    : Boolean(
-      (endpoints.start && endpoints.end)
-      || (endpoints.end && state.points.length >= 1)
-      || (!endpoints.end && state.points.length >= 2)
-      || (endpoints.start && endpoints.routeTopology !== "point_to_point" && state.points.length >= 1)
-    );
+  const resolvable = Boolean(
+    endpoints.start
+    && (endpoints.routeTopology === "loop" || endpoints.end)
+    && (state.planningMode === "auto_tour" || state.points.length >= 1)
+  );
   byId("generate").disabled = running || !resolvable || Boolean(pointValidation());
   byId("generate-top").disabled = byId("generate").disabled;
   byId("cancel").classList.toggle("hidden", !running);
@@ -1192,20 +1126,20 @@ function render() {
   }
 }
 
-async function selectCandidate(signature) {
-  if (!state.generationResult?.candidates.some((candidate) => candidate.signature === signature)) return;
-  state.selectedSignature = signature;
+async function selectCandidate(candidateId) {
+  if (!state.generationResult?.candidates.some((candidate) => candidate.id === candidateId)) return;
+  state.selectedSignature = candidateId;
   render();
   const candidate = selectedCandidate();
   if (!candidate) return;
   try {
-    let visualization = state.visualizationCache.get(signature);
+    let visualization = state.visualizationCache.get(candidateId);
     if (!visualization) {
       visualization = await visualizeRoute(candidate.route);
-      if (!state.generationResult?.candidates.some((current) => current.signature === signature)) return;
-      state.visualizationCache.set(signature, visualization);
+      if (!state.generationResult?.candidates.some((current) => current.id === candidateId)) return;
+      state.visualizationCache.set(candidateId, visualization);
     }
-    if (state.selectedSignature === signature) {
+    if (state.selectedSignature === candidateId) {
       renderVisualization(visualization, state.showNatureContext);
     }
   } catch (error) {
@@ -1216,18 +1150,18 @@ async function selectCandidate(signature) {
 function validateRequestControls() {
   updateOptionsFromControls();
   saveActivePoints();
-  const request = state.planningMode === "auto_tour" ? currentAutoTourRequest() : currentRequest();
-  if (request.target_distance_m < 1000 || request.target_distance_m > 200000) {
+  const request = currentPlanRequest();
+  if (request.distance_objective.target_m < 1000 || request.distance_objective.target_m > 200000) {
     throw new Error("Target distance must be between 1 and 200 km.");
   }
-  if (request.tolerance_m < 100 || request.tolerance_m > 10000) {
+  if (request.distance_objective.tolerance_m < 100 || request.distance_objective.tolerance_m > 10000) {
     throw new Error("Tolerance must be between 0.1 and 10 km.");
   }
   if (
-    request.maximum_distance_m !== undefined
-    && (!Number.isFinite(request.maximum_distance_m)
-      || request.maximum_distance_m <= 0
-      || request.maximum_distance_m > 200000)
+    request.distance_objective.maximum_m !== null
+    && (!Number.isFinite(request.distance_objective.maximum_m)
+      || request.distance_objective.maximum_m <= 0
+      || request.distance_objective.maximum_m > 200000)
   ) {
     throw new Error("Maximum distance must be blank or between 0.1 and 200 km.");
   }
@@ -1256,23 +1190,21 @@ async function generate() {
   }, 1000);
   render();
   try {
-    const result = state.planningMode === "auto_tour"
-      ? await generateAutoTour(request, state.abortController.signal)
-      : await generateRoutes(request, state.abortController.signal);
+    const result = await generatePlan(request, state.abortController.signal);
     if (state.request.id !== id) return;
     state.generationResult = result;
-    state.selectedSignature = result.candidates[0]?.signature ?? null;
+    state.selectedSignature = result.candidates[0]?.id ?? null;
     state.visualizationCache.clear();
     state.request = { status: "success", id, startedAt: null };
     byId("request-status").textContent = result.candidates.length
       ? `${result.candidates.length} candidate route${result.candidates.length === 1 ? "" : "s"} generated.`
       : state.planningMode === "auto_tour"
         ? "No safe Auto Tour candidate was returned."
-        : `No candidate returned: ${friendlyLabel(result.search.status)}.`;
+        : "No safe candidate was returned.";
     render();
     if (result.candidates.length) {
       fitCoordinates(result.candidates[0].route.geometry);
-      await selectCandidate(result.candidates[0].signature);
+      await selectCandidate(result.candidates[0].id);
     }
   } catch (error) {
     if (state.request.id !== id) return;
@@ -1299,242 +1231,113 @@ function normalizeImportedRequest(value) {
   if (!value || typeof value !== "object") {
     throw new Error("Request JSON must contain an object.");
   }
-  const rawPoints = Array.isArray(value.points) ? value.points : [];
-  if (rawPoints.length > 31) {
-    throw new Error("Request JSON supports at most 30 mandatory points.");
+  if (
+    value.schema_version !== 1
+    || !["auto_tour", "waypoint_route"].includes(value.kind)
+  ) {
+    throw new Error(
+      "Unsupported legacy Sugarglider request.\nConvert it with scripts/migrate_plan_json.py.",
+    );
   }
-  const normalizeCoordinate = (point, label) => {
-    if (point == null) return null;
+  const commonKeys = new Set([
+    "schema_version", "kind", "name", "topology", "start", "end",
+    "routing_profile", "candidate_count", "seed", "distance_objective",
+    "preferences",
+  ]);
+  const modeKeys = value.kind === "auto_tour"
+    ? ["hard_waypoints", "requested_stops", "preferred_discovered_poi_ids", "free_poi_spur_physical_m"]
+    : ["waypoints", "waypoint_order"];
+  const unknownKeys = Object.keys(value).filter(
+    (key) => !commonKeys.has(key) && !modeKeys.includes(key),
+  );
+  if (unknownKeys.length) {
+    throw new Error(`Canonical request contains unknown fields: ${unknownKeys.join(", ")}.`);
+  }
+  if (!["loop", "point_to_point"].includes(value.topology)) {
+    throw new Error("Canonical request topology must be loop or point_to_point.");
+  }
+  if (value.routing_profile !== "hike") {
+    throw new Error("Only the hike routing profile is supported.");
+  }
+  if (!value.start || (value.topology === "point_to_point" && !value.end)) {
+    throw new Error("Canonical request endpoints are incomplete.");
+  }
+  if (value.topology === "loop" && value.end != null) {
+    throw new Error("A loop request must not contain an end.");
+  }
+  const objective = value.distance_objective;
+  const preferences = value.preferences;
+  if (!objective || !preferences) {
+    throw new Error("Canonical distance_objective and preferences are required.");
+  }
+  const normalize = (point, label) => {
     const lat = Number(point?.lat);
     const lon = Number(point?.lon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
       throw new Error(`${label} has invalid coordinates.`);
     }
-    return {
-      id: typeof point.id === "string" && point.id.trim() ? point.id.trim() : null,
-      name: typeof point.name === "string" && point.name.trim() ? point.name.trim() : label,
-      lat,
-      lon,
-    };
+    return { ...point, name: point.name || label, lat, lon };
   };
-  let points = rawPoints.map((point, index) => {
-    const lat = Number(point?.lat);
-    const lon = Number(point?.lon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
-      throw new Error(`Point ${index + 1} has invalid coordinates.`);
-    }
-    const suppliedName = typeof point.name === "string" ? point.name.trim() : "";
-    return {
-      id: typeof point.id === "string" ? point.id : null,
-      name: suppliedName || `Point ${index + 1}`,
-      lat,
-      lon,
-      originalIndex: Number.isInteger(point.original_index)
-        ? point.original_index
-        : null,
-      category: typeof point.category === "string" ? point.category : null,
-      potability: typeof point.potability === "string" ? point.potability : null,
-      visitRadiusM: Number(point.visit_radius_m),
-      importance: point.importance,
-    };
-  });
-  const explicitStart = normalizeCoordinate(value.start, "Hard start");
-  const explicitEnd = normalizeCoordinate(value.end, "Hard end");
-  const hardPoints = (value.hard_points ?? []).map((point, index) => normalizeCoordinate(point, `Hard point ${index + 1}`));
-  if (
-    points.length > 2
-    && !explicitStart
-    && !explicitEnd
-    && points[0].lat === points.at(-1).lat
-    && points[0].lon === points.at(-1).lon
-  ) {
-    points = points.slice(0, -1);
-  }
-  if (points.length > (state.config?.max_required_points ?? 30)) {
-    throw new Error("The request exceeds the 30-point limit.");
-  }
-  const pointOrderMode = value.point_order_mode ?? "fixed";
-  const pathSelectionMode = value.path_selection_mode ?? "shortest";
-  const requestedNaturePreference = value.nature_preference ?? "off";
-  const loopGeometryPreference = value.loop_geometry_preference ?? "off";
-  if (
-    !["fixed", "optimize_loop", "optimize_path"].includes(pointOrderMode)
-    || !["shortest", "low_overlap"].includes(pathSelectionMode)
-    || !["off", "prefer"].includes(requestedNaturePreference)
-    || !["off", "prefer"].includes(loopGeometryPreference)
-  ) {
-    throw new Error("The request contains an unsupported generation mode.");
-  }
-  const naturePreference = state.config?.nature_index_available
-    ? requestedNaturePreference
-    : "off";
-  if (value.profile !== undefined && value.profile !== "hike") {
-    throw new Error("Only the hike profile is supported.");
-  }
-  const routeTopology = value.route_topology
-    ?? (value.close_loop === false ? "point_to_point" : "auto");
-  if (!["auto", "loop", "point_to_point"].includes(routeTopology)) {
-    throw new Error("The request contains an unsupported route topology.");
-  }
-  const targetDistanceM = Number(value.target_distance_m);
-  const toleranceM = Number(value.tolerance_m ?? 2000);
-  const maximumDistanceM = value.maximum_distance_m == null
-    ? null
-    : Number(value.maximum_distance_m);
-  const candidateCount = Number(value.candidate_count ?? 3);
-  const seed = Number(value.seed ?? 0);
-  if (!Number.isFinite(targetDistanceM) || targetDistanceM < 1000 || targetDistanceM > 200000) {
-    throw new Error("Target distance must be between 1,000 and 200,000 metres.");
-  }
-  if (!Number.isFinite(toleranceM) || toleranceM < 100 || toleranceM > 10000) {
-    throw new Error("Tolerance must be between 100 and 10,000 metres.");
-  }
-  if (maximumDistanceM !== null && (!Number.isFinite(maximumDistanceM) || maximumDistanceM <= 0 || maximumDistanceM > 200000)) {
-    throw new Error("Maximum distance must be blank or between 100 and 200,000 metres.");
-  }
-  if (!Number.isInteger(candidateCount) || candidateCount < 1 || candidateCount > 5) {
-    throw new Error("Candidate count must be an integer from 1 to 5.");
-  }
-  if (!Number.isInteger(seed)) throw new Error("Seed must be an integer.");
-
-  const coordinateKey = (point) => `${Number(point.lat).toFixed(7)},${Number(point.lon).toFixed(7)}`;
-  const normalizedName = (name) => String(name ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
-  const requestedKey = (place) => `${coordinateKey(place.coordinate)}|${normalizedName(place.name)}`;
-  const consumedLocations = [];
-  const consume = (point, kind) => {
-    if (!point) return;
-    consumedLocations.push({ point, kind });
-  };
-  consume(explicitStart, "start");
-  consume(explicitEnd, "end");
-  hardPoints.forEach((point) => consume(point, "hard_point"));
-
-  let autoTourStart = explicitStart;
-  let legacyRequestedPoints = [...points];
-  const diagnostics = {
-    supplied_location_count: 0,
-    supplied_json_point_count: rawPoints.length,
-    imported_requested_place_count: 0,
-    consumed_as_start_count: explicitStart ? 1 : 0,
-    consumed_as_end_count: explicitEnd ? 1 : 0,
-    consumed_as_hard_point_count: hardPoints.length,
-    deduplicated_count: 0,
-    discarded_count: 0,
-  };
-  if (!autoTourStart && legacyRequestedPoints.length) {
-    autoTourStart = legacyRequestedPoints.shift();
-    diagnostics.consumed_as_start_count += 1;
-    consume(autoTourStart, "start");
-  }
-
-  const requestedPlaces = [];
-  const stableIds = new Set();
-  const semanticKeys = new Set();
-  const consumedMatchKeys = new Set();
-  const consumedLocation = (place) => {
-    const stableId = typeof place.id === "string" && place.id.trim() ? place.id.trim() : null;
-    const semanticKey = requestedKey(place);
-    const coordinate = coordinateKey(place.coordinate);
-    const match = consumedLocations.find(({ point }) => (
-      (stableId && point.id === stableId)
-      || `${coordinateKey(point)}|${normalizedName(point.name)}` === semanticKey
-      || coordinateKey(point) === coordinate
-    ));
-    if (!match) return null;
-    const matchKey = `${match.kind}|${stableId ?? semanticKey}`;
-    if (consumedMatchKeys.has(matchKey)) {
-      diagnostics.deduplicated_count += 1;
-      return "duplicate";
-    }
-    consumedMatchKeys.add(matchKey);
-    return match.kind;
-  };
-  const appendRequested = (place, explicit) => {
-    const consumed = consumedLocation(place);
-    if (consumed) {
-      return;
-    }
-    const stableId = typeof place.id === "string" && place.id.trim() ? place.id.trim() : null;
-    const semanticKey = requestedKey(place);
-    if ((stableId && stableIds.has(stableId)) || semanticKeys.has(semanticKey)) {
-      diagnostics.deduplicated_count += 1;
-      return;
-    }
-    if (stableId) stableIds.add(stableId);
-    semanticKeys.add(semanticKey);
-    requestedPlaces.push({
-      ...place,
-      id: stableId ?? requestedPlaceIdentifier(place, requestedPlaces.length),
-      inferredFromPoint: !explicit,
-    });
-  };
-  (value.requested_places ?? []).forEach((place, index) => {
-    const coordinate = normalizeCoordinate(place.coordinate, `Requested place ${index + 1}`);
-    appendRequested({
-      id: place.id,
-      name: typeof place.name === "string" && place.name.trim()
-        ? place.name.trim()
-        : coordinate.name,
-      coordinate,
-      visitRadiusM: Number(place.visit_radius_m ?? 100),
-      importance: ["must_visit", "prefer"].includes(place.importance) ? place.importance : "prefer",
-      originalIndex: place.original_index ?? index + 1,
-    }, true);
-  });
-  legacyRequestedPoints.forEach((point) => appendRequested({
-    id: typeof point.id === "string" ? point.id : null,
-    name: point.name || `Requested place ${index + 1}`,
-    coordinate: { name: point.name, lat: point.lat, lon: point.lon },
-    visitRadiusM: importedVisitRadius(point),
-    importance: ["must_visit", "prefer"].includes(point.importance)
-      ? point.importance
-      : "must_visit",
-    originalIndex: point.originalIndex ?? requestedPlaces.length + 1,
-  }, false));
-  diagnostics.imported_requested_place_count = requestedPlaces.length;
-  diagnostics.supplied_location_count = (
-    (autoTourStart ? 1 : 0)
-    + (explicitEnd ? 1 : 0)
-    + hardPoints.length
-    + requestedPlaces.length
-  );
+  const start = normalize(value.start, "Start");
+  const end = value.end == null ? null : normalize(value.end, "End");
+  const autoTour = value.kind === "auto_tour";
+  const hardPoints = autoTour
+    ? (value.hard_waypoints ?? []).map((point, index) => normalize(point, `Hard waypoint ${index + 1}`))
+    : [];
+  const points = autoTour
+    ? [start, ...hardPoints]
+    : (value.waypoints ?? []).map((point, index) => normalize(point, `Waypoint ${index + 1}`));
+  const requestedPlaces = autoTour
+    ? (value.requested_stops ?? []).map((stop, index) => ({
+      id: stop.id,
+      name: stop.name,
+      coordinate: normalize(stop.semantic_coordinate, `Requested stop ${index + 1}`),
+      accessSearchRadiusM: stop.access_search_radius_m,
+      importance: stop.importance,
+      osmReference: stop.osm_reference,
+      approachOverride: stop.approach_override == null
+        ? null
+        : normalize(stop.approach_override, `Approach override ${index + 1}`),
+    }))
+    : [];
   return {
     points,
-    start: explicitStart,
-    end: explicitEnd,
+    start,
+    end,
     hardPoints,
     requestedPlaces,
-    autoTourStart,
-    importDiagnostics: diagnostics,
-    maximumDistanceKm: maximumDistanceM === null ? null : maximumDistanceM / 1000,
-    routeTopology,
-    options: {
-      name: typeof value.name === "string" ? value.name : "Sugarglider route",
-      targetDistanceKm: targetDistanceM / 1000,
-      toleranceKm: toleranceM / 1000,
-      candidateCount,
-      seed,
-      pointOrderMode,
-      pathSelectionMode,
-      naturePreference,
-      loopGeometryPreference,
+    autoTourStart: autoTour ? start : null,
+    importDiagnostics: {
+      supplied_location_count: points.length + requestedPlaces.length + Number(Boolean(end)),
+      imported_requested_place_count: requestedPlaces.length,
+      consumed_as_start_count: 1,
+      consumed_as_end_count: Number(Boolean(end)),
+      discarded_count: 0,
     },
+    maximumDistanceKm: objective.maximum_m == null ? null : objective.maximum_m / 1000,
+    routeTopology: value.topology,
+    options: {
+      name: value.name,
+      targetDistanceKm: objective.target_m / 1000,
+      toleranceKm: objective.tolerance_m / 1000,
+      candidateCount: value.candidate_count,
+      seed: value.seed,
+      waypointOrder: value.kind === "waypoint_route" ? value.waypoint_order : "fixed",
+      pathSelectionMode: preferences.path_selection,
+      naturePreference: preferences.nature,
+      loopGeometryPreference: preferences.loop_geometry,
+      freePoiSpurRepeatedM: value.free_poi_spur_physical_m ?? 200,
+    },
+    canonical: value,
   };
 }
-
-function importedVisitRadius(point) {
-  if (Number.isFinite(point.visitRadiusM) && point.visitRadiusM >= 25 && point.visitRadiusM <= 500) {
-    return point.visitRadiusM;
-  }
-  if (point.category === "castle") return 200;
-  if (point.category === "viewpoint") return 125;
-  if (point.category === "drinking_water" && point.potability === "verified") return 50;
-  return 100;
-}
-
 async function importRequest(file) {
   try {
     const imported = normalizeImportedRequest(JSON.parse(await file.text()));
+    state.planningMode = imported.canonical.kind;
+    document.querySelectorAll('input[name="planning-mode"]').forEach((input) => {
+      input.checked = input.value === state.planningMode;
+    });
     state.options = imported.options;
     if (state.planningMode === "auto_tour") {
       if (!imported.autoTourStart) throw new Error("Auto Tour JSON needs a resolvable start.");
@@ -1545,6 +1348,13 @@ async function importRequest(file) {
       state.importDiagnostics = imported.importDiagnostics;
       state.autoTour.maximumDistanceKm = imported.maximumDistanceKm;
       state.autoTour.routeTopology = imported.routeTopology;
+      state.autoTour.preferredPoiIds = [
+        ...(imported.canonical.preferred_discovered_poi_ids ?? []),
+      ];
+      state.autoTour.distancePriority = imported.canonical.distance_objective.priority;
+      state.autoTour.directionPreference = imported.canonical.preferences.direction;
+      state.autoTour.scenicPreference = imported.canonical.preferences.scenic;
+      state.autoTour.drinkingWaterPreference = imported.canonical.preferences.drinking_water;
       state.autoTourOptions = { ...imported.options };
       state.points = [state.autoTour.start, ...state.autoTour.hardPoints].filter(Boolean);
       state.selectedPointIndex = state.points.length ? 0 : null;
@@ -1558,6 +1368,13 @@ async function importRequest(file) {
       state.waypointEndpoints.routeTopology = imported.routeTopology;
       state.selectedPointIndex = state.points.length ? 0 : null;
     }
+    state.plan = {
+      schema_version: 1,
+      kind: imported.canonical.kind,
+      common: null,
+      auto_tour: null,
+      waypoint_route: null,
+    };
     state.pendingPointPopupIndex = null;
     updateControlsFromOptions();
     invalidateAndRender();
@@ -1590,7 +1407,7 @@ async function downloadSelected() {
   const candidate = selectedCandidate();
   if (!candidate) return;
   try {
-    const { blob, filename } = await exportRoute(candidate.route);
+    const { blob, filename } = await exportPlanCandidate(candidate);
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -1702,8 +1519,8 @@ function bindEvents() {
     state.showNatureContext = event.target.checked;
     renderMapData();
   });
-  byId("show-missed-requested-radii").addEventListener("change", (event) => {
-    state.showMissedRequestedRadii = event.target.checked;
+  byId("show-dropped-requested-radii").addEventListener("change", (event) => {
+    state.showDroppedRequestedRadii = event.target.checked;
     renderMapData();
   });
   byId("places-filters").addEventListener("change", () => {
@@ -1711,11 +1528,29 @@ function bindEvents() {
     schedulePoiRefresh();
   });
   byId("download-gpx").addEventListener("click", downloadSelected);
+  byId("export-plan").addEventListener("click", () => {
+    try {
+      updateOptionsFromControls();
+      const request = currentPlanRequest();
+      const blob = new Blob([`${JSON.stringify(request, null, 2)}\n`], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "sugarglider-plan.json";
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      byId("request-status").textContent = "Canonical plan JSON exported.";
+    } catch (error) {
+      showError("Could not export plan JSON.", error.message);
+    }
+  });
   byId("copy-request").addEventListener("click", async () => {
     try {
       updateOptionsFromControls();
       saveActivePoints();
-      const request = state.planningMode === "auto_tour" ? currentAutoTourRequest() : currentRequest();
+      const request = currentPlanRequest();
       await navigator.clipboard.writeText(JSON.stringify(request, null, 2));
       byId("request-status").textContent = state.planningMode === "auto_tour"
         ? "Auto Tour request copied with requested places, distance priority, and POI preferences."
@@ -1766,6 +1601,16 @@ async function start() {
       onError: showMapError,
       onViewportChange: schedulePoiRefresh,
       onMapClick: (coordinate) => {
+        if (state.settingRequestedApproachId) {
+          const place = state.autoTour.requestedPlaces.find((value, index) => (
+            (value.id ?? requestedPlaceIdentifier(value, index))
+            === state.settingRequestedApproachId
+          ));
+          if (place) place.approachOverride = coordinate;
+          state.settingRequestedApproachId = null;
+          invalidateAndRender();
+          return;
+        }
         if (state.endpointSetMode) {
           const kind = state.endpointSetMode;
           const existing = activeEndpoints()[kind];

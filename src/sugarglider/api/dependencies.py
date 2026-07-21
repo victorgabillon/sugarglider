@@ -4,9 +4,8 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from sugarglider.generation.service import RouteGenerationService
+from sugarglider.planning.pipeline import PlanService
 from sugarglider.routing.service import RouteService
-from sugarglider.tours.service import AutoTourService
 
 
 def get_route_service(request: Request) -> RouteService:
@@ -18,21 +17,10 @@ def get_route_service(request: Request) -> RouteService:
 RouteServiceDependency = Annotated[RouteService, Depends(get_route_service)]
 
 
-def get_generation_service(request: Request) -> RouteGenerationService:
-    """Return the application-scoped target-distance generation service."""
-    service: RouteGenerationService = request.app.state.generation_service
+def get_plan_service(request: Request) -> PlanService:
+    """Return the canonical application-scoped planning service."""
+    service: PlanService = request.app.state.plan_service
     return service
 
 
-GenerationServiceDependency = Annotated[
-    RouteGenerationService, Depends(get_generation_service)
-]
-
-
-def get_auto_tour_service(request: Request) -> AutoTourService:
-    """Return the application-scoped skeleton-first tour service."""
-    service: AutoTourService = request.app.state.auto_tour_service
-    return service
-
-
-AutoTourServiceDependency = Annotated[AutoTourService, Depends(get_auto_tour_service)]
+PlanServiceDependency = Annotated[PlanService, Depends(get_plan_service)]

@@ -3,27 +3,33 @@
 from sugarglider.analysis.loop_geometry import LoopGeometryRouteAnalyzer
 from sugarglider.analysis.route import RouteAnalyzer, haversine_distance_m
 from sugarglider.domain.models import Coordinate, PathDetailSegment, RouteResult
-from sugarglider.generation.scoring import score_route
-from sugarglider.pois.models import PoiCategory, PoiFeature
-from sugarglider.routing.backend import RoutedPath
-from sugarglider.routing.result import RouteResultFactory
-from sugarglider.tours.models import (
+from sugarglider.planning.auto_tour.approaches import (
+    approach_candidates_for_feature,
+    resolve_requested_place,
+)
+from sugarglider.planning.auto_tour.candidate_models import (
     AutoTourCandidate,
+)
+from sugarglider.planning.auto_tour.models import (
+    DiscoveredPoiVisit,
     DistancePriority,
     RequestedTourPlace,
     RequestedTourPlaceVisit,
     TourControlComparison,
-    TourPoiVisit,
 )
-from sugarglider.tours.scoring import (
+from sugarglider.planning.auto_tour.ranking import (
     GLOBAL_AUTO_TOUR_MAXIMUM_DISTANCE_M,
     auto_tour_ranking_key,
     compare_with_control,
     control_comparison,
     maximum_auto_tour_distance_m,
     poi_reward,
+    score_route,
     soft_distance_penalty,
 )
+from sugarglider.pois.models import PoiCategory, PoiFeature
+from sugarglider.routing.backend import RoutedPath
+from sugarglider.routing.result import RouteResultFactory
 
 
 def test_distance_maximum_is_mode_aware_and_user_bounded() -> None:
@@ -111,8 +117,8 @@ def _feature(osm_id: int, category: str, *, verified: bool = False) -> PoiFeatur
     )
 
 
-def _visits(*features: PoiFeature) -> tuple[TourPoiVisit, ...]:
-    values: list[TourPoiVisit] = []
+def _visits(*features: PoiFeature) -> tuple[DiscoveredPoiVisit, ...]:
+    values: list[DiscoveredPoiVisit] = []
     categories: list[PoiCategory] = []
     water_seen = False
     for index, feature in enumerate(features, start=1):
@@ -123,11 +129,13 @@ def _visits(*features: PoiFeature) -> tuple[TourPoiVisit, ...]:
         )
         categories.append(feature.category)
         water_seen = water_seen or feature.potability == "verified"
+        approach = approach_candidates_for_feature(feature)[0]
         values.append(
-            TourPoiVisit(
+            DiscoveredPoiVisit(
                 poi=feature,
                 visit_distance_m=0,
-                visit_radius_m=50 if feature.potability == "verified" else 200,
+                chosen_approach=approach,
+                arrival_tolerance_m=approach.arrival_tolerance_m,
                 already_on_route=False,
                 inserted=True,
                 estimated_detour_m=0,
@@ -145,7 +153,7 @@ def _visits(*features: PoiFeature) -> tuple[TourPoiVisit, ...]:
 def _candidate(
     route: RouteResult,
     signature: str,
-    visits: tuple[TourPoiVisit, ...],
+    visits: tuple[DiscoveredPoiVisit, ...],
     comparison: TourControlComparison,
     *,
     requested_visits: tuple[RequestedTourPlaceVisit, ...] = (),
@@ -176,17 +184,17 @@ def _candidate(
         control_eligible=comparison.eligible,
         control_comparison=comparison,
         total_poi_reward=reward,
-        inserted_poi_reward=reward,
+        discovered_poi_reward=reward,
         selected_scenic_count=sum(visit.poi.group == "scenic" for visit in visits),
         selected_verified_water_count=sum(
             visit.poi.potability == "verified" for visit in visits
         ),
-        satisfied_must_visit_count=sum(
-            visit.satisfied and visit.requested_place.importance == "must_visit"
+        selected_must_visit_count=sum(
+            visit.selected and visit.requested_place.importance == "must_visit"
             for visit in requested_visits
         ),
-        satisfied_preferred_place_count=sum(
-            visit.satisfied and visit.requested_place.importance == "prefer"
+        selected_preferred_place_count=sum(
+            visit.selected and visit.requested_place.importance == "prefer"
             for visit in requested_visits
         ),
         route_score=score_route(route, route.summary.distance_m),
@@ -208,8 +216,8 @@ def test_smooth_control_beats_higher_reward_zigzag() -> None:
     comparison = compare_with_control(
         route=zigzag_route,
         within_tolerance=True,
-        hard_points_satisfied=True,
-        inserted_poi_reward=sum(visit.reward for visit in visits),
+        hard_waypoints_selected=True,
+        discovered_poi_reward=sum(visit.reward for visit in visits),
         control=control_route,
         control_within_tolerance=True,
         control_signature="control",
@@ -228,8 +236,8 @@ def test_equal_route_quality_with_castle_and_water_wins() -> None:
     comparison = compare_with_control(
         route=route,
         within_tolerance=True,
-        hard_points_satisfied=True,
-        inserted_poi_reward=sum(visit.reward for visit in visits),
+        hard_waypoints_selected=True,
+        discovered_poi_reward=sum(visit.reward for visit in visits),
         control=route,
         control_within_tolerance=True,
         control_signature="control",
@@ -240,25 +248,34 @@ def test_equal_route_quality_with_castle_and_water_wins() -> None:
 
 
 def _requested_visits(count: int) -> tuple[RequestedTourPlaceVisit, ...]:
-    return tuple(
-        RequestedTourPlaceVisit(
-            requested_place=RequestedTourPlace(
-                name=f"Requested {index}",
-                coordinate=Coordinate(lat=48.88, lon=2.08 + index / 1_000),
-                importance="must_visit",
-                original_index=index,
-            ),
-            measured_distance_m=0,
-            route_progress_share=(index + 1) / (count + 1),
-            satisfied=True,
-            deliberately_routed=True,
-            reason="deliberately_routed_close_enough",
+    visits: list[RequestedTourPlaceVisit] = []
+    for index in range(count):
+        place = RequestedTourPlace(
+            name=f"Requested {index}",
+            coordinate=Coordinate(lat=48.88, lon=2.08 + index / 1_000),
+            importance="must_visit",
+            original_index=index,
         )
-        for index in range(count)
-    )
+        approach = resolve_requested_place(place, None).chosen_approach
+        assert approach is not None
+        visits.append(
+            RequestedTourPlaceVisit(
+                requested_place=place,
+                measured_distance_m=0,
+                closest_route_distance_m=0,
+                chosen_approach=approach,
+                arrival_tolerance_m=approach.arrival_tolerance_m,
+                route_progress_share=(index + 1) / (count + 1),
+                decision="selected",
+                deliberately_routed=True,
+                graph_snap_distance_m=0,
+                selection_reason="requested_must_visit",
+            )
+        )
+    return tuple(visits)
 
 
-def test_flexible_requested_places_beat_target_error_but_strict_does_not() -> None:
+def test_flexible_requested_stops_beat_target_error_but_strict_does_not() -> None:
     route = _route(RING, (1, 2, 3, 4))
     comparison = control_comparison(route, "control")
     close = _candidate(

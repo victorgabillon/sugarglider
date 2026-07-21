@@ -13,8 +13,6 @@ from sugarglider.analysis.route import RouteAnalyzer
 from sugarglider.api.errors import install_error_handlers
 from sugarglider.api.routes import router
 from sugarglider.config import Settings
-from sugarglider.generation.low_overlap import LowOverlapSettings
-from sugarglider.generation.service import RouteGenerationService
 from sugarglider.nature.analysis import NatureRouteAnalyzer
 from sugarglider.nature.errors import NatureIndexError, NatureIndexMissingError
 from sugarglider.nature.index import (
@@ -24,6 +22,12 @@ from sugarglider.nature.index import (
     unavailable_nature_status,
 )
 from sugarglider.nature.models import NatureIndexStatus
+from sugarglider.planning.alternative_legs import LowOverlapSettings
+from sugarglider.planning.auto_tour.discovered_pois import TourPoiSettings
+from sugarglider.planning.auto_tour.service import AutoTourPlanner, AutoTourService
+from sugarglider.planning.auto_tour.state import AutoTourSettings
+from sugarglider.planning.pipeline import PlanService
+from sugarglider.planning.waypoint.service import WaypointPlanner
 from sugarglider.pois.errors import PoiIndexError, PoiIndexMissingError
 from sugarglider.pois.index import (
     PoiIndex,
@@ -35,8 +39,6 @@ from sugarglider.pois.models import PoiIndexStatus
 from sugarglider.routing.graphhopper import GraphHopperClient
 from sugarglider.routing.result import RouteResultFactory
 from sugarglider.routing.service import RouteService
-from sugarglider.tours.poi_selection import TourPoiSettings
-from sugarglider.tours.service import AutoTourService, AutoTourSettings
 from sugarglider.web.models import UiConfig
 from sugarglider.web.routes import STATIC_DIRECTORY
 from sugarglider.web.routes import router as web_router
@@ -46,9 +48,8 @@ logger = logging.getLogger(__name__)
 
 def create_app(
     service: RouteService | None = None,
-    generation_service: RouteGenerationService | None = None,
     settings: Settings | None = None,
-    auto_tour_service: AutoTourService | None = None,
+    plan_service: PlanService | None = None,
 ) -> FastAPI:
     """Build an application, optionally injecting a service for tests."""
 
@@ -99,10 +100,8 @@ def create_app(
         app.state.poi_max_limit = runtime_settings.poi_max_limit
         if service is not None:
             app.state.route_service = service
-            if generation_service is not None:
-                app.state.generation_service = generation_service
-            if auto_tour_service is not None:
-                app.state.auto_tour_service = auto_tour_service
+            if plan_service is not None:
+                app.state.plan_service = plan_service
             yield
             return
         async with httpx.AsyncClient() as client:
@@ -119,26 +118,7 @@ def create_app(
             )
             structural_result_factory = RouteResultFactory(RouteAnalyzer())
             app.state.route_service = RouteService(backend, result_factory)
-            app.state.generation_service = RouteGenerationService(
-                backend,
-                result_factory,
-                structural_result_factory=structural_result_factory,
-                max_evaluations=runtime_settings.generation_max_evaluations,
-                max_optional_snap_displacement_m=(
-                    runtime_settings.generation_max_optional_snap_displacement_m
-                ),
-                low_overlap_settings=LowOverlapSettings(
-                    max_paths=runtime_settings.low_overlap_max_paths,
-                    max_weight_factor=runtime_settings.low_overlap_max_weight_factor,
-                    max_share_factor=runtime_settings.low_overlap_max_share_factor,
-                    beam_width=runtime_settings.low_overlap_beam_width,
-                    max_leg_requests=runtime_settings.low_overlap_max_leg_requests,
-                    source_count=runtime_settings.low_overlap_source_count,
-                ),
-                nature_index_available=nature_status.available,
-                nature_index_feature_count=nature_status.feature_count,
-            )
-            app.state.auto_tour_service = AutoTourService(
+            auto_tour_search = AutoTourService(
                 backend,
                 result_factory,
                 poi_index=poi_index,
@@ -169,6 +149,15 @@ def create_app(
                         24, runtime_settings.low_overlap_max_leg_requests
                     ),
                     source_count=min(2, runtime_settings.low_overlap_source_count),
+                ),
+            )
+            app.state.plan_service = PlanService(
+                auto_tour=AutoTourPlanner(auto_tour_search),
+                waypoint=WaypointPlanner(
+                    backend,
+                    result_factory,
+                    max_evaluations=runtime_settings.generation_max_evaluations,
+                    structural_result_factory=structural_result_factory,
                 ),
             )
             yield

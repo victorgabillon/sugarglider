@@ -38,19 +38,8 @@ export async function searchPois(request, signal) {
   return response.json();
 }
 
-export async function generateRoutes(request, signal) {
-  const response = await fetch("/v1/routes/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(request),
-    signal,
-  });
-  if (!response.ok) throw await responseError(response);
-  return response.json();
-}
-
-export async function generateAutoTour(request, signal) {
-  const response = await fetch("/v1/tours/generate", {
+export async function generatePlan(request, signal) {
+  const response = await fetch("/v2/plans/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(request),
@@ -61,7 +50,7 @@ export async function generateAutoTour(request, signal) {
 }
 
 export async function visualizeRoute(route, signal) {
-  const response = await fetch("/v1/routes/visualization", {
+  const response = await fetch("/v2/plans/visualization", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(route),
@@ -71,11 +60,11 @@ export async function visualizeRoute(route, signal) {
   return response.json();
 }
 
-export async function exportRoute(route) {
-  const response = await fetch("/v1/routes/gpx/from-result", {
+export async function exportPlanCandidate(candidate) {
+  const response = await fetch("/v2/plans/gpx", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/gpx+xml" },
-    body: JSON.stringify(route),
+    body: JSON.stringify({ schema_version: 1, candidate }),
   });
   if (!response.ok) throw await responseError(response);
   return { blob: await response.blob(), filename: attachmentFilename(response.headers.get("Content-Disposition")) };

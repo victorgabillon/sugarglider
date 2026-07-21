@@ -8,23 +8,14 @@ from pydantic import BaseModel, ConfigDict
 
 from sugarglider.analysis.route import RouteAnalysisError
 from sugarglider.analysis.visualization import build_route_visualization
-from sugarglider.api.dependencies import (
-    AutoTourServiceDependency,
-    GenerationServiceDependency,
-    RouteServiceDependency,
-)
+from sugarglider.analysis.visualization_models import RouteVisualization
+from sugarglider.api.dependencies import PlanServiceDependency, RouteServiceDependency
 from sugarglider.api.errors import RouteVisualizationError
-from sugarglider.domain.generation import (
-    RouteGenerationRequest,
-    RouteGenerationResult,
-)
-from sugarglider.domain.models import RouteRequest, RouteResult
-from sugarglider.generation.service import (
-    RouteGenerationNoCandidateError,
-    TargetDistanceInfeasibleError,
-)
-from sugarglider.gpx.writer import gpx_filename, write_gpx
+from sugarglider.domain.models import RouteResult
+from sugarglider.gpx.writer import gpx_filename, write_plan_gpx
 from sugarglider.nature.analysis import NatureRouteAnalyzer
+from sugarglider.planning.models import PlanRequest
+from sugarglider.planning.result import PlanGpxRequest, PlanResult
 from sugarglider.pois.errors import PoiSearchLimitError
 from sugarglider.pois.index import PoiIndex, unavailable_poi_search
 from sugarglider.pois.models import (
@@ -33,8 +24,6 @@ from sugarglider.pois.models import (
     PoiSearchResponse,
 )
 from sugarglider.routing.graphhopper import RoutingError, RoutingUnavailableError
-from sugarglider.tours.models import AutoTourRequest, AutoTourResult
-from sugarglider.web.models import RouteVisualization
 
 router = APIRouter()
 
@@ -86,42 +75,7 @@ async def ready(service: RouteServiceDependency) -> HealthResponse:
     return HealthResponse()
 
 
-@router.post("/v1/routes", response_model=RouteResult)
-async def create_route(
-    request: Annotated[RouteRequest, Body()], service: RouteServiceDependency
-) -> RouteResult:
-    """Return routed geometry and route metrics as JSON."""
-    return await service.route(request)
-
-
-@router.post("/v1/routes/gpx", response_class=Response)
-async def create_route_gpx(
-    request: Annotated[RouteRequest, Body()], service: RouteServiceDependency
-) -> Response:
-    """Return the same routed result as one downloadable GPX track."""
-    result = await service.route(request)
-    filename = gpx_filename(result.name)
-    return Response(
-        content=write_gpx(result),
-        media_type="application/gpx+xml",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@router.post("/v1/routes/gpx/from-result", response_class=Response)
-async def create_route_gpx_from_result(
-    route: Annotated[RouteResult, Body()],
-) -> Response:
-    """Export an already generated immutable route without calling routing."""
-    filename = gpx_filename(route.name)
-    return Response(
-        content=write_gpx(route),
-        media_type="application/gpx+xml",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@router.post("/v1/routes/visualization", response_model=RouteVisualization)
+@router.post("/v2/plans/visualization", response_model=RouteVisualization)
 async def visualize_route(
     route: Annotated[RouteResult, Body()],
     request: Request,
@@ -134,39 +88,21 @@ async def visualize_route(
         raise RouteVisualizationError from exc
 
 
-@router.post("/v1/routes/generate", response_model=RouteGenerationResult)
-async def generate_route(
-    request: Annotated[RouteGenerationRequest, Body()],
-    service: GenerationServiceDependency,
-) -> RouteGenerationResult:
-    """Return a baseline and ranked target-distance candidates."""
+@router.post("/v2/plans/generate", response_model=PlanResult)
+async def generate_plan(
+    request: PlanRequest,
+    service: PlanServiceDependency,
+) -> PlanResult:
+    """Generate one canonical portfolio for either supported planning mode."""
     return await service.generate(request)
 
 
-@router.post("/v1/tours/generate", response_model=AutoTourResult)
-async def generate_auto_tour(
-    request: Annotated[AutoTourRequest, Body()],
-    service: AutoTourServiceDependency,
-) -> AutoTourResult:
-    """Build a skeleton-first loop and conservatively collect nearby POIs."""
-    return await service.generate(request)
-
-
-@router.post("/v1/routes/generate/gpx", response_class=Response)
-async def generate_route_gpx(
-    request: Annotated[RouteGenerationRequest, Body()],
-    service: GenerationServiceDependency,
-) -> Response:
-    """Generate and export the best candidate as a clean GPX track."""
-    result = await service.generate(request)
-    if result.search.status == "infeasible":
-        raise TargetDistanceInfeasibleError
-    if not result.candidates:
-        raise RouteGenerationNoCandidateError
-    best = result.candidates[0].route
-    filename = gpx_filename(best.name)
+@router.post("/v2/plans/gpx", response_class=Response)
+async def create_plan_gpx(request: Annotated[PlanGpxRequest, Body()]) -> Response:
+    """Export a previously returned canonical candidate without rerouting."""
+    filename = gpx_filename(request.candidate.route.name)
     return Response(
-        content=write_gpx(best),
+        content=write_plan_gpx(request.candidate),
         media_type="application/gpx+xml",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

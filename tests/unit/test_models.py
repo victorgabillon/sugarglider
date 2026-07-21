@@ -41,7 +41,7 @@ def test_route_rejects_adjacent_duplicates() -> None:
 
 def test_loop_closure_does_not_mutate_caller_list() -> None:
     points = [Coordinate(lat=48.0, lon=2.0), Coordinate(lat=48.1, lon=2.1)]
-    request = RouteRequest(points=points, close_loop=True)
+    request = RouteRequest(points=points, closed=True)
 
     assert len(points) == 2
     assert request.points == [points[0], points[1], points[0]]
@@ -51,7 +51,7 @@ def test_loop_closure_does_not_mutate_caller_list() -> None:
 def test_already_closed_loop_is_not_closed_twice() -> None:
     first = Coordinate(lat=48.0, lon=2.0)
     request = RouteRequest(
-        points=[first, Coordinate(lat=48.1, lon=2.1), first], close_loop=True
+        points=[first, Coordinate(lat=48.1, lon=2.1), first], closed=True
     )
     assert len(request.points) == 3
     assert request.input_point_count == 3

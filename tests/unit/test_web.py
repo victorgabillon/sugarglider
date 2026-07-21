@@ -19,9 +19,7 @@ from fastapi import FastAPI
 from sugarglider.analysis.route import RouteAnalyzer
 from sugarglider.api.main import create_app
 from sugarglider.config import Settings
-from sugarglider.domain.generation import RouteGenerationRequest, RouteGenerationResult
 from sugarglider.domain.models import RouteRequest, RouteResult
-from sugarglider.generation.service import RouteGenerationService
 from sugarglider.nature.analysis import NatureRouteAnalyzer
 from sugarglider.nature.index import NatureIndex
 from sugarglider.nature.models import (
@@ -65,34 +63,14 @@ class _FakeRouteService(RouteService):
         return True
 
 
-class _FakeGenerationService(RouteGenerationService):
-    def __init__(self, result: RouteGenerationResult) -> None:
-        self.result = result
-        self.last_request: RouteGenerationRequest | None = None
-
-    async def generate(self, request: RouteGenerationRequest) -> RouteGenerationResult:
-        self.last_request = request
-        return self.result
-
-
 @pytest.fixture
 def fake_service(route_result: RouteResult) -> _FakeRouteService:
     return _FakeRouteService(route_result)
 
 
 @pytest.fixture
-def fake_generation_service(
-    generation_result: RouteGenerationResult,
-) -> _FakeGenerationService:
-    return _FakeGenerationService(generation_result)
-
-
-@pytest.fixture
-def app(
-    fake_service: _FakeRouteService,
-    fake_generation_service: _FakeGenerationService,
-) -> FastAPI:
-    return create_app(fake_service, fake_generation_service)
+def app(fake_service: _FakeRouteService) -> FastAPI:
+    return create_app(fake_service)
 
 
 @pytest_asyncio.fixture
@@ -253,12 +231,11 @@ async def test_every_referenced_local_module_exists(client: httpx.AsyncClient) -
 @pytest.mark.asyncio
 async def test_static_paths_do_not_depend_on_current_working_directory(
     fake_service: _FakeRouteService,
-    fake_generation_service: _FakeGenerationService,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    independent_app = create_app(fake_service, fake_generation_service)
+    independent_app = create_app(fake_service)
     async with independent_app.router.lifespan_context(independent_app):
         transport = httpx.ASGITransport(app=independent_app)
         async with httpx.AsyncClient(
@@ -276,7 +253,6 @@ async def test_static_paths_do_not_depend_on_current_working_directory(
 @pytest.mark.asyncio
 async def test_ui_config_uses_injected_map_settings(
     fake_service: _FakeRouteService,
-    fake_generation_service: _FakeGenerationService,
 ) -> None:
     settings = Settings(
         map_tile_url="https://tiles.example/{z}/{x}/{y}.png",
@@ -285,7 +261,7 @@ async def test_ui_config_uses_injected_map_settings(
         map_initial_lon=2.4,
         map_initial_zoom=9.5,
     )
-    app = create_app(fake_service, fake_generation_service, settings=settings)
+    app = create_app(fake_service, settings=settings)
     async with app.router.lifespan_context(app):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -306,7 +282,7 @@ async def test_ui_config_uses_injected_map_settings(
         "poi_default_limit": 500,
         "poi_max_limit": 1000,
         "default_planning_mode": "auto_tour",
-        "auto_tour_max_hard_points": 6,
+        "auto_tour_max_hard_waypoints": 6,
         "auto_tour_max_preferred_pois": 8,
         "auto_tour_scenic_corridor_radius_m": 600.0,
         "auto_tour_water_corridor_radius_m": 350.0,
@@ -327,9 +303,8 @@ async def test_nature_status_works_without_index(client: httpx.AsyncClient) -> N
 
 
 @pytest.mark.asyncio
-async def test_available_nature_status_ui_route_visualization_and_clean_gpx(
+async def test_available_nature_status_ui_and_plan_visualization(
     route_result: RouteResult,
-    generation_result: RouteGenerationResult,
     tmp_path: Path,
 ) -> None:
     index_path = tmp_path / "regional.json.gz"
@@ -346,7 +321,6 @@ async def test_available_nature_status_ui_route_visualization_and_clean_gpx(
     )
     app = create_app(
         _FakeRouteService(enriched),
-        _FakeGenerationService(generation_result),
         settings=Settings(
             nature_index_path=index_path,
             nature_water_buffer_m=125,
@@ -359,22 +333,8 @@ async def test_available_nature_status_ui_route_visualization_and_clean_gpx(
         ) as nature_client:
             status = await nature_client.get("/v1/nature/status")
             config = await nature_client.get("/v1/ui/config")
-            route = await nature_client.post(
-                "/v1/routes",
-                json={
-                    "name": "Nature route",
-                    "points": [
-                        {"lat": 48.87, "lon": 2.09},
-                        {"lat": 48.88, "lon": 2.1},
-                    ],
-                },
-            )
             visualization = await nature_client.post(
-                "/v1/routes/visualization",
-                json=enriched.model_dump(mode="json"),
-            )
-            gpx = await nature_client.post(
-                "/v1/routes/gpx/from-result",
+                "/v2/plans/visualization",
                 json=enriched.model_dump(mode="json"),
             )
     assert status.json()["available"] is True
@@ -383,18 +343,16 @@ async def test_available_nature_status_ui_route_visualization_and_clean_gpx(
     assert status.json()["water_buffer_m"] == 125
     assert config.json()["nature_index_available"] is True
     assert config.json()["nature_preference_values"] == ["off", "prefer"]
-    assert route.json()["analysis"]["nature"]["woodland"]["share"] == 1
+    assert enriched.analysis.nature is not None
+    assert enriched.analysis.nature.woodland.share == 1
     properties = visualization.json()["features"][0]["properties"]
     assert properties["nature_class"] == "woodland"
     assert properties["park_or_protected"] is True
     assert properties["near_water"] is False
-    assert b"nature" not in gpx.content.lower()
-    assert gpx.content.count(b"<trk>") == 1
-    assert gpx.content.count(b"<trkseg>") == 1
 
 
 @pytest.mark.asyncio
-async def test_single_injected_settings_instance_wires_pr5_and_pr6() -> None:
+async def test_single_settings_instance_wires_canonical_plan_service() -> None:
     settings = Settings(
         low_overlap_max_paths=5,
         low_overlap_max_weight_factor=2.2,
@@ -406,42 +364,8 @@ async def test_single_injected_settings_instance_wires_pr5_and_pr6() -> None:
     )
     app = create_app(settings=settings)
     async with app.router.lifespan_context(app):
-        service: RouteGenerationService = app.state.generation_service
-        configured = service._low_overlap_settings
-        assert configured.max_paths == 5
-        assert configured.max_weight_factor == 2.2
-        assert configured.max_share_factor == 0.3
-        assert configured.beam_width == 17
-        assert configured.max_leg_requests == 31
-        assert configured.source_count == 3
+        assert app.state.plan_service is not None
         assert app.state.ui_config.initial_zoom == 8.0
-
-
-@pytest.mark.asyncio
-async def test_result_gpx_export_never_calls_services(
-    client: httpx.AsyncClient,
-    route_result: RouteResult,
-    fake_service: _FakeRouteService,
-    fake_generation_service: _FakeGenerationService,
-) -> None:
-    response = await client.post(
-        "/v1/routes/gpx/from-result",
-        json=route_result.model_dump(mode="json"),
-    )
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "application/gpx+xml"
-    assert response.content.count(b"<trk>") == 1
-    assert response.content.count(b"<trkseg>") == 1
-    assert b'lat="48.87138900" lon="2.09666700"' in response.content
-    assert fake_service.route_calls == 0
-    assert fake_generation_service.last_request is None
-
-
-@pytest.mark.asyncio
-async def test_malformed_result_export_is_structured(client: httpx.AsyncClient) -> None:
-    response = await client.post("/v1/routes/gpx/from-result", json={"name": "bad"})
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "invalid_request"
 
 
 @pytest.mark.asyncio
@@ -449,7 +373,7 @@ async def test_visualization_endpoint_returns_typed_geojson(
     client: httpx.AsyncClient, route_result: RouteResult
 ) -> None:
     response = await client.post(
-        "/v1/routes/visualization", json=route_result.model_dump(mode="json")
+        "/v2/plans/visualization", json=route_result.model_dump(mode="json")
     )
     assert response.status_code == 200
     body = response.json()
@@ -469,7 +393,7 @@ async def test_semantically_malformed_visualization_is_structured(
 ) -> None:
     body = route_result.model_dump(mode="json")
     body["path_details"] = {"edge_id": [{"from_index": 0, "to_index": 999, "value": 1}]}
-    response = await client.post("/v1/routes/visualization", json=body)
+    response = await client.post("/v2/plans/visualization", json=body)
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "route_visualization_invalid"
 
@@ -503,17 +427,17 @@ def test_frontend_exposes_separate_optional_endpoints_and_open_metrics() -> None
     ):
         assert f'id="{control_id}"' in html
     assert "waypointEndpoints" in state_code
-    assert 'routeTopology: "auto"' in state_code
-    assert "...(endpoints.start ?" in state_code
-    assert "...(endpoints.end ?" in state_code
+    assert 'routeTopology: "loop"' in state_code
+    assert "topology: endpoints.routeTopology" in state_code
+    assert 'endpoints.routeTopology === "point_to_point"' in state_code
     assert "endpointSetMode" in state_code
     assert "state.endpointSetMode" in app
     assert "renderHardEndpoints" in app
     assert "badge.textContent = label" in map_code
     assert 'kind === "start" ? "START" : "END"' in map_code
-    assert "Direct control distance" in app
-    assert "Destination-progress monotonicity" in app
-    assert 'open ? "" : loopGeometrySection' in app
+    assert "Effective start" in app
+    assert "Effective end" in app
+    assert 'result.topology === "loop" ? loopGeometrySection' in app
 
 
 def test_font_license_provenance_and_glyphs_are_in_wheel(tmp_path: Path) -> None:
@@ -579,8 +503,8 @@ def test_frontend_exposes_nature_without_raw_polygon_requests() -> None:
     assert '"not evaluated"' in app
     assert 'state.request.status !== "running"' in app
     assert "state.request.startedAt === null" in app
-    assert "nature_preference" in state
-    assert "value.nature_preference" in app
+    assert "nature: state.options.naturePreference" in state
+    assert "preferences.nature" in app
     assert "nature_class" in map_code
     assert "selected-section-nature" in map_code
     assert "Object.entries(styles)" in map_code
@@ -597,8 +521,8 @@ def test_frontend_exposes_loop_geometry_request_metrics_and_nulls() -> None:
     assert "Prefer balanced loops" in html
     assert "outbound/return" in app.lower()
     assert 'loopGeometryPreference: "off"' in state
-    assert "loop_geometry_preference: state.options.loopGeometryPreference" in state
-    assert 'value.loop_geometry_preference ?? "off"' in app
+    assert '? state.options.loopGeometryPreference\n        : "off"' in state
+    assert "preferences.loop_geometry" in app
     assert "loopGeometryCardSummary" in app
     assert "loopGeometryCardDetails" in app
     assert "loopGeometrySection" in app
@@ -606,8 +530,8 @@ def test_frontend_exposes_loop_geometry_request_metrics_and_nulls() -> None:
     assert "Exact geometry details" in app
     assert "loop-sector-grid" in app
     assert "Sector ${index + 1}" in app
-    assert "Base evaluation budget" in app
-    assert "Geometry extra evaluations" in app
+    assert "Search budget" in app
+    assert "Total used" in app
     for label in (
         "Shape penalty (lower is better)",
         "Compactness",
@@ -622,7 +546,7 @@ def test_frontend_exposes_loop_geometry_request_metrics_and_nulls() -> None:
     assert "Shape metrics are unknown, not zero" in app
     assert "loop_geometry_analysis_incomplete" in formatting
     assert "loop_geometry_no_candidate_improvement" in formatting
-    assert "natureSection(analysis.nature, search)" in app
+    assert "natureSection(analysis.nature" in app
     assert 'id="show-nature"' in html
     assert "/v1/nature/polygons" not in app
 
@@ -676,10 +600,7 @@ def test_frontend_places_are_bounded_safe_and_separate_from_routing_state() -> N
     assert "poiCollection(features.filter" in map_code
     assert "setDOMContent(poiPopupContent(feature))" in map_code
     assert "document.createTextNode(value)" in map_code
-    assert (
-        'explanation.textContent = "Mapped in OpenStreetMap as drinking water."'
-        in map_code
-    )
+    assert "Current operation and water quality are not guaranteed." in map_code
     assert (
         'explanation.textContent = "Potability is not specified in the mapped data."'
         in map_code
@@ -708,25 +629,27 @@ def test_frontend_auto_tour_is_default_and_preserves_waypoint_mode() -> None:
     assert 'planningMode: "auto_tour"' in state_code
     assert 'value="auto_tour" checked' in html
     assert 'value="waypoint_route"' in html
-    assert 'fetch("/v1/tours/generate"' in api
-    assert "currentAutoTourRequest" in app
-    assert "preferred_poi_ids" in state_code
-    assert "direction_preference" in state_code
-    assert "scenic_preference" in state_code
-    assert "drinking_water_preference" in state_code
-    assert "requested_places" in state_code
+    assert 'fetch("/v2/plans/generate"' in api
+    assert "diagnostics.cache.hit_count" in app
+    assert "diagnostics.cache.miss_count" in app
+    assert 'result.topology === "point_to_point" ? "explicit" : "loop_closure"' in app
+    assert "currentPlanRequest" in app
+    assert "preferred_discovered_poi_ids" in state_code
+    assert '? state.autoTour.directionPreference\n        : "any"' in state_code
+    assert "scenic: state.autoTour.scenicPreference" in state_code
+    assert "drinking_water: state.autoTour.drinkingWaterPreference" in state_code
+    assert "requested_stops" in state_code
     assert 'distancePriority: "flexible"' in state_code
     assert 'id="distance-priority"' in html
     assert 'id="requested-places"' in html
     assert 'if (state.planningMode === "auto_tour")' in app
     assert "state.autoTour.requestedPlaces = imported.requestedPlaces" in app
-    assert "supplied_json_point_count" in app
     assert "imported_requested_place_count" in app
     assert "consumed_as_start_count" in app
-    assert "deduplicated_count" in app
     assert "discarded_count" in app
-    assert "legacyRequestedPoints.forEach" in app
-    assert "(value.requested_places ?? []).forEach" in app
+    assert "Unsupported legacy Sugarglider request." in app
+    assert "scripts/migrate_plan_json.py" in app
+    assert "value.requested_stops" in app
     assert 'switchPlanningMode("waypoint_route")' not in app
     assert "Prefer in Auto Tour" in map_code
     assert "Require exact visit" not in html + app + map_code
@@ -750,7 +673,7 @@ def test_frontend_auto_tour_is_default_and_preserves_waypoint_mode() -> None:
     )
 
 
-def test_requested_places_have_an_independent_safe_map_lifecycle() -> None:
+def test_requested_stops_have_an_independent_safe_map_lifecycle() -> None:
     html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
     app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
     map_code = (STATIC_DIRECTORY / "map.js").read_text(encoding="utf-8")
@@ -758,6 +681,9 @@ def test_requested_places_have_an_independent_safe_map_lifecycle() -> None:
     styles = (STATIC_DIRECTORY / "styles.css").read_text(encoding="utf-8")
 
     assert 'const REQUESTED_SOURCE = "auto-tour-requested-places"' in map_code
+    assert "connectorFeatureCount" in map_code
+    assert map_code.count('(feature) => feature.properties.status === "selected"') == 2
+    assert "connectorLayerExists" in map_code
     assert (
         'const REQUESTED_RADIUS_SOURCE = "auto-tour-requested-place-radii"' in map_code
     )
@@ -769,13 +695,21 @@ def test_requested_places_have_an_independent_safe_map_lifecycle() -> None:
         "longitude",
         "latitude",
         "importance",
-        "visit_radius_m",
+        "access_search_radius_m",
         "status",
         "measured_distance_m",
         "visit_reason",
     ):
         assert property_name in map_code
-    assert 'visit.satisfied ? "satisfied" : "missed"' in map_code
+    assert "visit?.selection_method" in map_code
+    assert "visit?.reason" in map_code
+    assert (
+        'const REQUESTED_APPROACH_SOURCE = "auto-tour-requested-approaches"' in map_code
+    )
+    assert (
+        'const REQUESTED_CONNECTOR_SOURCE = "auto-tour-requested-approach-connectors"'
+        in map_code
+    )
     assert '"pending"' in map_code
     assert "requestedPlaceIdentifier(backendRequestedPlace(visit), index)" in map_code
     assert "requestedPlaceIdentifier(place, index)" in app
@@ -794,8 +728,8 @@ def test_requested_places_have_an_independent_safe_map_lifecycle() -> None:
     assert 'map.hasImage("requested-sugarglider")' in map_code
     assert "REQUIRED_PIN_URL" in map_code
     assert '"circle-opacity": .42' in requested_layers
-    assert '"satisfied", "#4f8c61"' in requested_layers
-    assert '"missed", "#c94f47"' in requested_layers
+    assert '"selected", "#4f8c61"' in requested_layers
+    assert '"dropped", "#c94f47"' in requested_layers
     assert '"#fff1c7"' in requested_layers
     assert "REQUESTED_PREFERRED_LAYER" in requested_layers
     assert "poi-water-verified" not in requested_layers
@@ -804,10 +738,10 @@ def test_requested_places_have_an_independent_safe_map_lifecycle() -> None:
 
     assert "requestedPlaceRadiusCollection" in map_code
     assert "REQUESTED_RADIUS_SEGMENTS = 48" in map_code
-    assert "feature.properties.visit_radius_m" in map_code
-    assert "showMissed && feature.properties.status" in map_code
-    assert 'id="show-missed-requested-radii"' in html
-    assert "showMissedRequestedRadii: false" in state_code
+    assert "feature.properties.access_search_radius_m" in map_code
+    assert "showDropped && feature.properties.status" in map_code
+    assert 'id="show-dropped-requested-radii"' in html
+    assert "showDroppedRequestedRadii: false" in state_code
 
     popup = map_code[
         map_code.index("function requestedPlacePopupContent") : map_code.index(
@@ -818,14 +752,20 @@ def test_requested_places_have_an_independent_safe_map_lifecycle() -> None:
     assert "textContent" in popup
     assert "innerHTML" not in popup
     assert "setHTML" not in popup
-    assert "Closest route passage" in popup
-    assert "Required radius" in popup
+    assert "Route-to-approach distance" in popup
+    assert "Arrival tolerance" in popup
+    assert "Drop reason" in popup
 
-    assert "candidate?.requested_place_visits ?? []" in app
+    assert "candidate?.selected_stops ?? []" in app
+    assert 'stop.selection_origin === "requested"' in app
     assert "renderRequestedPlaceMarkers(" in app
     assert "state.pendingRequestedPlacePopupId = null" in app
     assert "state.selectedRequestedPlaceId = null" in app
     assert "requested-place-row" in app
+    assert "data-itinerary-stop-id" in app
+    assert "stop.resolved_approach.arrival_tolerance_m" in app
+    assert "stop.route_to_approach_m" in app
+    assert "focusCoordinate" in app
     assert 'item.setAttribute("role", "button")' in app
     assert "scrollRequestedPlaceIntoView" in app
     assert "...imported.requestedPlaces.map" in app
@@ -834,8 +774,8 @@ def test_requested_places_have_an_independent_safe_map_lifecycle() -> None:
 
     for legend_class in (
         "requested-pending",
-        "requested-satisfied",
-        "requested-missed",
+        "requested-selected",
+        "requested-dropped",
         "mascot-water",
     ):
         assert legend_class in html
@@ -860,28 +800,37 @@ def test_bastille_to_marly_example_preserves_source_points_and_consumes_end() ->
     state = (STATIC_DIRECTORY / "state.js").read_text(encoding="utf-8")
     html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
 
-    assert example["points"] == original["points"]
-    assert len(example["points"]) == 23
-    assert example["route_topology"] == "point_to_point"
-    assert example["maximum_distance_m"] is None
+    original_points = [original["start"], *original["waypoints"]]
+    original_points = [
+        point
+        for point in original_points
+        if (point["lat"], point["lon"])
+        != (example["end"]["lat"], example["end"]["lon"])
+    ]
+    requested_points = [
+        stop["semantic_coordinate"] for stop in example["requested_stops"]
+    ]
+    assert requested_points == original_points
+    assert len(example["requested_stops"]) == 22
+    assert example["topology"] == "point_to_point"
+    assert example["distance_objective"]["maximum_m"] is None
     assert (
         sum(
             point["lat"] == example["end"]["lat"]
             and point["lon"] == example["end"]["lon"]
-            for point in example["points"]
+            for point in requested_points
         )
-        == 1
+        == 0
     )
     supplied_locations = {
         (point["lat"], point["lon"], point["name"])
-        for point in (example["start"], example["end"], *example["points"])
+        for point in (example["start"], example["end"], *requested_points)
     }
     assert len(supplied_locations) == 24
     assert "supplied_location_count" in app
-    assert "consumedLocation" in app
     assert "consumed_as_end_count" in app
     assert 'id="maximum-distance"' in html
-    assert "maximum_distance_m" in state
+    assert "maximum_m" in state
 
 
 def test_frontend_uses_local_brand_identity_and_accessible_landmarks() -> None:
@@ -964,14 +913,14 @@ def test_point_names_remain_text_safe_through_import_edit_map_and_copy() -> None
     app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
     map_code = (STATIC_DIRECTORY / "map.js").read_text(encoding="utf-8")
     state = (STATIC_DIRECTORY / "state.js").read_text(encoding="utf-8")
-    assert "suppliedName" in app
+    assert "point.name || label" in app
     assert "pointDisplayName(point, index)" in app
-    assert "name: pointDisplayName(point, index)" in state
+    assert "pointDisplayName(point, index)" in state
     assert "heading.textContent" in map_code
     assert "display_name: displayName" in map_code
     assert "setDOMContent" in map_code
     assert "${point.name}" not in map_code
-    assert "currentRequest()" in app
+    assert "currentPlanRequest()" in app
 
 
 def test_frontend_keeps_browser_native_modules_and_local_icons() -> None:

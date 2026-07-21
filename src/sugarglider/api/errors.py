@@ -8,9 +8,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from sugarglider.domain.endpoints import EndpointSnapTooFarError
-from sugarglider.generation.service import (
-    RouteGenerationNoCandidateError,
-    TargetDistanceInfeasibleError,
+from sugarglider.gpx.writer import SelectedStopNotReachedError
+from sugarglider.planning.auto_tour.state import (
+    AutoTourMaximumBelowDirectLowerBoundError,
+    AutoTourNoCandidateError,
 )
 from sugarglider.pois.errors import PoiSearchLimitError
 from sugarglider.routing.graphhopper import (
@@ -18,10 +19,6 @@ from sugarglider.routing.graphhopper import (
     RoutingTimeoutError,
     RoutingUnavailableError,
     RoutingUpstreamError,
-)
-from sugarglider.tours.service import (
-    AutoTourMaximumBelowDirectLowerBoundError,
-    AutoTourNoCandidateError,
 )
 
 
@@ -62,15 +59,10 @@ ERRORS: dict[type[Exception], PublicError] = {
         "route_visualization_invalid",
         "The route result cannot be projected for visualization.",
     ),
-    TargetDistanceInfeasibleError: PublicError(
+    SelectedStopNotReachedError: PublicError(
         422,
-        "target_distance_infeasible",
-        "The mandatory route is already longer than the target tolerance.",
-    ),
-    RouteGenerationNoCandidateError: PublicError(
-        422,
-        "route_generation_no_candidate",
-        "No graph-valid generated route candidate was found.",
+        "selected_stop_not_reached",
+        "A selected stop is not within its required arrival tolerance of the track.",
     ),
     RoutingPointError: PublicError(
         400,
@@ -107,40 +99,12 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def validation_handler(
-        _request: Request, exception: RequestValidationError
+        _request: Request, _exception: RequestValidationError
     ) -> JSONResponse:
-        endpoint_codes = {
-            "endpoint_start_unresolved",
-            "endpoint_end_unresolved",
-            "endpoint_coordinates_equal_for_point_to_point",
-            "distinct_end_not_allowed_for_loop",
-            "adjacent_duplicate_routing_points",
-            "route_topology_conflicts_with_close_loop",
-        }
-        first_code = next(
-            (
-                str(error["type"])
-                for error in exception.errors()
-                if str(error["type"]) in endpoint_codes
-            ),
-            None,
-        )
-        if first_code is not None:
-            return _response(
-                PublicError(
-                    422,
-                    first_code,
-                    str(
-                        next(
-                            error["msg"]
-                            for error in exception.errors()
-                            if str(error["type"]) == first_code
-                        )
-                    ),
-                )
-            )
         return _response(
-            PublicError(422, "invalid_request", "The route request is invalid.")
+            PublicError(
+                422, "invalid_request", "The canonical plan request is invalid."
+            )
         )
 
     for exception_type, public_error in ERRORS.items():

@@ -12,6 +12,9 @@ dependencies = [
     "uvicorn[standard]>=0.34.0",
 ]
 
+[project.scripts]
+sugarglider-migrate-plan = "sugarglider.migrate_plan_json:main"
+
 [dependency-groups]
 dev = [
     "mypy>=1.14.0",

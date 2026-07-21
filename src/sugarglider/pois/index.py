@@ -14,8 +14,13 @@ from shapely.geometry import Point, Polygon, box
 from shapely.geometry.base import BaseGeometry
 
 from sugarglider.analysis.projection import LocalMetricProjection
+from sugarglider.pois.approaches import (
+    all_approach_candidates_for_feature,
+    approach_order_key,
+)
 from sugarglider.pois.errors import PoiIndexFormatError, PoiIndexMissingError
 from sugarglider.pois.models import (
+    PoiApproachCandidate,
     PoiFeature,
     PoiIndexDocument,
     PoiIndexMetadata,
@@ -24,7 +29,7 @@ from sugarglider.pois.models import (
     PoiSearchResponse,
 )
 
-SUPPORTED_FORMAT_VERSION = 1
+SUPPORTED_FORMAT_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -34,12 +39,22 @@ class PoiRouteMatch:
     feature: PoiFeature
     distance_m: float
     route_progress_share: float
+    approach: PoiApproachCandidate | None = None
 
 
 class PoiIndex:
     """Immutable POI models and one reusable STRtree over projected points."""
 
-    __slots__ = ("_by_id", "_features", "_metadata", "_projection", "_tree")
+    __slots__ = (
+        "_approach_feature_indices",
+        "_approach_indices",
+        "_approach_tree",
+        "_by_id",
+        "_feature_tree",
+        "_features",
+        "_metadata",
+        "_projection",
+    )
 
     def __init__(self, document: PoiIndexDocument) -> None:
         metadata = document.metadata
@@ -61,15 +76,45 @@ class PoiIndex:
                 raise PoiIndexFormatError(
                     f"POI feature {feature.id} is outside the index bounds"
                 )
+            for approach in all_approach_candidates_for_feature(feature):
+                approach_coordinate = approach.coordinate
+                if not (
+                    west <= approach_coordinate.lon <= east
+                    and south <= approach_coordinate.lat <= north
+                ):
+                    raise PoiIndexFormatError(
+                        f"POI approach {approach.id} is outside the index bounds"
+                    )
 
         self._metadata = metadata
         self._features = document.features
         self._by_id = {feature.id: feature for feature in self._features}
         self._projection = projection
-        self._tree = STRtree(
+        self._feature_tree = STRtree(
             tuple(
                 Point(projection.project_position(_position(feature)))
                 for feature in self._features
+            )
+        )
+        approach_entries = tuple(
+            (feature_index, approach_index, approach)
+            for feature_index, feature in enumerate(self._features)
+            for approach_index, approach in enumerate(
+                all_approach_candidates_for_feature(feature)
+            )
+        )
+        self._approach_feature_indices = tuple(
+            feature_index
+            for feature_index, _approach_index, _approach in approach_entries
+        )
+        self._approach_indices = tuple(
+            approach_index
+            for _feature_index, approach_index, _approach in approach_entries
+        )
+        self._approach_tree = STRtree(
+            tuple(
+                Point(projection.project_position(_position(approach)))
+                for _feature_index, _approach_index, approach in approach_entries
             )
         )
 
@@ -87,7 +132,12 @@ class PoiIndex:
 
     def query_indices(self, geometry: BaseGeometry) -> tuple[int, ...]:
         """Return only STRtree candidates, in stable source-index order."""
-        raw: object = self._tree.query(geometry)
+        raw: object = self._feature_tree.query(geometry)
+        return tuple(sorted(cast(Iterable[int], raw)))
+
+    def query_approach_indices(self, geometry: BaseGeometry) -> tuple[int, ...]:
+        """Return stable approach-tree entry indices for a projected geometry."""
+        raw: object = self._approach_tree.query(geometry)
         return tuple(sorted(cast(Iterable[int], raw)))
 
     def get_feature(self, poi_id: str) -> PoiFeature | None:
@@ -114,9 +164,30 @@ class PoiIndex:
         if line.is_empty or not line.is_valid or line.length <= 0:
             raise ValueError("POI route corridor requires a valid non-empty line")
         envelope = line.buffer(radius_m).envelope
+        best_by_feature: dict[int, tuple[float, PoiApproachCandidate]] = {}
+        for tree_index in self.query_approach_indices(envelope):
+            feature_index = self._approach_feature_indices[tree_index]
+            feature = self._features[feature_index]
+            approaches = all_approach_candidates_for_feature(feature)
+            approach = approaches[self._approach_indices[tree_index]]
+            point = Point(
+                self._projection.project_position(
+                    (approach.coordinate.lon, approach.coordinate.lat)
+                )
+            )
+            distance = float(line.distance(point))
+            if distance > radius_m:
+                continue
+            previous = best_by_feature.get(feature_index)
+            if previous is None or (distance, approach_order_key(approach)) < (
+                previous[0],
+                approach_order_key(previous[1]),
+            ):
+                best_by_feature[feature_index] = (distance, approach)
+
         matches: list[PoiRouteMatch] = []
-        for index in self.query_indices(envelope):
-            feature = self._features[index]
+        for feature_index, (distance, approach) in sorted(best_by_feature.items()):
+            feature = self._features[feature_index]
             if feature.group not in groups:
                 continue
             if (
@@ -133,14 +204,11 @@ class PoiIndex:
                 continue
             point = Point(
                 self._projection.project_position(
-                    (feature.coordinate.lon, feature.coordinate.lat)
+                    (approach.coordinate.lon, approach.coordinate.lat)
                 )
             )
-            distance = float(line.distance(point))
-            if distance > radius_m:
-                continue
             progress = float(line.project(point) / line.length)
-            matches.append(PoiRouteMatch(feature, distance, progress))
+            matches.append(PoiRouteMatch(feature, distance, progress, approach))
         matches.sort(
             key=lambda match: (
                 match.route_progress_share,
@@ -192,6 +260,9 @@ class PoiIndex:
             access_counts={
                 str(key): value for key, value in metadata.access_counts.items()
             },
+            approach_counts={
+                str(key): value for key, value in metadata.approach_counts.items()
+            },
             warnings=(),
         )
 
@@ -225,6 +296,7 @@ def unavailable_poi_status(
         category_counts={},
         potability_counts={},
         access_counts={},
+        approach_counts={},
         warnings=tuple(sorted(set(warnings))),
     )
 
@@ -279,5 +351,5 @@ def _sort_key(feature: PoiFeature) -> tuple[str, str, str, str, int]:
     )
 
 
-def _position(feature: PoiFeature) -> tuple[float, float]:
+def _position(feature: PoiFeature | PoiApproachCandidate) -> tuple[float, float]:
     return feature.coordinate.lon, feature.coordinate.lat

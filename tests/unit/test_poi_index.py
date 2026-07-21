@@ -17,6 +17,7 @@ from sugarglider.pois.index import (
     unavailable_poi_status,
 )
 from sugarglider.pois.models import (
+    PoiApproachCandidate,
     PoiBoundingBox,
     PoiFeature,
     PoiIndexDocument,
@@ -212,7 +213,7 @@ def test_missing_corrupt_unsupported_and_out_of_bounds_indexes(
     unsupported = _document().model_dump(mode="json")
     metadata = unsupported["metadata"]
     assert isinstance(metadata, dict)
-    metadata["format_version"] = 2
+    metadata["format_version"] = 1
     unsupported_path = tmp_path / "unsupported.json.gz"
     with gzip.open(unsupported_path, "wt", encoding="utf-8") as output:
         json.dump(unsupported, output)
@@ -249,3 +250,82 @@ def test_bbox_validation_rejects_invalid_or_dateline_queries() -> None:
         PoiBoundingBox(west=170, south=-1, east=-170, north=1)
     with pytest.raises(ValueError):
         PoiBoundingBox(west=2, south=float("nan"), east=3, north=49)
+
+
+def test_route_corridor_uses_approach_tree_not_remote_semantic_point() -> None:
+    approach = PoiApproachCandidate(
+        id="way/99/approach/00-entrance",
+        coordinate=Coordinate(lat=48.0001, lon=2.02),
+        kind="mapped_entrance",
+        source="osm_entrance",
+        access="public",
+        semantic_distance_m=900,
+        arrival_tolerance_m=20,
+        osm_type="node",
+        osm_id=100,
+        provenance="way_boundary_node",
+    )
+    feature = PoiFeature(
+        id="way/99",
+        osm_type="way",
+        osm_id=99,
+        coordinate=Coordinate(lat=48.0082, lon=2.02),
+        category="castle",
+        group="scenic",
+        display_name="Large castle",
+        name_source="name",
+        scenic_confidence="primary",
+        potability="not_applicable",
+        access_status="public",
+        approach_candidates=(approach,),
+    )
+    document = PoiIndexDocument(
+        metadata=PoiIndexMetadata(
+            source_basename="large.osm",
+            feature_count=1,
+            category_counts={"castle": 1},
+            potability_counts={"not_applicable": 1},
+            access_counts={"public": 1},
+            approach_counts={"mapped_entrance": 1},
+            bounding_box=(2.0, 48.0, 2.1, 48.1),
+            skipped_invalid_count=0,
+        ),
+        features=(feature,),
+    )
+    index = PoiIndex(document)
+    route = ((2.0, 48.0), (2.04, 48.0))
+
+    (match,) = index.query_near_route(route, 20, groups=("scenic",))
+    viewport = index.search(
+        _request(bbox={"west": 2.019, "south": 48.008, "east": 2.021, "north": 48.009}),
+        limit=10,
+    )
+
+    assert match.feature.id == "way/99"
+    assert match.approach == approach
+    assert match.distance_m < 20
+    assert viewport.features == (feature,)
+
+
+def test_index_rejects_out_of_bounds_approach_coordinate() -> None:
+    document = _document()
+    feature = document.features[0].model_copy(
+        update={
+            "approach_candidates": (
+                PoiApproachCandidate(
+                    id="node/1/approach/outside",
+                    coordinate=Coordinate(lat=47, lon=1),
+                    kind="viewpoint_location",
+                    source="osm_feature",
+                    access="public",
+                    semantic_distance_m=0,
+                    arrival_tolerance_m=20,
+                    osm_type="node",
+                    osm_id=1,
+                ),
+            )
+        }
+    )
+    bad = document.model_copy(update={"features": (feature, *document.features[1:])})
+    with pytest.raises(PoiIndexFormatError, match="approach"):
+        PoiIndex(bad)

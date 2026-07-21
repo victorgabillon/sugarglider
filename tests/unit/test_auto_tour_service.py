@@ -7,18 +7,13 @@ import pytest
 from sugarglider.analysis.projection import LocalMetricProjection
 from sugarglider.analysis.route import RouteAnalyzer, haversine_distance_m
 from sugarglider.domain.models import Coordinate, PathDetailSegment
-from sugarglider.pois.index import PoiIndex
-from sugarglider.pois.models import PoiFeature, PoiIndexDocument
-from sugarglider.routing.backend import (
-    IsochronePolygon,
-    IsochroneResult,
-    RoutedPath,
+from sugarglider.planning.auto_tour.discovered_pois import TourPoiSettings
+from sugarglider.planning.auto_tour.models import (
+    AutoTourSearchRequest,
+    RequestedTourPlace,
 )
-from sugarglider.routing.errors import RoutingPointError, RoutingUpstreamError
-from sugarglider.routing.result import RouteResultFactory
-from sugarglider.tours.models import AutoTourRequest, RequestedTourPlace
-from sugarglider.tours.poi_selection import TourPoiSettings
-from sugarglider.tours.service import (
+from sugarglider.planning.auto_tour.service import AutoTourService
+from sugarglider.planning.auto_tour.state import (
     ALTERNATIVE_LEG_REQUEST_BUDGET,
     LOCAL_REPAIR_ROUTE_EVALUATION_BUDGET,
     POI_BEAM_WIDTH,
@@ -26,9 +21,22 @@ from sugarglider.tours.service import (
     ROUND_TRIP_CONTROL_REQUEST_BUDGET,
     SKELETON_ROUTE_REQUEST_BUDGET,
     AutoTourMaximumBelowDirectLowerBoundError,
-    AutoTourService,
     AutoTourSettings,
 )
+from sugarglider.pois.index import PoiIndex
+from sugarglider.pois.models import (
+    PoiApproachCandidate,
+    PoiFeature,
+    PoiIndexDocument,
+    PoiIndexMetadata,
+)
+from sugarglider.routing.backend import (
+    IsochronePolygon,
+    IsochroneResult,
+    RoutedPath,
+)
+from sugarglider.routing.errors import RoutingPointError, RoutingUpstreamError
+from sugarglider.routing.result import RouteResultFactory
 
 START = Coordinate(lat=48.87, lon=2.09, name="Station")
 PROJECTION = LocalMetricProjection(START.lat)
@@ -148,6 +156,34 @@ class _LegOnlyBackend(_Backend):
         if len(points) > 2:
             raise RoutingPointError("synthetic multi-point traversal cap")
         return await super().route(points, profile, pass_through=pass_through)
+
+
+class _MultipleEntranceBackend(_Backend):
+    def __init__(self, bad_entrance: Coordinate) -> None:
+        super().__init__(fail_isochrone=True)
+        self.bad_entrance = bad_entrance
+
+    async def route(
+        self,
+        points: tuple[Coordinate, ...],
+        profile: str = "hike",
+        *,
+        pass_through: bool = False,
+    ) -> RoutedPath:
+        self.route_calls += 1
+        geometry = tuple((point.lon, point.lat) for point in points)
+        if self.bad_entrance in points:
+            position = (self.bad_entrance.lon, self.bad_entrance.lat)
+            geometry = (geometry[0], position, geometry[0], *geometry[2:])
+        distance = sum(
+            haversine_distance_m(left, right)
+            for left, right in zip(geometry, geometry[1:], strict=False)
+        )
+        return _path(
+            geometry,
+            distance,
+            snapped=tuple((point.lon, point.lat) for point in points),
+        )
 
 
 class _CorridorBackend(_Backend):
@@ -412,9 +448,105 @@ def test_named_default_budgets_are_exact_and_bounded() -> None:
 
 
 @pytest.mark.asyncio
+async def test_route_aware_beam_prefers_better_routed_entrance() -> None:
+    end = _coordinate(1_000, 0)
+    nearer = _coordinate(500, 30)
+    better = _coordinate(500, 60)
+    approaches = (
+        PoiApproachCandidate(
+            id="way/99/approach/a",
+            coordinate=nearer,
+            kind="mapped_entrance",
+            source="osm_entrance",
+            access="public",
+            semantic_distance_m=100,
+            arrival_tolerance_m=20,
+            osm_type="node",
+            osm_id=100,
+            provenance="way_boundary_node",
+        ),
+        PoiApproachCandidate(
+            id="way/99/approach/b",
+            coordinate=better,
+            kind="mapped_entrance",
+            source="osm_entrance",
+            access="public",
+            semantic_distance_m=100,
+            arrival_tolerance_m=20,
+            osm_type="node",
+            osm_id=101,
+            provenance="way_boundary_node",
+        ),
+    )
+    feature = PoiFeature(
+        id="way/99",
+        osm_type="way",
+        osm_id=99,
+        coordinate=_coordinate(500, 100),
+        category="castle",
+        group="scenic",
+        display_name="Two gate castle",
+        name_source="name",
+        scenic_confidence="primary",
+        potability="not_applicable",
+        access_status="public",
+        approach_candidates=approaches,
+    )
+    index = PoiIndex(
+        PoiIndexDocument(
+            metadata=PoiIndexMetadata(
+                source_basename="two-gates.osm",
+                feature_count=1,
+                category_counts={"castle": 1},
+                potability_counts={"not_applicable": 1},
+                access_counts={"public": 1},
+                approach_counts={"mapped_entrance": 2},
+                bounding_box=(1, 47, 3, 50),
+                skipped_invalid_count=0,
+            ),
+            features=(feature,),
+        )
+    )
+    result = await _service(_MultipleEntranceBackend(nearer), poi_index=index).generate(
+        AutoTourSearchRequest(
+            start=START,
+            end=end,
+            topology="point_to_point",
+            target_distance_m=1_000,
+            tolerance_m=500,
+            candidate_count=1,
+            requested_stops=(
+                RequestedTourPlace(
+                    id="castle",
+                    name="Two gate castle",
+                    coordinate=feature.coordinate,
+                    osm_reference="way/99",
+                    importance="must_visit",
+                ),
+            ),
+            scenic_preference="off",
+            drinking_water_preference="off",
+            nature_preference="off",
+        )
+    )
+
+    visit = result.candidates[0].requested_place_visits[0]
+    assert visit.chosen_approach is not None
+    assert visit.chosen_approach.id == approaches[1].id
+    assert result.search.approach_candidates_considered == 2
+    assert result.search.approach_route_evaluation_count == 2
+    assert result.search.through_route_evaluation_count == 0
+    assert result.diagnostics.budget.phases["approach"].used == 2
+    assert result.search.spur_route_evaluation_count == 0
+    assert result.search.selected_excursion_count == len(
+        result.candidates[0].poi_excursions
+    )
+
+
+@pytest.mark.asyncio
 async def test_missing_poi_index_returns_deterministic_control() -> None:
     backend = _Backend()
-    request = AutoTourRequest(start=START, target_distance_m=10_000, seed=42)
+    request = AutoTourSearchRequest(start=START, target_distance_m=10_000, seed=42)
     first = await _service(backend, poi_index=None).generate(request)
     second = await _service(_Backend(), poi_index=None).generate(request)
     assert first.control.signature == second.control.signature
@@ -434,7 +566,7 @@ async def test_missing_poi_index_returns_deterministic_control() -> None:
 async def test_isochrone_failure_falls_back_to_round_trip_controls() -> None:
     backend = _Backend(fail_isochrone=True)
     result = await _service(backend, poi_index=None).generate(
-        AutoTourRequest(start=START, target_distance_m=10_000)
+        AutoTourSearchRequest(start=START, target_distance_m=10_000)
     )
     assert result.control.skeleton_method == "graphhopper_round_trip"
     assert result.search.skeleton_route_request_count == 2
@@ -454,7 +586,7 @@ async def test_fallback_returns_three_controls_and_deliberately_routes_castle() 
     result = await _service(
         _Backend(fail_isochrone=True), poi_index=_poi_index((castle,))
     ).generate(
-        AutoTourRequest(
+        AutoTourSearchRequest(
             start=START,
             target_distance_m=10_000,
             candidate_count=3,
@@ -480,20 +612,20 @@ async def test_requested_place_outside_poi_corridor_drives_fallback_route() -> N
     requested = RequestedTourPlace(
         name="Imported estate",
         coordinate=_coordinate(1_250, 800),
-        visit_radius_m=100,
+        access_search_radius_m=100,
         importance="must_visit",
         original_index=1,
     )
     result = await _service(_Backend(fail_isochrone=True), poi_index=None).generate(
-        AutoTourRequest(
+        AutoTourSearchRequest(
             start=START,
             target_distance_m=10_000,
-            requested_places=(requested,),
+            requested_stops=(requested,),
         )
     )
     recommended = result.candidates[0]
-    assert recommended.satisfied_must_visit_count == 1
-    assert recommended.requested_place_visits[0].satisfied
+    assert recommended.selected_must_visit_count == 1
+    assert recommended.requested_place_visits[0].selected
     assert recommended.requested_place_visits[0].deliberately_routed
     assert result.search.poi_route_evaluation_count > 0
 
@@ -505,7 +637,7 @@ async def test_flexible_complete_requested_family_accounts_for_all_22_places() -
             id=f"imported-{index + 1}",
             name=f"Imported place {index + 1}",
             coordinate=_coordinate(400 + index * 55, 250 + (index % 4) * 80),
-            visit_radius_m=100,
+            access_search_radius_m=100,
             importance="must_visit",
             original_index=index + 1,
         )
@@ -518,12 +650,12 @@ async def test_flexible_complete_requested_family_accounts_for_all_22_places() -
         settings=_settings(max_inserted_pois=0),
     )
     result = await service.generate(
-        AutoTourRequest(
+        AutoTourSearchRequest(
             start=START,
             target_distance_m=45_000,
             tolerance_m=2_000,
             candidate_count=3,
-            requested_places=requested,
+            requested_stops=requested,
             distance_priority="flexible",
             scenic_preference="off",
             drinking_water_preference="off",
@@ -533,7 +665,7 @@ async def test_flexible_complete_requested_family_accounts_for_all_22_places() -
 
     recommended = result.candidates[0]
     assert len(recommended.requested_place_visits) == 22
-    assert recommended.satisfied_must_visit_count == 22
+    assert recommended.selected_must_visit_count == 22
     assert all(
         visit.deliberately_considered for visit in recommended.requested_place_visits
     )
@@ -541,18 +673,18 @@ async def test_flexible_complete_requested_family_accounts_for_all_22_places() -
         visit.deliberately_routed for visit in recommended.requested_place_visits
     )
     assert all(
-        visit.failure_reason is None for visit in recommended.requested_place_visits
+        visit.drop_reason is None for visit in recommended.requested_place_visits
     )
     assert result.search.requested_place_route_evaluations > 0
     assert result.search.discovered_poi_route_evaluations == 0
 
     nearby_result = await service.generate(
-        AutoTourRequest(
+        AutoTourSearchRequest(
             start=START,
             target_distance_m=46_000,
             tolerance_m=2_000,
             candidate_count=3,
-            requested_places=requested,
+            requested_stops=requested,
             distance_priority="flexible",
             scenic_preference="off",
             drinking_water_preference="off",
@@ -577,17 +709,17 @@ async def test_requested_family_composes_legs_after_multi_point_failure() -> Non
         for index in range(4)
     )
     result = await _service(backend, poi_index=None).generate(
-        AutoTourRequest(
+        AutoTourSearchRequest(
             start=START,
             target_distance_m=10_000,
-            requested_places=requested,
+            requested_stops=requested,
             scenic_preference="off",
             drinking_water_preference="off",
             nature_preference="off",
         )
     )
 
-    assert result.candidates[0].satisfied_must_visit_count == 4
+    assert result.candidates[0].selected_must_visit_count == 4
     assert any(count > 2 for count in backend.point_counts)
     assert sum(count == 2 for count in backend.point_counts) >= 5
 
@@ -604,11 +736,11 @@ async def test_distance_ceiling_keeps_maximum_requested_subset_with_reasons() ->
         for index in range(3)
     )
     result = await _service(_Backend(fail_isochrone=True), poi_index=None).generate(
-        AutoTourRequest(
+        AutoTourSearchRequest(
             start=START,
             target_distance_m=10_000,
             maximum_distance_m=15_000,
-            requested_places=requested,
+            requested_stops=requested,
             scenic_preference="off",
             drinking_water_preference="off",
             nature_preference="off",
@@ -616,7 +748,7 @@ async def test_distance_ceiling_keeps_maximum_requested_subset_with_reasons() ->
     )
 
     recommended = result.candidates[0]
-    assert 0 < recommended.satisfied_must_visit_count < 3
+    assert 0 < recommended.selected_must_visit_count < 3
     assert recommended.route.summary.distance_m <= recommended.maximum_distance_m
     assert result.search.complete_set_candidate_distance_m is not None
     assert (
@@ -624,30 +756,30 @@ async def test_distance_ceiling_keeps_maximum_requested_subset_with_reasons() ->
         > result.search.maximum_distance_m
     )
     assert all(
-        visit.failure_reason == "requested_place_user_maximum_rejected"
+        visit.drop_reason == "maximum_distance_rejected"
         for visit in recommended.requested_place_visits
-        if not visit.satisfied
+        if not visit.selected
     )
 
 
 @pytest.mark.asyncio
-async def test_missed_soft_requested_hook_is_removed_inside_repair_budget() -> None:
+async def test_dropped_soft_requested_hook_is_removed_inside_repair_budget() -> None:
     reachable = RequestedTourPlace(
         name="Reachable estate",
         coordinate=_coordinate(1_000, 300),
-        visit_radius_m=100,
+        access_search_radius_m=100,
         importance="must_visit",
         original_index=1,
     )
-    missed = RequestedTourPlace(
+    dropped = RequestedTourPlace(
         name="Soft coordinate beyond the path",
         coordinate=_coordinate(1_500, 300),
-        visit_radius_m=100,
+        access_search_radius_m=100,
         importance="must_visit",
         original_index=2,
     )
     backend = _MissedRequestedHookBackend(
-        missed.coordinate,
+        dropped.coordinate,
         _coordinate(1_500, 700),
     )
     service = AutoTourService(
@@ -660,21 +792,21 @@ async def test_missed_soft_requested_hook_is_removed_inside_repair_budget() -> N
         ),
     )
     result = await service.generate(
-        AutoTourRequest(
+        AutoTourSearchRequest(
             start=START,
             target_distance_m=10_000,
-            requested_places=(reachable, missed),
+            requested_stops=(reachable, dropped),
         )
     )
     recommended = result.candidates[0]
     assert result.search.local_repair_evaluation_count > 0
     assert recommended.construction == "local_repair"
     assert recommended.route.analysis.immediate_backtrack.distance_m == 0
-    assert recommended.satisfied_must_visit_count == 1
+    assert recommended.selected_must_visit_count == 1
     assert recommended.requested_place_visits[0].deliberately_routed
     assert not recommended.requested_place_visits[1].deliberately_routed
     assert reachable.coordinate in recommended.routing_points
-    assert missed.coordinate not in recommended.routing_points
+    assert dropped.coordinate not in recommended.routing_points
 
 
 @pytest.mark.asyncio
@@ -699,7 +831,7 @@ async def test_corridor_continuation_repairs_singleton_out_and_back() -> None:
         ),
     )
     result = await service.generate(
-        AutoTourRequest(
+        AutoTourSearchRequest(
             start=START,
             target_distance_m=10_000,
             preferred_poi_ids=(pivot.id,),
@@ -727,7 +859,7 @@ async def test_corridor_continuation_repairs_singleton_out_and_back() -> None:
 async def test_soft_pois_can_win_without_quality_regression() -> None:
     backend = _Backend()
     result = await _service(backend, poi_index=_poi_index()).generate(
-        AutoTourRequest(start=START, target_distance_m=10_000, tolerance_m=2_000)
+        AutoTourSearchRequest(start=START, target_distance_m=10_000, tolerance_m=2_000)
     )
     recommended = result.candidates[0]
     assert recommended.control_eligible
@@ -737,7 +869,7 @@ async def test_soft_pois_can_win_without_quality_regression() -> None:
     assert recommended.route.analysis.repetition.repeated_distance.share <= (
         result.control.route.analysis.repetition.repeated_distance.share + 1e-12
     )
-    assert recommended.inserted_poi_reward >= 0
+    assert recommended.discovered_poi_reward >= 0
     assert result.search.poi_route_evaluation_count <= 8
     assert sum(visit.inserted for visit in recommended.poi_visits) <= 2
     if any(
@@ -752,7 +884,7 @@ async def test_explicit_direction_preference_is_respected_after_route_analysis()
     None
 ):
     result = await _service(_Backend(), poi_index=None).generate(
-        AutoTourRequest(
+        AutoTourSearchRequest(
             start=START,
             target_distance_m=10_000,
             direction_preference="clockwise",
@@ -768,10 +900,10 @@ async def test_open_auto_tour_uses_direct_graph_route_and_never_returns_to_start
 ):
     backend = _Backend()
     end = _coordinate(12_000, 2_000)
-    request = AutoTourRequest(
+    request = AutoTourSearchRequest(
         start=START,
         end=end,
-        route_topology="point_to_point",
+        topology="point_to_point",
         target_distance_m=8_000,
         scenic_preference="off",
         drinking_water_preference="off",
@@ -820,14 +952,14 @@ async def test_flexible_open_route_retains_complete_coverage_above_old_ceiling()
         )
         for index in range(1, 4)
     )
-    request = AutoTourRequest(
+    request = AutoTourSearchRequest(
         start=START,
         end=end,
-        route_topology="point_to_point",
+        topology="point_to_point",
         target_distance_m=12_000,
         tolerance_m=2_000,
         candidate_count=3,
-        requested_places=requested,
+        requested_stops=requested,
         distance_priority="flexible",
         scenic_preference="off",
         drinking_water_preference="off",
@@ -838,7 +970,7 @@ async def test_flexible_open_route_retains_complete_coverage_above_old_ceiling()
 
     recommended = result.candidates[0]
     old_target_ceiling = 15_000
-    assert recommended.satisfied_must_visit_count == 3
+    assert recommended.selected_must_visit_count == 3
     assert recommended.route.summary.distance_m > old_target_ceiling
     assert recommended.maximum_distance_m == 200_000
     assert result.search.full_set_route_attempted
@@ -864,13 +996,13 @@ async def test_open_user_maximum_prunes_with_specific_reasons() -> None:
         for index in range(1, 4)
     )
     result = await _service(_Backend(), poi_index=None).generate(
-        AutoTourRequest(
+        AutoTourSearchRequest(
             start=START,
             end=end,
-            route_topology="point_to_point",
+            topology="point_to_point",
             target_distance_m=12_000,
             maximum_distance_m=15_000,
-            requested_places=requested,
+            requested_stops=requested,
             scenic_preference="off",
             drinking_water_preference="off",
             nature_preference="off",
@@ -879,11 +1011,11 @@ async def test_open_user_maximum_prunes_with_specific_reasons() -> None:
 
     recommended = result.candidates[0]
     assert recommended.route.summary.distance_m <= 15_000
-    assert recommended.satisfied_must_visit_count < 3
+    assert recommended.selected_must_visit_count < 3
     assert all(
-        visit.failure_reason == "requested_place_user_maximum_rejected"
+        visit.drop_reason == "maximum_distance_rejected"
         for visit in recommended.requested_place_visits
-        if not visit.satisfied
+        if not visit.selected
     )
 
 
@@ -891,10 +1023,10 @@ async def test_open_user_maximum_prunes_with_specific_reasons() -> None:
 async def test_open_user_maximum_below_direct_route_is_rejected() -> None:
     with pytest.raises(AutoTourMaximumBelowDirectLowerBoundError):
         await _service(_Backend(), poi_index=None).generate(
-            AutoTourRequest(
+            AutoTourSearchRequest(
                 start=START,
                 end=_coordinate(12_000, 0),
-                route_topology="point_to_point",
+                topology="point_to_point",
                 target_distance_m=12_000,
                 maximum_distance_m=10_000,
             )
@@ -910,12 +1042,12 @@ async def test_open_flexible_server_maximum_has_specific_rejection_reason() -> N
         original_index=1,
     )
     result = await _service(_Backend(), poi_index=None).generate(
-        AutoTourRequest(
+        AutoTourSearchRequest(
             start=START,
             end=_coordinate(30_000, 0),
-            route_topology="point_to_point",
+            topology="point_to_point",
             target_distance_m=45_000,
-            requested_places=(requested,),
+            requested_stops=(requested,),
             scenic_preference="off",
             drinking_water_preference="off",
             nature_preference="off",
@@ -929,8 +1061,8 @@ async def test_open_flexible_server_maximum_has_specific_rejection_reason() -> N
         == "requested_place_server_maximum_rejected"
     )
     assert (
-        result.candidates[0].requested_place_visits[0].failure_reason
-        == "requested_place_server_maximum_rejected"
+        result.candidates[0].requested_place_visits[0].drop_reason
+        == "maximum_distance_rejected"
     )
 
 
@@ -946,14 +1078,14 @@ async def test_open_balanced_retains_target_derived_maximum() -> None:
         for index in range(1, 4)
     )
     result = await _service(_Backend(), poi_index=None).generate(
-        AutoTourRequest(
+        AutoTourSearchRequest(
             start=START,
             end=_coordinate(12_000, 0),
-            route_topology="point_to_point",
+            topology="point_to_point",
             target_distance_m=12_000,
             tolerance_m=2_000,
             distance_priority="balanced",
-            requested_places=requested,
+            requested_stops=requested,
             scenic_preference="off",
             drinking_water_preference="off",
             nature_preference="off",
@@ -962,4 +1094,4 @@ async def test_open_balanced_retains_target_derived_maximum() -> None:
 
     assert result.search.maximum_distance_m == 16_000
     assert result.candidates[0].route.summary.distance_m <= 16_000
-    assert result.candidates[0].satisfied_must_visit_count < 3
+    assert result.candidates[0].selected_must_visit_count < 3
