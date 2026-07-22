@@ -36,6 +36,21 @@ def test_dependency_direction_has_no_forbidden_reverse_imports() -> None:
     assert violations == []
 
 
+def test_planning_has_no_hidden_hike_defaults_or_raw_backend_profile_names() -> None:
+    planning = SOURCE / "planning"
+    forbidden_backend_names = ('"bike"', '"mtb"', '"racingbike"')
+    violations: list[str] = []
+    for path in sorted(planning.rglob("*.py")):
+        source = path.read_text()
+        if 'profile: RoutingProfileId = "hike"' in source:
+            violations.append(f"{path.relative_to(ROOT)}: hidden hike default")
+        if path.name not in {"profile_quality.py"}:
+            for value in forbidden_backend_names:
+                if value in source:
+                    violations.append(f"{path.relative_to(ROOT)}: raw {value}")
+    assert violations == []
+
+
 def test_superseded_generation_and_tours_packages_have_no_source_modules() -> None:
     for package in ("generation", "tours"):
         directory = SOURCE / package

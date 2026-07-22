@@ -43,6 +43,7 @@ from sugarglider.planning.auto_tour.state import (
 )
 from sugarglider.planning.budget import SearchPhase
 from sugarglider.planning.cache import RouteCacheKey
+from sugarglider.planning.profiles import RoutingProfileId
 from sugarglider.planning.signatures import candidate_signature
 from sugarglider.routing.backend import (
     RoutedPath,
@@ -219,6 +220,7 @@ class RequestedSearchMixin:
                     name=request.name,
                     path=path,
                     input_point_count=len(routed_points),
+                    routing_profile=request.profile,
                 )
             except RoutingUpstreamError:
                 continue
@@ -366,6 +368,7 @@ class RequestedSearchMixin:
                             name=request.name,
                             path=path,
                             input_point_count=len(points),
+                            routing_profile=request.profile,
                         )
                     except RoutingUpstreamError:
                         continue
@@ -451,7 +454,7 @@ class RequestedSearchMixin:
         self,
         outcome: _RequestedRouteOutcome,
         *,
-        profile: str,
+        profile: RoutingProfileId,
         state: _SearchState,
         requested_index_by_coordinate: dict[tuple[float, float], int],
         maximum_distance_m: float,
@@ -471,13 +474,11 @@ class RequestedSearchMixin:
                     continue
                 left = points[position - 1]
                 right = points[position + 1]
-                if profile != "hike":
-                    raise ValueError(f"unsupported routing profile {profile}")
                 left_path = cast(
                     RoutedPath | None,
                     state.context.routes.peek(
                         RouteCacheKey.for_route(
-                            profile_id="hike",
+                            profile_id=profile,
                             points=(left, point),
                             pass_through=True,
                         )
@@ -487,7 +488,7 @@ class RequestedSearchMixin:
                     RoutedPath | None,
                     state.context.routes.peek(
                         RouteCacheKey.for_route(
-                            profile_id="hike",
+                            profile_id=profile,
                             points=(point, right),
                             pass_through=True,
                         )
@@ -532,7 +533,7 @@ class RequestedSearchMixin:
     async def _route_requested_sequence(
         self,
         points: tuple[Coordinate, ...],
-        profile: str,
+        profile: RoutingProfileId,
         state: _SearchState,
         *,
         requested_index_by_coordinate: dict[tuple[float, float], int],

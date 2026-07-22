@@ -15,6 +15,7 @@ from sugarglider.domain.models import RouteResult
 from sugarglider.gpx.writer import gpx_filename, write_plan_gpx
 from sugarglider.nature.analysis import NatureRouteAnalyzer
 from sugarglider.planning.models import PlanRequest
+from sugarglider.planning.profiles import RoutingProfileCatalog
 from sugarglider.planning.result import PlanGpxRequest, PlanResult
 from sugarglider.pois.errors import PoiSearchLimitError
 from sugarglider.pois.index import PoiIndex, unavailable_poi_search
@@ -65,14 +66,22 @@ async def search_pois(
 
 @router.get("/ready", response_model=HealthResponse)
 async def ready(service: RouteServiceDependency) -> HealthResponse:
-    """Report readiness only when the GraphHopper hike profile is loaded."""
+    """Report readiness only when every packaged routing profile is loaded."""
     try:
         is_ready = await service.ready()
     except RoutingError as exc:
         raise RoutingUnavailableError("GraphHopper readiness check failed") from exc
     if not is_ready:
-        raise RoutingUnavailableError("GraphHopper does not advertise hike")
+        raise RoutingUnavailableError("GraphHopper profiles are incomplete")
     return HealthResponse()
+
+
+@router.get("/v2/routing-profiles", response_model=RoutingProfileCatalog)
+async def routing_profiles(
+    service: RouteServiceDependency,
+) -> RoutingProfileCatalog:
+    """Return stable public capabilities and safe runtime availability."""
+    return await service.profile_catalog()
 
 
 @router.post("/v2/plans/visualization", response_model=RouteVisualization)
@@ -92,8 +101,10 @@ async def visualize_route(
 async def generate_plan(
     request: PlanRequest,
     service: PlanServiceDependency,
+    routes: RouteServiceDependency,
 ) -> PlanResult:
     """Generate one canonical portfolio for either supported planning mode."""
+    await routes.ensure_profile_available(request.routing_profile)
     return await service.generate(request)
 
 

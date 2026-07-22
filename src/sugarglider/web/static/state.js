@@ -7,6 +7,8 @@ export const state = {
     waypoint_route: null,
   },
   config: null,
+  routingProfileCatalog: null,
+  routingProfile: null,
   planningMode: "auto_tour",
   points: [],
   waypointPoints: [],
@@ -155,7 +157,7 @@ function commonPlanState(endpoints) {
     end: endpoints.routeTopology === "point_to_point"
       ? coordinatePayload(endpoints.end, "End")
       : null,
-    routing_profile: "hike",
+    routing_profile: state.routingProfile,
     candidate_count: state.options.candidateCount,
     seed: state.options.seed,
     distance_objective: {

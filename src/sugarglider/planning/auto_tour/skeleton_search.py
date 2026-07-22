@@ -82,6 +82,7 @@ class SkeletonSearchMixin:
                 name=request.name,
                 path=path,
                 input_point_count=len(points),
+                routing_profile=request.profile,
             )
         except RoutingUpstreamError:
             return None
@@ -129,6 +130,7 @@ class SkeletonSearchMixin:
                     name=request.name,
                     path=path,
                     input_point_count=2,
+                    routing_profile=request.profile,
                 )
             except RoutingUpstreamError:
                 continue
@@ -172,6 +174,7 @@ class SkeletonSearchMixin:
                     name=request.name,
                     path=sampled_path,
                     input_point_count=len(points),
+                    routing_profile=request.profile,
                 )
             except RoutingUpstreamError:
                 continue

@@ -17,6 +17,7 @@ from sugarglider.domain.models import (
     GeoJsonPosition,
     ImmutableModel,
 )
+from sugarglider.planning.profiles import RoutingProfileId
 from sugarglider.pois.models import PoiApproachCandidate, PoiCategory, PoiFeature
 
 type TourDirection = Literal["clockwise", "counterclockwise", "mixed"]
@@ -49,6 +50,9 @@ type PoiDropReason = Literal[
     "maximum_distance_rejected",
     "search_budget_exhausted",
     "lower_utility_candidate",
+    "profile_unreachable",
+    "profile_snap_too_far",
+    "no_profile_compatible_approach",
 ]
 type CandidateRole = Literal[
     "harmonious", "maximum_requested_coverage", "smooth_low_detour"
@@ -114,6 +118,7 @@ class CandidateScore(ImmutableModel):
     unknown_surface_penalty: NonNegativeFloat
     trail_like_reward: NonNegativeFloat
     hiking_network_reward: NonNegativeFloat
+    profile_quality_penalty: float = 0.0
 
 
 class RequestedTourPlace(ImmutableModel):
@@ -350,7 +355,7 @@ class AutoTourSearchRequest(ImmutableModel):
     maximum_distance_m: Annotated[float, Field(gt=0, le=200_000)] | None = None
     candidate_count: Annotated[int, Field(ge=1, le=5)] = 3
     seed: int = 0
-    profile: Literal["hike"] = "hike"
+    profile: RoutingProfileId
     direction_preference: DirectionPreference = "any"
     hard_waypoints: Annotated[tuple[Coordinate, ...], Field(max_length=6)] = ()
     requested_stops: Annotated[

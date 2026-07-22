@@ -13,6 +13,7 @@ from sugarglider.planning.auto_tour.models import (
     PoiRewardBreakdown,
     TourControlComparison,
 )
+from sugarglider.planning.profile_quality import profile_quality_components
 from sugarglider.planning.result import PlanCandidate
 from sugarglider.pois.models import PoiCategory, PoiFeature
 
@@ -65,24 +66,21 @@ def score_route(
     repetition_penalty = (
         resolved.repetition * route.analysis.repetition.repeated_distance.share
     )
-    major_road_penalty = resolved.major_road * route.analysis.major_road.share
-    paved_penalty = resolved.paved * route.analysis.paved.share
-    unknown_surface_penalty = (
-        resolved.unknown_surface * route.analysis.unknown_surface.share
+    profile_quality_penalty, profile_components, _severe = profile_quality_components(
+        route
     )
-    trail_like_reward = resolved.trail_like * route.analysis.trail_like.share
-    hiking_network_reward = (
-        resolved.hiking_network * route.analysis.official_hiking_network.share
+    major_road_penalty = profile_components.get("major_road_penalty", 0.0)
+    paved_penalty = profile_components.get("paved_penalty", 0.0)
+    unknown_surface_penalty = profile_components.get("unknown_surface_penalty", 0.0)
+    trail_like_reward = profile_components.get("trail_like_reward", 0.0)
+    hiking_network_reward = profile_components.get(
+        "official_hiking_network_reward", 0.0
     )
     return CandidateScore(
         total=(
             resolved.distance_error * distance_error_ratio
             + repetition_penalty
-            + major_road_penalty
-            + paved_penalty
-            + unknown_surface_penalty
-            - trail_like_reward
-            - hiking_network_reward
+            + profile_quality_penalty
         ),
         distance_error_ratio=distance_error_ratio,
         repetition_penalty=repetition_penalty,
@@ -91,6 +89,7 @@ def score_route(
         unknown_surface_penalty=unknown_surface_penalty,
         trail_like_reward=trail_like_reward,
         hiking_network_reward=hiking_network_reward,
+        profile_quality_penalty=profile_quality_penalty,
     )
 
 

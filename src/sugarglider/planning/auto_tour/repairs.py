@@ -124,6 +124,7 @@ class RepairSearchMixin:
                     name=request.name,
                     path=path,
                     input_point_count=len(points),
+                    routing_profile=request.profile,
                 )
             except RoutingUpstreamError:
                 continue
@@ -250,6 +251,7 @@ class RepairSearchMixin:
                             name=request.name,
                             path=beam_state.composed_path,
                             input_point_count=len(source.draft.routing_points),
+                            routing_profile=request.profile,
                         )
                     except RoutingUpstreamError:
                         continue
@@ -392,6 +394,7 @@ class RepairSearchMixin:
                         name=request.name,
                         path=path,
                         input_point_count=len(points),
+                        routing_profile=request.profile,
                     )
                 except RoutingUpstreamError:
                     continue
@@ -549,6 +552,7 @@ class RepairSearchMixin:
                 name=request.name,
                 path=path,
                 input_point_count=len(points),
+                routing_profile=request.profile,
             )
         except RoutingUpstreamError:
             return None

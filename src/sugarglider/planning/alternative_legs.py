@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from sugarglider.domain.models import Coordinate, RouteResult
+from sugarglider.planning.profiles import RoutingProfileId
 from sugarglider.planning.routing_gateway import SearchBudgetExhaustedError
 from sugarglider.planning.signatures import candidate_signature
 from sugarglider.routing.backend import RoutedPath, RoutingBackend
@@ -77,7 +78,7 @@ class LowOverlapBeamSearch:
         *,
         name: str,
         routing_points: tuple[Coordinate, ...],
-        profile: str,
+        profile: RoutingProfileId,
         target_distance_m: float,
         input_point_count: int,
         closed: bool = True,
@@ -119,6 +120,7 @@ class LowOverlapBeamSearch:
                         name=name,
                         path=composed,
                         input_point_count=input_point_count,
+                        routing_profile=profile,
                     )
                     expanded.append(
                         _beam_state(
@@ -148,6 +150,7 @@ class LowOverlapBeamSearch:
                 name=name,
                 path=state.composed_path,
                 input_point_count=input_point_count,
+                routing_profile=profile,
             ).analysis.repetition.edge_id_coverage.share
             < MIN_LOW_OVERLAP_EDGE_COVERAGE
             for state in beam
@@ -156,7 +159,7 @@ class LowOverlapBeamSearch:
         return LowOverlapSearchResult(beam, tuple(sorted(warnings)))
 
     async def _alternatives(
-        self, start: Coordinate, end: Coordinate, profile: str
+        self, start: Coordinate, end: Coordinate, profile: RoutingProfileId
     ) -> tuple[RoutedPath, ...]:
         alternatives = await self.backend.alternative_routes(
             start,

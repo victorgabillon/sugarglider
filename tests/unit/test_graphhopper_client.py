@@ -14,6 +14,7 @@ from sugarglider.routing.graphhopper import (
     RoutingUnavailableError,
     RoutingUpstreamError,
 )
+from sugarglider.routing.profiles import RoutingProfileId, routing_profile
 
 
 def route_payload(*, include_details: bool = True) -> dict[str, object]:
@@ -151,6 +152,48 @@ async def test_generated_route_sets_pass_through_without_changing_default() -> N
 
 
 @pytest.mark.asyncio
+async def test_every_profile_sends_exact_resolved_snap_preventions_and_mapping() -> (
+    None
+):
+    payloads: list[dict[str, object]] = []
+    profile_ids: tuple[RoutingProfileId, ...] = (
+        "trail_run",
+        "hike",
+        "city_bike",
+        "gravel_bike",
+        "mountain_bike",
+        "road_bike",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/info":
+            return httpx.Response(
+                200,
+                json={
+                    "profiles": [
+                        {"name": routing_profile(profile).graphhopper_profile}
+                        for profile in profile_ids
+                    ],
+                    "encoded_values": [],
+                },
+            )
+        payloads.append(cast(dict[str, object], json.loads(request.read())))
+        return httpx.Response(200, json=route_payload(include_details=False))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = GraphHopperClient("http://test", client=http_client)
+        points = (Coordinate(lat=48, lon=2), Coordinate(lat=49, lon=3))
+        for profile in profile_ids:
+            await client.route(points, profile)
+
+    for payload, profile_id in zip(payloads, profile_ids, strict=True):
+        resolved = routing_profile(profile_id)
+        assert payload["profile"] == resolved.graphhopper_profile
+        assert payload["snap_preventions"] == list(resolved.snap_preventions)
+        assert "steps" not in cast(list[object], payload["snap_preventions"])
+
+
+@pytest.mark.asyncio
 async def test_alternatives_post_full_parameters_and_parse_all_distinct_paths() -> None:
     captured: dict[str, object] = {}
 
@@ -179,22 +222,11 @@ async def test_alternatives_post_full_parameters_and_parse_all_distinct_paths() 
     assert payload["alternative_route.max_paths"] == 3
     assert payload["alternative_route.max_weight_factor"] == 1.6
     assert payload["alternative_route.max_share_factor"] == 0.5
-    assert payload["details"] == list(
-        (
-            "edge_id",
-            "osm_way_id",
-            "road_class",
-            "road_environment",
-            "surface",
-            "smoothness",
-            "track_type",
-            "hike_rating",
-            "foot_network",
-            "foot_priority",
-            "foot_road_access",
-            "car_access",
-        )
-    )
+    assert payload["snap_preventions"] == list(routing_profile("hike").snap_preventions)
+    assert payload["details"] == [
+        "edge_id",
+        *routing_profile("hike").requested_path_details,
+    ]
     assert [path.details["edge_id"][0].value for path in alternatives] == [7, 8]
 
 
@@ -309,6 +341,8 @@ async def test_round_trip_request_uses_local_post_parameters() -> None:
     assert '"round_trip.distance":10000' in body
     assert '"round_trip.seed":42' in body
     assert '"points_encoded":false' in body
+    payload = cast(dict[str, object], json.loads(body))
+    assert payload["snap_preventions"] == list(routing_profile("hike").snap_preventions)
     assert path.geometry[0] == path.geometry[-1]
     assert path.details == {}
 
@@ -388,6 +422,63 @@ async def test_info_excludes_unsupported_optional_details_and_is_cached() -> Non
         ["edge_id", "surface", "car_access"],
         ["edge_id", "surface", "car_access"],
     ]
+
+
+@pytest.mark.asyncio
+async def test_optional_detail_fallback_is_isolated_per_backend_profile() -> None:
+    requests: list[dict[str, object]] = []
+    rejected_trail_detail = False
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal rejected_trail_detail
+        if request.url.path == "/info":
+            return httpx.Response(
+                200,
+                json={
+                    "profiles": [
+                        {"name": profile.graphhopper_profile}
+                        for profile in (
+                            routing_profile("trail_run"),
+                            routing_profile("city_bike"),
+                        )
+                    ],
+                    "encoded_values": [
+                        "surface",
+                        "road_class",
+                        "smoothness",
+                        "hike_rating",
+                        "bike_network",
+                        "bike_access",
+                    ],
+                },
+            )
+        payload = cast(dict[str, object], json.loads(request.read()))
+        requests.append(payload)
+        details = cast(list[str], payload["details"])
+        if (
+            payload["profile"] == "trail_run"
+            and "hike_rating" in details
+            and not rejected_trail_detail
+        ):
+            rejected_trail_detail = True
+            return httpx.Response(
+                400, json={"message": "Unknown path detail: hike_rating"}
+            )
+        return httpx.Response(200, json=route_payload(include_details=False))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = GraphHopperClient("http://test", client=http_client)
+        points = (Coordinate(lat=48, lon=2), Coordinate(lat=49, lon=3))
+        await client.route(points, "trail_run")
+        await client.route(points, "city_bike")
+
+    assert [request["profile"] for request in requests] == [
+        "trail_run",
+        "trail_run",
+        "bike",
+    ]
+    assert "hike_rating" not in cast(list[str], requests[1]["details"])
+    assert "bike_network" in cast(list[str], requests[2]["details"])
 
 
 @pytest.mark.asyncio

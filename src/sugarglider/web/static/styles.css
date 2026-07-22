@@ -78,6 +78,9 @@ button:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity:
 .notice-mark { width: 1.8rem; height: 1.8rem; display: grid; place-items: center; border: 2px solid currentColor; border-radius: 50%; font-weight: 900; }
 .notice h2 { margin: 0 0 .15rem; font-size: .9rem; }
 .notice p { margin: 0; font-size: .8rem; line-height: 1.4; }
+.notice .error-code { margin-bottom: .2rem; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .7rem; font-weight: 750; }
+.notice .error-context { margin-top: .3rem; font-weight: 650; }
+.notice .error-suggestion { margin-top: .3rem; }
 .notice details { margin-top: .35rem; font-size: .72rem; }
 .notice pre { max-height: 10rem; margin: .35rem 0 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .notice > .icon-button { position: absolute; top: .35rem; right: .6rem; }

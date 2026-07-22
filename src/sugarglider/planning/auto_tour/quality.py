@@ -53,6 +53,7 @@ from sugarglider.planning.auto_tour.state import (
     _SearchState,
 )
 from sugarglider.planning.budget import SearchPhase
+from sugarglider.planning.profiles import RoutingProfileId
 from sugarglider.planning.routing_gateway import SearchBudgetExhaustedError
 from sugarglider.routing.backend import (
     RoutedPath,
@@ -379,17 +380,15 @@ class AutoTourQualityMixin:
     async def _route_points(
         self,
         points: tuple[Coordinate, ...],
-        profile: str,
+        profile: RoutingProfileId,
         phase: SearchPhase,
         state: _SearchState,
     ) -> RoutedPath | None:
-        if profile != "hike":
-            raise ValueError(f"unsupported routing profile {profile}")
         started = perf_counter()
         try:
             path = await state.context.routes.route(
                 points,
-                "hike",
+                profile,
                 pass_through=True,
                 phase=phase,
             )

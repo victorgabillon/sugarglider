@@ -1,56 +1,53 @@
-"""Routing-profile identities and immutable backend capabilities."""
+"""Planning-facing exports of the canonical routing-profile registry."""
 
-from typing import Literal
-
-from pydantic import ConfigDict
-
-from sugarglider.domain.models import ImmutableModel
-
-type RoutingProfileId = Literal["hike"]
-type GraphHopperProfile = Literal["hike"]
-type ActivityKind = Literal["walking"]
-type QualityMetricId = Literal[
-    "distance",
-    "repetition",
-    "immediate_backtracking",
-    "surface",
-    "trail_like",
-    "hiking_network",
-    "nature",
-    "loop_geometry",
-]
-
-
-class RoutingProfile(ImmutableModel):
-    """One public activity mapped explicitly to a configured routing backend."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    id: RoutingProfileId
-    graphhopper_profile: GraphHopperProfile
-    activity_kind: ActivityKind
-    allowed_quality_metrics: tuple[QualityMetricId, ...]
-
-
-HIKE_PROFILE = RoutingProfile(
-    id="hike",
-    graphhopper_profile="hike",
-    activity_kind="walking",
-    allowed_quality_metrics=(
-        "distance",
-        "repetition",
-        "immediate_backtracking",
-        "surface",
-        "trail_like",
-        "hiking_network",
-        "nature",
-        "loop_geometry",
-    ),
+from sugarglider.routing.profiles import (
+    BICYCLE_DETAILS as BICYCLE_DETAILS,
 )
-
-_PROFILES: dict[RoutingProfileId, RoutingProfile] = {"hike": HIKE_PROFILE}
-
-
-def routing_profile(profile_id: RoutingProfileId) -> RoutingProfile:
-    """Resolve a validated public ID without leaking backend strings to callers."""
-    return _PROFILES[profile_id]
+from sugarglider.routing.profiles import (
+    COMMON_DETAILS as COMMON_DETAILS,
+)
+from sugarglider.routing.profiles import (
+    FOOT_DETAILS as FOOT_DETAILS,
+)
+from sugarglider.routing.profiles import (
+    ROUTING_PROFILES as ROUTING_PROFILES,
+)
+from sugarglider.routing.profiles import (
+    AccessMode as AccessMode,
+)
+from sugarglider.routing.profiles import (
+    ActivityKind as ActivityKind,
+)
+from sugarglider.routing.profiles import (
+    GraphHopperProfile as GraphHopperProfile,
+)
+from sugarglider.routing.profiles import (
+    PublicRoutingProfile as PublicRoutingProfile,
+)
+from sugarglider.routing.profiles import (
+    QualityMetricId as QualityMetricId,
+)
+from sugarglider.routing.profiles import (
+    RoutingProfile as RoutingProfile,
+)
+from sugarglider.routing.profiles import (
+    RoutingProfileCapabilities as RoutingProfileCapabilities,
+)
+from sugarglider.routing.profiles import (
+    RoutingProfileCatalog as RoutingProfileCatalog,
+)
+from sugarglider.routing.profiles import (
+    RoutingProfileId as RoutingProfileId,
+)
+from sugarglider.routing.profiles import (
+    RoutingProfileStatus as RoutingProfileStatus,
+)
+from sugarglider.routing.profiles import (
+    public_profile as public_profile,
+)
+from sugarglider.routing.profiles import (
+    routing_profile as routing_profile,
+)
+from sugarglider.routing.profiles import (
+    routing_profile_catalog as routing_profile_catalog,
+)

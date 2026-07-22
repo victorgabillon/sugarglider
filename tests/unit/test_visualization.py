@@ -38,6 +38,7 @@ def route(
     total = distance_m if distance_m is not None else float(len(geometry) - 1) * 100
     return RouteResult(
         name="Visualization route",
+        routing_profile="hike",
         summary=RouteSummary(
             distance_m=total,
             duration_ms=1,

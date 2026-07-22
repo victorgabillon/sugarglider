@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "kind": "waypoint_route",
+  "name": "Bastille to Marly road bike",
+  "topology": "point_to_point",
+  "start": {"lat": 48.853, "lon": 2.369, "name": "Place de la Bastille"},
+  "end": {"lat": 48.871389, "lon": 2.096667, "name": "Gare de Marly-le-Roi"},
+  "routing_profile": "road_bike",
+  "candidate_count": 3,
+  "seed": 42,
+  "distance_objective": {"target_m": 25000, "tolerance_m": 2500, "maximum_m": null, "priority": "flexible"},
+  "preferences": {"nature": "off", "path_selection": "low_overlap", "loop_geometry": "off"},
+  "waypoints": [],
+  "waypoint_order": "fixed"
+}

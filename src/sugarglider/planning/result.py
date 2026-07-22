@@ -12,6 +12,7 @@ from sugarglider.planning.models import (
     RequestedStopImportance,
     RouteTopology,
 )
+from sugarglider.planning.profiles import RoutingProfileId
 from sugarglider.pois.models import PoiApproachCandidate
 
 type CandidateRole = Literal[
@@ -78,6 +79,7 @@ class PlanCandidateDiagnostics(CanonicalModel):
 
 class PlanCandidate(CanonicalModel):
     id: str
+    routing_profile: RoutingProfileId
     rank: int = Field(ge=1)
     roles: tuple[CandidateRole, ...]
     route: RouteResult
@@ -111,6 +113,7 @@ class PlanResult(CanonicalModel):
     schema_version: Literal[1] = 1
     kind: PlanKind
     topology: RouteTopology
+    routing_profile: RoutingProfileId
     effective_start: Coordinate
     effective_end: Coordinate
     candidates: tuple[PlanCandidate, ...]

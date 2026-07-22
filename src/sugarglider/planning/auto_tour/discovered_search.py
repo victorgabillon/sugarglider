@@ -174,6 +174,7 @@ class DiscoveredSearchMixin:
                 name=request.name,
                 path=path,
                 input_point_count=len(points),
+                routing_profile=request.profile,
             )
         except RoutingUpstreamError:
             return None

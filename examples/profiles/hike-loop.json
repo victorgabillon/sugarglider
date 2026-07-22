@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "kind": "auto_tour",
+  "name": "Marly hike loop",
+  "topology": "loop",
+  "start": {"lat": 48.871389, "lon": 2.096667, "name": "Marly station"},
+  "end": null,
+  "routing_profile": "hike",
+  "candidate_count": 3,
+  "seed": 42,
+  "distance_objective": {"target_m": 20000, "tolerance_m": 2000, "maximum_m": null, "priority": "flexible"},
+  "preferences": {"nature": "prefer", "path_selection": "low_overlap", "scenic": "prefer", "drinking_water": "prefer", "loop_geometry": "prefer", "direction": "any"},
+  "hard_waypoints": [],
+  "requested_stops": [],
+  "preferred_discovered_poi_ids": [],
+  "free_poi_spur_physical_m": 200
+}

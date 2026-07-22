@@ -9,6 +9,10 @@ class RoutingUnavailableError(RoutingError):
     """The configured routing backend could not be reached."""
 
 
+class RoutingProfileUnavailableError(RoutingError):
+    """A valid public profile is not loaded by the routing backend."""
+
+
 class RoutingTimeoutError(RoutingError):
     """The configured routing backend exceeded its timeout."""
 

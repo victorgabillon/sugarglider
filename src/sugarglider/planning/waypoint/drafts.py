@@ -18,6 +18,7 @@ def waypoint_draft(
         name=request.name,
         path=path,
         input_point_count=len(proposal.routing_points),
+        routing_profile=request.routing_profile,
     )
     return CandidateDraft(
         route=route,

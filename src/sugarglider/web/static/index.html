@@ -40,11 +40,14 @@
       </nav>
     </header>
 
-    <section id="error-banner" class="notice error hidden" role="alert" aria-labelledby="error-title">
+    <section id="error-banner" class="notice error hidden" role="alert" aria-live="assertive" aria-atomic="true" aria-labelledby="error-title">
       <div class="notice-mark" aria-hidden="true">!</div>
       <div class="notice-copy">
         <h2 id="error-title">Something needs attention</h2>
+        <p id="error-code" class="error-code hidden"></p>
         <p id="error-message"></p>
+        <p id="error-context" class="error-context hidden"></p>
+        <p id="error-suggestion" class="error-suggestion hidden"></p>
         <details><summary>Technical details</summary><pre id="error-details"></pre></details>
       </div>
       <button id="dismiss-error" class="icon-button" type="button" data-icon="close" aria-label="Dismiss error" title="Dismiss error"></button>
@@ -77,8 +80,9 @@
             </div>
             <div class="field-pair">
               <label>Candidates<select id="candidate-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
-              <label>Profile<select id="profile" disabled><option>hike</option></select></label>
+              <label>Activity profile<select id="profile" aria-describedby="profile-description"></select></label>
             </div>
+            <p id="profile-description" class="field-help" role="status">Loading routing profiles…</p>
             <label>Route topology<select id="route-topology"><option value="loop">Loop</option><option value="point_to_point">Point to point</option></select></label>
             <section class="endpoint-controls" aria-label="Optional hard endpoints">
               <fieldset class="endpoint-control" id="hard-start-control">

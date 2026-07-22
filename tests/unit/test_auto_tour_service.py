@@ -36,6 +36,7 @@ from sugarglider.routing.backend import (
     RoutedPath,
 )
 from sugarglider.routing.errors import RoutingPointError, RoutingUpstreamError
+from sugarglider.routing.profiles import RoutingProfileId
 from sugarglider.routing.result import RouteResultFactory
 
 START = Coordinate(lat=48.87, lon=2.09, name="Station")
@@ -49,8 +50,15 @@ def _coordinate(x: float, y: float) -> Coordinate:
 
 
 class _Backend:
-    def __init__(self, *, fail_isochrone: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fail_isochrone: bool = False,
+        expected_profile: RoutingProfileId = "hike",
+    ) -> None:
         self.fail_isochrone = fail_isochrone
+        self.expected_profile = expected_profile
+        self.profiles: list[str] = []
         self.isochrone_calls = 0
         self.route_calls = 0
         self.round_trip_calls = 0
@@ -67,7 +75,8 @@ class _Backend:
         self.isochrone_calls += 1
         if self.fail_isochrone:
             raise RoutingUpstreamError("synthetic isochrone failure")
-        assert profile == "hike"
+        self.profiles.append(profile)
+        assert profile == self.expected_profile
         assert distance_limit_m == 5_000
         assert buckets == 1
         assert not reverse_flow
@@ -91,7 +100,8 @@ class _Backend:
         pass_through: bool = False,
     ) -> RoutedPath:
         self.route_calls += 1
-        assert profile == "hike"
+        self.profiles.append(profile)
+        assert profile == self.expected_profile
         assert pass_through
         geometry = tuple((point.lon, point.lat) for point in points)
         distance = sum(
@@ -110,7 +120,8 @@ class _Backend:
         heading_degrees: float | None = None,
     ) -> RoutedPath:
         self.round_trip_calls += 1
-        assert profile == "hike"
+        self.profiles.append(profile)
+        assert profile == self.expected_profile
         assert heading_degrees is not None
         size = distance_m / 4
         # Alternate broad rotation while retaining deterministic heading influence.
@@ -136,6 +147,8 @@ class _Backend:
         max_weight_factor: float = 1.6,
         max_share_factor: float = 0.5,
     ) -> tuple[RoutedPath, ...]:
+        self.profiles.append(profile)
+        assert profile == self.expected_profile
         geometry = ((start.lon, start.lat), (end.lon, end.lat))
         return (_path(geometry, haversine_distance_m(*geometry), snapped=geometry),)
 
@@ -448,6 +461,37 @@ def test_named_default_budgets_are_exact_and_bounded() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "profile",
+    (
+        "trail_run",
+        "hike",
+        "city_bike",
+        "gravel_bike",
+        "mountain_bike",
+        "road_bike",
+    ),
+)
+async def test_every_public_profile_propagates_through_auto_tour(
+    profile: RoutingProfileId,
+) -> None:
+    backend = _Backend(expected_profile=profile)
+    result = await _service(backend, poi_index=None).generate(
+        AutoTourSearchRequest(
+            profile=profile,
+            start=START,
+            target_distance_m=10_000,
+            seed=42,
+        )
+    )
+    assert backend.profiles and set(backend.profiles) == {profile}
+    assert result.control.route.routing_profile == profile
+    assert all(
+        candidate.route.routing_profile == profile for candidate in result.candidates
+    )
+
+
+@pytest.mark.asyncio
 async def test_route_aware_beam_prefers_better_routed_entrance() -> None:
     end = _coordinate(1_000, 0)
     nearer = _coordinate(500, 30)
@@ -509,6 +553,7 @@ async def test_route_aware_beam_prefers_better_routed_entrance() -> None:
     )
     result = await _service(_MultipleEntranceBackend(nearer), poi_index=index).generate(
         AutoTourSearchRequest(
+            profile="hike",
             start=START,
             end=end,
             topology="point_to_point",
@@ -546,7 +591,9 @@ async def test_route_aware_beam_prefers_better_routed_entrance() -> None:
 @pytest.mark.asyncio
 async def test_missing_poi_index_returns_deterministic_control() -> None:
     backend = _Backend()
-    request = AutoTourSearchRequest(start=START, target_distance_m=10_000, seed=42)
+    request = AutoTourSearchRequest(
+        profile="hike", start=START, target_distance_m=10_000, seed=42
+    )
     first = await _service(backend, poi_index=None).generate(request)
     second = await _service(_Backend(), poi_index=None).generate(request)
     assert first.control.signature == second.control.signature
@@ -566,7 +613,7 @@ async def test_missing_poi_index_returns_deterministic_control() -> None:
 async def test_isochrone_failure_falls_back_to_round_trip_controls() -> None:
     backend = _Backend(fail_isochrone=True)
     result = await _service(backend, poi_index=None).generate(
-        AutoTourSearchRequest(start=START, target_distance_m=10_000)
+        AutoTourSearchRequest(profile="hike", start=START, target_distance_m=10_000)
     )
     assert result.control.skeleton_method == "graphhopper_round_trip"
     assert result.search.skeleton_route_request_count == 2
@@ -587,6 +634,7 @@ async def test_fallback_returns_three_controls_and_deliberately_routes_castle() 
         _Backend(fail_isochrone=True), poi_index=_poi_index((castle,))
     ).generate(
         AutoTourSearchRequest(
+            profile="hike",
             start=START,
             target_distance_m=10_000,
             candidate_count=3,
@@ -618,6 +666,7 @@ async def test_requested_place_outside_poi_corridor_drives_fallback_route() -> N
     )
     result = await _service(_Backend(fail_isochrone=True), poi_index=None).generate(
         AutoTourSearchRequest(
+            profile="hike",
             start=START,
             target_distance_m=10_000,
             requested_stops=(requested,),
@@ -651,6 +700,7 @@ async def test_flexible_complete_requested_family_accounts_for_all_22_places() -
     )
     result = await service.generate(
         AutoTourSearchRequest(
+            profile="hike",
             start=START,
             target_distance_m=45_000,
             tolerance_m=2_000,
@@ -680,6 +730,7 @@ async def test_flexible_complete_requested_family_accounts_for_all_22_places() -
 
     nearby_result = await service.generate(
         AutoTourSearchRequest(
+            profile="hike",
             start=START,
             target_distance_m=46_000,
             tolerance_m=2_000,
@@ -710,6 +761,7 @@ async def test_requested_family_composes_legs_after_multi_point_failure() -> Non
     )
     result = await _service(backend, poi_index=None).generate(
         AutoTourSearchRequest(
+            profile="hike",
             start=START,
             target_distance_m=10_000,
             requested_stops=requested,
@@ -737,6 +789,7 @@ async def test_distance_ceiling_keeps_maximum_requested_subset_with_reasons() ->
     )
     result = await _service(_Backend(fail_isochrone=True), poi_index=None).generate(
         AutoTourSearchRequest(
+            profile="hike",
             start=START,
             target_distance_m=10_000,
             maximum_distance_m=15_000,
@@ -793,6 +846,7 @@ async def test_dropped_soft_requested_hook_is_removed_inside_repair_budget() -> 
     )
     result = await service.generate(
         AutoTourSearchRequest(
+            profile="hike",
             start=START,
             target_distance_m=10_000,
             requested_stops=(reachable, dropped),
@@ -832,6 +886,7 @@ async def test_corridor_continuation_repairs_singleton_out_and_back() -> None:
     )
     result = await service.generate(
         AutoTourSearchRequest(
+            profile="hike",
             start=START,
             target_distance_m=10_000,
             preferred_poi_ids=(pivot.id,),
@@ -859,7 +914,9 @@ async def test_corridor_continuation_repairs_singleton_out_and_back() -> None:
 async def test_soft_pois_can_win_without_quality_regression() -> None:
     backend = _Backend()
     result = await _service(backend, poi_index=_poi_index()).generate(
-        AutoTourSearchRequest(start=START, target_distance_m=10_000, tolerance_m=2_000)
+        AutoTourSearchRequest(
+            profile="hike", start=START, target_distance_m=10_000, tolerance_m=2_000
+        )
     )
     recommended = result.candidates[0]
     assert recommended.control_eligible
@@ -885,6 +942,7 @@ async def test_explicit_direction_preference_is_respected_after_route_analysis()
 ):
     result = await _service(_Backend(), poi_index=None).generate(
         AutoTourSearchRequest(
+            profile="hike",
             start=START,
             target_distance_m=10_000,
             direction_preference="clockwise",
@@ -901,6 +959,7 @@ async def test_open_auto_tour_uses_direct_graph_route_and_never_returns_to_start
     backend = _Backend()
     end = _coordinate(12_000, 2_000)
     request = AutoTourSearchRequest(
+        profile="hike",
         start=START,
         end=end,
         topology="point_to_point",
@@ -953,6 +1012,7 @@ async def test_flexible_open_route_retains_complete_coverage_above_old_ceiling()
         for index in range(1, 4)
     )
     request = AutoTourSearchRequest(
+        profile="hike",
         start=START,
         end=end,
         topology="point_to_point",
@@ -997,6 +1057,7 @@ async def test_open_user_maximum_prunes_with_specific_reasons() -> None:
     )
     result = await _service(_Backend(), poi_index=None).generate(
         AutoTourSearchRequest(
+            profile="hike",
             start=START,
             end=end,
             topology="point_to_point",
@@ -1024,6 +1085,7 @@ async def test_open_user_maximum_below_direct_route_is_rejected() -> None:
     with pytest.raises(AutoTourMaximumBelowDirectLowerBoundError):
         await _service(_Backend(), poi_index=None).generate(
             AutoTourSearchRequest(
+                profile="hike",
                 start=START,
                 end=_coordinate(12_000, 0),
                 topology="point_to_point",
@@ -1043,6 +1105,7 @@ async def test_open_flexible_server_maximum_has_specific_rejection_reason() -> N
     )
     result = await _service(_Backend(), poi_index=None).generate(
         AutoTourSearchRequest(
+            profile="hike",
             start=START,
             end=_coordinate(30_000, 0),
             topology="point_to_point",
@@ -1079,6 +1142,7 @@ async def test_open_balanced_retains_target_derived_maximum() -> None:
     )
     result = await _service(_Backend(), poi_index=None).generate(
         AutoTourSearchRequest(
+            profile="hike",
             start=START,
             end=_coordinate(12_000, 0),
             topology="point_to_point",

@@ -7,6 +7,7 @@ from typing import Protocol
 from shapely.geometry import MultiPolygon, Polygon
 
 from sugarglider.domain.models import Coordinate, GeoJsonPosition, PathDetailSegment
+from sugarglider.routing.profiles import RoutingProfileId
 
 
 @dataclass(frozen=True)
@@ -54,7 +55,7 @@ class RoutingBackend(Protocol):
     async def route(
         self,
         points: tuple[Coordinate, ...],
-        profile: str = "hike",
+        profile: RoutingProfileId = "hike",
         *,
         pass_through: bool = False,
     ) -> RoutedPath: ...
@@ -64,14 +65,14 @@ class RoutingBackend(Protocol):
         start: Coordinate,
         distance_m: float,
         seed: int,
-        profile: str = "hike",
+        profile: RoutingProfileId = "hike",
     ) -> RoutedPath: ...
 
     async def alternative_routes(
         self,
         start: Coordinate,
         end: Coordinate,
-        profile: str = "hike",
+        profile: RoutingProfileId = "hike",
         *,
         max_paths: int = 3,
         max_weight_factor: float = 1.6,
@@ -87,7 +88,7 @@ class AutoTourRoutingBackend(RoutingBackend, Protocol):
         start: Coordinate,
         distance_m: float,
         seed: int,
-        profile: str = "hike",
+        profile: RoutingProfileId = "hike",
         *,
         heading_degrees: float | None = None,
     ) -> RoutedPath: ...
@@ -95,7 +96,7 @@ class AutoTourRoutingBackend(RoutingBackend, Protocol):
     async def isochrone(
         self,
         start: Coordinate,
-        profile: str,
+        profile: RoutingProfileId,
         *,
         distance_limit_m: float,
         buckets: int = 1,

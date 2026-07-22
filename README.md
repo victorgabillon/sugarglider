@@ -4,11 +4,11 @@
 
 # Sugarglider
 
-Sugarglider generates deterministic hiking plans on real OpenStreetMap paths through
-a self-hosted GraphHopper 11 instance. It supports preference-driven Auto Tours and
-routes through explicit waypoints. Every published candidate contains routed geometry,
-explainable structural analysis, a score, selected and dropped stops, and bounded-search
-diagnostics.
+Sugarglider generates deterministic walking, trail-running, and cycling plans on real
+OpenStreetMap paths through a self-hosted GraphHopper 11 instance. It supports
+preference-driven Auto Tours and routes through explicit waypoints. Every published
+candidate contains routed geometry, explainable structural and activity-specific
+analysis, a score, selected and dropped stops, and bounded-search diagnostics.
 
 This repository deliberately supports one public planning schema: version 1. Pre-PR14
 request JSON is not accepted at runtime.
@@ -45,6 +45,7 @@ route visualization remain separate:
 
 - `GET /health`
 - `GET /ready`
+- `GET /v2/routing-profiles`
 - `GET /v1/ui/config`
 - `GET /v1/nature/status`
 - `GET /v1/pois/status`
@@ -156,10 +157,27 @@ never an exponential exact TSP and never drops a mandatory waypoint.
 - balanced and strict plans require a maximum;
 - strict maximums must contain the complete target tolerance.
 
-The sole public routing profile is currently `hike`. The immutable profile registry
-owns the mapping to GraphHopper and declares activity kind and allowed quality metrics.
-This keeps the planning schema ready for future running and cycling profiles without
-publishing values for which no GraphHopper configuration exists.
+Every request must select exactly one public routing profile: `hike`, `trail_run`,
+`city_bike`, `gravel_bike`, `mountain_bike`, or `road_bike`. Backend names are not API
+values and aliases are rejected. The immutable routing registry owns backend mapping,
+activity kind, requested path details, snap preventions, public labels, capabilities,
+and metric ordering. `GET /v2/routing-profiles` returns that public catalog in stable
+order with safe runtime availability; packaged readiness requires all six profiles.
+
+GraphHopper still has elevation disabled, so every profile truthfully reports
+`elevation_aware: false`. Profiles are preferences over mapped OSM data, not guarantees
+of safety, legality, current opening, surface condition, or rideability. Rebuild the
+graph after profile, encoded-value, custom-model, or GraphHopper-version changes:
+
+```sh
+make rebuild-graph
+```
+
+The old graph is moved to a timestamped backup under `data/graph-cache-backups`; it is
+not silently reused or deleted. Six ready-to-send requests are in
+[`examples/profiles`](examples/profiles). See
+[`docs/pr15-routing-profiles.md`](docs/pr15-routing-profiles.md) for mapping, model
+intent, acceptance commands, and resource reporting.
 
 ## Results and explainability
 
@@ -234,8 +252,8 @@ domain / analysis / routing / pois
           api / gpx / web
 ```
 
-The canonical planning package owns models, results, profiles, typed budgets, shared
-candidate drafts, final evaluation, portfolio construction, and mode-specific
+The canonical planning package owns models, results, typed budgets, shared candidate
+drafts, profile-quality policy, final evaluation, portfolio construction, and mode-specific
 producers. Each generation request creates one `PlanningSearchContext`; its cached
 routing gateway is the only component that reserves route-call budget. Cache
 diagnostics separately report lookups, hits, misses, successful/failed entries,
@@ -245,8 +263,8 @@ Waypoint Route consumes `WaypointPlanRequest` directly. Its service only orchest
 endpoint-fixed controls, bounded deterministic ordering proposals, gateway routing,
 shared draft evaluation, and portfolio publication. There is no runtime planning
 adapter and no request conversion to the deleted generation or tours packages. The
-canonical routing-profile ID remains the single profile key in cache entries, leaving
-the public boundary ready for PR15 profile additions.
+cache identity includes public and resolved backend profile identity plus routing
+options, preventing cross-profile reuse.
 
 Target-distance proposals remain graph-derived: loops use routed round-trip geometry,
 while point-to-point plans use routed alternative-leg geometry without closing or
@@ -266,8 +284,8 @@ assigns public roles and ranks.
 
 The offline `sugarglider-migrate-plan` command is included in wheels. It is the only
 legacy-request conversion surface; runtime HTTP planning accepts canonical schema
-version 1 only. Cache keys already include the canonical routing-profile ID, preparing
-the boundary for PR15 routing-profile options without adding them in PR14.
+version 1 only. Candidate/result identity, route signatures, diagnostics, and GPX
+metadata preserve the selected public profile without exposing backend profile names.
 
 Domain code does not import FastAPI. Routing does not import API code, POIs do not
 import planning, and generic analysis does not import planning-service models.

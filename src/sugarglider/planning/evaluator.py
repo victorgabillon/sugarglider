@@ -5,6 +5,7 @@ from typing import Protocol
 
 from sugarglider.planning.drafts import CandidateDraft
 from sugarglider.planning.models import PlanRequestBase
+from sugarglider.planning.profile_quality import profile_quality_components
 from sugarglider.planning.result import (
     PlanCandidate,
     PlanCandidateDiagnostics,
@@ -42,6 +43,7 @@ class CandidateEvaluator:
                 name=route.name,
                 path=draft.routed_path,
                 input_point_count=route.summary.input_point_count,
+                routing_profile=request.routing_profile,
             )
             draft = replace(draft, route=route)
         score = scorer.score(request=request, draft=draft)
@@ -54,8 +56,16 @@ class CandidateEvaluator:
             else request.distance_objective.maximum_m
         )
         analysis = route.analysis
+        _quality_total, _quality_components, profile_incompatible = (
+            profile_quality_components(route)
+        )
         candidate = PlanCandidate(
-            id=candidate_signature(route, topology=draft.topology),
+            id=candidate_signature(
+                route,
+                topology=draft.topology,
+                routing_profile=request.routing_profile,
+            ),
+            routing_profile=request.routing_profile,
             rank=1,
             roles=(),
             route=route,
@@ -65,6 +75,7 @@ class CandidateEvaluator:
             diagnostics=PlanCandidateDiagnostics(
                 safety_eligible=(
                     draft.structural_safety_eligible
+                    and not profile_incompatible
                     and (
                         maximum_distance_m is None
                         or route.summary.distance_m <= maximum_distance_m

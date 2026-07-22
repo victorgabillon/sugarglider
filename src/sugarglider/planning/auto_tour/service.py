@@ -28,7 +28,7 @@ from sugarglider.planning.drafts import CandidateDraft
 from sugarglider.planning.evaluator import CandidateEvaluator
 from sugarglider.planning.models import AutoTourPlanRequest, PlanRequestBase
 from sugarglider.planning.pipeline import evaluate_candidate_portfolio
-from sugarglider.planning.profiles import routing_profile
+from sugarglider.planning.profile_quality import profile_aware_drop_reason
 from sugarglider.planning.result import (
     DroppedPlanStop,
     PlanResult,
@@ -100,6 +100,7 @@ class AutoTourCandidateScorer:
                 "unknown_surface_penalty": route_score.unknown_surface_penalty,
                 "trail_like_reward": route_score.trail_like_reward,
                 "hiking_network_reward": route_score.hiking_network_reward,
+                "profile_quality_penalty": route_score.profile_quality_penalty,
                 "poi_reward": dict(draft.quality_inputs).get("poi_reward", 0.0),
             },
         )
@@ -134,6 +135,7 @@ class AutoTourPlanner:
         return PlanResult(
             kind=request.kind,
             topology=request.topology,
+            routing_profile=request.routing_profile,
             effective_start=request.start,
             effective_end=request.effective_end,
             candidates=evaluated.candidates,
@@ -154,7 +156,7 @@ def _search_request(request: AutoTourPlanRequest) -> AutoTourSearchRequest:
         maximum_distance_m=objective.maximum_m,
         candidate_count=request.candidate_count,
         seed=request.seed,
-        profile=routing_profile(request.routing_profile).graphhopper_profile,
+        profile=request.routing_profile,
         direction_preference=preferences.direction,
         hard_waypoints=request.hard_waypoints,
         requested_stops=tuple(
@@ -241,6 +243,7 @@ def _dropped_stop(
     stop: DroppedPoiStop, request: AutoTourPlanRequest
 ) -> DroppedPlanStop:
     semantic = stop.semantic_poi
+    reason = profile_aware_drop_reason(request.routing_profile, stop.drop_reason)
     return DroppedPlanStop(
         id=semantic.id,
         name=semantic.name,
@@ -248,7 +251,7 @@ def _dropped_stop(
         category=semantic.category,
         importance=semantic.importance,
         selection_origin=_origin(semantic.origin, semantic.id, request),
-        reason=stop.drop_reason,
+        reason=reason,
         considered_approaches=stop.approach_candidates_considered,
     )
 

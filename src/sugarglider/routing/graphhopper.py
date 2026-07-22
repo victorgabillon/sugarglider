@@ -21,9 +21,16 @@ from sugarglider.routing.backend import IsochronePolygon, IsochroneResult, Route
 from sugarglider.routing.errors import (
     RoutingError,
     RoutingPointError,
+    RoutingProfileUnavailableError,
     RoutingTimeoutError,
     RoutingUnavailableError,
     RoutingUpstreamError,
+)
+from sugarglider.routing.profiles import (
+    ROUTING_PROFILES,
+    GraphHopperProfile,
+    RoutingProfileId,
+    routing_profile,
 )
 
 __all__ = [
@@ -31,6 +38,7 @@ __all__ = [
     "GraphHopperPath",
     "RoutingError",
     "RoutingPointError",
+    "RoutingProfileUnavailableError",
     "RoutingTimeoutError",
     "RoutingUnavailableError",
     "RoutingUpstreamError",
@@ -42,20 +50,6 @@ type JsonObject = dict[str, object]
 type QueryValue = str | int | float | bool
 
 BUILTIN_DETAILS = ("edge_id",)
-OPTIONAL_DETAILS = (
-    "osm_way_id",
-    "road_class",
-    "road_environment",
-    "surface",
-    "smoothness",
-    "track_type",
-    "hike_rating",
-    "foot_network",
-    "foot_priority",
-    "foot_road_access",
-    "car_access",
-)
-REQUESTED_DETAILS = (*BUILTIN_DETAILS, *OPTIONAL_DETAILS)
 
 
 GraphHopperPath = RoutedPath
@@ -73,7 +67,8 @@ class GraphHopperClient:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout_seconds
         self._client = client
-        self._supported_details: tuple[str, ...] | None = None
+        self._supported_details: dict[GraphHopperProfile, tuple[str, ...]] = {}
+        self._advertised_profiles: frozenset[str] | None = None
 
     async def info(self) -> JsonObject:
         """Return validated-enough server information for readiness checks."""
@@ -85,56 +80,80 @@ class GraphHopperClient:
         self._cache_supported_details(payload)
         return payload
 
-    async def is_ready(self, profile: str = "hike") -> bool:
-        """Return whether GraphHopper advertises the requested profile."""
+    async def available_profiles(self) -> frozenset[str]:
+        """Return the safe set of backend profile names advertised by `/info`."""
         payload = await self.info()
         profiles = cast(Sequence[object], payload["profiles"])
+        names: set[str] = set()
         for item in profiles:
-            if isinstance(item, str) and item == profile:
-                return True
-            if isinstance(item, Mapping) and item.get("name") == profile:
-                return True
-        return False
+            if isinstance(item, str):
+                names.add(item)
+            elif isinstance(item, Mapping) and isinstance(item.get("name"), str):
+                names.add(cast(str, item["name"]))
+        self._advertised_profiles = frozenset(names)
+        return self._advertised_profiles
+
+    async def ensure_profile_available(self, profile: RoutingProfileId) -> None:
+        available = self._advertised_profiles
+        if available is None:
+            return
+        if routing_profile(profile).graphhopper_profile not in available:
+            raise RoutingProfileUnavailableError(profile)
+
+    async def is_ready(self, profile: RoutingProfileId = "hike") -> bool:
+        """Return whether GraphHopper advertises one resolved public profile."""
+        return (
+            routing_profile(profile).graphhopper_profile
+            in await self.available_profiles()
+        )
 
     async def route(
         self,
         points: tuple[Coordinate, ...],
-        profile: str = "hike",
+        profile: RoutingProfileId = "hike",
         *,
         pass_through: bool = False,
     ) -> RoutedPath:
         """Route ordered points, preserving GraphHopper's GeoJSON coordinate order."""
-        requested_details = list(await self._details_for_route())
+        resolved = routing_profile(profile)
+        await self.ensure_profile_available(profile)
+        requested_details = list(await self._details_for_route(profile))
+        await self.ensure_profile_available(profile)
         payload: JsonObject = {
             "points": [[point.lon, point.lat] for point in points],
-            "profile": profile,
+            "profile": resolved.graphhopper_profile,
             "points_encoded": False,
             "instructions": False,
             "calc_points": True,
             "elevation": False,
-            "snap_preventions": ["motorway", "trunk", "ferry"],
+            "snap_preventions": list(resolved.snap_preventions),
             "details": requested_details,
         }
         if pass_through:
             payload["pass_through"] = True
-        response = await self._request_with_detail_fallback(payload, requested_details)
+        response = await self._request_with_detail_fallback(
+            payload, requested_details, resolved.graphhopper_profile
+        )
         return self._parse_route(response, expected_snapped_point_count=len(points))
 
     async def alternative_routes(
         self,
         start: Coordinate,
         end: Coordinate,
-        profile: str = "hike",
+        profile: RoutingProfileId = "hike",
         *,
         max_paths: int = 3,
         max_weight_factor: float = 1.6,
         max_share_factor: float = 0.5,
     ) -> tuple[RoutedPath, ...]:
         """Return distinct GraphHopper alternatives for exactly one routed leg."""
-        requested_details = list(await self._details_for_route())
+        resolved = routing_profile(profile)
+        await self.ensure_profile_available(profile)
+        requested_details = list(await self._details_for_route(profile))
+        await self.ensure_profile_available(profile)
         payload: JsonObject = {
             "points": [[start.lon, start.lat], [end.lon, end.lat]],
-            "profile": profile,
+            "profile": resolved.graphhopper_profile,
             "algorithm": "alternative_route",
             "alternative_route.max_paths": max_paths,
             "alternative_route.max_weight_factor": max_weight_factor,
@@ -143,10 +162,12 @@ class GraphHopperClient:
             "instructions": False,
             "calc_points": True,
             "elevation": False,
-            "snap_preventions": ["motorway", "trunk", "ferry"],
+            "snap_preventions": list(resolved.snap_preventions),
             "details": requested_details,
         }
-        response = await self._request_with_detail_fallback(payload, requested_details)
+        response = await self._request_with_detail_fallback(
+            payload, requested_details, resolved.graphhopper_profile
+        )
         alternatives = self._parse_routes(
             response,
             expected_snapped_point_count=2,
@@ -168,7 +189,7 @@ class GraphHopperClient:
         start: Coordinate,
         distance_m: float,
         seed: int,
-        profile: str = "hike",
+        profile: RoutingProfileId = "hike",
         *,
         heading_degrees: float | None = None,
     ) -> RoutedPath:
@@ -179,10 +200,13 @@ class GraphHopperClient:
             not isfinite(heading_degrees) or not 0 <= heading_degrees < 360
         ):
             raise ValueError("round-trip heading must be within [0, 360)")
-        requested_details = list(await self._details_for_route())
+        resolved = routing_profile(profile)
+        await self.ensure_profile_available(profile)
+        requested_details = list(await self._details_for_route(profile))
+        await self.ensure_profile_available(profile)
         payload: JsonObject = {
             "points": [[start.lon, start.lat]],
-            "profile": profile,
+            "profile": resolved.graphhopper_profile,
             "algorithm": "round_trip",
             "round_trip.distance": distance_m,
             "round_trip.seed": seed,
@@ -190,17 +214,20 @@ class GraphHopperClient:
             "instructions": False,
             "calc_points": True,
             "elevation": False,
+            "snap_preventions": list(resolved.snap_preventions),
             "details": requested_details,
         }
         if heading_degrees is not None:
             payload["headings"] = [heading_degrees]
-        response = await self._request_with_detail_fallback(payload, requested_details)
+        response = await self._request_with_detail_fallback(
+            payload, requested_details, resolved.graphhopper_profile
+        )
         return self._parse_route(response, expected_snapped_point_count=None)
 
     async def isochrone(
         self,
         start: Coordinate,
-        profile: str,
+        profile: RoutingProfileId,
         *,
         distance_limit_m: float,
         buckets: int = 1,
@@ -211,12 +238,13 @@ class GraphHopperClient:
             raise ValueError("isochrone distance limit must be finite and positive")
         if buckets < 1:
             raise ValueError("isochrone buckets must be positive")
+        await self.ensure_profile_available(profile)
         response = await self._request(
             "GET",
             "/isochrone",
             params={
                 "point": f"{start.lat},{start.lon}",
-                "profile": profile,
+                "profile": routing_profile(profile).graphhopper_profile,
                 "distance_limit": distance_limit_m,
                 "buckets": buckets,
                 "reverse_flow": str(reverse_flow).lower(),
@@ -224,20 +252,26 @@ class GraphHopperClient:
         )
         return self._parse_isochrone(response)
 
-    async def _details_for_route(self) -> tuple[str, ...]:
-        if self._supported_details is not None:
-            return self._supported_details
+    async def _details_for_route(self, profile: RoutingProfileId) -> tuple[str, ...]:
+        resolved = routing_profile(profile)
+        cached = self._supported_details.get(resolved.graphhopper_profile)
+        if cached is not None:
+            return cached
         try:
             await self.info()
         except RoutingError:
             # Detail discovery is an optimization, not a routing prerequisite.
-            self._supported_details = REQUESTED_DETAILS
-        if self._supported_details is None:
-            self._supported_details = REQUESTED_DETAILS
-        return self._supported_details
+            pass
+        return self._supported_details.setdefault(
+            resolved.graphhopper_profile,
+            (*BUILTIN_DETAILS, *resolved.requested_path_details),
+        )
 
     async def _request_with_detail_fallback(
-        self, payload: JsonObject, requested_details: list[str]
+        self,
+        payload: JsonObject,
+        requested_details: list[str],
+        backend_profile: GraphHopperProfile,
     ) -> httpx.Response:
         """Retry the complete request after removing unsupported path details."""
         while True:
@@ -264,7 +298,7 @@ class GraphHopperClient:
                 else:
                     raise
                 payload["details"] = requested_details.copy()
-                self._supported_details = tuple(requested_details)
+                self._supported_details[backend_profile] = tuple(requested_details)
 
     def _cache_supported_details(self, payload: JsonObject) -> None:
         encoded_values = payload.get("encoded_values")
@@ -276,12 +310,16 @@ class GraphHopperClient:
         ):
             supported = {value for value in encoded_values if isinstance(value, str)}
         else:
-            self._supported_details = REQUESTED_DETAILS
             return
-        self._supported_details = (
-            *BUILTIN_DETAILS,
-            *(detail for detail in OPTIONAL_DETAILS if detail in supported),
-        )
+        for profile in ROUTING_PROFILES:
+            self._supported_details[profile.graphhopper_profile] = (
+                *BUILTIN_DETAILS,
+                *(
+                    detail
+                    for detail in profile.requested_path_details
+                    if detail in supported
+                ),
+            )
 
     async def _request(
         self,
