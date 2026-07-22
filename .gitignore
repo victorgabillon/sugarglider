@@ -20,6 +20,7 @@ data/osm/*
 !data/osm/.gitkeep
 data/graph-cache/*
 !data/graph-cache/.gitkeep
+data/graph-cache-backups/
 data/nature/*
 !data/nature/.gitkeep
 data/nature/*.json

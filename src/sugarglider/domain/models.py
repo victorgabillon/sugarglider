@@ -6,6 +6,15 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from sugarglider.domain.analysis import DetailValue, RouteAnalysis
 
+type RoutingProfileId = Literal[
+    "hike",
+    "trail_run",
+    "city_bike",
+    "gravel_bike",
+    "mountain_bike",
+    "road_bike",
+]
+
 Latitude = Annotated[float, Field(ge=-90, le=90)]
 Longitude = Annotated[float, Field(ge=-180, le=180)]
 GeoJsonPosition = tuple[Longitude, Latitude]
@@ -32,7 +41,7 @@ class RouteRequest(ImmutableModel):
     name: str = "Sugarglider route"
     points: Annotated[list[Coordinate], Field(min_length=2)]
     closed: bool = False
-    profile: Literal["hike"] = "hike"
+    profile: RoutingProfileId
     _input_point_count: int = PrivateAttr()
 
     @model_validator(mode="after")
@@ -81,6 +90,7 @@ class RouteResult(ImmutableModel):
     """A route computed on the GraphHopper/OSM network."""
 
     name: str
+    routing_profile: RoutingProfileId
     summary: RouteSummary
     geometry: tuple[GeoJsonPosition, ...]
     snapped_points: tuple[GeoJsonPosition, ...] | None = None

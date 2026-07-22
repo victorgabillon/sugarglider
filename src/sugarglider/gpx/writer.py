@@ -9,6 +9,7 @@ from shapely.geometry import Point
 
 from sugarglider.analysis.projection import LocalMetricProjection
 from sugarglider.domain.models import RouteResult
+from sugarglider.planning.profiles import routing_profile
 from sugarglider.planning.result import PlanCandidate, SelectedPlanStop
 
 GPX_NAMESPACE = "http://www.topografix.com/GPX/1/1"
@@ -48,17 +49,25 @@ def gpx_filename(name: str) -> str:
 
 def write_gpx(route: RouteResult) -> bytes:
     """Serialize exactly one GraphHopper track and no analysis extensions."""
+    profile = routing_profile(route.routing_profile)
+    route_name = f"{route.name} — {profile.display_name}"
     root = ElementTree.Element(
         _tag("gpx"),
         {"version": "1.1", "creator": "Sugarglider"},
     )
     metadata = ElementTree.SubElement(root, _tag("metadata"))
-    ElementTree.SubElement(metadata, _tag("name")).text = clean_xml_text(route.name)
-    ElementTree.SubElement(
-        metadata, _tag("desc")
-    ).text = "Trail route snapped to OpenStreetMap paths by GraphHopper."
+    ElementTree.SubElement(metadata, _tag("name")).text = clean_xml_text(route_name)
+    ElementTree.SubElement(metadata, _tag("desc")).text = (
+        "Route preference based on mapped OpenStreetMap data; conditions, access "
+        "and suitability must be checked locally."
+    )
     track = ElementTree.SubElement(root, _tag("trk"))
-    ElementTree.SubElement(track, _tag("name")).text = clean_xml_text(route.name)
+    ElementTree.SubElement(track, _tag("name")).text = clean_xml_text(route_name)
+    ElementTree.SubElement(track, _tag("type")).text = {
+        "walking": "hiking",
+        "running": "running",
+        "cycling": "cycling",
+    }[profile.activity_kind]
     segment = ElementTree.SubElement(track, _tag("trkseg"))
     for lon, lat in route.geometry:
         ElementTree.SubElement(

@@ -1,4 +1,4 @@
-import { ApiError, exportPlanCandidate, generatePlan, getConfig, getPoiStatus, searchPois, visualizeRoute } from "./api.js";
+import { ApiError, exportPlanCandidate, generatePlan, getConfig, getPoiStatus, getRoutingProfiles, searchPois, visualizeRoute } from "./api.js";
 import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
@@ -20,8 +20,19 @@ const PRIMARY_SCENIC_CATEGORIES = [
 ];
 const HYDRATION_CATEGORIES = ["drinking_water", "fountain", "water_tap"];
 
-function showError(message, details = "") {
+const GENERATION_SUGGESTION = "Use Auto Tour for approximate places, or remove or move the exact waypoint.";
+
+function showError(message, details = "", code = "", context = "", suggestion = "") {
+  const codeElement = byId("error-code");
+  const contextElement = byId("error-context");
+  const suggestionElement = byId("error-suggestion");
+  codeElement.textContent = code ? `Error code: ${code}` : "";
+  codeElement.classList.toggle("hidden", !code);
   byId("error-message").textContent = message;
+  contextElement.textContent = context;
+  contextElement.classList.toggle("hidden", !context);
+  suggestionElement.textContent = suggestion;
+  suggestionElement.classList.toggle("hidden", !suggestion);
   byId("error-details").textContent = details;
   byId("error-banner").classList.remove("hidden");
 }
@@ -206,6 +217,7 @@ function schedulePoiRefresh(bounds = currentViewportBounds()) {
 }
 
 function updateOptionsFromControls() {
+  state.routingProfile = byId("profile").value;
   state.options = {
     name: byId("route-name").value.trim() || "Sugarglider route",
     targetDistanceKm: Number(byId("target-distance").value),
@@ -229,6 +241,7 @@ function updateOptionsFromControls() {
 }
 
 function updateControlsFromOptions() {
+  byId("profile").value = state.routingProfile;
   byId("route-name").value = state.options.name;
   byId("target-distance").value = state.options.targetDistanceKm;
   byId("tolerance").value = state.options.toleranceKm;
@@ -244,6 +257,61 @@ function updateControlsFromOptions() {
   byId("maximum-distance").value = state.autoTour.maximumDistanceKm ?? "";
   byId("scenic-preference").value = state.autoTour.scenicPreference;
   byId("water-preference").value = state.autoTour.drinkingWaterPreference;
+  updateProfileDescription();
+}
+
+function renderRoutingProfiles() {
+  const select = byId("profile");
+  select.replaceChildren();
+  const groups = new Map([
+    ["running", "Running"],
+    ["walking", "Walking"],
+    ["cycling", "Cycling"],
+  ]);
+  for (const [kind, label] of groups) {
+    const statuses = state.routingProfileCatalog.profiles.filter(
+      (status) => status.profile.activity_kind === kind,
+    );
+    if (!statuses.length) continue;
+    const group = document.createElement("optgroup");
+    group.label = label;
+    statuses.forEach((status) => {
+      const option = document.createElement("option");
+      option.value = status.profile.id;
+      option.textContent = status.available
+        ? status.profile.display_name
+        : `${status.profile.display_name} — unavailable`;
+      option.disabled = !status.available;
+      group.append(option);
+    });
+    select.append(group);
+  }
+  const selected = selectedProfileStatus();
+  if (!selected?.available) {
+    state.routingProfile = state.routingProfileCatalog.profiles.find(
+      (status) => status.available,
+    )?.profile.id ?? null;
+  }
+  select.value = state.routingProfile ?? "";
+  updateProfileDescription();
+}
+
+function selectedProfileStatus(profileId = state.routingProfile) {
+  return state.routingProfileCatalog?.profiles.find(
+    (status) => status.profile.id === profileId,
+  ) ?? null;
+}
+
+function profileDisplayName(profileId) {
+  return selectedProfileStatus(profileId)?.profile.display_name
+    ?? friendlyLabel(profileId);
+}
+
+function updateProfileDescription() {
+  const status = selectedProfileStatus(byId("profile").value);
+  byId("profile-description").textContent = status
+    ? `${status.profile.short_description} Elevation-aware routing: ${status.profile.capabilities.elevation_aware ? "yes" : "no"}.${status.available ? "" : " This profile is unavailable in the routing backend."}`
+    : "Select a routing profile.";
 }
 
 function activeEndpoints() {
@@ -772,6 +840,7 @@ function renderMapData() {
 
 function candidateBadges(candidate, search) {
   const values = [];
+  values.push(`<span class="badge">${escapeHtml(profileDisplayName(candidate.routing_profile))}</span>`);
   for (const role of candidate.roles) {
     values.push(`<span class="badge">${escapeHtml(friendlyLabel(role))}</span>`);
   }
@@ -806,6 +875,68 @@ function metricBar(label, share, className, displayValue) {
   return `<div class="bar-metric ${className}"><div class="bar-heading"><span>${escapeHtml(label)}</span><strong>${escapeHtml(displayValue)}</strong></div><div class="metric-track" role="img" aria-label="${escapeHtml(`${label}: ${displayValue}`)}"><div class="metric-fill" style="--metric-value:${percentage.toFixed(3)}%"></div></div></div>`;
 }
 
+function primaryQualityMetric(analysis) {
+  const quality = analysis.activity_quality;
+  const covered = (detail) => Number(quality.detail_coverage?.[detail] ?? 0) > 0;
+  if (quality.activity_kind === "walking") return ["Trail-like", covered("road_class") ? quality.trail_like.share : null];
+  if (quality.activity_kind === "running") return ["Runnable surface", covered("surface") ? quality.runnable_surface.share : null];
+  if (quality.activity_kind === "cycling") {
+    return ["Cycling network", covered("bike_network") ? quality.cycling_network.share : null];
+  }
+  return null;
+}
+
+function activityQualitySection(analysis) {
+  const quality = analysis.activity_quality;
+  const metric = (label, value, detail) => {
+    const coverage = Number(quality.detail_coverage?.[detail] ?? 0);
+    return [
+      label,
+      coverage > 0
+        ? `${formatDistance(value.distance_m)} · ${formatPercent(value.share)}`
+        : "not evaluated",
+    ];
+  };
+  if (quality.activity_kind === "walking") {
+    return section("Hiking quality", [
+      metric("Trail-like", quality.trail_like, "road_class"),
+      metric("Hiking network", quality.official_hiking_network, "foot_network"),
+      metric("Technical hiking", quality.technical_hiking, "hike_rating"),
+      metric("Steps", quality.steps, "road_class"),
+      metric("Poor smoothness", quality.poor_smoothness, "smoothness"),
+    ]);
+  }
+  if (quality.activity_kind === "running") {
+    return section("Trail-running quality", [
+      metric("Runnable surface", quality.runnable_surface, "surface"),
+      metric("Trail-like", quality.trail_like, "road_class"),
+      metric("Technical trail", quality.technical_trail, "hike_rating"),
+      metric("Steps", quality.steps, "road_class"),
+      metric("Poor smoothness", quality.poor_smoothness, "smoothness"),
+      metric("Major roads", quality.major_road, "road_class"),
+    ]);
+  }
+  if (quality.activity_kind === "cycling") {
+    return section("Cycling quality", [
+      metric("Cycling network", quality.cycling_network, "bike_network"),
+      metric("Cycleway-like", quality.cycleway_like, "road_class"),
+      metric("Paved", quality.paved, "surface"),
+      metric("Suitable unpaved", quality.suitable_unpaved, "surface"),
+      metric("Tracks", quality.track, "road_class"),
+      metric("Rough surface", quality.rough_surface, "surface"),
+      metric("Steps", quality.steps, "road_class"),
+      metric("Major roads", quality.major_road, "road_class"),
+      [
+        "MTB-rating coverage",
+        Number(quality.detail_coverage?.mtb_rating ?? 0) > 0
+          ? formatPercent(quality.mtb_rating.coverage_share)
+          : "not evaluated",
+      ],
+    ]);
+  }
+  return "";
+}
+
 function loopGeometryCardSummary(geometry) {
   if (!geometry) {
     return '<div class="loop-geometry-card not-evaluated"><div class="loop-geometry-heading"><strong>Loop geometry</strong><span>not evaluated</span></div><p>Shape metrics are unknown, not zero.</p></div>';
@@ -838,7 +969,9 @@ function renderCandidatesPanel() {
   const container = byId("candidate-list");
   const result = state.generationResult;
   if (!result?.candidates.length) {
-    container.innerHTML = '<p class="empty-copy">Returned routes will appear here in ranked order.</p>';
+    container.innerHTML = result
+      ? '<p class="empty-copy">No route candidate could satisfy the current hard constraints.</p>'
+      : '<p class="empty-copy">Returned routes will appear here in ranked order.</p>';
     byId("search-summary").textContent = result
       ? "No safe planning candidates returned"
       : "";
@@ -867,7 +1000,7 @@ function renderCandidatesPanel() {
     selector.setAttribute("aria-label", `Select candidate ${candidate.rank}, ${formatDistance(candidate.route.summary.distance_m)}`);
     selector.innerHTML = state.planningMode === "auto_tour"
       ? autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare)
-      : `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate, result.search_diagnostics)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.diagnostics.details.construction ?? "route"))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.diagnostics.target_error_m)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Major road</span><strong>${formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${metricBar("Trail-like", analysis.trail_like.share, "trail", formatPercent(analysis.trail_like.share))}${metricBar("Paved", analysis.paved.share, "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}`;
+      : (() => { const quality = primaryQualityMetric(analysis); return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate, result.search_diagnostics)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.diagnostics.details.construction ?? "route"))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.diagnostics.target_error_m)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Major road</span><strong>${formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${quality ? metricBar(quality[0], quality[1], "trail", quality[1] == null ? "not evaluated" : formatPercent(quality[1])) : ""}${metricBar("Paved", analysis.paved.share, "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}`; })();
     selector.addEventListener("click", () => selectCandidate(candidate.id));
     card.append(selector);
     card.append(loopGeometryCardDetails(loopGeometry));
@@ -1054,6 +1187,7 @@ function renderCanonicalMetrics(candidate, result) {
   byId("metrics-content").innerHTML = endpointSection(result)
     + section("Canonical candidate", [
       ["Candidate ID", candidate.id],
+      ["Routing profile", profileDisplayName(candidate.routing_profile)],
       ["Roles", candidate.roles.map(friendlyLabel).join(", ") || "None"],
       ["Distance", formatDistance(candidate.route.summary.distance_m)],
       ["Target error", formatDistance(candidate.diagnostics.target_error_m)],
@@ -1065,10 +1199,10 @@ function renderCanonicalMetrics(candidate, result) {
     + section("Route quality", [
       ["Total repetition", `${formatDistance(analysis.repetition.repeated_distance.distance_m)} · ${formatPercent(analysis.repetition.repeated_distance.share)}`],
       ["Immediate backtracking", `${formatDistance(analysis.immediate_backtrack.distance_m)} · ${formatPercent(analysis.immediate_backtrack.share)}`],
-      ["Trail-like", formatPercent(analysis.trail_like.share)],
       ["Paved", formatPercent(analysis.paved.share)],
       ["Major roads", formatPercent(analysis.major_road.share)],
     ])
+    + activityQualitySection(analysis)
     + section("Score", [["Total", Number(candidate.score.total).toFixed(6)], ...scoreRows])
     + (result.topology === "loop" ? loopGeometrySection(analysis.loop_geometry) : "")
     + natureSection(analysis.nature, { nature_index_available: Boolean(analysis.nature) })
@@ -1089,9 +1223,14 @@ function renderStatus() {
   const resolvable = Boolean(
     endpoints.start
     && (endpoints.routeTopology === "loop" || endpoints.end)
-    && (state.planningMode === "auto_tour" || state.points.length >= 1)
+    && (
+      state.planningMode === "auto_tour"
+      || endpoints.routeTopology === "point_to_point"
+      || state.points.length >= 1
+    )
   );
-  byId("generate").disabled = running || !resolvable || Boolean(pointValidation());
+  const profileAvailable = Boolean(selectedProfileStatus()?.available);
+  byId("generate").disabled = running || !resolvable || !profileAvailable || Boolean(pointValidation());
   byId("generate-top").disabled = byId("generate").disabled;
   byId("cancel").classList.toggle("hidden", !running);
   byId("generation-state").classList.toggle("hidden", !running);
@@ -1198,20 +1337,20 @@ async function generate() {
     state.request = { status: "success", id, startedAt: null };
     byId("request-status").textContent = result.candidates.length
       ? `${result.candidates.length} candidate route${result.candidates.length === 1 ? "" : "s"} generated.`
-      : state.planningMode === "auto_tour"
-        ? "No safe Auto Tour candidate was returned."
-        : "No safe candidate was returned.";
+      : "No route candidate could satisfy the current hard constraints.";
     render();
     if (result.candidates.length) {
       fitCoordinates(result.candidates[0].route.geometry);
       await selectCandidate(result.candidates[0].id);
+    } else {
+      showNoCandidateError(result);
     }
   } catch (error) {
     if (state.request.id !== id) return;
     const cancelled = error.name === "AbortError";
     state.request = { status: cancelled ? "cancelled" : "error", id, startedAt: null };
     byId("request-status").textContent = cancelled ? "Generation cancelled." : "Generation failed.";
-    if (!cancelled) handleError(error, "Route generation failed.");
+    if (!cancelled) handleGenerationError(error);
   } finally {
     window.clearInterval(elapsedTimer);
     if (state.request.id === id) {
@@ -1222,9 +1361,73 @@ async function generate() {
   }
 }
 
+function exactWaypointContext(metadata) {
+  const name = metadata?.point_name;
+  const index = metadata?.point_index;
+  const label = name
+    ? `Exact mandatory waypoint “${name}”`
+    : Number.isInteger(index)
+      ? `Exact mandatory point ${index + 1}`
+      : "An exact mandatory waypoint";
+  const indexText = Number.isInteger(index) ? ` (required-point index ${index})` : "";
+  const snap = metadata?.snap_distance_m;
+  const maximum = metadata?.maximum_snap_distance_m;
+  const distanceText = typeof snap === "number" && typeof maximum === "number"
+    ? ` snapped ${snap.toFixed(1)} m away; the permitted threshold is ${maximum.toFixed(1)} m.`
+    : " could not be reached within the permitted snap threshold.";
+  return `${label}${indexText}${distanceText}`;
+}
+
+function safeGenerationDiagnostics(result) {
+  const diagnostics = result?.search_diagnostics;
+  return JSON.stringify({
+    code: "no_route_candidate",
+    kind: result?.kind ?? null,
+    topology: result?.topology ?? null,
+    routing_profile: result?.routing_profile ?? null,
+    candidate_count: result?.candidates?.length ?? 0,
+    budget: diagnostics ? {
+      total_used: diagnostics.budget.total_used,
+      total_limit: diagnostics.budget.total_limit,
+    } : null,
+    cache: diagnostics ? {
+      hit_count: diagnostics.cache.hit_count,
+      miss_count: diagnostics.cache.miss_count,
+      backend_call_count: diagnostics.cache.backend_call_count,
+    } : null,
+  }, null, 2);
+}
+
+function showNoCandidateError(result) {
+  showError(
+    "No route candidate could satisfy the current hard constraints.",
+    safeGenerationDiagnostics(result),
+    "no_route_candidate",
+    "Every returned candidate was rejected or the search produced no complete route.",
+    GENERATION_SUGGESTION,
+  );
+}
+
+function handleGenerationError(error) {
+  if (error instanceof ApiError) {
+    const context = error.code === "exact_waypoint_not_reached"
+      ? exactWaypointContext(error.metadata)
+      : "The planning request was not completed.";
+    showError(error.message, error.details, error.code, context, GENERATION_SUGGESTION);
+    return;
+  }
+  showError(
+    "Route generation failed.",
+    "A browser error interrupted generation; no raw traceback is displayed.",
+    "browser_generation_error",
+    "The planning request was not completed.",
+    GENERATION_SUGGESTION,
+  );
+}
+
 function handleError(error, fallback) {
   if (error instanceof ApiError) showError(error.message, `${error.code}\n${error.details}`);
-  else showError(error?.message ?? fallback, error?.stack ?? "");
+  else showError(fallback, "A browser error interrupted this action; no raw traceback is displayed.");
 }
 
 function normalizeImportedRequest(value) {
@@ -1256,8 +1459,11 @@ function normalizeImportedRequest(value) {
   if (!["loop", "point_to_point"].includes(value.topology)) {
     throw new Error("Canonical request topology must be loop or point_to_point.");
   }
-  if (value.routing_profile !== "hike") {
-    throw new Error("Only the hike routing profile is supported.");
+  const profileStatus = state.routingProfileCatalog?.profiles.find(
+    (status) => status.profile.id === value.routing_profile,
+  );
+  if (!profileStatus) {
+    throw new Error("Canonical request contains an unknown routing profile.");
   }
   if (!value.start || (value.topology === "point_to_point" && !value.end)) {
     throw new Error("Canonical request endpoints are incomplete.");
@@ -1335,6 +1541,7 @@ async function importRequest(file) {
   try {
     const imported = normalizeImportedRequest(JSON.parse(await file.text()));
     state.planningMode = imported.canonical.kind;
+    state.routingProfile = imported.canonical.routing_profile;
     document.querySelectorAll('input[name="planning-mode"]').forEach((input) => {
       input.checked = input.value === state.planningMode;
     });
@@ -1566,7 +1773,11 @@ async function start() {
   decorateIcons();
   bindEvents();
   try {
-    state.config = await getConfig();
+    [state.config, state.routingProfileCatalog] = await Promise.all([
+      getConfig(),
+      getRoutingProfiles(),
+    ]);
+    renderRoutingProfiles();
     try {
       state.poiIndexStatus = await getPoiStatus();
     } catch {

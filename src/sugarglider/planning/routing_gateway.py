@@ -12,7 +12,7 @@ from sugarglider.planning.cache import (
     RoutingOperation,
 )
 from sugarglider.planning.diagnostics import CacheDiagnostics
-from sugarglider.planning.profiles import RoutingProfileId
+from sugarglider.planning.profiles import RoutingProfileId, routing_profile
 from sugarglider.routing.backend import (
     AutoTourRoutingBackend,
     IsochroneResult,
@@ -59,7 +59,7 @@ class CachedRoutingGateway:
     async def route(
         self,
         points: tuple[Coordinate, ...],
-        profile: RoutingProfileId = "hike",
+        profile: RoutingProfileId,
         *,
         pass_through: bool = False,
         phase: SearchPhase = SearchPhase.CONTROL,
@@ -69,10 +69,17 @@ class CachedRoutingGateway:
         key = RouteCacheKey(
             operation=RoutingOperation.ROUTE,
             profile_id=profile,
+            backend_profile=routing_profile(profile).graphhopper_profile,
             coordinates=tuple((point.lat, point.lon) for point in points),
             pass_through=pass_through,
             topology_options=topology_options,
-            custom_options=custom_options,
+            custom_options=(
+                (
+                    "snap_preventions",
+                    ",".join(routing_profile(profile).snap_preventions),
+                ),
+                *custom_options,
+            ),
         )
         return await self._resolve(
             key,
@@ -84,7 +91,7 @@ class CachedRoutingGateway:
         self,
         start: Coordinate,
         end: Coordinate,
-        profile: RoutingProfileId = "hike",
+        profile: RoutingProfileId,
         *,
         max_paths: int = 3,
         max_weight_factor: float = 1.6,
@@ -99,8 +106,15 @@ class CachedRoutingGateway:
         key = RouteCacheKey(
             operation=RoutingOperation.ALTERNATIVES,
             profile_id=profile,
+            backend_profile=routing_profile(profile).graphhopper_profile,
             coordinates=((start.lat, start.lon), (end.lat, end.lon)),
             alternative_settings=settings,
+            custom_options=(
+                (
+                    "snap_preventions",
+                    ",".join(routing_profile(profile).snap_preventions),
+                ),
+            ),
         )
         return await self._resolve(
             key,
@@ -120,7 +134,7 @@ class CachedRoutingGateway:
         start: Coordinate,
         distance_m: float,
         seed: int,
-        profile: RoutingProfileId = "hike",
+        profile: RoutingProfileId,
         *,
         heading_degrees: float | None = None,
         phase: SearchPhase = SearchPhase.CONTROL,
@@ -128,11 +142,18 @@ class CachedRoutingGateway:
         key = RouteCacheKey(
             operation=RoutingOperation.ROUND_TRIP,
             profile_id=profile,
+            backend_profile=routing_profile(profile).graphhopper_profile,
             coordinates=((start.lat, start.lon),),
             round_trip_distance_m=distance_m,
             round_trip_seed=seed,
             round_trip_heading_degrees=heading_degrees,
             headings=(heading_degrees,),
+            custom_options=(
+                (
+                    "snap_preventions",
+                    ",".join(routing_profile(profile).snap_preventions),
+                ),
+            ),
         )
         return await self._resolve(
             key,
@@ -159,10 +180,14 @@ class CachedRoutingGateway:
         key = RouteCacheKey(
             operation=RoutingOperation.ISOCHRONE,
             profile_id=profile,
+            backend_profile=routing_profile(profile).graphhopper_profile,
             coordinates=((start.lat, start.lon),),
             isochrone_distance_limit_m=distance_limit_m,
             isochrone_buckets=buckets,
             isochrone_reverse_flow=reverse_flow,
+            custom_options=(
+                ("backend_profile", routing_profile(profile).graphhopper_profile),
+            ),
         )
         return await self._resolve(
             key,

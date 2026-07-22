@@ -70,6 +70,7 @@ async def refine_low_overlap(
                         name=request.name,
                         path=path,
                         input_point_count=leg_index + 2,
+                        routing_profile=request.routing_profile,
                     )
                 except (RouteCompositionError, RoutingError):
                     continue

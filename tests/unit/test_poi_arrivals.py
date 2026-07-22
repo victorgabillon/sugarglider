@@ -268,6 +268,7 @@ def test_exact_shared_spur_attribution_uses_returning_edges_once() -> None:
         )
     )
     route = RouteResultFactory().create(
+        routing_profile="hike",
         name="Shared spur",
         input_point_count=3,
         path=RoutedPath(
@@ -335,6 +336,7 @@ def test_short_dead_end_excursion_is_selected_inside_free_allowance() -> None:
         for point in (_coordinate(0, 0), _coordinate(100, 0), _coordinate(0, 0))
     )
     route = RouteResultFactory().create(
+        routing_profile="hike",
         name="Short dead end",
         input_point_count=3,
         path=RoutedPath(
@@ -395,6 +397,7 @@ def test_unknown_edge_inside_spur_is_unverified_and_gets_no_allowance() -> None:
     geometry = tuple((point.lon, point.lat) for point in route_points)
     edge_ids: tuple[int | str, ...] = (1, "unknown", 3, 3, "unknown", 1)
     route = RouteResultFactory().create(
+        routing_profile="hike",
         name="Partially unknown spur",
         input_point_count=3,
         path=RoutedPath(
@@ -461,6 +464,7 @@ def test_spur_at_stack_depth_is_unverified_without_duplicate_allowance() -> None
     geometry = tuple((point.lon, point.lat) for point in route_points)
     edge_ids = (*range(65), *reversed(range(65)))
     route = RouteResultFactory().create(
+        routing_profile="hike",
         name="Long bounded-stack spur",
         input_point_count=3,
         path=RoutedPath(

@@ -10,8 +10,10 @@ from sugarglider.domain.models import Coordinate
 from sugarglider.gpx.writer import write_plan_gpx
 from sugarglider.planning.models import PLAN_REQUEST_ADAPTER, WaypointPlanRequest
 from sugarglider.planning.result import PlanCandidate, PlanGpxRequest, PlanResult
+from sugarglider.planning.validation import ExactWaypointNotReachedError
 from sugarglider.planning.waypoint.service import WaypointPlanner
 from sugarglider.routing.backend import AutoTourRoutingBackend, RoutedPath
+from sugarglider.routing.profiles import RoutingProfileId
 from sugarglider.routing.result import RouteResultFactory
 
 START = Coordinate(lat=48.8700, lon=2.0900)
@@ -26,6 +28,7 @@ class _NativeBackend:
         self.route_calls = 0
         self.round_trip_calls = 0
         self.alternative_calls = 0
+        self.profiles: list[str] = []
 
     async def route(
         self,
@@ -34,7 +37,8 @@ class _NativeBackend:
         *,
         pass_through: bool = False,
     ) -> RoutedPath:
-        del profile, pass_through
+        del pass_through
+        self.profiles.append(profile)
         self.route_calls += 1
         geometry = tuple((point.lon, point.lat) for point in points)
         snapped = list(geometry)
@@ -52,7 +56,8 @@ class _NativeBackend:
         *,
         heading_degrees: float | None = None,
     ) -> RoutedPath:
-        del distance_m, seed, profile, heading_degrees
+        del distance_m, seed, heading_degrees
+        self.profiles.append(profile)
         self.round_trip_calls += 1
         geometry = (
             (start.lon, start.lat),
@@ -73,7 +78,8 @@ class _NativeBackend:
         max_weight_factor: float = 1.6,
         max_share_factor: float = 0.5,
     ) -> tuple[RoutedPath, ...]:
-        del profile, max_weight_factor, max_share_factor
+        del max_weight_factor, max_share_factor
+        self.profiles.append(profile)
         self.alternative_calls += 1
         direct_geometry = ((start.lon, start.lat), (end.lon, end.lat))
         midpoint = (
@@ -115,6 +121,7 @@ def _request(
     target_m: float = 8_000,
     tolerance_m: float = 1_500,
     path_selection: str = "shortest",
+    profile: RoutingProfileId = "hike",
 ) -> WaypointPlanRequest:
     document = {
         "schema_version": 1,
@@ -123,7 +130,7 @@ def _request(
         "topology": topology,
         "start": START.model_dump(),
         "end": END.model_dump() if topology == "point_to_point" else None,
-        "routing_profile": "hike",
+        "routing_profile": profile,
         "candidate_count": 5,
         "seed": 41,
         "distance_objective": {
@@ -173,6 +180,37 @@ def _assert_gpx(candidate: PlanCandidate) -> None:
     assert len(root.findall("g:trk", namespace)) == 1
     assert len(root.findall("g:trk/g:trkseg", namespace)) == 1
     assert root.findall("g:rte", namespace) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "profile",
+    (
+        "trail_run",
+        "hike",
+        "city_bike",
+        "gravel_bike",
+        "mountain_bike",
+        "road_bike",
+    ),
+)
+async def test_every_public_profile_propagates_through_waypoint_route(
+    profile: RoutingProfileId,
+) -> None:
+    request = _request(
+        topology="point_to_point",
+        waypoints=(),
+        target_m=3_000,
+        tolerance_m=2_000,
+        profile=profile,
+    )
+    backend, result = await _generate(request)
+    assert backend.profiles == [profile]
+    assert result.routing_profile == profile
+    assert all(candidate.routing_profile == profile for candidate in result.candidates)
+    assert all(
+        candidate.route.routing_profile == profile for candidate in result.candidates
+    )
 
 
 @pytest.mark.asyncio
@@ -302,10 +340,11 @@ async def test_target_below_control_is_best_effort_with_warning() -> None:
 
 @pytest.mark.asyncio
 async def test_badly_snapped_exact_waypoint_is_rejected() -> None:
-    request = _request(topology="point_to_point", waypoints=(FIRST,), target_m=8_000)
-    _, result = await _generate(request, _NativeBackend(bad_snap=True))
-    assert result.candidates == ()
-    assert any(
-        "exact_waypoint_not_reached" in warning
-        for warning in result.search_diagnostics.warnings
-    )
+    named = FIRST.model_copy(update={"name": "Cliff gate"})
+    request = _request(topology="point_to_point", waypoints=(named,), target_m=8_000)
+    with pytest.raises(ExactWaypointNotReachedError) as caught:
+        await _generate(request, _NativeBackend(bad_snap=True))
+    assert caught.value.point_index == 1
+    assert caught.value.point_name == "Cliff gate"
+    assert caught.value.snap_distance_m > 300
+    assert caught.value.maximum_snap_distance_m == 300

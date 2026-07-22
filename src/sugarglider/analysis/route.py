@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import pairwise
 from math import asin, cos, isfinite, radians, sin, sqrt
-from typing import Protocol
+from typing import Literal, Protocol
 
 from sugarglider.analysis.backtracking import (
     MIN_BACKTRACK_EDGE_ID_COVERAGE,
@@ -14,6 +14,8 @@ from sugarglider.analysis.backtracking import (
 )
 from sugarglider.analysis.projection import EARTH_RADIUS_M
 from sugarglider.domain.analysis import (
+    ActivityRouteQuality,
+    CyclingRouteQuality,
     DetailBreakdown,
     DetailBucket,
     DetailValue,
@@ -22,6 +24,8 @@ from sugarglider.domain.analysis import (
     NatureAnalysis,
     RepetitionAnalysis,
     RouteAnalysis,
+    RunningRouteQuality,
+    WalkingRouteQuality,
 )
 from sugarglider.domain.models import GeoJsonPosition, PathDetailSegment
 
@@ -47,17 +51,30 @@ TRAIL_LIKE_ROAD_CLASSES = frozenset(
     {"TRACK", "PATH", "FOOTWAY", "BRIDLEWAY", "STEPS", "PEDESTRIAN"}
 )
 OFFICIAL_HIKING_NETWORKS = frozenset({"INTERNATIONAL", "NATIONAL", "REGIONAL", "LOCAL"})
+OFFICIAL_CYCLING_NETWORKS = OFFICIAL_HIKING_NETWORKS
 MAJOR_ROAD_CLASSES = frozenset(
     {"MOTORWAY", "TRUNK", "PRIMARY", "SECONDARY", "TERTIARY"}
 )
+POOR_SMOOTHNESS = frozenset(
+    {"BAD", "VERY_BAD", "HORRIBLE", "VERY_HORRIBLE", "IMPASSABLE"}
+)
+RUNNABLE_SURFACES = PAVED_SURFACES | frozenset(
+    {"COMPACTED", "FINE_GRAVEL", "GRAVEL", "GROUND", "DIRT", "GRASS"}
+)
+SUITABLE_UNPAVED_SURFACES = frozenset({"COMPACTED", "FINE_GRAVEL", "GRAVEL"})
+ROUGH_CYCLING_SURFACES = frozenset({"GROUND", "DIRT", "GRASS", "SAND"})
 
-DERIVED_DETAIL_NAMES = (
+COMMON_DERIVED_DETAIL_NAMES = (
     "car_access",
     "edge_id",
-    "foot_network",
     "road_class",
     "surface",
 )
+ACTIVITY_DERIVED_DETAIL_NAMES = {
+    "walking": ("foot_network", "hike_rating", "smoothness"),
+    "running": ("hike_rating", "smoothness"),
+    "cycling": ("bike_network", "mtb_rating", "smoothness"),
+}
 
 
 class RouteAnalysisError(ValueError):
@@ -137,6 +154,8 @@ class RouteAnalyzer:
         geometry: tuple[GeoJsonPosition, ...],
         route_distance_m: float,
         path_details: Mapping[str, tuple[PathDetailSegment, ...]],
+        *,
+        activity_kind: Literal["walking", "running", "cycling"] = "walking",
     ) -> RouteAnalysis:
         projection = project_geometry_edges(
             geometry=geometry,
@@ -168,9 +187,13 @@ class RouteAnalyzer:
         backtrack_coverage = self._metric(
             backtracking.known_edge_distance_m, route_distance_m
         )
+        derived_detail_names = (
+            *COMMON_DERIVED_DETAIL_NAMES,
+            *ACTIVITY_DERIVED_DETAIL_NAMES[activity_kind],
+        )
         warnings = {
             f"{detail}_coverage_incomplete"
-            for detail in DERIVED_DETAIL_NAMES
+            for detail in derived_detail_names
             if any(
                 not (
                     self._known_edge_id(edge) is not None
@@ -193,6 +216,100 @@ class RouteAnalyzer:
             else None
         )
 
+        trail_like = self._metric(
+            self._classified_distance(edges, "road_class", TRAIL_LIKE_ROAD_CLASSES),
+            route_distance_m,
+        )
+        hiking_network = self._metric(
+            self._classified_distance(edges, "foot_network", OFFICIAL_HIKING_NETWORKS),
+            route_distance_m,
+        )
+        major_road = self._metric(
+            self._classified_distance(edges, "road_class", MAJOR_ROAD_CLASSES),
+            route_distance_m,
+        )
+        steps = self._metric(
+            self._classified_distance(edges, "road_class", frozenset({"STEPS"})),
+            route_distance_m,
+        )
+        poor_smoothness = self._metric(
+            self._classified_distance(edges, "smoothness", POOR_SMOOTHNESS),
+            route_distance_m,
+        )
+        coverage = {
+            detail: breakdowns[detail].coverage_share for detail in sorted(breakdowns)
+        }
+        if activity_kind == "walking":
+            activity_quality: ActivityRouteQuality = WalkingRouteQuality(
+                trail_like=trail_like,
+                official_hiking_network=hiking_network,
+                technical_hiking=self._technical_metric(
+                    edges, "hike_rating", route_distance_m
+                ),
+                steps=steps,
+                poor_smoothness=poor_smoothness,
+                detail_coverage=coverage,
+            )
+        elif activity_kind == "running":
+            activity_quality = RunningRouteQuality(
+                runnable_surface=self._metric(
+                    self._classified_distance(edges, "surface", RUNNABLE_SURFACES),
+                    route_distance_m,
+                ),
+                trail_like=trail_like,
+                technical_trail=self._technical_metric(
+                    edges, "hike_rating", route_distance_m
+                ),
+                steps=steps,
+                poor_smoothness=poor_smoothness,
+                major_road=major_road,
+                detail_coverage=coverage,
+            )
+        else:
+            activity_quality = CyclingRouteQuality(
+                cycling_network=self._metric(
+                    self._classified_distance(
+                        edges, "bike_network", OFFICIAL_CYCLING_NETWORKS
+                    ),
+                    route_distance_m,
+                ),
+                cycleway_like=self._metric(
+                    self._classified_distance(
+                        edges, "road_class", frozenset({"CYCLEWAY"})
+                    ),
+                    route_distance_m,
+                ),
+                paved=self._metric(paved_distance, route_distance_m),
+                suitable_unpaved=self._metric(
+                    self._classified_distance(
+                        edges, "surface", SUITABLE_UNPAVED_SURFACES
+                    ),
+                    route_distance_m,
+                ),
+                track=self._metric(
+                    self._classified_distance(
+                        edges, "road_class", frozenset({"TRACK"})
+                    ),
+                    route_distance_m,
+                ),
+                rough_surface=self._metric(
+                    self._classified_distance(edges, "surface", ROUGH_CYCLING_SURFACES),
+                    route_distance_m,
+                ),
+                steps=steps,
+                major_road=major_road,
+                mtb_rating=breakdowns.get(
+                    "mtb_rating",
+                    DetailBreakdown(
+                        detail="mtb_rating",
+                        covered_distance_m=0.0,
+                        coverage_share=0.0,
+                        buckets=(),
+                    ),
+                ),
+                detail_coverage=coverage,
+            )
+
         return RouteAnalysis(
             route_distance_m=route_distance_m,
             geometry_distance_m=projection.geometry_distance_m,
@@ -201,20 +318,7 @@ class RouteAnalyzer:
             paved=self._metric(paved_distance, route_distance_m),
             unpaved=self._metric(unpaved_distance, route_distance_m),
             unknown_surface=self._metric(unknown_surface_distance, route_distance_m),
-            trail_like=self._metric(
-                self._classified_distance(edges, "road_class", TRAIL_LIKE_ROAD_CLASSES),
-                route_distance_m,
-            ),
-            official_hiking_network=self._metric(
-                self._classified_distance(
-                    edges, "foot_network", OFFICIAL_HIKING_NETWORKS
-                ),
-                route_distance_m,
-            ),
-            major_road=self._metric(
-                self._classified_distance(edges, "road_class", MAJOR_ROAD_CLASSES),
-                route_distance_m,
-            ),
+            major_road=major_road,
             car_accessible=self._metric(
                 sum(
                     edge.distance_m
@@ -223,6 +327,7 @@ class RouteAnalyzer:
                 ),
                 route_distance_m,
             ),
+            activity_quality=activity_quality,
             repetition=self._repetition(edges, route_distance_m),
             immediate_backtrack=self._metric(
                 backtracking.immediate_backtrack_distance_m, route_distance_m
@@ -371,6 +476,27 @@ class RouteAnalyzer:
     def _is_classified_surface(cls, edge: ProjectedGeometryEdge) -> bool:
         value = cls._normalized_string(edge.detail("surface")[1])
         return value in PAVED_SURFACES or value in UNPAVED_SURFACES
+
+    @classmethod
+    def _technical_metric(
+        cls,
+        edges: tuple[ProjectedGeometryEdge, ...],
+        detail: str,
+        route_distance_m: float,
+    ) -> DistanceMetric:
+        technical = 0.0
+        for edge in edges:
+            present, value = edge.detail(detail)
+            if not present:
+                continue
+            normalized = cls._normalized_string(value)
+            if (
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and value >= 3
+            ) or (normalized is not None and normalized in {"T3", "T4", "T5", "T6"}):
+                technical += edge.distance_m
+        return cls._metric(technical, route_distance_m)
 
     @classmethod
     def _repetition(

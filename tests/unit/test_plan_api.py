@@ -16,30 +16,52 @@ from sugarglider.planning.diagnostics import (
 )
 from sugarglider.planning.models import PlanRequest
 from sugarglider.planning.pipeline import PlanService
+from sugarglider.planning.profiles import (
+    RoutingProfileCatalog,
+    RoutingProfileId,
+    routing_profile_catalog,
+)
 from sugarglider.planning.result import (
     PlanCandidate,
     PlanCandidateDiagnostics,
     PlanResult,
     PlanScore,
 )
+from sugarglider.planning.validation import ExactWaypointNotReachedError
+from sugarglider.routing.errors import RoutingProfileUnavailableError
 from sugarglider.routing.service import RouteService
 
 
 class _RouteService(RouteService):
     def __init__(self) -> None:
-        pass
+        self.available = True
 
     async def ready(self) -> bool:
         return True
+
+    async def ensure_profile_available(self, profile: RoutingProfileId) -> None:
+        if not self.available:
+            raise RoutingProfileUnavailableError(profile)
+
+    async def profile_catalog(self) -> RoutingProfileCatalog:
+        available = frozenset(
+            {"hike", "trail_run", "bike", "gravel_bike", "mtb", "racingbike"}
+            if self.available
+            else set()
+        )
+        return routing_profile_catalog(available)
 
 
 class _PlanService(PlanService):
     def __init__(self, result: PlanResult) -> None:
         self.result = result
         self.request: PlanRequest | None = None
+        self.error: Exception | None = None
 
     async def generate(self, request: PlanRequest) -> PlanResult:
         self.request = request
+        if self.error is not None:
+            raise self.error
         return self.result.model_copy(update={"kind": request.kind})
 
 
@@ -47,6 +69,7 @@ class _PlanService(PlanService):
 def plan_result(route_result: RouteResult) -> PlanResult:
     candidate = PlanCandidate(
         id="candidate-1",
+        routing_profile="hike",
         rank=1,
         roles=("harmonious", "distance_focused"),
         route=route_result,
@@ -63,6 +86,7 @@ def plan_result(route_result: RouteResult) -> PlanResult:
     return PlanResult(
         kind="waypoint_route",
         topology="point_to_point",
+        routing_profile="hike",
         effective_start=Coordinate(lat=48.871389, lon=2.096667),
         effective_end=Coordinate(lat=48.871454, lon=2.124421),
         candidates=(candidate,),
@@ -93,8 +117,13 @@ def plan_service(plan_result: PlanResult) -> _PlanService:
 
 
 @pytest.fixture
-def app(plan_service: _PlanService) -> FastAPI:
-    return create_app(_RouteService(), plan_service=plan_service)
+def route_service() -> _RouteService:
+    return _RouteService()
+
+
+@pytest.fixture
+def app(plan_service: _PlanService, route_service: _RouteService) -> FastAPI:
+    return create_app(route_service, plan_service=plan_service)
 
 
 @pytest_asyncio.fixture
@@ -160,6 +189,33 @@ async def test_generate_accepts_direct_point_to_point_route(
 
 
 @pytest.mark.asyncio
+async def test_exact_waypoint_failure_has_safe_structured_public_fields(
+    client: httpx.AsyncClient, plan_service: _PlanService
+) -> None:
+    plan_service.error = ExactWaypointNotReachedError(
+        point_index=3,
+        point_name="Woodland gate",
+        snap_distance_m=487.25,
+        maximum_snap_distance_m=300,
+    )
+    response = await client.post("/v2/plans/generate", json=waypoint_request())
+    assert response.status_code == 422
+    assert response.json() == {
+        "error": {
+            "code": "exact_waypoint_not_reached",
+            "message": (
+                "An exact mandatory waypoint is too far from the selected routing "
+                "network."
+            ),
+            "point_index": 3,
+            "point_name": "Woodland gate",
+            "snap_distance_m": 487.25,
+            "maximum_snap_distance_m": 300.0,
+        }
+    }
+
+
+@pytest.mark.asyncio
 async def test_obsolete_field_is_rejected(client: httpx.AsyncClient) -> None:
     request = waypoint_request()
     request["closed"] = False
@@ -201,3 +257,22 @@ async def test_gpx_serializes_returned_candidate_without_planning(
 async def test_health_and_ready_remain_separate(client: httpx.AsyncClient) -> None:
     assert (await client.get("/health")).json() == {"status": "ok"}
     assert (await client.get("/ready")).json() == {"status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_profile_catalog_and_unavailable_profile_error(
+    client: httpx.AsyncClient, route_service: _RouteService
+) -> None:
+    catalog = (await client.get("/v2/routing-profiles")).json()
+    assert [value["profile"]["id"] for value in catalog["profiles"]] == [
+        "trail_run",
+        "hike",
+        "city_bike",
+        "gravel_bike",
+        "mountain_bike",
+        "road_bike",
+    ]
+    route_service.available = False
+    response = await client.post("/v2/plans/generate", json=waypoint_request())
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "routing_profile_unavailable"

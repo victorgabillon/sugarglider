@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from sugarglider.planning.drafts import CandidateDraft
 from sugarglider.planning.models import PlanRequestBase, WaypointPlanRequest
+from sugarglider.planning.profile_quality import profile_quality_components
 from sugarglider.planning.result import PlanScore
 
 
@@ -41,6 +42,7 @@ class WaypointCandidateScorer:
             "balanced": 1.25,
             "flexible": 1.0,
         }[request.distance_objective.priority]
+        profile_quality, profile_components, _severe = profile_quality_components(route)
         components = {
             "distance_error_ratio": error_ratio,
             "immediate_backtracking_penalty": (
@@ -49,15 +51,7 @@ class WaypointCandidateScorer:
             "repetition_penalty": (
                 weights.repetition * analysis.repetition.repeated_distance.share
             ),
-            "major_road_penalty": weights.major_road * analysis.major_road.share,
-            "paved_penalty": weights.paved * analysis.paved.share,
-            "unknown_surface_penalty": (
-                weights.unknown_surface * analysis.unknown_surface.share
-            ),
-            "trail_like_reward": weights.trail_like * analysis.trail_like.share,
-            "hiking_network_reward": (
-                weights.hiking_network * analysis.official_hiking_network.share
-            ),
+            **profile_components,
         }
         nature_reward = 0.0
         if request.preferences.nature == "prefer" and analysis.nature is not None:
@@ -67,11 +61,7 @@ class WaypointCandidateScorer:
             weights.distance_error * distance_weight * error_ratio
             + components["immediate_backtracking_penalty"]
             + components["repetition_penalty"]
-            + components["major_road_penalty"]
-            + components["paved_penalty"]
-            + components["unknown_surface_penalty"]
-            - components["trail_like_reward"]
-            - components["hiking_network_reward"]
+            + profile_quality
             - nature_reward
         )
         return PlanScore(total=total, components=components)

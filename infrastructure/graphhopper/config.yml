@@ -1,20 +1,39 @@
 graphhopper:
   datareader.file: /data/osm/ile-de-france-latest.osm.pbf
   graph.location: /data/graph-cache
+  custom_models.directory: custom_models
 
   profiles:
     - name: hike
       custom_model_files: [hike.json]
+    - name: trail_run
+      custom_model_files: [hike.json, trail_run.json]
+    - name: bike
+      custom_model_files: [bike.json]
+    - name: gravel_bike
+      custom_model_files: [bike.json, gravel_bike.json]
+    - name: mtb
+      custom_model_files: [mtb.json]
+    - name: racingbike
+      custom_model_files: [racingbike.json]
 
-  # Landmark preparation keeps the custom hiking profile flexible for later PRs.
+  # Each profile owns its preparation. PR15 deliberately avoids unproven sharing.
   profiles_ch: []
   profiles_lm:
     - profile: hike
+    - profile: trail_run
+    - profile: bike
+    - profile: gravel_bike
+    - profile: mtb
+    - profile: racingbike
 
-  # hike.json requirements plus the path details exposed by PR1.
+  # Built-in/custom-model requirements plus public activity analysis details.
   graph.encoded_values: >-
     foot_access,foot_priority,foot_network,foot_average_speed,foot_road_access,car_access,
-    hike_rating,road_class,road_environment,surface,smoothness,track_type,osm_way_id
+    hike_rating,bike_access,bike_priority,bike_network,bike_average_speed,bike_road_access,
+    mtb_access,mtb_priority,mtb_average_speed,racingbike_access,racingbike_priority,
+    racingbike_average_speed,mtb_rating,roundabout,country,road_class,road_environment,
+    surface,smoothness,track_type,osm_way_id
 
   graph.elevation.provider: noop
   prepare.min_network_size: 200

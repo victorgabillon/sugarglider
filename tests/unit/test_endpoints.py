@@ -37,6 +37,7 @@ def test_auto_tour_infers_loop_start_from_lowest_requested_index() -> None:
     later = RequestedTourPlace(name="Later", coordinate=END, original_index=9)
     earlier = RequestedTourPlace(name="Earlier", coordinate=START, original_index=2)
     request = AutoTourSearchRequest(
+        profile="hike",
         target_distance_m=10_000,
         requested_stops=(later, earlier),
     )
@@ -48,6 +49,7 @@ def test_auto_tour_infers_loop_start_from_lowest_requested_index() -> None:
 
 def test_auto_tour_infers_open_end_from_highest_requested_index() -> None:
     request = AutoTourSearchRequest(
+        profile="hike",
         start=START,
         topology="point_to_point",
         target_distance_m=10_000,

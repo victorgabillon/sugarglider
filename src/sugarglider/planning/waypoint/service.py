@@ -10,6 +10,7 @@ from sugarglider.planning.pipeline import evaluate_candidate_portfolio
 from sugarglider.planning.result import PlanCandidate, PlanResult
 from sugarglider.planning.validation import (
     CandidateEvaluationError,
+    ExactWaypointNotReachedError,
     validate_waypoint_path,
 )
 from sugarglider.planning.waypoint.controls import control_proposal
@@ -69,11 +70,13 @@ class WaypointPlanner:
 
         candidates: list[PlanCandidate] = []
         routed: list[tuple[WaypointSequenceProposal, RoutedPath, PlanCandidate]] = []
+        exact_waypoint_failures: list[ExactWaypointNotReachedError] = []
         for proposal in base_proposals:
             evaluated = await self._route_and_evaluate(
                 request=request,
                 proposal=proposal,
                 context=context,
+                exact_waypoint_failures=exact_waypoint_failures,
             )
             if evaluated is not None:
                 path, candidate = evaluated
@@ -111,6 +114,7 @@ class WaypointPlanner:
                 proposal=proposal,
                 context=context,
                 phase=SearchPhase.SKELETON,
+                exact_waypoint_failures=exact_waypoint_failures,
             )
             if evaluated is not None:
                 path, candidate = evaluated
@@ -131,6 +135,15 @@ class WaypointPlanner:
             limit=request.candidate_count,
             ranking_key=lambda candidate: _waypoint_ranking_key(candidate, request),
         )
+        if not portfolio.candidates and exact_waypoint_failures:
+            raise min(
+                exact_waypoint_failures,
+                key=lambda error: (
+                    error.point_index,
+                    error.snap_distance_m,
+                    error.point_name or "",
+                ),
+            )
         warnings = tuple(
             sorted(
                 {
@@ -152,6 +165,7 @@ class WaypointPlanner:
         return PlanResult(
             kind=request.kind,
             topology=request.topology,
+            routing_profile=request.routing_profile,
             effective_start=request.start,
             effective_end=request.effective_end,
             candidates=portfolio.candidates,
@@ -164,6 +178,7 @@ class WaypointPlanner:
         request: WaypointPlanRequest,
         proposal: WaypointSequenceProposal,
         context: PlanningSearchContext,
+        exact_waypoint_failures: list[ExactWaypointNotReachedError],
         phase: SearchPhase | None = None,
     ) -> tuple[RoutedPath, PlanCandidate] | None:
         try:
@@ -174,6 +189,11 @@ class WaypointPlanner:
                 phase=phase,
             )
             return path, self._evaluate_path(request, proposal, path, context)
+        except ExactWaypointNotReachedError as exc:
+            exact_waypoint_failures.append(exc)
+            context.diagnostics.rejections.append(f"{proposal.construction}:{exc}")
+            context.diagnostics.increment("candidates_rejected")
+            return None
         except (CandidateEvaluationError, RoutingError) as exc:
             context.diagnostics.rejections.append(f"{proposal.construction}:{exc}")
             context.diagnostics.increment("candidates_rejected")

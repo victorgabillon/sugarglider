@@ -1,22 +1,43 @@
 export class ApiError extends Error {
-  constructor(message, details = "", code = "api_error") {
+  constructor(message, details = "", code = "api_error", metadata = {}) {
     super(message);
     this.name = "ApiError";
     this.details = details;
     this.code = code;
+    this.metadata = metadata;
   }
 }
 
 async function responseError(response) {
   let body;
   try { body = await response.json(); } catch { body = null; }
-  const code = body?.error?.code ?? `http_${response.status}`;
-  const message = body?.error?.message ?? `The server returned HTTP ${response.status}.`;
-  return new ApiError(message, JSON.stringify(body ?? { status: response.status }, null, 2), code);
+  const publicError = body?.error && typeof body.error === "object" ? body.error : {};
+  const code = publicError.code ?? `http_${response.status}`;
+  const message = publicError.message ?? `The server returned HTTP ${response.status}.`;
+  const metadata = {
+    point_index: Number.isInteger(publicError.point_index) ? publicError.point_index : null,
+    point_name: typeof publicError.point_name === "string" ? publicError.point_name : null,
+    snap_distance_m: typeof publicError.snap_distance_m === "number" ? publicError.snap_distance_m : null,
+    maximum_snap_distance_m: typeof publicError.maximum_snap_distance_m === "number"
+      ? publicError.maximum_snap_distance_m
+      : null,
+  };
+  const safeDetails = {
+    status: response.status,
+    code,
+    ...Object.fromEntries(Object.entries(metadata).filter(([, value]) => value !== null)),
+  };
+  return new ApiError(message, JSON.stringify(safeDetails, null, 2), code, metadata);
 }
 
 export async function getConfig() {
   const response = await fetch("/v1/ui/config", { headers: { Accept: "application/json" } });
+  if (!response.ok) throw await responseError(response);
+  return response.json();
+}
+
+export async function getRoutingProfiles() {
+  const response = await fetch("/v2/routing-profiles", { headers: { Accept: "application/json" } });
   if (!response.ok) throw await responseError(response);
   return response.json();
 }

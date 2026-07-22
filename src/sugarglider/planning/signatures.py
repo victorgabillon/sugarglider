@@ -5,6 +5,7 @@ from hashlib import sha256
 
 from sugarglider.domain.endpoints import ResolvedRouteTopology
 from sugarglider.domain.models import RouteResult
+from sugarglider.planning.profiles import RoutingProfileId
 from sugarglider.planning.result import PlanCandidate
 
 MIN_SIGNATURE_EDGE_COVERAGE = 0.90
@@ -43,17 +44,21 @@ def edge_id_runs(route: RouteResult) -> tuple[int, ...]:
 
 
 def candidate_signature(
-    route: RouteResult, *, topology: ResolvedRouteTopology | None = None
+    route: RouteResult,
+    *,
+    topology: ResolvedRouteTopology | None = None,
+    routing_profile: RoutingProfileId | None = None,
 ) -> str:
     """Hash edge runs when well covered, otherwise geometry rounded to 6 decimals."""
+    profile = routing_profile or route.routing_profile
     coverage = route.analysis.repetition.edge_id_coverage.share
     runs = edge_id_runs(route)
     if coverage >= MIN_SIGNATURE_EDGE_COVERAGE and runs:
-        source = "edge-runs:" + ",".join(str(edge_id) for edge_id in runs)
+        source = f"{profile}:edge-runs:" + ",".join(str(edge_id) for edge_id in runs)
         if topology is not None:
             source = f"{topology}:{source}"
         return "edges:" + sha256(source.encode()).hexdigest()
-    source = "geometry:" + ";".join(
+    source = f"{profile}:geometry:" + ";".join(
         f"{lon:.{GEOMETRY_SIGNATURE_DECIMALS}f},{lat:.{GEOMETRY_SIGNATURE_DECIMALS}f}"
         for lon, lat in route.geometry
     )

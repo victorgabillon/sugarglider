@@ -140,3 +140,17 @@
   exactly once through the shared candidate evaluator.
 - Auto Tour algorithm diagnostics must never reconstruct route calls or cache facts;
   phase usage and cache snapshots from the request context are authoritative.
+- Public routing profiles are exactly `hike`, `trail_run`, `city_bike`, `gravel_bike`,
+  `mountain_bike`, and `road_bike`; do not accept aliases or expose backend profile
+  names through public models.
+- The immutable routing-profile registry is the sole owner of public/backend mapping,
+  activity kind, path details, snap preventions, capabilities, and public labels.
+- Every production planning and POI-approach route call must pass the selected public
+  profile explicitly. Route caches, candidate signatures, results, and GPX metadata
+  must preserve profile identity and must never fall back to hike.
+- Packaged readiness requires all six GraphHopper profiles. Profile/config/model/version
+  changes must invalidate the graph cache through the import fingerprint.
+- Activity-specific analysis and scoring must respect path-detail coverage. Missing
+  surface, access, network, smoothness, or technicality data remains visibly unknown.
+- Routing profiles are preferences over mapped OSM data, never safety, legality,
+  opening, current-condition, or rideability guarantees. Elevation remains disabled.

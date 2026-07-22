@@ -86,6 +86,7 @@ class OpenSearchMixin:
             name=request.name,
             path=direct_path,
             input_point_count=2,
+            routing_profile=request.profile,
         )
         if (
             request.maximum_distance_m is not None
@@ -138,6 +139,7 @@ class OpenSearchMixin:
                 name=request.name,
                 path=exact_path,
                 input_point_count=len(exact_points),
+                routing_profile=request.profile,
             )
             primary_draft = _Draft(
                 route=exact_route,
@@ -175,6 +177,7 @@ class OpenSearchMixin:
                     name=request.name,
                     path=original_path,
                     input_point_count=len(original_hard_waypoints),
+                    routing_profile=request.profile,
                 )
                 control_drafts.append(
                     _Draft(
@@ -224,6 +227,7 @@ class OpenSearchMixin:
                     name=request.name,
                     path=path,
                     input_point_count=2,
+                    routing_profile=request.profile,
                 )
                 control_drafts.append(
                     _Draft(

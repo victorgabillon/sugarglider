@@ -19,7 +19,7 @@ from sugarglider.planning.models import (
     WaypointPlanRequest,
 )
 from sugarglider.planning.portfolio import build_portfolio
-from sugarglider.planning.profiles import routing_profile
+from sugarglider.planning.profiles import RoutingProfileId, routing_profile
 from sugarglider.planning.result import (
     DroppedPlanStop,
     PlanCandidate,
@@ -45,9 +45,14 @@ class _CountingResultFactory(RouteResultFactory):
         self.calls = 0
 
     def create(
-        self, *, name: str, path: RoutedPath, input_point_count: int
+        self,
+        *,
+        name: str,
+        path: RoutedPath,
+        input_point_count: int,
+        routing_profile: RoutingProfileId,
     ) -> RouteResult:
-        del name, path, input_point_count
+        del name, path, input_point_count, routing_profile
         self.calls += 1
         return self.route
 
@@ -300,8 +305,8 @@ async def test_gateway_cache_hit_does_not_consume_budget(
     backend = _GatewayBackend(_routed_path(route_result))
     gateway = CachedRoutingGateway(cast(AutoTourRoutingBackend, backend), budget)
     points = (Coordinate(lat=48.87, lon=2.09), Coordinate(lat=48.88, lon=2.1))
-    assert await gateway.route(points) is backend.path
-    assert await gateway.route(points) is backend.path
+    assert await gateway.route(points, "hike") is backend.path
+    assert await gateway.route(points, "hike") is backend.path
     assert budget.total_used == 1
     assert backend.route_calls == 1
     assert gateway.cache_snapshot().model_dump() == {
@@ -327,9 +332,9 @@ async def test_gateway_caches_deterministic_failures(route_result: RouteResult) 
     )
     points = (Coordinate(lat=48.87, lon=2.09), Coordinate(lat=48.88, lon=2.1))
     with pytest.raises(ValueError, match="deterministic failure"):
-        await context.routes.route(points)
+        await context.routes.route(points, "hike")
     with pytest.raises(ValueError, match="deterministic failure"):
-        await context.routes.route(points)
+        await context.routes.route(points, "hike")
     assert budget.total_used == 1
     assert backend.route_calls == 1
     snapshot = context.routes.cache_snapshot()
@@ -349,12 +354,14 @@ async def test_gateway_caches_alternatives_and_round_trip_detours(
     gateway = CachedRoutingGateway(cast(AutoTourRoutingBackend, backend), budget)
     start = Coordinate(lat=48.87, lon=2.09)
     end = Coordinate(lat=48.88, lon=2.1)
-    first = await gateway.alternative_routes(start, end)
-    second = await gateway.alternative_routes(start, end)
+    first = await gateway.alternative_routes(start, end, "hike")
+    second = await gateway.alternative_routes(start, end, "hike")
     assert first == second
-    first_detour = await gateway.round_trip(start, 5_000, 7, phase=SearchPhase.SKELETON)
+    first_detour = await gateway.round_trip(
+        start, 5_000, 7, "hike", phase=SearchPhase.SKELETON
+    )
     second_detour = await gateway.round_trip(
-        start, 5_000, 7, phase=SearchPhase.SKELETON
+        start, 5_000, 7, "hike", phase=SearchPhase.SKELETON
     )
     assert first_detour == second_detour
     assert backend.alternative_calls == backend.round_trip_calls == 1
@@ -374,11 +381,12 @@ async def test_route_cache_key_distinguishes_behavior_options(
     backend = _GatewayBackend(_routed_path(route_result))
     gateway = CachedRoutingGateway(cast(AutoTourRoutingBackend, backend), budget)
     points = (Coordinate(lat=48.87, lon=2.09), Coordinate(lat=48.88, lon=2.1))
-    await gateway.route(points, pass_through=False)
-    await gateway.route(points, pass_through=True)
-    await gateway.route(points, custom_options=(("avoid", "steps"),))
+    await gateway.route(points, "hike", pass_through=False)
+    await gateway.route(points, "hike", pass_through=True)
+    await gateway.route(points, "hike", custom_options=(("avoid", "steps"),))
     await gateway.route(
         points,
+        "hike",
         topology_options=(("topology", "point_to_point"),),
     )
     assert backend.route_calls == 4
@@ -439,6 +447,7 @@ def _candidate(
 ) -> PlanCandidate:
     return PlanCandidate(
         id=candidate_id,
+        routing_profile=route.routing_profile,
         rank=1,
         roles=(),
         route=route,

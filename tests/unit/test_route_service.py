@@ -28,9 +28,19 @@ class FakeGraphHopperClient(GraphHopperClient):
         return True
 
 
+class AvailabilityGraphHopperClient(FakeGraphHopperClient):
+    def __init__(self, path: GraphHopperPath, profiles: frozenset[str]) -> None:
+        super().__init__(path)
+        self.profiles = profiles
+
+    async def available_profiles(self) -> frozenset[str]:
+        return self.profiles
+
+
 def request() -> RouteRequest:
     return RouteRequest(
-        points=[Coordinate(lat=48.0, lon=2.0), Coordinate(lat=48.1, lon=2.1)]
+        profile="hike",
+        points=[Coordinate(lat=48.0, lon=2.0), Coordinate(lat=48.1, lon=2.1)],
     )
 
 
@@ -79,3 +89,24 @@ async def test_impossible_geometry_is_an_upstream_error() -> None:
     )
     with pytest.raises(RoutingUpstreamError):
         await RouteService(FakeGraphHopperClient(path)).route(request())
+
+
+@pytest.mark.asyncio
+async def test_packaged_readiness_requires_every_backend_profile() -> None:
+    coordinate = (2.0, 48.0)
+    path = GraphHopperPath(
+        distance_m=100,
+        duration_ms=1_000,
+        ascend_m=None,
+        descend_m=None,
+        geometry=(coordinate, (2.01, 48.01)),
+        snapped_points=None,
+        details={},
+    )
+    complete = frozenset(
+        {"trail_run", "hike", "bike", "gravel_bike", "mtb", "racingbike"}
+    )
+    assert await RouteService(AvailabilityGraphHopperClient(path, complete)).ready()
+    assert not await RouteService(
+        AvailabilityGraphHopperClient(path, complete - {"racingbike"})
+    ).ready()

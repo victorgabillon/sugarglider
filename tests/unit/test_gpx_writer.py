@@ -28,6 +28,7 @@ def _candidate(
 ) -> PlanCandidate:
     return PlanCandidate(
         id="candidate",
+        routing_profile=route.routing_profile,
         rank=1,
         roles=("harmonious",),
         route=route,
@@ -83,6 +84,17 @@ def test_gpx_contains_one_track_and_exact_geometry(route_result: RouteResult) ->
     assert points[0].attrib == {"lat": "48.87138900", "lon": "2.09666700"}
     assert root.findall("g:rte", namespace) == []
     assert root.findall("g:wpt", namespace) == []
+
+
+def test_gpx_uses_public_profile_metadata_without_extensions(
+    route_result: RouteResult,
+) -> None:
+    road_route = route_result.model_copy(update={"routing_profile": "road_bike"})
+    root = ElementTree.fromstring(write_gpx(road_route))
+    namespace = {"g": GPX_NAMESPACE}
+    assert root.findtext("g:trk/g:type", namespaces=namespace) == "cycling"
+    assert "Road bike" in (root.findtext("g:trk/g:name", namespaces=namespace) or "")
+    assert root.findall(".//g:extensions", namespace) == []
 
 
 def test_plan_gpx_contains_only_selected_stops(route_result: RouteResult) -> None:

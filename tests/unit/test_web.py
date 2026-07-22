@@ -855,6 +855,75 @@ def test_frontend_uses_local_brand_identity_and_accessible_landmarks() -> None:
     assert all(url.startswith("/static/brand/") for url in brand_urls)
 
 
+def test_frontend_uses_profile_catalog_without_a_hidden_hike_default() -> None:
+    html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
+    app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
+    api = (STATIC_DIRECTORY / "api.js").read_text(encoding="utf-8")
+    state = (STATIC_DIRECTORY / "state.js").read_text(encoding="utf-8")
+
+    assert 'id="profile" aria-describedby="profile-description"' in html
+    assert 'fetch("/v2/routing-profiles"' in api
+    assert "getRoutingProfiles()" in app
+    assert "status.profile.activity_kind" in app
+    assert "option.disabled = !status.available" in app
+    assert "state.routingProfile: null" not in state
+    assert "routingProfile: null" in state
+    assert 'routingProfile: "hike"' not in state
+    assert "activity_quality" in app
+    assert '"not evaluated"' in app
+
+
+def test_generation_failures_are_visible_structured_and_accessible() -> None:
+    html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
+    app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
+    api = (STATIC_DIRECTORY / "api.js").read_text(encoding="utf-8")
+
+    assert 'id="error-banner"' in html
+    assert 'role="alert"' in html
+    assert 'aria-live="assertive"' in html
+    assert 'aria-atomic="true"' in html
+    for element_id in (
+        "error-code",
+        "error-message",
+        "error-context",
+        "error-suggestion",
+        "error-details",
+    ):
+        assert f'id="{element_id}"' in html
+
+    assert 'state.request = { status: "running"' in app
+    assert "finally {" in app
+    assert "state.abortController = null" in app
+    assert "renderStatus();" in app
+    assert "handleGenerationError(error)" in app
+    assert "showNoCandidateError(result)" in app
+    assert "No route candidate could satisfy the current hard constraints" in app
+    assert "exactWaypointContext(error.metadata)" in app
+    assert "required-point index" in app
+    assert "snap.toFixed(1)" in app
+    assert "maximum.toFixed(1)" in app
+    assert "Use Auto Tour for approximate places" in app
+    assert "no raw traceback is displayed" in app
+    assert "alert(" not in app
+
+    assert "publicError.point_index" in api
+    assert "publicError.point_name" in api
+    assert "publicError.snap_distance_m" in api
+    assert "publicError.maximum_snap_distance_m" in api
+    assert "JSON.stringify(body" not in api
+
+
+def test_imported_profiles_and_all_activity_candidate_groups_remain_rendered() -> None:
+    app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
+    assert "state.routingProfile = imported.canonical.routing_profile" in app
+    assert 'endpoints.routeTopology === "point_to_point"' in app
+    assert "profileDisplayName(candidate.routing_profile)" in app
+    assert 'quality.activity_kind === "walking"' in app
+    assert 'quality.activity_kind === "running"' in app
+    assert 'quality.activity_kind === "cycling"' in app
+    assert 'byId("download-gpx").disabled = !candidate' in app
+
+
 def test_required_marker_labels_and_selection_are_coordinated() -> None:
     app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
     html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")

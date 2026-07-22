@@ -12,6 +12,7 @@ def route_result() -> RouteResult:
     geometry = ((2.096667, 48.871389), (2.1, 48.87), (2.124421, 48.871454))
     return RouteResult(
         name="Marly & woods",
+        routing_profile="hike",
         summary=RouteSummary(
             distance_m=2500.5,
             duration_ms=1_800_000,

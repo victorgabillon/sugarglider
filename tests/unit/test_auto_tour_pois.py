@@ -97,6 +97,7 @@ def _request(**updates: object) -> AutoTourSearchRequest:
     values: dict[str, object] = {
         "start": _coordinate(0, 0),
         "target_distance_m": 14_000,
+        "profile": "hike",
     }
     values.update(updates)
     return AutoTourSearchRequest.model_validate(values)

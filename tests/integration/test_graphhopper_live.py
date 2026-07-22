@@ -20,6 +20,7 @@ from sugarglider.planning.models import (
 from sugarglider.planning.waypoint.service import WaypointPlanner
 from sugarglider.pois.index import load_poi_index
 from sugarglider.routing.graphhopper import GraphHopperClient
+from sugarglider.routing.profiles import ROUTING_PROFILES, RoutingProfileId
 from sugarglider.routing.result import RouteResultFactory
 from sugarglider.routing.service import RouteService
 
@@ -37,12 +38,75 @@ def _load(path: str) -> AutoTourPlanRequest | WaypointPlanRequest:
 
 
 @pytest.mark.asyncio
+async def test_live_info_advertises_every_packaged_profile() -> None:
+    _enabled()
+    base_url = os.getenv("GRAPHHOPPER_URL", "http://localhost:8989")
+    async with httpx.AsyncClient(timeout=60) as client:
+        advertised = await GraphHopperClient(
+            base_url, client=client
+        ).available_profiles()
+    assert {profile.graphhopper_profile for profile in ROUTING_PROFILES} <= advertised
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "profile",
+    (
+        "trail_run",
+        "hike",
+        "city_bike",
+        "gravel_bike",
+        "mountain_bike",
+        "road_bike",
+    ),
+)
+async def test_live_profile_supports_every_routing_operation(
+    profile: RoutingProfileId,
+) -> None:
+    _enabled()
+    base_url = os.getenv("GRAPHHOPPER_URL", "http://localhost:8989")
+    start = Coordinate(lat=48.871389, lon=2.096667)
+    middle = Coordinate(lat=48.871454, lon=2.124421)
+    end = Coordinate(lat=48.86156, lon=2.10833)
+    async with httpx.AsyncClient(timeout=300) as client:
+        backend = GraphHopperClient(base_url, client=client)
+        ordinary = await backend.route((start, end), profile)
+        multiple = await backend.route((start, middle, end), profile)
+        alternatives = await backend.alternative_routes(start, end, profile)
+        round_trip = await backend.round_trip(start, 10_000, 42, profile)
+        isochrone = await backend.isochrone(
+            start,
+            profile,
+            distance_limit_m=5_000,
+        )
+
+    for path in (ordinary, multiple, *alternatives, round_trip):
+        assert path.distance_m > 0
+        assert len(path.geometry) >= 2
+        assert {"edge_id", "road_class", "surface"} <= set(path.details)
+    assert multiple.snapped_points is not None
+    assert len(multiple.snapped_points) == 3
+    assert all(
+        haversine_distance_m(snapped, (point.lon, point.lat)) < 300
+        for snapped, point in zip(
+            multiple.snapped_points, (start, middle, end), strict=True
+        )
+    )
+    assert alternatives
+    assert round_trip.geometry[0] == round_trip.geometry[-1] or (
+        haversine_distance_m(round_trip.geometry[0], round_trip.geometry[-1]) < 300
+    )
+    assert isochrone.polygons
+
+
+@pytest.mark.asyncio
 async def test_live_routing_adapter_preserves_graphhopper_geometry() -> None:
     _enabled()
     base_url = os.getenv("GRAPHHOPPER_URL", "http://localhost:8989")
     async with httpx.AsyncClient() as client:
         result = await RouteService(GraphHopperClient(base_url, client=client)).route(
             RouteRequest(
+                profile="hike",
                 name="Adapter integration",
                 points=[
                     Coordinate(lat=48.871389, lon=2.096667),

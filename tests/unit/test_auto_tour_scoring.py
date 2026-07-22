@@ -96,7 +96,12 @@ def _route(
     )
     return RouteResultFactory(
         RouteAnalyzer(loop_geometry_analyzer=LoopGeometryRouteAnalyzer())
-    ).create(name="Synthetic Auto Tour", path=path, input_point_count=2)
+    ).create(
+        name="Synthetic Auto Tour",
+        path=path,
+        input_point_count=2,
+        routing_profile="hike",
+    )
 
 
 def _feature(osm_id: int, category: str, *, verified: bool = False) -> PoiFeature:

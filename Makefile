@@ -1,4 +1,4 @@
-.PHONY: install format lint typecheck test check brand-assets download-osm nature-index poi-index benchmark-pois up down logs smoke report generate generate-all-pois generate-auto-tour
+.PHONY: install format lint typecheck test check brand-assets download-osm rebuild-graph nature-index poi-index benchmark-pois up down logs smoke report generate generate-all-pois generate-auto-tour
 
 install:
 	uv sync
@@ -24,6 +24,9 @@ brand-assets:
 
 download-osm:
 	./scripts/download_osm.sh
+
+rebuild-graph:
+	./scripts/rebuild_graph_cache.sh
 
 nature-index:
 	./scripts/build_nature_index.sh

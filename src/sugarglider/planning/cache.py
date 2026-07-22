@@ -6,7 +6,11 @@ from typing import TypeVar
 
 from sugarglider.domain.models import Coordinate
 from sugarglider.planning.diagnostics import CacheDiagnostics
-from sugarglider.planning.profiles import RoutingProfileId
+from sugarglider.planning.profiles import (
+    GraphHopperProfile,
+    RoutingProfileId,
+    routing_profile,
+)
 
 T = TypeVar("T")
 
@@ -22,6 +26,7 @@ class RoutingOperation(StrEnum):
 class RouteCacheKey:
     operation: RoutingOperation
     profile_id: RoutingProfileId
+    backend_profile: GraphHopperProfile
     coordinates: tuple[tuple[float, float], ...]
     pass_through: bool | None = None
     topology_options: tuple[tuple[str, str], ...] = ()
@@ -47,6 +52,7 @@ class RouteCacheKey:
         return cls(
             operation=RoutingOperation.ROUTE,
             profile_id=profile_id,
+            backend_profile=routing_profile(profile_id).graphhopper_profile,
             coordinates=tuple((point.lat, point.lon) for point in points),
             pass_through=pass_through,
             topology_options=topology_options,

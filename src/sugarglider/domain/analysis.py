@@ -1,7 +1,7 @@
 """Immutable public models for explainable route-quality metrics."""
 
 from math import isclose
-from typing import Annotated, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -61,6 +61,47 @@ class RepetitionAnalysis(_ImmutableAnalysisModel):
     traversed_edge_run_count: NonNegativeInt
     repeated_edge_count: NonNegativeInt
     repeated_distance: DistanceMetric
+
+
+class WalkingRouteQuality(_ImmutableAnalysisModel):
+    activity_kind: Literal["walking"] = "walking"
+    trail_like: DistanceMetric
+    official_hiking_network: DistanceMetric
+    technical_hiking: DistanceMetric
+    steps: DistanceMetric
+    poor_smoothness: DistanceMetric
+    detail_coverage: dict[str, Share]
+
+
+class RunningRouteQuality(_ImmutableAnalysisModel):
+    activity_kind: Literal["running"] = "running"
+    runnable_surface: DistanceMetric
+    trail_like: DistanceMetric
+    technical_trail: DistanceMetric
+    steps: DistanceMetric
+    poor_smoothness: DistanceMetric
+    major_road: DistanceMetric
+    detail_coverage: dict[str, Share]
+
+
+class CyclingRouteQuality(_ImmutableAnalysisModel):
+    activity_kind: Literal["cycling"] = "cycling"
+    cycling_network: DistanceMetric
+    cycleway_like: DistanceMetric
+    paved: DistanceMetric
+    suitable_unpaved: DistanceMetric
+    track: DistanceMetric
+    rough_surface: DistanceMetric
+    steps: DistanceMetric
+    major_road: DistanceMetric
+    mtb_rating: DetailBreakdown
+    detail_coverage: dict[str, Share]
+
+
+type ActivityRouteQuality = Annotated[
+    WalkingRouteQuality | RunningRouteQuality | CyclingRouteQuality,
+    Field(discriminator="activity_kind"),
+]
 
 
 class NatureWeightedComponent(_ImmutableAnalysisModel):
@@ -260,10 +301,9 @@ class RouteAnalysis(_ImmutableAnalysisModel):
     unpaved: DistanceMetric
     unknown_surface: DistanceMetric
 
-    trail_like: DistanceMetric
-    official_hiking_network: DistanceMetric
     major_road: DistanceMetric
     car_accessible: DistanceMetric
+    activity_quality: ActivityRouteQuality
 
     repetition: RepetitionAnalysis
     immediate_backtrack: DistanceMetric
@@ -306,3 +346,17 @@ class RouteAnalysis(_ImmutableAnalysisModel):
             ):
                 raise ValueError("nature primary metrics must partition route distance")
         return self
+
+    @property
+    def trail_like(self) -> DistanceMetric:
+        quality = self.activity_quality
+        if isinstance(quality, (WalkingRouteQuality, RunningRouteQuality)):
+            return quality.trail_like
+        return DistanceMetric(distance_m=0.0, share=0.0)
+
+    @property
+    def official_hiking_network(self) -> DistanceMetric:
+        quality = self.activity_quality
+        if isinstance(quality, WalkingRouteQuality):
+            return quality.official_hiking_network
+        return DistanceMetric(distance_m=0.0, share=0.0)
