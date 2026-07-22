@@ -26,29 +26,54 @@
   "waypoint_order": "fixed",
   "waypoints": [
     {
-      "lat": 48.871454,
-      "lon": 2.124421,
-      "name": "Machine de Marly"
+      "id": "route-waypoint-1",
+      "name": "Machine de Marly",
+      "coordinate": {
+        "lat": 48.871454,
+        "lon": 2.124421,
+        "name": "Machine de Marly"
+      },
+      "constraint_strength": "exact"
     },
     {
-      "lat": 48.86156,
-      "lon": 2.10833,
-      "name": "Aqueduc de Louveciennes"
+      "id": "route-waypoint-2",
+      "name": "Aqueduc de Louveciennes",
+      "coordinate": {
+        "lat": 48.86156,
+        "lon": 2.10833,
+        "name": "Aqueduc de Louveciennes"
+      },
+      "constraint_strength": "exact"
     },
     {
-      "lat": 48.862849,
-      "lon": 2.099448,
-      "name": "Domaine de Marly"
+      "id": "route-waypoint-3",
+      "name": "Domaine de Marly",
+      "coordinate": {
+        "lat": 48.862849,
+        "lon": 2.099448,
+        "name": "Domaine de Marly"
+      },
+      "constraint_strength": "exact"
     },
     {
-      "lat": 48.8715,
-      "lon": 2.043,
-      "name": "Croix Saint-Michel"
+      "id": "route-waypoint-4",
+      "name": "Croix Saint-Michel",
+      "coordinate": {
+        "lat": 48.8715,
+        "lon": 2.043,
+        "name": "Croix Saint-Michel"
+      },
+      "constraint_strength": "exact"
     },
     {
-      "lat": 48.89081,
-      "lon": 2.02153,
-      "name": "Entrance of the Désert de Retz"
+      "id": "route-waypoint-5",
+      "name": "Entrance of the Désert de Retz",
+      "coordinate": {
+        "lat": 48.89081,
+        "lon": 2.02153,
+        "name": "Entrance of the Désert de Retz"
+      },
+      "constraint_strength": "exact"
     }
   ]
 }

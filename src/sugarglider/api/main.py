@@ -158,6 +158,7 @@ def create_app(
                     result_factory,
                     max_evaluations=runtime_settings.generation_max_evaluations,
                     structural_result_factory=structural_result_factory,
+                    poi_index=poi_index,
                 ),
             )
             yield

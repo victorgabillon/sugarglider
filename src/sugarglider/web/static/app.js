@@ -21,6 +21,7 @@ const PRIMARY_SCENIC_CATEGORIES = [
 const HYDRATION_CATEGORIES = ["drinking_water", "fountain", "water_tap"];
 
 const GENERATION_SUGGESTION = "Use Auto Tour for approximate places, or remove or move the exact waypoint.";
+let lastExactFailure = null;
 
 function showError(message, details = "", code = "", context = "", suggestion = "") {
   const codeElement = byId("error-code");
@@ -35,6 +36,10 @@ function showError(message, details = "", code = "", context = "", suggestion = 
   suggestionElement.classList.toggle("hidden", !suggestion);
   byId("error-details").textContent = details;
   byId("error-banner").classList.remove("hidden");
+  byId("exact-error-actions").classList.toggle(
+    "hidden",
+    code !== "exact_waypoint_not_reached",
+  );
 }
 
 function hideError() { byId("error-banner").classList.add("hidden"); }
@@ -399,9 +404,12 @@ function renderPreferredPois() {
 function selectedRequestedVisits() {
   const candidate = selectedCandidate();
   const decisions = [
-    ...(candidate?.selected_stops ?? [])
+    ...(candidate?.reached_stops ?? [])
       .filter((stop) => stop.selection_origin === "requested")
-      .map((stop) => [stop.id, { decision: "selected" }]),
+      .map((stop) => [stop.id, { decision: "reached" }]),
+    ...(candidate?.approximated_stops ?? [])
+      .filter((stop) => stop.selection_origin === "requested")
+      .map((stop) => [stop.id, { decision: "approximated" }]),
     ...(candidate?.dropped_stops ?? [])
       .filter((stop) => stop.selection_origin === "requested")
       .map((stop) => [stop.id, { decision: "dropped" }]),
@@ -821,19 +829,33 @@ function renderMapData() {
   );
   const allFeatures = state.poiFeatures;
   renderPois(allFeatures, state.selectedPoiId, selectPoi, poiRenderOptions());
+  const constraintPlaces = state.planningMode === "auto_tour"
+    ? state.autoTour.requestedPlaces
+    : state.points.filter((point) => point.constraintStrength !== "exact").map((point, index) => ({
+      id: point.id ?? `route-waypoint-${index + 1}`,
+      name: point.name,
+      coordinate: { lat: point.lat, lon: point.lon },
+      importance: "must_visit",
+      accessSearchRadiusM: point.accessSearchRadiusM ?? 500,
+    }));
+  const constraintVisits = [
+    ...(candidate?.reached_stops ?? []),
+    ...(candidate?.approximated_stops ?? []),
+    ...(candidate?.dropped_stops ?? []),
+  ].filter((stop) => stop.selection_origin === "requested");
   renderRequestedPlaceMarkers(
-    state.planningMode === "auto_tour" ? state.autoTour.requestedPlaces : [],
-    state.planningMode === "auto_tour"
-      ? [
-        ...(candidate?.selected_stops ?? [])
-          .filter((stop) => stop.selection_origin === "requested"),
-        ...(candidate?.dropped_stops ?? [])
-          .filter((stop) => stop.selection_origin === "requested"),
-      ]
-      : [],
+    constraintPlaces,
+    constraintVisits,
     state.selectedRequestedPlaceId,
     state.showDroppedRequestedRadii,
-    (id) => selectRequestedPlace(id, { scrollList: true }),
+    (id) => {
+      if (state.planningMode === "auto_tour") {
+        selectRequestedPlace(id, { scrollList: true });
+      } else {
+        const point = constraintPlaces.find((value) => value.id === id);
+        if (point) focusCoordinate([point.coordinate.lon, point.coordinate.lat]);
+      }
+    },
     requestedPopupId,
   );
 }
@@ -853,13 +875,14 @@ function autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare
   const analysis = candidate.route.analysis;
   const targetDifference = candidate.route.summary.distance_m - state.options.targetDistanceKm * 1000;
   const targetDifferenceLabel = `${targetDifference >= 0 ? "+" : "−"}${formatDistance(Math.abs(targetDifference))}`;
-  const requestedTotal = candidate.selected_stops.filter((stop) => stop.selection_origin === "requested").length
+  const requestedTotal = candidate.reached_stops.filter((stop) => stop.selection_origin === "requested").length
+    + candidate.approximated_stops.filter((stop) => stop.selection_origin === "requested").length
     + candidate.dropped_stops.filter((stop) => stop.selection_origin === "requested").length;
   const requestedSelected = candidate.diagnostics.requested_stop_count;
-  const discoveredSelected = candidate.selected_stops.filter((stop) => stop.selection_origin !== "requested").length;
+  const discoveredSelected = candidate.reached_stops.filter((stop) => stop.selection_origin !== "requested").length;
   const metrics = [
-    ["Selected requested stops", `${formatCount(requestedSelected)} / ${formatCount(requestedTotal)}`],
-    ["Selected discovered stops", formatCount(discoveredSelected)],
+    ["Covered requested stops", `${formatCount(requestedSelected)} / ${formatCount(requestedTotal)}`],
+    ["Reached discovered stops", formatCount(discoveredSelected)],
     ["Distance", formatDistance(candidate.route.summary.distance_m)],
     ["Target difference", targetDifferenceLabel],
     ["Immediate backtracking", formatDistance(candidate.diagnostics.immediate_backtracking_m)],
@@ -1125,15 +1148,26 @@ function loopGeometrySection(geometry) {
   ])}</details><p class="context-note">These projected shape diagnostics do not measure scenic beauty, safety or accessibility. Dense networks and routed geometry resolution can affect corridor detection.</p></section>`;
 }
 
-function autoTourItinerary(candidate) {
-  const selected = (candidate.selected_stops ?? []).map((stop, index) => {
+function constraintItinerary(candidate) {
+  const reached = (candidate.reached_stops ?? []).map((stop, index) => {
     return `<li class="itinerary-stop" role="button" tabindex="0" data-itinerary-stop-id="${escapeHtml(stop.id)}" data-itinerary-origin="${escapeHtml(stop.selection_origin)}"><strong>${index + 1}. ${escapeHtml(stop.name)}</strong><span>${escapeHtml(friendlyLabel(stop.category))} · ${escapeHtml(friendlyLabel(stop.resolved_approach.kind))} · arrival ${Number(stop.route_to_approach_m).toFixed(1)} m / ${Number(stop.resolved_approach.arrival_tolerance_m).toFixed(0)} m · ${escapeHtml(friendlyLabel(stop.selection_method))}</span></li>`;
   }).join("");
+  const approximated = (candidate.approximated_stops ?? []).map((stop) => `<li class="itinerary-stop approximated" role="button" tabindex="0" data-itinerary-stop-id="${escapeHtml(stop.id)}" data-itinerary-origin="${escapeHtml(stop.selection_origin)}"><strong>${escapeHtml(stop.name)} — approximated</strong><span>${formatDistance(stop.distance_m)} from the semantic place · normal tolerance ${formatDistance(stop.normal_tolerance_m)} · ${escapeHtml(friendlyLabel(stop.reason))} · access ${escapeHtml(friendlyLabel(stop.resolved_approach.access))}</span><div class="button-row"><button type="button" data-compromise-action="exact" data-constraint-id="${escapeHtml(stop.id)}">Make exact</button><button type="button" data-compromise-action="accept" data-constraint-id="${escapeHtml(stop.id)}">Accept approximation</button><button type="button" data-compromise-action="remove" data-constraint-id="${escapeHtml(stop.id)}">Remove stop</button></div></li>`).join("");
   const dropped = (candidate.dropped_stops ?? []).map((stop) => `<li><strong>${escapeHtml(stop.name)}</strong><span>Drop reason: ${escapeHtml(friendlyLabel(stop.reason))}</span></li>`).join("");
-  if (!selected && !dropped) {
-    return '<section><h3>Selected itinerary</h3><p class="context-note">No scenic or hydration POI is selected for this route.</p></section>';
+  if (!reached && !approximated && !dropped) {
+    return "";
   }
-  return `<section><h3>Selected itinerary</h3><ol class="tour-itinerary">${selected}</ol>${dropped ? `<details><summary>Dropped stops (${candidate.dropped_stops.length})</summary><ul class="tour-itinerary dropped">${dropped}</ul></details>` : ""}</section>`;
+  return `<section><h3>Route itinerary</h3><ol class="tour-itinerary">${reached}${approximated}</ol>${dropped ? `<details><summary>Dropped stops (${candidate.dropped_stops.length})</summary><ul class="tour-itinerary dropped">${dropped}</ul></details>` : ""}</section>`;
+}
+
+function compromiseSummary(candidate) {
+  const target = candidate.compromises.find((item) => item.code === "target_distance_missed");
+  return `<section class="compromise-summary" role="status" aria-live="polite"><h3>Route generated</h3>${metricRows([
+    ["Reached", formatCount(candidate.reached_stops.length)],
+    ["Approximated", formatCount(candidate.approximated_stops.length)],
+    ["Dropped", formatCount(candidate.dropped_stops.length)],
+    ["Target", target ? `Missed by ${formatDistance(target.distance_m)}` : "Within requested tolerance"],
+  ])}</section>`;
 }
 
 function endpointSection(result) {
@@ -1184,7 +1218,7 @@ function renderCanonicalMetrics(candidate, result) {
     ...(analysis.loop_geometry?.warnings ?? []),
     ...(analysis.nature?.warnings ?? []),
   ])];
-  byId("metrics-content").innerHTML = endpointSection(result)
+  byId("metrics-content").innerHTML = compromiseSummary(candidate) + endpointSection(result)
     + section("Canonical candidate", [
       ["Candidate ID", candidate.id],
       ["Routing profile", profileDisplayName(candidate.routing_profile)],
@@ -1193,9 +1227,9 @@ function renderCanonicalMetrics(candidate, result) {
       ["Target error", formatDistance(candidate.diagnostics.target_error_m)],
       ["Within tolerance", candidate.diagnostics.within_tolerance ? "Yes" : "No"],
       ["Safety eligible", candidate.diagnostics.safety_eligible ? "Yes" : "No"],
-      ["Selected / dropped stops", `${candidate.selected_stops.length} / ${candidate.dropped_stops.length}`],
+      ["Reached / approximated / dropped", `${candidate.reached_stops.length} / ${candidate.approximated_stops.length} / ${candidate.dropped_stops.length}`],
     ])
-    + (result.kind === "auto_tour" ? autoTourItinerary(candidate) : "")
+    + constraintItinerary(candidate)
     + section("Route quality", [
       ["Total repetition", `${formatDistance(analysis.repetition.repeated_distance.distance_m)} · ${formatPercent(analysis.repetition.repeated_distance.share)}`],
       ["Immediate backtracking", `${formatDistance(analysis.immediate_backtrack.distance_m)} · ${formatPercent(analysis.immediate_backtrack.share)}`],
@@ -1212,6 +1246,75 @@ function renderCanonicalMetrics(candidate, result) {
       ...phaseRows,
     ])
     + `<section><h3>Warnings</h3><ul class="warning-list">${warnings.length ? warnings.map((warning) => `<li>${escapeHtml(friendlyLabel(warning))}</li>`).join("") : "<li>No route or search warnings.</li>"}</ul></section>`;
+  wireCompromiseActions(candidate);
+}
+
+function constraintStateById(id) {
+  if (state.planningMode === "auto_tour") {
+    const index = state.autoTour.requestedPlaces.findIndex((place, position) => (
+      requestedPlaceIdentifier(place, position) === id
+    ));
+    return index < 0 ? null : { collection: state.autoTour.requestedPlaces, index };
+  }
+  const index = state.points.findIndex((point) => point.id === id);
+  return index < 0 ? null : { collection: state.points, index };
+}
+
+function wireCompromiseActions(candidate) {
+  byId("metrics-content").querySelectorAll(".itinerary-stop[data-itinerary-stop-id]").forEach((item) => {
+    const focusStop = () => {
+      const id = item.dataset.itineraryStopId;
+      const stop = [...candidate.reached_stops, ...candidate.approximated_stops]
+        .find((value) => value.id === id);
+      if (!stop) return;
+      state.selectedRequestedPlaceId = id;
+      state.pendingRequestedPlacePopupId = id;
+      renderMapData();
+      const coordinate = stop.resolved_approach.coordinate;
+      focusCoordinate([coordinate.lon, coordinate.lat]);
+    };
+    item.addEventListener("click", (event) => {
+      if (event.target.closest("button")) return;
+      focusStop();
+    });
+    item.addEventListener("keydown", (event) => {
+      if (event.target.closest("button") || !["Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      focusStop();
+    });
+  });
+  byId("metrics-content").querySelectorAll("[data-compromise-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.constraintId;
+      const target = constraintStateById(id);
+      if (!target) return;
+      const stop = candidate.approximated_stops.find((value) => value.id === id);
+      if (!stop) return;
+      const item = target.collection[target.index];
+      if (button.dataset.compromiseAction === "remove") {
+        target.collection.splice(target.index, 1);
+      } else if (button.dataset.compromiseAction === "exact") {
+        if (state.planningMode === "auto_tour") {
+          target.collection.splice(target.index, 1);
+          state.autoTour.hardPoints.push({
+            id: stop.id,
+            name: stop.name,
+            ...stop.semantic_coordinate,
+            constraintStrength: "exact",
+          });
+          state.points = [state.autoTour.start, ...state.autoTour.hardPoints].filter(Boolean);
+        } else {
+          item.constraintStrength = "exact";
+          item.approachOverride = null;
+        }
+      } else {
+        item.constraintStrength = "best_effort";
+        item.approachOverride = { ...stop.resolved_approach.coordinate };
+      }
+      invalidateAndRender();
+      byId("request-status").textContent = "Constraint updated. Generate again to apply it.";
+    });
+  });
 }
 
 function renderStatus() {
@@ -1413,7 +1516,14 @@ function handleGenerationError(error) {
     const context = error.code === "exact_waypoint_not_reached"
       ? exactWaypointContext(error.metadata)
       : "The planning request was not completed.";
-    showError(error.message, error.details, error.code, context, GENERATION_SUGGESTION);
+    lastExactFailure = error.code === "exact_waypoint_not_reached" ? error.metadata : null;
+    showError(
+      error.message,
+      error.details,
+      error.code,
+      context,
+      error.metadata?.suggestion ?? GENERATION_SUGGESTION,
+    );
     return;
   }
   showError(
@@ -1487,18 +1597,40 @@ function normalizeImportedRequest(value) {
   const start = normalize(value.start, "Start");
   const end = value.end == null ? null : normalize(value.end, "End");
   const autoTour = value.kind === "auto_tour";
+  const strength = (raw, fallback) => {
+    const resolved = raw ?? fallback;
+    if (!["exact", "approach", "best_effort"].includes(resolved)) {
+      throw new Error(`Unknown constraint strength: ${resolved}.`);
+    }
+    return resolved;
+  };
   const hardPoints = autoTour
-    ? (value.hard_waypoints ?? []).map((point, index) => normalize(point, `Hard waypoint ${index + 1}`))
+    ? (value.hard_waypoints ?? []).map((point, index) => ({
+      ...normalize(point.coordinate, point.name || `Hard waypoint ${index + 1}`),
+      id: point.id,
+      constraintStrength: "exact",
+    }))
     : [];
   const points = autoTour
     ? [start, ...hardPoints]
-    : (value.waypoints ?? []).map((point, index) => normalize(point, `Waypoint ${index + 1}`));
+    : (value.waypoints ?? []).map((point, index) => ({
+      ...normalize(point.coordinate, point.name || `Waypoint ${index + 1}`),
+      id: point.id,
+      constraintStrength: strength(point.constraint_strength, "exact"),
+      accessSearchRadiusM: point.access_search_radius_m ?? 500,
+      maximumBestEffortDistanceM: point.maximum_best_effort_distance_m,
+      approachOverride: point.approach_override == null
+        ? null
+        : normalize(point.approach_override, `Approach override ${index + 1}`),
+    }));
   const requestedPlaces = autoTour
     ? (value.requested_stops ?? []).map((stop, index) => ({
       id: stop.id,
       name: stop.name,
       coordinate: normalize(stop.semantic_coordinate, `Requested stop ${index + 1}`),
       accessSearchRadiusM: stop.access_search_radius_m,
+      constraintStrength: strength(stop.constraint_strength, "approach"),
+      maximumBestEffortDistanceM: stop.maximum_best_effort_distance_m,
       importance: stop.importance,
       osmReference: stop.osm_reference,
       approachOverride: stop.approach_override == null
@@ -1587,7 +1719,7 @@ async function importRequest(file) {
     invalidateAndRender();
     byId("request-status").textContent = state.planningMode === "auto_tour"
       ? `${file.name} loaded. ${state.importDiagnostics.supplied_location_count} supplied locations: ${state.importDiagnostics.consumed_as_start_count} START, ${state.importDiagnostics.consumed_as_end_count} END, ${state.autoTour.requestedPlaces.length} requested places; ${state.importDiagnostics.discarded_count} discarded.`
-      : `${file.name} loaded. All ${state.points.length} names and exact required points are ready for review.`;
+      : `${file.name} loaded. All ${state.points.length} named waypoint constraints and strengths are ready for review.`;
     fitCoordinates([
       ...imported.points,
       ...imported.hardPoints,
@@ -1627,8 +1759,75 @@ async function downloadSelected() {
   }
 }
 
+function failedExactPoint() {
+  const id = lastExactFailure?.point_id;
+  if (state.planningMode === "auto_tour") {
+    const index = state.autoTour.hardPoints.findIndex((point) => point.id === id);
+    return index < 0 ? null : { collection: state.autoTour.hardPoints, index };
+  }
+  let index = state.points.findIndex((point) => point.id === id);
+  if (index < 0 && Number.isInteger(lastExactFailure?.point_index)) {
+    index = lastExactFailure.point_index - 1;
+  }
+  return index < 0 || index >= state.points.length
+    ? null
+    : { collection: state.points, index };
+}
+
+function updateFailedExactPoint(action) {
+  const target = failedExactPoint();
+  if (!target) return;
+  const point = target.collection[target.index];
+  if (["nearest", "best_effort"].includes(action)) {
+    point.constraintStrength = "best_effort";
+    point.accessSearchRadiusM = Math.max(point.accessSearchRadiusM ?? 500, 1000);
+    point.maximumBestEffortDistanceM = point.accessSearchRadiusM;
+  } else if (action === "remove") {
+    target.collection.splice(target.index, 1);
+  } else if (action === "requested") {
+    target.collection.splice(target.index, 1);
+    const wasWaypointRoute = state.planningMode === "waypoint_route";
+    state.autoTour.requestedPlaces.push({
+      id: point.id,
+      name: point.name,
+      coordinate: { lat: point.lat, lon: point.lon },
+      importance: "must_visit",
+      constraintStrength: "approach",
+      accessSearchRadiusM: 500,
+    });
+    if (wasWaypointRoute) {
+      state.waypointPoints = [...state.points];
+      state.autoTour.start = state.waypointEndpoints.start;
+      state.autoTour.end = state.waypointEndpoints.end;
+      state.autoTour.routeTopology = state.waypointEndpoints.routeTopology;
+      state.autoTour.hardPoints = [];
+      state.planningMode = "auto_tour";
+      state.points = [state.autoTour.start].filter(Boolean);
+      document.querySelector('input[name="planning-mode"][value="auto_tour"]').checked = true;
+    }
+  } else if (action === "move") {
+    state.selectedPointIndex = state.planningMode === "auto_tour"
+      ? target.index + 1
+      : target.index;
+    state.addPointMode = true;
+  }
+  if (state.planningMode === "auto_tour") {
+    state.points = [state.autoTour.start, ...state.autoTour.hardPoints].filter(Boolean);
+  }
+  hideError();
+  invalidateAndRender();
+  byId("request-status").textContent = action === "move"
+    ? "Drag the selected waypoint or place it on the map, then generate again."
+    : "Constraint updated. Generate again to apply it.";
+}
+
 function bindEvents() {
   byId("dismiss-error").addEventListener("click", hideError);
+  byId("error-use-nearest").addEventListener("click", () => updateFailedExactPoint("nearest"));
+  byId("error-best-effort").addEventListener("click", () => updateFailedExactPoint("best_effort"));
+  byId("error-requested-place").addEventListener("click", () => updateFailedExactPoint("requested"));
+  byId("error-move-waypoint").addEventListener("click", () => updateFailedExactPoint("move"));
+  byId("error-remove-waypoint").addEventListener("click", () => updateFailedExactPoint("remove"));
   byId("generate").addEventListener("click", generate);
   byId("generate-top").addEventListener("click", generate);
   byId("cancel").addEventListener("click", () => state.abortController?.abort());

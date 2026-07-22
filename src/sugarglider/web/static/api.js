@@ -16,11 +16,14 @@ async function responseError(response) {
   const message = publicError.message ?? `The server returned HTTP ${response.status}.`;
   const metadata = {
     point_index: Number.isInteger(publicError.point_index) ? publicError.point_index : null,
+    point_id: typeof publicError.point_id === "string" ? publicError.point_id : null,
     point_name: typeof publicError.point_name === "string" ? publicError.point_name : null,
     snap_distance_m: typeof publicError.snap_distance_m === "number" ? publicError.snap_distance_m : null,
     maximum_snap_distance_m: typeof publicError.maximum_snap_distance_m === "number"
       ? publicError.maximum_snap_distance_m
       : null,
+    profile: typeof publicError.profile === "string" ? publicError.profile : null,
+    suggestion: typeof publicError.suggestion === "string" ? publicError.suggestion : null,
   };
   const safeDetails = {
     status: response.status,

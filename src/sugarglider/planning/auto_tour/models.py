@@ -28,6 +28,7 @@ type NaturePreference = Literal["off", "prefer"]
 type LoopGeometryPreference = Literal["off", "prefer"]
 type RequestedPlaceImportance = Literal["must_visit", "prefer"]
 type PoiDecision = Literal["selected", "dropped"]
+type ConstraintStrength = Literal["approach", "best_effort"]
 type PoiOrigin = Literal["requested", "discovered_scenic", "discovered_water"]
 type PoiSelectionReason = Literal[
     "requested_must_visit",
@@ -132,8 +133,12 @@ class RequestedTourPlace(ImmutableModel):
     access_search_radius_m: Annotated[float, Field(ge=25, le=2_000)] = 500.0
     arrival_tolerance_m: Annotated[float, Field(gt=0, le=25)] = 25.0
     importance: RequestedPlaceImportance = "prefer"
+    constraint_strength: ConstraintStrength = "approach"
     osm_reference: Annotated[str, Field(min_length=1, max_length=80)] | None = None
     approach_override: Coordinate | None = None
+    maximum_best_effort_distance_m: Annotated[float, Field(gt=0, le=2_000)] | None = (
+        None
+    )
     original_index: NonNegativeInt | None = None
     approach_candidates: SkipJsonSchema[tuple[PoiApproachCandidate, ...]] = Field(
         default=(), exclude=True

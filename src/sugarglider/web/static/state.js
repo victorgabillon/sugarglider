@@ -199,10 +199,11 @@ export function currentPlanRequest() {
   const common = commonPlanState(endpoints);
   const modeState = state.planningMode === "auto_tour"
     ? {
-      hard_waypoints: state.autoTour.hardPoints.map((point, index) => coordinatePayload(
-        point,
-        pointDisplayName(point, index + 1),
-      )),
+      hard_waypoints: state.autoTour.hardPoints.map((point, index) => ({
+        id: point.id ?? `hard-waypoint-${index + 1}`,
+        name: pointDisplayName(point, index + 1),
+        coordinate: coordinatePayload(point, pointDisplayName(point, index + 1)),
+      })),
       requested_stops: state.autoTour.requestedPlaces.map((place, index) => ({
         id: requestedPlaceIdentifier(place, index),
         name: place.name || `Requested stop ${index + 1}`,
@@ -211,8 +212,12 @@ export function currentPlanRequest() {
           place.name || `Requested stop ${index + 1}`,
         ),
         importance: place.importance,
+        constraint_strength: place.constraintStrength ?? "approach",
         osm_reference: place.osmReference ?? null,
         access_search_radius_m: place.accessSearchRadiusM ?? 500,
+        maximum_best_effort_distance_m: place.constraintStrength === "best_effort"
+          ? place.maximumBestEffortDistanceM ?? place.accessSearchRadiusM ?? 500
+          : null,
         approach_override: place.approachOverride
           ? coordinatePayload(place.approachOverride, "Approach override")
           : null,
@@ -221,10 +226,19 @@ export function currentPlanRequest() {
       free_poi_spur_physical_m: state.options.freePoiSpurRepeatedM ?? 200,
     }
     : {
-      waypoints: state.points.map((point, index) => coordinatePayload(
-        point,
-        pointDisplayName(point, index),
-      )),
+      waypoints: state.points.map((point, index) => ({
+        id: point.id ?? `route-waypoint-${index + 1}`,
+        name: pointDisplayName(point, index),
+        coordinate: coordinatePayload(point, pointDisplayName(point, index)),
+        constraint_strength: point.constraintStrength ?? "exact",
+        access_search_radius_m: point.accessSearchRadiusM ?? 500,
+        maximum_best_effort_distance_m: point.constraintStrength === "best_effort"
+          ? point.maximumBestEffortDistanceM ?? point.accessSearchRadiusM ?? 500
+          : null,
+        approach_override: point.approachOverride
+          ? coordinatePayload(point.approachOverride, "Approach override")
+          : null,
+      })),
       waypoint_order: state.options.waypointOrder,
     };
   state.plan = {

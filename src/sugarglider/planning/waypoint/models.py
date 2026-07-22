@@ -23,6 +23,7 @@ class WaypointSequenceProposal:
     exact_points: tuple[Coordinate, ...]
     exact_point_positions: tuple[int, ...]
     original_indices: tuple[int, ...]
+    exact_point_ids: tuple[str | None, ...]
     topology: RouteTopology
     construction: WaypointConstruction
     order_provenance: str
@@ -31,6 +32,8 @@ class WaypointSequenceProposal:
     def __post_init__(self) -> None:
         if len(self.exact_points) != len(self.exact_point_positions):
             raise ValueError("exact points and positions must have equal length")
+        if len(self.exact_points) != len(self.exact_point_ids):
+            raise ValueError("exact points and IDs must have equal length")
         if tuple(sorted(self.exact_point_positions)) != self.exact_point_positions:
             raise ValueError("exact point positions must be ordered")
         if any(

@@ -2,12 +2,17 @@
 
 from sugarglider.analysis.route import RouteAnalyzer
 from sugarglider.planning.budget import SearchBudget, SearchPhase
+from sugarglider.planning.constraints.resolver import (
+    ConstraintResolution,
+    ConstraintResolver,
+)
 from sugarglider.planning.context import PlanningSearchContext
 from sugarglider.planning.diagnostics import PlanSearchDiagnostics
 from sugarglider.planning.evaluator import CandidateEvaluator
 from sugarglider.planning.models import WaypointPlanRequest
 from sugarglider.planning.pipeline import evaluate_candidate_portfolio
 from sugarglider.planning.result import PlanCandidate, PlanResult
+from sugarglider.planning.routing_gateway import SearchBudgetExhaustedError
 from sugarglider.planning.validation import (
     CandidateEvaluationError,
     ExactWaypointNotReachedError,
@@ -21,6 +26,7 @@ from sugarglider.planning.waypoint.models import WaypointSequenceProposal
 from sugarglider.planning.waypoint.ordering import ordering_proposals
 from sugarglider.planning.waypoint.routing import route_proposal
 from sugarglider.planning.waypoint.scoring import WaypointCandidateScorer
+from sugarglider.pois.index import PoiIndex
 from sugarglider.routing.backend import AutoTourRoutingBackend, RoutedPath
 from sugarglider.routing.errors import RoutingError
 from sugarglider.routing.result import RouteResultFactory
@@ -36,6 +42,7 @@ class WaypointPlanner:
         *,
         max_evaluations: int = 48,
         structural_result_factory: RouteResultFactory | None = None,
+        poi_index: PoiIndex | None = None,
     ) -> None:
         if max_evaluations < 1:
             raise ValueError("Waypoint search budget must be positive")
@@ -45,6 +52,7 @@ class WaypointPlanner:
             structural_result_factory or RouteResultFactory(RouteAnalyzer())
         )
         self._max_evaluations = max_evaluations
+        self._poi_index = poi_index
         self._evaluator = CandidateEvaluator()
         self._scorer = WaypointCandidateScorer()
 
@@ -52,6 +60,9 @@ class WaypointPlanner:
         context = PlanningSearchContext.create(
             backend=self._backend,
             budget=_waypoint_budget(request, self._max_evaluations),
+        )
+        request, constraint_resolutions = await self._resolve_constraints(
+            request, context
         )
         ordered, ordering_stats = ordering_proposals(
             request, limit=min(16, self._max_evaluations)
@@ -77,6 +88,7 @@ class WaypointPlanner:
                 proposal=proposal,
                 context=context,
                 exact_waypoint_failures=exact_waypoint_failures,
+                constraint_resolutions=constraint_resolutions,
             )
             if evaluated is not None:
                 path, candidate = evaluated
@@ -115,6 +127,7 @@ class WaypointPlanner:
                 context=context,
                 phase=SearchPhase.SKELETON,
                 exact_waypoint_failures=exact_waypoint_failures,
+                constraint_resolutions=constraint_resolutions,
             )
             if evaluated is not None:
                 path, candidate = evaluated
@@ -127,6 +140,7 @@ class WaypointPlanner:
                 sources=tuple(routed),
                 context=context,
                 destination=candidates,
+                constraint_resolutions=constraint_resolutions,
             )
 
         portfolio = evaluate_candidate_portfolio(
@@ -179,6 +193,7 @@ class WaypointPlanner:
         proposal: WaypointSequenceProposal,
         context: PlanningSearchContext,
         exact_waypoint_failures: list[ExactWaypointNotReachedError],
+        constraint_resolutions: tuple[ConstraintResolution, ...],
         phase: SearchPhase | None = None,
     ) -> tuple[RoutedPath, PlanCandidate] | None:
         try:
@@ -188,9 +203,17 @@ class WaypointPlanner:
                 context=context,
                 phase=phase,
             )
-            return path, self._evaluate_path(request, proposal, path, context)
+            return path, self._evaluate_path(
+                request, proposal, path, context, constraint_resolutions
+            )
         except ExactWaypointNotReachedError as exc:
+            exc.profile = request.routing_profile
             exact_waypoint_failures.append(exc)
+            context.diagnostics.rejections.append(f"{proposal.construction}:{exc}")
+            context.diagnostics.increment("candidates_rejected")
+            return None
+        except SearchBudgetExhaustedError as exc:
+            context.diagnostics.warnings.add("route_budget_exhausted")
             context.diagnostics.rejections.append(f"{proposal.construction}:{exc}")
             context.diagnostics.increment("candidates_rejected")
             return None
@@ -205,12 +228,14 @@ class WaypointPlanner:
         proposal: WaypointSequenceProposal,
         path: RoutedPath,
         context: PlanningSearchContext,
+        constraint_resolutions: tuple[ConstraintResolution, ...],
     ) -> PlanCandidate:
         draft = waypoint_draft(
             request=request,
             proposal=proposal,
             path=path,
             result_factory=self._result_factory,
+            constraint_resolutions=constraint_resolutions,
         )
         context.diagnostics.increment("candidate_drafts_created")
         candidate = self._evaluator.evaluate(
@@ -228,6 +253,7 @@ class WaypointPlanner:
         sources: tuple[tuple[WaypointSequenceProposal, RoutedPath, PlanCandidate], ...],
         context: PlanningSearchContext,
         destination: list[PlanCandidate],
+        constraint_resolutions: tuple[ConstraintResolution, ...],
     ) -> None:
         source_order = sorted(
             sources,
@@ -248,7 +274,11 @@ class WaypointPlanner:
                 try:
                     validate_waypoint_path(value.proposal, value.path)
                     candidate = self._evaluate_path(
-                        request, value.proposal, value.path, context
+                        request,
+                        value.proposal,
+                        value.path,
+                        context,
+                        constraint_resolutions,
                     )
                 except (CandidateEvaluationError, RoutingError) as exc:
                     context.diagnostics.rejections.append(f"low_overlap_beam:{exc}")
@@ -262,13 +292,54 @@ class WaypointPlanner:
                     continue
                 destination.append(candidate)
 
+    async def _resolve_constraints(
+        self,
+        request: WaypointPlanRequest,
+        context: PlanningSearchContext,
+    ) -> tuple[WaypointPlanRequest, tuple[ConstraintResolution, ...]]:
+        resolver = ConstraintResolver(routes=context.routes, poi_index=self._poi_index)
+        resolved_waypoints = []
+        resolutions = []
+        anchor = request.start
+        for waypoint in request.waypoints:
+            resolution = await resolver.resolve(
+                constraint_id=waypoint.id,
+                constraint_name=waypoint.name,
+                semantic_coordinate=waypoint.coordinate,
+                strength=waypoint.constraint_strength,
+                anchor=anchor,
+                profile=request.routing_profile,
+                access_search_radius_m=waypoint.access_search_radius_m,
+                maximum_best_effort_distance_m=(
+                    waypoint.maximum_best_effort_distance_m
+                ),
+                approach_override=waypoint.approach_override,
+            )
+            resolutions.append(resolution)
+            if resolution.routed_coordinate is not None:
+                resolved_waypoints.append(
+                    waypoint.model_copy(
+                        update={"coordinate": resolution.routed_coordinate}
+                    )
+                )
+                anchor = resolution.routed_coordinate
+        return (
+            request.model_copy(update={"waypoints": tuple(resolved_waypoints)}),
+            tuple(resolutions),
+        )
+
 
 def _waypoint_budget(
     request: WaypointPlanRequest, max_evaluations: int
 ) -> SearchBudget:
     limits = {phase: 0 for phase in SearchPhase}
+    approach = min(
+        sum(waypoint.constraint_strength != "exact" for waypoint in request.waypoints),
+        max_evaluations - 1,
+    )
+    limits[SearchPhase.APPROACH] = approach
     limits[SearchPhase.CONTROL] = 1
-    remaining = max_evaluations - 1
+    remaining = max_evaluations - 1 - approach
     alternative = (
         min(16, remaining) if request.preferences.path_selection == "low_overlap" else 0
     )
@@ -288,6 +359,10 @@ def _waypoint_ranking_key(
     diagnostics = candidate.diagnostics
     return (
         0 if diagnostics.safety_eligible else 1,
+        -diagnostics.requested_stop_count,
+        diagnostics.approximated_stop_count,
+        sum(stop.distance_m for stop in candidate.approximated_stops),
+        diagnostics.dropped_stop_count,
         0 if diagnostics.within_tolerance else 1,
         priority_weight,
         diagnostics.target_error_m,

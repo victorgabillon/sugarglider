@@ -158,7 +158,14 @@ def waypoint_request() -> dict[str, object]:
             "loop_geometry": "off",
             "path_selection": "shortest",
         },
-        "waypoints": [{"lat": 48.87, "lon": 2.11}],
+        "waypoints": [
+            {
+                "id": "woodland-gate",
+                "name": "Woodland gate",
+                "coordinate": {"lat": 48.87, "lon": 2.11},
+                "constraint_strength": "exact",
+            }
+        ],
         "waypoint_order": "fixed",
     }
 
@@ -194,9 +201,11 @@ async def test_exact_waypoint_failure_has_safe_structured_public_fields(
 ) -> None:
     plan_service.error = ExactWaypointNotReachedError(
         point_index=3,
+        point_id="woodland-gate",
         point_name="Woodland gate",
         snap_distance_m=487.25,
         maximum_snap_distance_m=300,
+        profile="mountain_bike",
     )
     response = await client.post("/v2/plans/generate", json=waypoint_request())
     assert response.status_code == 422
@@ -208,9 +217,15 @@ async def test_exact_waypoint_failure_has_safe_structured_public_fields(
                 "network."
             ),
             "point_index": 3,
+            "point_id": "woodland-gate",
             "point_name": "Woodland gate",
             "snap_distance_m": 487.25,
             "maximum_snap_distance_m": 300.0,
+            "profile": "mountain_bike",
+            "suggestion": (
+                "Move or remove the exact waypoint, or explicitly convert it to "
+                "best effort."
+            ),
         }
     }
 

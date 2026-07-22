@@ -25,7 +25,7 @@ from sugarglider.planning.result import (
     PlanCandidate,
     PlanCandidateDiagnostics,
     PlanScore,
-    SelectedPlanStop,
+    ReachedPlanStop,
 )
 from sugarglider.planning.routing_gateway import CachedRoutingGateway
 from sugarglider.planning.validation import (
@@ -181,6 +181,50 @@ def test_discriminated_models_round_trip_and_forbid_obsolete_fields() -> None:
         PLAN_REQUEST_ADAPTER.validate_python(document)
 
 
+def test_explicit_constraint_models_and_distance_hardness() -> None:
+    document = {
+        **_common(),
+        "kind": "waypoint_route",
+        "preferences": _waypoint_preferences(),
+        "waypoints": [
+            {
+                "id": "viewpoint",
+                "name": "Viewpoint",
+                "coordinate": {"lat": 48.89, "lon": 2.11},
+                "constraint_strength": "best_effort",
+                "maximum_best_effort_distance_m": 750,
+            }
+        ],
+        "waypoint_order": "fixed",
+        "distance_objective": {
+            "target_m": 10_000,
+            "tolerance_m": 1_000,
+            "maximum_m": None,
+            "priority": "balanced",
+        },
+    }
+    request = PLAN_REQUEST_ADAPTER.validate_python(document)
+    assert isinstance(request, WaypointPlanRequest)
+    assert request.waypoints[0].constraint_strength == "best_effort"
+    assert request.waypoints[0].maximum_best_effort_distance_m == 750
+
+    document["waypoints"] = [{"lat": 48.89, "lon": 2.11}]
+    with pytest.raises(ValidationError, match="coordinate"):
+        PLAN_REQUEST_ADAPTER.validate_python(document)
+
+    document["waypoints"] = []
+    document["topology"] = "point_to_point"
+    document["end"] = {"lat": 48.9, "lon": 2.12}
+    document["distance_objective"] = {
+        "target_m": 10_000,
+        "tolerance_m": 1_000,
+        "maximum_m": None,
+        "priority": "strict",
+    }
+    with pytest.raises(ValidationError, match="maximum_m is required for strict"):
+        PLAN_REQUEST_ADAPTER.validate_python(document)
+
+
 @pytest.mark.parametrize(
     ("topology", "end"),
     [("loop", {"lat": 48.88, "lon": 2.1}), ("point_to_point", None)],
@@ -192,7 +236,13 @@ def test_endpoint_rules_are_explicit(topology: str, end: object) -> None:
         "topology": topology,
         "end": end,
         "preferences": _waypoint_preferences(),
-        "waypoints": [{"lat": 48.89, "lon": 2.11}],
+        "waypoints": [
+            {
+                "id": "waypoint-1",
+                "name": "Waypoint 1",
+                "coordinate": {"lat": 48.89, "lon": 2.11},
+            }
+        ],
         "waypoint_order": "fixed",
     }
     with pytest.raises(ValidationError):
@@ -244,7 +294,13 @@ def test_waypoint_route_rejects_auto_tour_preferences() -> None:
                 **_common(),
                 "kind": "waypoint_route",
                 "preferences": {**_waypoint_preferences(), "scenic": "prefer"},
-                "waypoints": [{"lat": 48.89, "lon": 2.11}],
+                "waypoints": [
+                    {
+                        "id": "waypoint-1",
+                        "name": "Waypoint 1",
+                        "coordinate": {"lat": 48.89, "lon": 2.11},
+                    }
+                ],
                 "waypoint_order": "fixed",
             }
         )
@@ -475,7 +531,7 @@ def test_shared_portfolio_assigns_distinct_multi_roles(
     portfolio = build_portfolio(candidates, limit=4)
     roles = {role: candidate.id for candidate in portfolio for role in candidate.roles}
     assert roles == {
-        "harmonious": "distance",
+        "harmonious": "coverage",
         "maximum_requested_coverage": "coverage",
         "smooth_low_detour": "smooth",
         "distance_focused": "distance",
@@ -525,7 +581,14 @@ def test_hard_waypoint_566_m_from_route_is_rejected(
                 "lon": route_result.geometry[-1][0],
             },
             "preferences": _waypoint_preferences(),
-            "waypoints": [waypoint.model_dump(mode="json")],
+            "waypoints": [
+                {
+                    "id": "lisiere",
+                    "name": "Lisière",
+                    "coordinate": waypoint.model_dump(mode="json"),
+                    "constraint_strength": "exact",
+                }
+            ],
             "waypoint_order": "fixed",
         }
     )
@@ -597,8 +660,8 @@ def test_inaccessible_semantic_stop_can_be_dropped_or_use_an_override(
     )
     selected = base.model_copy(
         update={
-            "selected_stops": (
-                SelectedPlanStop(
+            "reached_stops": (
+                ReachedPlanStop(
                     id="castle",
                     name="Castle",
                     semantic_coordinate=semantic,
@@ -651,10 +714,12 @@ def test_shared_evaluator_enriches_each_complete_draft_once(
     )
     factory = _CountingResultFactory(route_result)
 
-    CandidateEvaluator(factory).evaluate(
+    candidate = CandidateEvaluator(factory).evaluate(
         request=request,
         draft=draft,
         scorer=_DraftScorer(),
     )
 
     assert factory.calls == 1
+    assert not candidate.diagnostics.within_tolerance
+    assert [value.code for value in candidate.compromises] == ["target_distance_missed"]

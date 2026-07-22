@@ -193,6 +193,7 @@ def _insert_after_exact(
         exact_points=source.exact_points,
         exact_point_positions=positions,
         original_indices=source.original_indices,
+        exact_point_ids=source.exact_point_ids,
         topology=source.topology,
         construction=construction,
         order_provenance=source.order_provenance,

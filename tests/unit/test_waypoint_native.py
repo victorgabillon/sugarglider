@@ -144,7 +144,15 @@ def _request(
             "path_selection": path_selection,
             "loop_geometry": "off",
         },
-        "waypoints": [point.model_dump() for point in waypoints],
+        "waypoints": [
+            {
+                "id": f"waypoint-{index}",
+                "name": point.name or f"Waypoint {index}",
+                "coordinate": point.model_dump(),
+                "constraint_strength": "exact",
+            }
+            for index, point in enumerate(waypoints, start=1)
+        ],
         "waypoint_order": order,
     }
     request = PLAN_REQUEST_ADAPTER.validate_python(document)

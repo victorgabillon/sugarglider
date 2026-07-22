@@ -146,6 +146,8 @@ input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d;
 .requested-place-copy { min-width: 0; display: grid; gap: .12rem; overflow-wrap: anywhere; }
 .requested-place-status { color: var(--muted-text); font-size: .61rem; font-weight: 800; text-transform: uppercase; }
 .requested-status-selected .requested-place-status { color: #2f6f48; }
+.requested-status-reached .requested-place-status { color: #2f6f48; }
+.requested-status-approximated .requested-place-status { color: #9a5b00; }
 .requested-status-dropped .requested-place-status { color: #a73535; }
 .poi-list { position: relative; max-height: min(47vh, 520px); margin: .45rem 0; padding: .15rem .2rem .15rem 0; display: grid; gap: .45rem; overflow-y: auto; overscroll-behavior: contain; scroll-padding: .4rem; }
 .poi-row { min-width: 0; padding: .48rem; display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; gap: .45rem; border: 1px solid #d2d2c4; border-radius: 8px; background: #f5f3e9; box-shadow: 0 1px 2px rgb(42 47 39 / 5%); }
@@ -181,6 +183,8 @@ input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d;
 .tour-itinerary { margin: .45rem 0 0; padding-left: 1.25rem; display: grid; gap: .45rem; }
 .tour-itinerary li { font-size: .72rem; line-height: 1.35; }
 .tour-itinerary span { display: block; color: var(--muted-text); font-size: .65rem; }
+.compromise-summary { border: 1px solid #dfbf76; border-radius: 7px; padding: .6rem; background: #fff3cf; }
+.tour-itinerary .approximated { border-left: 4px solid #d99216; padding-left: .5rem; }
 .tour-itinerary .itinerary-stop { padding: .3rem; border-radius: 5px; cursor: pointer; }
 .tour-itinerary .itinerary-stop:hover,
 .tour-itinerary .itinerary-stop:focus-visible { outline: 2px solid var(--brand-leaf); outline-offset: 1px; background: #f5f4e8; }

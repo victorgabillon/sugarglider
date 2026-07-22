@@ -539,12 +539,14 @@ export function requestedPlaceFeatureCollection(places, visits = [], selectedId 
       const id = place.id ?? requestedPlaceIdentifier(place, index);
       const visit = visitsById.get(id);
       const status = visit?.selection_method
-        ? "selected"
+        ? "reached"
+        : Number.isFinite(Number(visit?.distance_m)) && visit?.resolved_approach
+          ? "approximated"
         : visit?.reason
           ? "dropped"
           : "pending";
       const originalOrder = Number(place.originalIndex ?? index + 1);
-      const measuredDistance = Number(visit?.route_to_approach_m);
+      const measuredDistance = Number(visit?.distance_m ?? visit?.route_to_approach_m);
       return {
         type: "Feature",
         id,
@@ -670,7 +672,8 @@ function ensureRequestedPlaceLayers() {
   }
   const statusColor = [
     "match", ["get", "status"],
-    "selected", "#4f8c61",
+    "reached", "#4f8c61",
+    "approximated", "#d99216",
     "dropped", "#c94f47",
     "#fff1c7",
   ];
@@ -805,7 +808,8 @@ function ensureRequestedPlaceLayers() {
 }
 
 function requestedPlaceStatusLabel(status) {
-  if (status === "selected") return "Selected";
+  if (status === "reached") return "Reached";
+  if (status === "approximated") return "Approximated";
   if (status === "dropped") return "Dropped";
   return "Pending route generation";
 }
@@ -933,10 +937,10 @@ export function renderRequestedPlaces(
   map.getSource(REQUESTED_SOURCE).setData(collection);
   const selectedApproaches = collection.features.filter((feature) => (
     feature.properties.approach
-    && (feature.properties.status === "selected" || feature.properties.selected)
+    && (["reached", "approximated"].includes(feature.properties.status) || feature.properties.selected)
   ));
   requestedConnectorFeatureCount = selectedApproaches.filter(
-    (feature) => feature.properties.status === "selected",
+    (feature) => ["reached", "approximated"].includes(feature.properties.status),
   ).length;
   map.getSource(REQUESTED_APPROACH_SOURCE).setData({
     type: "FeatureCollection",
@@ -956,7 +960,7 @@ export function renderRequestedPlaces(
   map.getSource(REQUESTED_CONNECTOR_SOURCE).setData({
     type: "FeatureCollection",
     features: selectedApproaches
-      .filter((feature) => feature.properties.status === "selected")
+      .filter((feature) => ["reached", "approximated"].includes(feature.properties.status))
       .map((feature) => ({
         type: "Feature",
         id: `${feature.id}-connector`,
@@ -993,7 +997,7 @@ export function renderRequestedPlaces(
 
 export function requestedPlaceMapDiagnostics() {
   const features = [...requestedPlaceById.values()];
-  const statuses = { pending: 0, selected: 0, dropped: 0 };
+  const statuses = { pending: 0, reached: 0, approximated: 0, dropped: 0 };
   for (const feature of features) statuses[feature.properties.status] += 1;
   const requestedLayerIds = [
     REQUESTED_RADIUS_FILL_LAYER,

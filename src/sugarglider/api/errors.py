@@ -44,9 +44,12 @@ class PublicErrorBody(BaseModel):
     code: str
     message: str
     point_index: int | None = None
+    point_id: str | None = None
     point_name: str | None = None
     snap_distance_m: float | None = None
     maximum_snap_distance_m: float | None = None
+    profile: str | None = None
+    suggestion: str | None = None
 
 
 ERRORS: dict[type[Exception], PublicError] = {
@@ -112,17 +115,23 @@ def _response(
     error: PublicError,
     *,
     point_index: int | None = None,
+    point_id: str | None = None,
     point_name: str | None = None,
     snap_distance_m: float | None = None,
     maximum_snap_distance_m: float | None = None,
+    profile: str | None = None,
+    suggestion: str | None = None,
 ) -> JSONResponse:
     body = PublicErrorBody(
         code=error.code,
         message=error.message,
         point_index=point_index,
+        point_id=point_id,
         point_name=point_name,
         snap_distance_m=snap_distance_m,
         maximum_snap_distance_m=maximum_snap_distance_m,
+        profile=profile,
+        suggestion=suggestion,
     )
     return JSONResponse(
         status_code=error.status_code,
@@ -157,9 +166,12 @@ def install_error_handlers(app: FastAPI) -> None:
                 ),
             ),
             point_index=exception.point_index,
+            point_id=exception.point_id,
             point_name=exception.point_name,
             snap_distance_m=exception.snap_distance_m,
             maximum_snap_distance_m=exception.maximum_snap_distance_m,
+            profile=exception.profile,
+            suggestion=exception.suggestion,
         )
 
     for exception_type, public_error in ERRORS.items():

@@ -3,13 +3,29 @@
   "kind": "auto_tour",
   "name": "Marly gravel-bike loop",
   "topology": "loop",
-  "start": {"lat": 48.871389, "lon": 2.096667, "name": "Marly station"},
+  "start": {
+    "lat": 48.871389,
+    "lon": 2.096667,
+    "name": "Marly station"
+  },
   "end": null,
   "routing_profile": "gravel_bike",
   "candidate_count": 3,
   "seed": 42,
-  "distance_objective": {"target_m": 30000, "tolerance_m": 2500, "maximum_m": null, "priority": "flexible"},
-  "preferences": {"nature": "prefer", "path_selection": "low_overlap", "scenic": "prefer", "drinking_water": "prefer", "loop_geometry": "prefer", "direction": "any"},
+  "distance_objective": {
+    "target_m": 30000,
+    "tolerance_m": 2500,
+    "maximum_m": null,
+    "priority": "flexible"
+  },
+  "preferences": {
+    "nature": "prefer",
+    "path_selection": "low_overlap",
+    "scenic": "prefer",
+    "drinking_water": "prefer",
+    "loop_geometry": "prefer",
+    "direction": "any"
+  },
   "hard_waypoints": [],
   "requested_stops": [],
   "preferred_discovered_poi_ids": [],

@@ -1032,7 +1032,7 @@ async def test_flexible_open_route_retains_complete_coverage_above_old_ceiling()
     old_target_ceiling = 15_000
     assert recommended.selected_must_visit_count == 3
     assert recommended.route.summary.distance_m > old_target_ceiling
-    assert recommended.maximum_distance_m == 200_000
+    assert recommended.maximum_distance_m == float("inf")
     assert result.search.full_set_route_attempted
     assert result.search.full_set_route_succeeded
     assert result.search.full_set_safety_eligible is True
@@ -1096,7 +1096,9 @@ async def test_open_user_maximum_below_direct_route_is_rejected() -> None:
 
 
 @pytest.mark.asyncio
-async def test_open_flexible_server_maximum_has_specific_rejection_reason() -> None:
+async def test_open_flexible_without_maximum_has_no_implicit_distance_rejection() -> (
+    None
+):
     requested = RequestedTourPlace(
         name="Remote requested place",
         coordinate=_coordinate(150_000, 150_000),
@@ -1117,20 +1119,13 @@ async def test_open_flexible_server_maximum_has_specific_rejection_reason() -> N
         )
     )
 
-    assert result.search.maximum_distance_m == 200_000
-    assert result.search.full_set_safety_eligible is False
-    assert (
-        result.search.full_set_rejection_reason
-        == "requested_place_server_maximum_rejected"
-    )
-    assert (
-        result.candidates[0].requested_place_visits[0].drop_reason
-        == "maximum_distance_rejected"
-    )
+    assert result.search.maximum_distance_m == float("inf")
+    assert result.search.full_set_safety_eligible is True
+    assert result.search.full_set_rejection_reason is None
 
 
 @pytest.mark.asyncio
-async def test_open_balanced_retains_target_derived_maximum() -> None:
+async def test_open_balanced_has_no_implicit_target_derived_maximum() -> None:
     requested = tuple(
         RequestedTourPlace(
             name=f"Balanced place {index}",
@@ -1156,6 +1151,5 @@ async def test_open_balanced_retains_target_derived_maximum() -> None:
         )
     )
 
-    assert result.search.maximum_distance_m == 16_000
-    assert result.candidates[0].route.summary.distance_m <= 16_000
-    assert result.candidates[0].selected_must_visit_count < 3
+    assert result.search.maximum_distance_m == float("inf")
+    assert result.candidates[0].selected_must_visit_count == 3

@@ -15,6 +15,7 @@ type RequestedStopImportance = Literal["must_visit", "prefer"]
 type PreferenceLevel = Literal["off", "prefer"]
 type DirectionPreference = Literal["any", "clockwise", "counterclockwise"]
 type PathSelection = Literal["shortest", "low_overlap"]
+type ConstraintStrength = Literal["exact", "approach", "best_effort"]
 
 
 class CanonicalModel(ImmutableModel):
@@ -31,8 +32,8 @@ class DistanceObjective(CanonicalModel):
 
     @model_validator(mode="after")
     def validate_limits(self) -> Self:
-        if self.priority != "flexible" and self.maximum_m is None:
-            raise ValueError("maximum_m is required for balanced and strict plans")
+        if self.priority == "strict" and self.maximum_m is None:
+            raise ValueError("maximum_m is required for strict plans")
         if self.maximum_m is not None and self.maximum_m < self.target_m:
             raise ValueError("maximum_m must not be below target_m")
         if (
@@ -73,9 +74,59 @@ class RequestedStop(CanonicalModel):
     name: Annotated[str, Field(min_length=1, max_length=200)]
     semantic_coordinate: Coordinate
     importance: RequestedStopImportance
+    constraint_strength: Literal["approach", "best_effort"] = "approach"
     osm_reference: Annotated[str, Field(min_length=1, max_length=80)] | None = None
     access_search_radius_m: Annotated[float, Field(ge=25, le=2_000)] = 500.0
+    maximum_best_effort_distance_m: Annotated[float, Field(gt=0, le=2_000)] | None = (
+        None
+    )
     approach_override: Coordinate | None = None
+
+    @model_validator(mode="after")
+    def validate_best_effort_limit(self) -> Self:
+        if (
+            self.constraint_strength == "approach"
+            and self.maximum_best_effort_distance_m is not None
+        ):
+            raise ValueError(
+                "maximum_best_effort_distance_m is only valid for best_effort"
+            )
+        return self
+
+
+class ExactWaypoint(CanonicalModel):
+    """One explicitly hard interior coordinate."""
+
+    id: Annotated[str, Field(min_length=1, max_length=240)]
+    name: Annotated[str, Field(min_length=1, max_length=200)]
+    coordinate: Coordinate
+
+
+class RouteWaypoint(CanonicalModel):
+    """One identified interior point with an explicit routing contract."""
+
+    id: Annotated[str, Field(min_length=1, max_length=240)]
+    name: Annotated[str, Field(min_length=1, max_length=200)]
+    coordinate: Coordinate
+    constraint_strength: ConstraintStrength = "exact"
+    access_search_radius_m: Annotated[float, Field(ge=25, le=2_000)] = 500.0
+    maximum_best_effort_distance_m: Annotated[float, Field(gt=0, le=2_000)] | None = (
+        None
+    )
+    approach_override: Coordinate | None = None
+
+    @model_validator(mode="after")
+    def validate_strength_options(self) -> Self:
+        if (
+            self.constraint_strength != "best_effort"
+            and self.maximum_best_effort_distance_m is not None
+        ):
+            raise ValueError(
+                "maximum_best_effort_distance_m is only valid for best_effort"
+            )
+        if self.constraint_strength == "exact" and self.approach_override is not None:
+            raise ValueError("exact waypoints cannot define an approach override")
+        return self
 
 
 class PlanRequestBase(CanonicalModel):
@@ -112,7 +163,7 @@ class PlanRequestBase(CanonicalModel):
 class AutoTourPlanRequest(PlanRequestBase):
     kind: Literal["auto_tour"]
     preferences: AutoTourPreferences
-    hard_waypoints: Annotated[tuple[Coordinate, ...], Field(max_length=6)] = ()
+    hard_waypoints: Annotated[tuple[ExactWaypoint, ...], Field(max_length=6)] = ()
     requested_stops: Annotated[tuple[RequestedStop, ...], Field(max_length=30)] = ()
     preferred_discovered_poi_ids: Annotated[tuple[str, ...], Field(max_length=8)] = ()
     free_poi_spur_physical_m: Annotated[float, Field(ge=0, le=1_000)] = 200.0
@@ -128,9 +179,15 @@ class AutoTourPlanRequest(PlanRequestBase):
                 raise ValueError(
                     "point-to-point Auto Tour does not support loop geometry"
                 )
-        waypoint_keys = tuple((point.lat, point.lon) for point in self.hard_waypoints)
+        waypoint_keys = tuple(
+            (point.coordinate.lat, point.coordinate.lon)
+            for point in self.hard_waypoints
+        )
         if len(waypoint_keys) != len(set(waypoint_keys)):
             raise ValueError("hard_waypoints must be unique")
+        waypoint_ids = tuple(point.id for point in self.hard_waypoints)
+        if len(waypoint_ids) != len(set(waypoint_ids)):
+            raise ValueError("hard waypoint IDs must be unique")
         stop_ids = tuple(stop.id for stop in self.requested_stops)
         if len(stop_ids) != len(set(stop_ids)):
             raise ValueError("requested stop IDs must be unique")
@@ -144,7 +201,7 @@ class AutoTourPlanRequest(PlanRequestBase):
 class WaypointPlanRequest(PlanRequestBase):
     kind: Literal["waypoint_route"]
     preferences: WaypointPreferences
-    waypoints: Annotated[tuple[Coordinate, ...], Field(max_length=30)] = ()
+    waypoints: Annotated[tuple[RouteWaypoint, ...], Field(max_length=30)] = ()
     waypoint_order: WaypointOrder
 
     @model_validator(mode="after")
@@ -158,9 +215,14 @@ class WaypointPlanRequest(PlanRequestBase):
             raise ValueError(
                 "point-to-point Waypoint Route does not support loop geometry"
             )
-        keys = tuple((point.lat, point.lon) for point in self.waypoints)
+        keys = tuple(
+            (point.coordinate.lat, point.coordinate.lon) for point in self.waypoints
+        )
         if len(keys) != len(set(keys)):
             raise ValueError("waypoints must be unique")
+        waypoint_ids = tuple(point.id for point in self.waypoints)
+        if len(waypoint_ids) != len(set(waypoint_ids)):
+            raise ValueError("waypoint IDs must be unique")
         endpoint_keys = {(self.start.lat, self.start.lon)}
         if self.end is not None:
             endpoint_keys.add((self.end.lat, self.end.lon))

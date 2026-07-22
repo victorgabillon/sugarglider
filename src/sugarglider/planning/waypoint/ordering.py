@@ -23,41 +23,83 @@ def ordering_proposals(
     """Return immutable endpoint-safe canonical proposals after the control."""
     if request.waypoint_order == "fixed":
         return (), OrderingProposalStats(0, 0, 0)
+    interior = tuple(
+        waypoint.coordinate.model_copy(update={"name": waypoint.name})
+        for waypoint in request.waypoints
+    )
     if request.topology == "loop":
-        mandatory = (request.start, *request.waypoints)
+        mandatory = (request.start, *interior)
         orders = generate_order_proposals(mandatory, limit=limit)[1:]
         proposals = tuple(
-            WaypointSequenceProposal(
-                routing_points=ordered_closed_points(mandatory, order),
-                exact_points=ordered_closed_points(mandatory, order),
-                exact_point_positions=tuple(range(len(mandatory) + 1)),
-                original_indices=(*order, 0),
-                topology="loop",
-                construction="optimized_order",
-                order_provenance="bounded_loop_heuristic",
+            _ordered_proposal(
+                request, ordered_closed_points(mandatory, order), (*order, 0)
             )
             for order in orders
         )
     else:
         assert request.end is not None
-        mandatory = (request.start, *request.waypoints, request.end)
+        mandatory = (request.start, *interior, request.end)
         orders = generate_path_order_proposals(mandatory, limit=limit)[1:]
         proposals = tuple(
-            WaypointSequenceProposal(
-                routing_points=ordered_open_points(mandatory, order),
-                exact_points=ordered_open_points(mandatory, order),
-                exact_point_positions=tuple(range(len(mandatory))),
-                original_indices=order,
-                topology="point_to_point",
-                construction="optimized_order",
-                order_provenance="bounded_open_heuristic",
-            )
+            _ordered_proposal(request, ordered_open_points(mandatory, order), order)
             for order in orders
         )
     return proposals, OrderingProposalStats(
         generated=len(proposals),
         deduplicated=0,
         rejected_before_routing=0,
+    )
+
+
+def _ordered_proposal(
+    request: WaypointPlanRequest,
+    routing_points: tuple[Coordinate, ...],
+    routed_original_indices: tuple[int, ...],
+) -> WaypointSequenceProposal:
+    last_original = len(request.waypoints) + 1
+
+    def is_exact(original_index: int) -> bool:
+        return (
+            original_index == 0
+            or (
+                request.topology == "point_to_point" and original_index == last_original
+            )
+            or (
+                1 <= original_index <= len(request.waypoints)
+                and request.waypoints[original_index - 1].constraint_strength == "exact"
+            )
+        )
+
+    exact_positions = tuple(
+        position
+        for position, original_index in enumerate(routed_original_indices)
+        if is_exact(original_index)
+    )
+
+    def exact_id(original_index: int) -> str:
+        if original_index == 0:
+            return "start"
+        if request.topology == "point_to_point" and original_index == last_original:
+            return "end"
+        return request.waypoints[original_index - 1].id
+
+    return WaypointSequenceProposal(
+        routing_points=routing_points,
+        exact_points=tuple(routing_points[position] for position in exact_positions),
+        exact_point_positions=exact_positions,
+        original_indices=tuple(
+            routed_original_indices[position] for position in exact_positions
+        ),
+        exact_point_ids=tuple(
+            exact_id(routed_original_indices[position]) for position in exact_positions
+        ),
+        topology=request.topology,
+        construction="optimized_order",
+        order_provenance=(
+            "bounded_loop_heuristic"
+            if request.topology == "loop"
+            else "bounded_open_heuristic"
+        ),
     )
 
 

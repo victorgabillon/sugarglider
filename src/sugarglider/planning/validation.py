@@ -31,12 +31,21 @@ class ExactWaypointNotReachedError(CandidateEvaluationError):
         point_name: str | None,
         snap_distance_m: float,
         maximum_snap_distance_m: float,
+        point_id: str | None = None,
+        profile: str | None = None,
+        suggestion: str = (
+            "Move or remove the exact waypoint, or explicitly convert it to "
+            "best effort."
+        ),
     ) -> None:
         super().__init__("exact_waypoint_not_reached")
         self.point_index = point_index
+        self.point_id = point_id
         self.point_name = point_name
         self.snap_distance_m = snap_distance_m
         self.maximum_snap_distance_m = maximum_snap_distance_m
+        self.profile = profile
+        self.suggestion = suggestion
 
 
 def validate_waypoint_path(
@@ -51,10 +60,11 @@ def validate_waypoint_path(
     snapped = path.snapped_points
     if snapped is None or len(snapped) != len(proposal.routing_points):
         raise CandidateEvaluationError("exact_waypoint_snapped_count_mismatch")
-    for position, exact, original_index in zip(
+    for position, exact, original_index, exact_id in zip(
         proposal.exact_point_positions,
         proposal.exact_points,
         proposal.original_indices,
+        proposal.exact_point_ids,
         strict=True,
     ):
         snap_distance_m = haversine_distance_m(
@@ -64,6 +74,7 @@ def validate_waypoint_path(
         if snap_distance_m > maximum_snap_distance_m:
             raise ExactWaypointNotReachedError(
                 point_index=original_index,
+                point_id=exact_id,
                 point_name=exact.name,
                 snap_distance_m=snap_distance_m,
                 maximum_snap_distance_m=maximum_snap_distance_m,
@@ -104,9 +115,13 @@ def validate_search_candidate(
     projection = LocalMetricProjection(route.geometry[0][1])
     line = projection.project_line(route.geometry)
     hard_waypoints = (
-        request.hard_waypoints
+        tuple(point.coordinate for point in request.hard_waypoints)
         if isinstance(request, AutoTourPlanRequest)
-        else request.waypoints
+        else tuple(
+            point.coordinate
+            for point in request.waypoints
+            if point.constraint_strength == "exact"
+        )
         if isinstance(request, WaypointPlanRequest)
         else ()
     )
@@ -120,7 +135,7 @@ def validate_search_candidate(
             raise CandidateEvaluationError(
                 "candidate did not reach a required waypoint"
             )
-    for stop in candidate.selected_stops:
+    for stop in candidate.reached_stops:
         approach = stop.resolved_approach
         measured = float(
             line.distance(
@@ -132,5 +147,42 @@ def validate_search_candidate(
             )
         )
         if measured > approach.arrival_tolerance_m + 1e-6:
-            raise CandidateEvaluationError("selected stop is not reached")
+            raise CandidateEvaluationError("reached stop is not reached")
+    for approximated_stop in candidate.approximated_stops:
+        approximated_approach = approximated_stop.resolved_approach
+        measured = float(
+            line.distance(
+                Point(
+                    projection.project_position(
+                        (
+                            approximated_approach.coordinate.lon,
+                            approximated_approach.coordinate.lat,
+                        )
+                    )
+                )
+            )
+        )
+        if measured > approximated_approach.arrival_tolerance_m + 1e-6:
+            raise CandidateEvaluationError("approximated routed target is not reached")
+        semantic_distance = haversine_distance_m(
+            (
+                approximated_stop.semantic_coordinate.lon,
+                approximated_stop.semantic_coordinate.lat,
+            ),
+            (
+                approximated_approach.coordinate.lon,
+                approximated_approach.coordinate.lat,
+            ),
+        )
+        if abs(semantic_distance - approximated_stop.distance_m) > 2.0:
+            raise CandidateEvaluationError(
+                "approximated semantic distance does not match routed target"
+            )
+        if (
+            approximated_stop.configured_maximum_m is not None
+            and semantic_distance > approximated_stop.configured_maximum_m
+        ):
+            raise CandidateEvaluationError(
+                "approximated stop exceeds its configured maximum"
+            )
     return candidate

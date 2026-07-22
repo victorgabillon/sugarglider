@@ -3,13 +3,37 @@
   "kind": "waypoint_route",
   "name": "Marly trail-run loop",
   "topology": "loop",
-  "start": {"lat": 48.871389, "lon": 2.096667, "name": "Marly station"},
+  "start": {
+    "lat": 48.871389,
+    "lon": 2.096667,
+    "name": "Marly station"
+  },
   "end": null,
   "routing_profile": "trail_run",
   "candidate_count": 3,
   "seed": 42,
-  "distance_objective": {"target_m": 18000, "tolerance_m": 1500, "maximum_m": null, "priority": "flexible"},
-  "preferences": {"nature": "prefer", "path_selection": "low_overlap", "loop_geometry": "prefer"},
-  "waypoints": [{"lat": 48.86156, "lon": 2.10833, "name": "Aqueduc de Louveciennes"}],
+  "distance_objective": {
+    "target_m": 18000,
+    "tolerance_m": 1500,
+    "maximum_m": null,
+    "priority": "flexible"
+  },
+  "preferences": {
+    "nature": "prefer",
+    "path_selection": "low_overlap",
+    "loop_geometry": "prefer"
+  },
+  "waypoints": [
+    {
+      "id": "route-waypoint-1",
+      "name": "Aqueduc de Louveciennes",
+      "coordinate": {
+        "lat": 48.86156,
+        "lon": 2.10833,
+        "name": "Aqueduc de Louveciennes"
+      },
+      "constraint_strength": "exact"
+    }
+  ],
   "waypoint_order": "fixed"
 }
