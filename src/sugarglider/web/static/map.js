@@ -30,6 +30,9 @@ const REQUESTED_ORDER_LAYER = "auto-tour-requested-order";
 const REQUESTED_LABEL_LAYER = "auto-tour-requested-labels";
 const REQUESTED_SELECTED_LAYER = "auto-tour-requested-selected";
 const REQUESTED_RADIUS_SEGMENTS = 48;
+const DIRECTION_SOURCE = "selected-route-direction";
+const DIRECTION_LAYER = "selected-route-direction-arrows";
+const DIRECTION_IMAGE = "route-direction-arrow";
 
 const POI_ICON_SVGS = {
   "poi-viewpoint": '<path d="M6 36 20 14l8 12 6-8 8 18Z" fill="#fff"/><path d="m13 30 7-11 7 11" fill="none" stroke="#214b3b" stroke-width="3"/>',
@@ -59,6 +62,7 @@ let requestedPlacePopup = null;
 let requestedPlacePopupId = null;
 let requestedRadiusFeatureCount = 0;
 let requestedConnectorFeatureCount = 0;
+let directionCandidateId = null;
 
 export function initializeMap(config, handlers) {
   if (!window.maplibregl) {
@@ -96,6 +100,7 @@ export function initializeMap(config, handlers) {
     } catch {
       handlers.onError("Local place icons could not be prepared. Route controls remain available.");
     }
+    installDirectionArrowImage();
     ready = true;
     handlers.onReady();
     handlers.onViewportChange?.(currentViewportBounds());
@@ -182,6 +187,38 @@ export function initializeMap(config, handlers) {
     handlers.onError(`Map resource error: ${message}`);
   });
   return true;
+}
+
+function installDirectionArrowImage() {
+  if (!map || map.hasImage(DIRECTION_IMAGE)) return;
+  const canvas = document.createElement("canvas");
+  canvas.width = 32;
+  canvas.height = 20;
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, 32, 20);
+  context.lineJoin = "round";
+  context.lineCap = "round";
+  context.strokeStyle = "#fffdf7";
+  context.lineWidth = 7;
+  context.beginPath();
+  context.moveTo(5, 10);
+  context.lineTo(25, 10);
+  context.moveTo(18, 3);
+  context.lineTo(26, 10);
+  context.lineTo(18, 17);
+  context.stroke();
+  context.strokeStyle = "#173d31";
+  context.lineWidth = 3;
+  context.beginPath();
+  context.moveTo(5, 10);
+  context.lineTo(25, 10);
+  context.moveTo(18, 3);
+  context.lineTo(26, 10);
+  context.lineTo(18, 17);
+  context.stroke();
+  map.addImage(DIRECTION_IMAGE, context.getImageData(0, 0, 32, 20), {
+    pixelRatio: 2,
+  });
 }
 
 function candidateLineLayerIds() {
@@ -1069,7 +1106,13 @@ export function currentViewportBounds() {
   };
 }
 
-export function renderCandidates(candidates, selectedCandidateId, showAll, onSelect) {
+export function renderCandidates(
+  candidates,
+  selectedCandidateId,
+  showAll,
+  showDirection,
+  onSelect,
+) {
   if (!ready || !map) return;
   clearByPrefix("candidate-");
   candidateClickHandler = onSelect;
@@ -1106,7 +1149,52 @@ export function renderCandidates(candidates, selectedCandidateId, showAll, onSel
       },
     });
   });
+  renderDirectionArrows(
+    candidates.find((candidate) => candidate.id === selectedCandidateId) ?? null,
+    showDirection,
+  );
   moveRequiredLabelsToTop();
+}
+
+function renderDirectionArrows(candidate, enabled) {
+  if (!ready || !map) return;
+  removeLayer(DIRECTION_LAYER);
+  removeSource(DIRECTION_SOURCE);
+  directionCandidateId = null;
+  if (!enabled || !candidate || candidate.route.geometry.length < 2) return;
+  sourceData(DIRECTION_SOURCE, {
+    type: "Feature",
+    properties: { candidate_id: candidate.id },
+    geometry: { type: "LineString", coordinates: candidate.route.geometry },
+  });
+  map.addLayer({
+    id: DIRECTION_LAYER,
+    type: "symbol",
+    source: DIRECTION_SOURCE,
+    layout: {
+      "symbol-placement": "line",
+      "symbol-spacing": ["interpolate", ["linear"], ["zoom"], 8, 180, 14, 95],
+      "icon-image": DIRECTION_IMAGE,
+      "icon-size": 0.78,
+      "icon-rotation-alignment": "map",
+      "icon-pitch-alignment": "map",
+      "icon-keep-upright": false,
+      "icon-allow-overlap": false,
+      "icon-ignore-placement": false,
+    },
+    paint: { "icon-opacity": 0.88 },
+  });
+  directionCandidateId = candidate.id;
+}
+
+export function directionMapDiagnostics() {
+  const source = map?.getSource(DIRECTION_SOURCE);
+  return {
+    sourceExists: Boolean(source),
+    layerExists: Boolean(map?.getLayer(DIRECTION_LAYER)),
+    imageLoaded: Boolean(map?.hasImage(DIRECTION_IMAGE)),
+    candidateId: directionCandidateId,
+  };
 }
 
 export function renderVisualization(collection, showNature = false) {

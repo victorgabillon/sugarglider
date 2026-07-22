@@ -73,6 +73,22 @@ export async function generatePlan(request, signal) {
   return response.json();
 }
 
+export async function reversePlan(sourceRequest, candidate, candidateCount, signal) {
+  const response = await fetch("/v2/plans/reverse", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      schema_version: 1,
+      source_request: sourceRequest,
+      candidate,
+      candidate_count: candidateCount,
+    }),
+    signal,
+  });
+  if (!response.ok) throw await responseError(response);
+  return response.json();
+}
+
 export async function visualizeRoute(route, signal) {
   const response = await fetch("/v2/plans/visualization", {
     method: "POST",

@@ -14,6 +14,10 @@ from sugarglider.api.errors import RouteVisualizationError
 from sugarglider.domain.models import RouteResult
 from sugarglider.gpx.writer import gpx_filename, write_plan_gpx
 from sugarglider.nature.analysis import NatureRouteAnalyzer
+from sugarglider.planning.direction.models import (
+    ReversePlanRequest,
+    ReversePlanResponse,
+)
 from sugarglider.planning.models import PlanRequest
 from sugarglider.planning.profiles import RoutingProfileCatalog
 from sugarglider.planning.result import PlanGpxRequest, PlanResult
@@ -106,6 +110,17 @@ async def generate_plan(
     """Generate one canonical portfolio for either supported planning mode."""
     await routes.ensure_profile_available(request.routing_profile)
     return await service.generate(request)
+
+
+@router.post("/v2/plans/reverse", response_model=ReversePlanResponse)
+async def reverse_plan(
+    request: ReversePlanRequest,
+    service: PlanServiceDependency,
+    routes: RouteServiceDependency,
+) -> ReversePlanResponse:
+    """Reroute one published candidate through the graph in opposite order."""
+    await routes.ensure_profile_available(request.source_request.routing_profile)
+    return await service.reverse(request)
 
 
 @router.post("/v2/plans/gpx", response_class=Response)

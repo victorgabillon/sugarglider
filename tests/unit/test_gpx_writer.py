@@ -20,6 +20,8 @@ from sugarglider.planning.result import (
     PlanCandidate,
     PlanCandidateDiagnostics,
     PlanScore,
+    PlanTraversal,
+    PlanTraversalAnchor,
     ReachedPlanStop,
 )
 from sugarglider.pois.models import PoiApproachCandidate
@@ -32,11 +34,14 @@ def _candidate(
 ) -> PlanCandidate:
     return PlanCandidate(
         id="candidate",
+        kind="waypoint_route",
+        topology="point_to_point",
         routing_profile=route.routing_profile,
         rank=1,
         roles=("harmonious",),
         route=route,
         score=PlanScore(total=0),
+        traversal=_traversal(route),
         reached_stops=selected,
         approximated_stops=approximated,
         diagnostics=PlanCandidateDiagnostics(
@@ -46,6 +51,36 @@ def _candidate(
             requested_stop_count=len(selected),
             immediate_backtracking_m=0,
             repeated_distance_m=0,
+        ),
+    )
+
+
+def _traversal(route: RouteResult) -> PlanTraversal:
+    start = Coordinate(lat=route.geometry[0][1], lon=route.geometry[0][0])
+    end = Coordinate(lat=route.geometry[-1][1], lon=route.geometry[-1][0])
+    return PlanTraversal(
+        direction="start_to_end",
+        anchors=(
+            PlanTraversalAnchor(
+                id="endpoint/start",
+                name="Start",
+                kind="start",
+                routed_coordinate=start,
+                semantic_coordinate=start,
+                route_progress=0,
+                constraint_strength="exact",
+                outcome="reached",
+            ),
+            PlanTraversalAnchor(
+                id="endpoint/end",
+                name="End",
+                kind="end",
+                routed_coordinate=end,
+                semantic_coordinate=end,
+                route_progress=1,
+                constraint_strength="exact",
+                outcome="reached",
+            ),
         ),
     )
 

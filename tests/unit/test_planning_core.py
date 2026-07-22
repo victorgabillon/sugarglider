@@ -25,6 +25,8 @@ from sugarglider.planning.result import (
     PlanCandidate,
     PlanCandidateDiagnostics,
     PlanScore,
+    PlanTraversal,
+    PlanTraversalAnchor,
     ReachedPlanStop,
 )
 from sugarglider.planning.routing_gateway import CachedRoutingGateway
@@ -503,11 +505,46 @@ def _candidate(
 ) -> PlanCandidate:
     return PlanCandidate(
         id=candidate_id,
+        kind="auto_tour",
+        topology="point_to_point",
         routing_profile=route.routing_profile,
         rank=1,
         roles=(),
         route=route,
         score=PlanScore(total=error),
+        traversal=PlanTraversal(
+            direction="start_to_end",
+            anchors=(
+                PlanTraversalAnchor(
+                    id="endpoint/start",
+                    name="Start",
+                    kind="start",
+                    routed_coordinate=Coordinate(
+                        lat=route.geometry[0][1], lon=route.geometry[0][0]
+                    ),
+                    semantic_coordinate=Coordinate(
+                        lat=route.geometry[0][1], lon=route.geometry[0][0]
+                    ),
+                    route_progress=0,
+                    constraint_strength="exact",
+                    outcome="reached",
+                ),
+                PlanTraversalAnchor(
+                    id="endpoint/end",
+                    name="End",
+                    kind="end",
+                    routed_coordinate=Coordinate(
+                        lat=route.geometry[-1][1], lon=route.geometry[-1][0]
+                    ),
+                    semantic_coordinate=Coordinate(
+                        lat=route.geometry[-1][1], lon=route.geometry[-1][0]
+                    ),
+                    route_progress=1,
+                    constraint_strength="exact",
+                    outcome="reached",
+                ),
+            ),
+        ),
         diagnostics=PlanCandidateDiagnostics(
             safety_eligible=True,
             target_error_m=error,

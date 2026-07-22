@@ -823,6 +823,38 @@ def test_best_effort_gui_explains_compromises_and_requires_regeneration() -> Non
     assert 'type: "LineString"' in map_code
 
 
+def test_route_direction_arrows_and_graph_reverse_are_explicit() -> None:
+    html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
+    app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
+    api = (STATIC_DIRECTORY / "api.js").read_text(encoding="utf-8")
+    map_code = (STATIC_DIRECTORY / "map.js").read_text(encoding="utf-8")
+    state = (STATIC_DIRECTORY / "state.js").read_text(encoding="utf-8")
+
+    assert 'id="show-direction"' in html
+    assert 'id="reverse-route"' in html
+    assert "Show direction arrows" in html
+    assert 'fetch("/v2/plans/reverse"' in api
+    assert 'state.request = { status: "reversing"' in app
+    assert "Reversing route…" in app
+    assert "Route reversed and rerouted for" in app
+    assert "applyCanonicalRequestState(response.transformed_request)" in app
+    assert "state.generationResult = sourceResult" in app
+    assert "directionLabel(candidate.traversal)" in app
+    assert 'aria-label="Route traversal direction"' in app
+    assert "sourceCandidate.route.geometry.reverse" not in app
+    assert '"symbol-placement": "line"' in map_code
+    assert '"icon-keep-upright": false' in map_code
+    assert '"icon-rotation-alignment": "map"' in map_code
+    assert 'const DIRECTION_SOURCE = "selected-route-direction"' in map_code
+    assert "installDirectionArrowImage" in map_code
+    assert "candidate.route.geometry" in map_code
+    assert "candidateId: directionCandidateId" in map_code
+    assert 'direction: "M4 12h14 M13 7l5 5-5 5"' in (
+        STATIC_DIRECTORY / "icons.js"
+    ).read_text(encoding="utf-8")
+    assert "showDirectionArrows: true" in state
+
+
 def test_bastille_to_marly_example_preserves_source_points_and_consumes_end() -> None:
     original = json.loads(
         Path("examples/marly/all-pois-generation-request.json").read_text(

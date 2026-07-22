@@ -13,6 +13,7 @@ const ICON_PATHS = {
   delete: "M4 7h16 M9 7V4h6v3 M8 7l1 14h6l1-14",
   nature: "M19.5 4.5C12 4.5 6 8 6 14c0 3 2 5.5 5 5.5 6 0 8.5-8.5 8.5-15z M5 21c2-6 6-10 12-13",
   alternatives: "M4 6h16 M4 12h11 M4 18h7 M17 10l3 2-3 2",
+  direction: "M4 12h14 M13 7l5 5-5 5",
   close: "M6 6l12 12 M18 6L6 18",
   info: "M12 10.5v7 M12 6.5h.01 M3 12a9 9 0 1 0 18 0 9 9 0 1 0-18 0",
 };

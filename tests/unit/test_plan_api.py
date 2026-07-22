@@ -14,6 +14,12 @@ from sugarglider.planning.diagnostics import (
     CacheDiagnostics,
     PlanSearchDiagnostics,
 )
+from sugarglider.planning.direction.models import (
+    ReversePlanRequest,
+    ReversePlanResponse,
+)
+from sugarglider.planning.direction.service import ReverseRouteUnavailableError
+from sugarglider.planning.direction.validation import ReverseSourceInvalidError
 from sugarglider.planning.models import PlanRequest
 from sugarglider.planning.pipeline import PlanService
 from sugarglider.planning.profiles import (
@@ -26,6 +32,8 @@ from sugarglider.planning.result import (
     PlanCandidateDiagnostics,
     PlanResult,
     PlanScore,
+    PlanTraversal,
+    PlanTraversalAnchor,
 )
 from sugarglider.planning.validation import ExactWaypointNotReachedError
 from sugarglider.routing.errors import RoutingProfileUnavailableError
@@ -57,6 +65,7 @@ class _PlanService(PlanService):
         self.result = result
         self.request: PlanRequest | None = None
         self.error: Exception | None = None
+        self.reverse_request: ReversePlanRequest | None = None
 
     async def generate(self, request: PlanRequest) -> PlanResult:
         self.request = request
@@ -64,16 +73,65 @@ class _PlanService(PlanService):
             raise self.error
         return self.result.model_copy(update={"kind": request.kind})
 
+    async def reverse(self, request: ReversePlanRequest) -> ReversePlanResponse:
+        self.reverse_request = request
+        if self.error is not None:
+            raise self.error
+        return ReversePlanResponse(
+            transformed_request=request.source_request,
+            result=self.result.model_copy(update={"kind": request.source_request.kind}),
+            source_candidate_id=request.candidate.id,
+        )
+
 
 @pytest.fixture
 def plan_result(route_result: RouteResult) -> PlanResult:
     candidate = PlanCandidate(
         id="candidate-1",
+        kind="waypoint_route",
+        topology="point_to_point",
         routing_profile="hike",
         rank=1,
         roles=("harmonious", "distance_focused"),
         route=route_result,
         score=PlanScore(total=0, components={}),
+        traversal=PlanTraversal(
+            direction="start_to_end",
+            anchors=(
+                PlanTraversalAnchor(
+                    id="endpoint/start",
+                    name="Start",
+                    kind="start",
+                    routed_coordinate=Coordinate(
+                        lat=route_result.geometry[0][1],
+                        lon=route_result.geometry[0][0],
+                    ),
+                    semantic_coordinate=Coordinate(
+                        lat=route_result.geometry[0][1],
+                        lon=route_result.geometry[0][0],
+                    ),
+                    route_progress=0,
+                    constraint_strength="exact",
+                    outcome="reached",
+                ),
+                PlanTraversalAnchor(
+                    id="endpoint/end",
+                    name="End",
+                    kind="end",
+                    routed_coordinate=Coordinate(
+                        lat=route_result.geometry[-1][1],
+                        lon=route_result.geometry[-1][0],
+                    ),
+                    semantic_coordinate=Coordinate(
+                        lat=route_result.geometry[-1][1],
+                        lon=route_result.geometry[-1][0],
+                    ),
+                    route_progress=1,
+                    constraint_strength="exact",
+                    outcome="reached",
+                ),
+            ),
+        ),
         diagnostics=PlanCandidateDiagnostics(
             safety_eligible=True,
             target_error_m=499.5,
@@ -193,6 +251,86 @@ async def test_generate_accepts_direct_point_to_point_route(
     assert plan_service.request is not None
     assert plan_service.request.kind == "waypoint_route"
     assert plan_service.request.waypoints == ()
+
+
+@pytest.mark.asyncio
+async def test_reverse_endpoint_uses_strict_canonical_wrapper(
+    client: httpx.AsyncClient,
+    plan_service: _PlanService,
+    plan_result: PlanResult,
+) -> None:
+    response = await client.post(
+        "/v2/plans/reverse",
+        json={
+            "schema_version": 1,
+            "source_request": waypoint_request(),
+            "candidate": plan_result.candidates[0].model_dump(mode="json"),
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["source_candidate_id"] == "candidate-1"
+    assert response.json()["transformed_request"]["routing_profile"] == "hike"
+    assert plan_service.reverse_request is not None
+    assert plan_service.reverse_request.candidate_count == 1
+
+
+@pytest.mark.asyncio
+async def test_reverse_endpoint_rejects_unknown_fields(
+    client: httpx.AsyncClient, plan_result: PlanResult
+) -> None:
+    response = await client.post(
+        "/v2/plans/reverse",
+        json={
+            "schema_version": 1,
+            "source_request": waypoint_request(),
+            "candidate": plan_result.candidates[0].model_dump(mode="json"),
+            "candidate_count": 1,
+            "reverse_geometry_locally": True,
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_request"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("error", "code", "status_code"),
+    (
+        (
+            ReverseSourceInvalidError("forged details"),
+            "reverse_source_invalid",
+            422,
+        ),
+        (
+            ReverseRouteUnavailableError("upstream details"),
+            "reverse_route_unavailable",
+            503,
+        ),
+    ),
+)
+async def test_reverse_failures_use_safe_stable_public_errors(
+    client: httpx.AsyncClient,
+    plan_service: _PlanService,
+    plan_result: PlanResult,
+    error: Exception,
+    code: str,
+    status_code: int,
+) -> None:
+    plan_service.error = error
+    response = await client.post(
+        "/v2/plans/reverse",
+        json={
+            "schema_version": 1,
+            "source_request": waypoint_request(),
+            "candidate": plan_result.candidates[0].model_dump(mode="json"),
+        },
+    )
+    assert response.status_code == status_code
+    body = response.json()["error"]
+    assert body["code"] == code
+    assert "details" not in body
+    assert "forged" not in body["message"]
+    assert "upstream" not in body["message"]
 
 
 @pytest.mark.asyncio
