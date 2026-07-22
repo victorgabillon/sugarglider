@@ -48,6 +48,13 @@
         <p id="error-message"></p>
         <p id="error-context" class="error-context hidden"></p>
         <p id="error-suggestion" class="error-suggestion hidden"></p>
+        <div id="exact-error-actions" class="button-row hidden" aria-label="Exact waypoint actions">
+          <button id="error-use-nearest" class="button secondary" type="button">Use nearest reachable point</button>
+          <button id="error-best-effort" class="button secondary" type="button">Convert to best effort</button>
+          <button id="error-requested-place" class="button secondary" type="button">Convert to requested place</button>
+          <button id="error-move-waypoint" class="button secondary" type="button">Move exact waypoint</button>
+          <button id="error-remove-waypoint" class="button secondary" type="button">Remove waypoint</button>
+        </div>
         <details><summary>Technical details</summary><pre id="error-details"></pre></details>
       </div>
       <button id="dismiss-error" class="icon-button" type="button" data-icon="close" aria-label="Dismiss error" title="Dismiss error"></button>
@@ -210,7 +217,8 @@
             <span><i class="marker start">1</i>Start/end</span>
             <span class="legend-group">Your plan</span>
             <span><i class="marker requested-pending">R1</i>Requested, pending</span>
-            <span><i class="marker requested-selected">R1</i>Requested, selected</span>
+            <span><i class="marker requested-selected">R1</i>Requested, reached</span>
+            <span><i class="marker requested-pending">R1</i>Requested, approximated</span>
             <span><i class="marker requested-dropped">R1</i>Requested, dropped</span>
             <span><i class="marker access"></i>Selected approach</span>
             <span><i class="marker optional"></i>Generated point</span>

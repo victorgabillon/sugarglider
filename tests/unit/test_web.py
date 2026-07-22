@@ -682,7 +682,12 @@ def test_requested_stops_have_an_independent_safe_map_lifecycle() -> None:
 
     assert 'const REQUESTED_SOURCE = "auto-tour-requested-places"' in map_code
     assert "connectorFeatureCount" in map_code
-    assert map_code.count('(feature) => feature.properties.status === "selected"') == 2
+    assert (
+        map_code.count(
+            '["reached", "approximated"].includes(feature.properties.status)'
+        )
+        == 3
+    )
     assert "connectorLayerExists" in map_code
     assert (
         'const REQUESTED_RADIUS_SOURCE = "auto-tour-requested-place-radii"' in map_code
@@ -728,7 +733,8 @@ def test_requested_stops_have_an_independent_safe_map_lifecycle() -> None:
     assert 'map.hasImage("requested-sugarglider")' in map_code
     assert "REQUIRED_PIN_URL" in map_code
     assert '"circle-opacity": .42' in requested_layers
-    assert '"selected", "#4f8c61"' in requested_layers
+    assert '"reached", "#4f8c61"' in requested_layers
+    assert '"approximated", "#d99216"' in requested_layers
     assert '"dropped", "#c94f47"' in requested_layers
     assert '"#fff1c7"' in requested_layers
     assert "REQUESTED_PREFERRED_LAYER" in requested_layers
@@ -756,7 +762,7 @@ def test_requested_stops_have_an_independent_safe_map_lifecycle() -> None:
     assert "Arrival tolerance" in popup
     assert "Drop reason" in popup
 
-    assert "candidate?.selected_stops ?? []" in app
+    assert "candidate?.reached_stops ?? []" in app
     assert 'stop.selection_origin === "requested"' in app
     assert "renderRequestedPlaceMarkers(" in app
     assert "state.pendingRequestedPlacePopupId = null" in app
@@ -785,6 +791,38 @@ def test_requested_stops_have_an_independent_safe_map_lifecycle() -> None:
     assert "max-width: calc(100vw - 24px)" in styles
 
 
+def test_best_effort_gui_explains_compromises_and_requires_regeneration() -> None:
+    html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
+    app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
+    state = (STATIC_DIRECTORY / "state.js").read_text(encoding="utf-8")
+    map_code = (STATIC_DIRECTORY / "map.js").read_text(encoding="utf-8")
+
+    for label in (
+        "Use nearest reachable point",
+        "Convert to best effort",
+        "Convert to requested place",
+        "Move exact waypoint",
+        "Remove waypoint",
+    ):
+        assert label in html
+    for label in ("Make exact", "Accept approximation", "Remove stop"):
+        assert label in app
+    assert 'class="compromise-summary"' in app
+    assert '["Reached", formatCount(candidate.reached_stops.length)]' in app
+    assert "candidate.approximated_stops.length" in app
+    assert "+ constraintItinerary(candidate)" in app
+    assert 'result.kind === "auto_tour" ?' not in app
+    assert "resolved_approach.access" in app
+    assert "item.dataset.itineraryStopId" in app
+    assert "focusCoordinate([coordinate.lon, coordinate.lat])" in app
+    assert 'code === "exact_waypoint_not_reached"' in app
+    assert "Constraint updated. Generate again to apply it." in app
+    assert "constraint_strength" in state
+    assert "maximum_best_effort_distance_m" in state
+    assert '"approximated", "#d99216"' in map_code
+    assert 'type: "LineString"' in map_code
+
+
 def test_bastille_to_marly_example_preserves_source_points_and_consumes_end() -> None:
     original = json.loads(
         Path("examples/marly/all-pois-generation-request.json").read_text(
@@ -800,7 +838,10 @@ def test_bastille_to_marly_example_preserves_source_points_and_consumes_end() ->
     state = (STATIC_DIRECTORY / "state.js").read_text(encoding="utf-8")
     html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
 
-    original_points = [original["start"], *original["waypoints"]]
+    original_points = [
+        original["start"],
+        *(waypoint["coordinate"] for waypoint in original["waypoints"]),
+    ]
     original_points = [
         point
         for point in original_points

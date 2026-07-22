@@ -21,7 +21,18 @@ type CandidateRole = Literal[
     "smooth_low_detour",
     "distance_focused",
 ]
-type StopDecision = Literal["pending", "selected", "dropped"]
+type StopDecision = Literal["pending", "reached", "approximated", "dropped"]
+type CompromiseSeverity = Literal["info", "warning"]
+type CompromiseCode = Literal[
+    "target_distance_missed",
+    "stop_approximated",
+    "stop_dropped",
+    "no_profile_compatible_approach",
+    "nearest_routeable_point_used",
+    "access_unknown",
+    "route_budget_exhausted",
+    "optional_preference_unmet",
+]
 type SelectionOrigin = Literal["requested", "discovered", "user_preferred"]
 type SelectionMethod = Literal[
     "already_reached",
@@ -37,7 +48,7 @@ class PlanScore(CanonicalModel):
     components: dict[str, float] = Field(default_factory=dict)
 
 
-class SelectedPlanStop(CanonicalModel):
+class ReachedPlanStop(CanonicalModel):
     id: str
     name: str
     semantic_coordinate: Coordinate
@@ -52,7 +63,33 @@ class SelectedPlanStop(CanonicalModel):
     @model_validator(mode="after")
     def validate_arrival(self) -> Self:
         if self.route_to_approach_m > self.resolved_approach.arrival_tolerance_m:
-            raise ValueError("selected stop is outside its strict arrival tolerance")
+            raise ValueError("reached stop is outside its strict arrival tolerance")
+        return self
+
+
+class ApproximatedPlanStop(CanonicalModel):
+    id: str
+    name: str
+    semantic_coordinate: Coordinate
+    category: str
+    importance: RequestedStopImportance | None = None
+    selection_origin: SelectionOrigin
+    resolved_approach: PoiApproachCandidate
+    route_progress: float = Field(ge=0, le=1)
+    distance_m: float = Field(gt=0)
+    normal_tolerance_m: float = Field(gt=0)
+    configured_maximum_m: float | None = Field(default=None, gt=0)
+    reason: str
+
+    @model_validator(mode="after")
+    def validate_approximation(self) -> Self:
+        if self.distance_m <= self.normal_tolerance_m:
+            raise ValueError("approximated stop must exceed its normal tolerance")
+        if (
+            self.configured_maximum_m is not None
+            and self.distance_m > self.configured_maximum_m
+        ):
+            raise ValueError("approximated stop exceeds its configured maximum")
         return self
 
 
@@ -67,11 +104,28 @@ class DroppedPlanStop(CanonicalModel):
     considered_approaches: tuple[PoiApproachCandidate, ...] = ()
 
 
+class PlanCompromise(CanonicalModel):
+    code: CompromiseCode
+    severity: CompromiseSeverity
+    constraint_id: str | None = None
+    constraint_name: str | None = None
+    semantic_coordinate: Coordinate | None = None
+    routed_coordinate: Coordinate | None = None
+    distance_m: float | None = Field(default=None, ge=0)
+    normal_tolerance_m: float | None = Field(default=None, ge=0)
+    configured_maximum_m: float | None = Field(default=None, ge=0)
+    reason: str
+    profile: RoutingProfileId
+    suggestion: str
+
+
 class PlanCandidateDiagnostics(CanonicalModel):
     safety_eligible: bool
     target_error_m: float = Field(ge=0)
     within_tolerance: bool
     requested_stop_count: int = Field(ge=0)
+    approximated_stop_count: int = Field(default=0, ge=0)
+    dropped_stop_count: int = Field(default=0, ge=0)
     immediate_backtracking_m: float = Field(ge=0)
     repeated_distance_m: float = Field(ge=0)
     details: dict[str, Any] = Field(default_factory=dict)
@@ -84,8 +138,10 @@ class PlanCandidate(CanonicalModel):
     roles: tuple[CandidateRole, ...]
     route: RouteResult
     score: PlanScore
-    selected_stops: tuple[SelectedPlanStop, ...] = ()
+    reached_stops: tuple[ReachedPlanStop, ...] = ()
+    approximated_stops: tuple[ApproximatedPlanStop, ...] = ()
     dropped_stops: tuple[DroppedPlanStop, ...] = ()
+    compromises: tuple[PlanCompromise, ...] = ()
     diagnostics: PlanCandidateDiagnostics
 
     @model_validator(mode="after")
@@ -98,14 +154,21 @@ class PlanCandidate(CanonicalModel):
         }
         if self.roles != tuple(sorted(set(self.roles), key=role_order.__getitem__)):
             raise ValueError("candidate roles must be unique and canonically ordered")
-        selected_ids = {stop.id for stop in self.selected_stops}
+        reached_ids = {stop.id for stop in self.reached_stops}
+        approximated_ids = {stop.id for stop in self.approximated_stops}
         dropped_ids = {stop.id for stop in self.dropped_stops}
-        if len(selected_ids) != len(self.selected_stops):
-            raise ValueError("selected stop IDs must be unique")
+        if len(reached_ids) != len(self.reached_stops):
+            raise ValueError("reached stop IDs must be unique")
+        if len(approximated_ids) != len(self.approximated_stops):
+            raise ValueError("approximated stop IDs must be unique")
         if len(dropped_ids) != len(self.dropped_stops):
             raise ValueError("dropped stop IDs must be unique")
-        if selected_ids.intersection(dropped_ids):
-            raise ValueError("a stop cannot be selected and dropped")
+        if (
+            reached_ids.intersection(approximated_ids)
+            or reached_ids.intersection(dropped_ids)
+            or approximated_ids.intersection(dropped_ids)
+        ):
+            raise ValueError("a stop must have exactly one final outcome")
         return self
 
 

@@ -5,6 +5,7 @@ from xml.etree import ElementTree
 import pytest
 
 from sugarglider.analysis.projection import LocalMetricProjection
+from sugarglider.analysis.route import haversine_distance_m
 from sugarglider.domain.models import Coordinate, RouteResult
 from sugarglider.gpx.writer import (
     GPX_NAMESPACE,
@@ -15,16 +16,19 @@ from sugarglider.gpx.writer import (
     write_plan_gpx,
 )
 from sugarglider.planning.result import (
+    ApproximatedPlanStop,
     PlanCandidate,
     PlanCandidateDiagnostics,
     PlanScore,
-    SelectedPlanStop,
+    ReachedPlanStop,
 )
 from sugarglider.pois.models import PoiApproachCandidate
 
 
 def _candidate(
-    route: RouteResult, selected: tuple[SelectedPlanStop, ...] = ()
+    route: RouteResult,
+    selected: tuple[ReachedPlanStop, ...] = (),
+    approximated: tuple[ApproximatedPlanStop, ...] = (),
 ) -> PlanCandidate:
     return PlanCandidate(
         id="candidate",
@@ -33,7 +37,8 @@ def _candidate(
         roles=("harmonious",),
         route=route,
         score=PlanScore(total=0),
-        selected_stops=selected,
+        reached_stops=selected,
+        approximated_stops=approximated,
         diagnostics=PlanCandidateDiagnostics(
             safety_eligible=True,
             target_error_m=0,
@@ -45,7 +50,7 @@ def _candidate(
     )
 
 
-def _stop(route: RouteResult, *, offset_m: float = 0) -> SelectedPlanStop:
+def _stop(route: RouteResult, *, offset_m: float = 0) -> ReachedPlanStop:
     projection = LocalMetricProjection(route.geometry[0][1])
     line = projection.project_line(route.geometry)
     midpoint = line.interpolate(line.length / 2)
@@ -60,7 +65,7 @@ def _stop(route: RouteResult, *, offset_m: float = 0) -> SelectedPlanStop:
         arrival_tolerance_m=25,
         provenance="imported_coordinate",
     )
-    return SelectedPlanStop(
+    return ReachedPlanStop(
         id="requested/1",
         name="Étape & source",
         semantic_coordinate=approach.coordinate,
@@ -108,6 +113,52 @@ def test_plan_gpx_contains_only_selected_stops(route_result: RouteResult) -> Non
     assert waypoints[0].findtext("g:type", namespaces=namespace) == "requested_stop"
     assert len(root.findall("g:trk", namespace)) == 1
     assert root.findall("g:rte", namespace) == []
+
+
+def test_plan_gpx_truthfully_exports_and_revalidates_approximation(
+    route_result: RouteResult,
+) -> None:
+    reached = _stop(route_result)
+    routed = reached.resolved_approach.coordinate
+    semantic = routed.model_copy(update={"lat": routed.lat + 0.001})
+    remaining = haversine_distance_m(
+        (semantic.lon, semantic.lat), (routed.lon, routed.lat)
+    )
+    approximated = ApproximatedPlanStop(
+        id="approximate-1",
+        name="Woodland viewpoint",
+        semantic_coordinate=semantic,
+        category="requested_stop",
+        importance="must_visit",
+        selection_origin="requested",
+        resolved_approach=reached.resolved_approach,
+        route_progress=reached.route_progress,
+        distance_m=remaining,
+        normal_tolerance_m=25,
+        configured_maximum_m=500,
+        reason="nearest_routeable_point_used",
+    )
+    root = ElementTree.fromstring(
+        write_plan_gpx(_candidate(route_result, approximated=(approximated,)))
+    )
+    namespace = {"g": GPX_NAMESPACE}
+    assert root.findall("g:rte", namespace) == []
+    assert len(root.findall("g:trk/g:trkseg", namespace)) == 1
+    assert root.findtext("g:wpt/g:name", namespaces=namespace) == (
+        "1. Woodland viewpoint — approximate"
+    )
+
+    forged = approximated.model_copy(
+        update={
+            "resolved_approach": approximated.resolved_approach.model_copy(
+                update={
+                    "coordinate": semantic.model_copy(update={"lat": semantic.lat + 1})
+                }
+            )
+        }
+    )
+    with pytest.raises(SelectedStopNotReachedError):
+        write_plan_gpx(_candidate(route_result, approximated=(forged,)))
 
 
 def test_plan_export_rejects_forged_stop_measurement(route_result: RouteResult) -> None:

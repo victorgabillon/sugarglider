@@ -32,7 +32,9 @@
         "lat": 48.8715,
         "lon": 2.043,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -45,7 +47,9 @@
         "lat": 48.887496,
         "lon": 2.034384,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -58,7 +62,9 @@
         "lat": 48.89081,
         "lon": 2.02153,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -71,7 +77,9 @@
         "lat": 48.889861,
         "lon": 2.044635,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -84,7 +92,9 @@
         "lat": 48.8848,
         "lon": 2.0402,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -97,7 +107,9 @@
         "lat": 48.8562,
         "lon": 2.083,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -110,7 +122,9 @@
         "lat": 48.8512,
         "lon": 2.0915,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -123,7 +137,9 @@
         "lat": 48.864,
         "lon": 2.074,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -136,7 +152,9 @@
         "lat": 48.861,
         "lon": 2.071,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -149,7 +167,9 @@
         "lat": 48.871389,
         "lon": 2.096667,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -162,7 +182,9 @@
         "lat": 48.8667,
         "lon": 2.0954,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -175,7 +197,9 @@
         "lat": 48.862484,
         "lon": 2.099204,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -188,7 +212,9 @@
         "lat": 48.863976,
         "lon": 2.103777,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -201,7 +227,9 @@
         "lat": 48.871454,
         "lon": 2.124421,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -214,7 +242,9 @@
         "lat": 48.8644,
         "lon": 2.1135,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -227,7 +257,9 @@
         "lat": 48.86156,
         "lon": 2.10833,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -240,7 +272,9 @@
         "lat": 48.8587,
         "lon": 2.104,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -253,7 +287,9 @@
         "lat": 48.854245,
         "lon": 2.107372,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -266,7 +302,9 @@
         "lat": 48.8588,
         "lon": 2.1017,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 200.0,
@@ -279,7 +317,9 @@
         "lat": 48.862849,
         "lon": 2.099448,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -292,7 +332,9 @@
         "lat": 48.8597,
         "lon": 2.095,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     },
     {
       "access_search_radius_m": 500.0,
@@ -305,7 +347,9 @@
         "lat": 48.8698,
         "lon": 2.0745,
         "name": null
-      }
+      },
+      "constraint_strength": "approach",
+      "maximum_best_effort_distance_m": null
     }
   ],
   "routing_profile": "hike",

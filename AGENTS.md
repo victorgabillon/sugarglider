@@ -154,3 +154,16 @@
   surface, access, network, smoothness, or technicality data remains visibly unknown.
 - Routing profiles are preferences over mapped OSM data, never safety, legality,
   opening, current-condition, or rideability guarantees. Elevation remains disabled.
+- Start, end, and explicitly exact waypoints remain hard constraints. Approach and
+  best-effort constraints must use the shared profile-aware resolver and may not cause
+  an unexplained total-plan rejection.
+- Public stop outcomes are reached, approximated, or dropped. An approximation must
+  preserve semantic and routed coordinates, report the actual remaining distance,
+  and must never be labeled reached.
+- Flexible and balanced distance tolerance is soft; only an explicit balanced
+  maximum is hard. Strict tolerance and its required explicit maximum remain hard.
+- Every successful compromise must be immutable, deterministic, profile-aware, and
+  visible in the canonical result and browser. Exact failure must never trigger an
+  automatic weakened retry.
+- Reached and approximated GPX waypoints use their validated routed coordinates with
+  truthful names. Dropped stops are omitted; the GPX remains one track and segment.

@@ -91,8 +91,10 @@ requires distinct `start` and `end` coordinates. Services never infer either end
       "name": "Croix Saint-Michel",
       "semantic_coordinate": {"lat": 48.8715, "lon": 2.043},
       "importance": "must_visit",
+      "constraint_strength": "approach",
       "osm_reference": null,
       "access_search_radius_m": 500,
+      "maximum_best_effort_distance_m": null,
       "approach_override": null
     }
   ],
@@ -129,16 +131,25 @@ The complete checked-in Bastille-to-Marly example is
     "priority": "flexible"
   },
   "preferences": {
-    "scenic": "off",
-    "drinking_water": "off",
     "nature": "prefer",
     "loop_geometry": "prefer",
-    "direction": "any",
     "path_selection": "low_overlap"
   },
   "waypoints": [
-    {"lat": 48.871454, "lon": 2.124421, "name": "Machine de Marly"},
-    {"lat": 48.86156, "lon": 2.10833, "name": "Aqueduc de Louveciennes"}
+    {
+      "id": "machine-de-marly",
+      "name": "Machine de Marly",
+      "coordinate": {"lat": 48.871454, "lon": 2.124421},
+      "constraint_strength": "exact"
+    },
+    {
+      "id": "aqueduc",
+      "name": "Aqueduc de Louveciennes",
+      "coordinate": {"lat": 48.86156, "lon": 2.10833},
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 750,
+      "maximum_best_effort_distance_m": 750
+    }
   ],
   "waypoint_order": "optimize"
 }
@@ -146,15 +157,22 @@ The complete checked-in Bastille-to-Marly example is
 
 Optimization always fixes the start. It reorders only interior waypoints for a
 point-to-point plan and fixes both endpoints. It uses bounded deterministic heuristics,
-never an exponential exact TSP and never drops a mandatory waypoint.
+never an exponential exact TSP, and never drops an exact waypoint.
+
+Every interior point has an explicit strength. `exact` preserves the 300 m hard snap
+contract and may reject the plan. `approach` routes to a safe mapped/user/profile
+approach or drops the place with a reason. `best_effort` additionally accepts a
+bounded profile-compatible fallback and reports the remaining semantic distance as
+an approximation; it never claims the original place was reached.
 
 ## Distance and profiles
 
 `distance_objective` is the only distance objective:
 
 - `target_m` and `tolerance_m` are required;
-- `maximum_m` can be null only with `priority: "flexible"`;
-- balanced and strict plans require a maximum;
+- `maximum_m: null` means no hard maximum for flexible and balanced plans;
+- balanced target/tolerance misses affect ranking but do not reject a route;
+- strict plans require a maximum and make both tolerance and maximum hard;
 - strict maximums must contain the complete target tolerance.
 
 Every request must select exactly one public routing profile: `hike`, `trail_run`,
@@ -183,9 +201,25 @@ intent, acceptance commands, and resource reporting.
 
 `PlanResult` has one shape for both modes: schema version, kind, topology, effective
 endpoints, candidates, and search diagnostics. A candidate has a stable ID, rank,
-multiple roles, route, score, selected/dropped stops, and diagnostics. Portfolio roles
+multiple roles, route, score, reached/approximated/dropped stops, compromises, and
+diagnostics. Portfolio roles
 are `harmonious`, `maximum_requested_coverage`, `smooth_low_detour`, and
 `distance_focused`.
+
+Each `PlanCompromise` has a stable code and severity plus the affected identity,
+semantic and routed coordinates where relevant, measured distance, normal tolerance,
+configured maximum, profile, reason, and suggestion. Flexible distance misses are
+warnings. Exact failures remain structured HTTP 422 errors and are never silently
+retried with weaker semantics. The browser renders reached (green), approximated
+(amber), and dropped outcomes, focuses map connectors, and offers explicit edits that
+require regeneration.
+
+The strict Marly regression remains
+[`all-pois-generation-request.json`](examples/marly/all-pois-generation-request.json).
+Its sightseeing counterpart is
+[`all-pois-best-effort-generation-request.json`](examples/marly/all-pois-best-effort-generation-request.json);
+it keeps the exact start and flexible 41 km objective while making every scenic
+constraint explicit and bounded.
 
 GraphHopper's route distance is authoritative. Geometry-edge distances are normalized
 to it before analysis. Unknown path-detail or local-nature coverage stays visibly

@@ -3,13 +3,37 @@
   "kind": "waypoint_route",
   "name": "Marly mountain-bike loop",
   "topology": "loop",
-  "start": {"lat": 48.871389, "lon": 2.096667, "name": "Marly station"},
+  "start": {
+    "lat": 48.871389,
+    "lon": 2.096667,
+    "name": "Marly station"
+  },
   "end": null,
   "routing_profile": "mountain_bike",
   "candidate_count": 3,
   "seed": 42,
-  "distance_objective": {"target_m": 25000, "tolerance_m": 2000, "maximum_m": null, "priority": "flexible"},
-  "preferences": {"nature": "prefer", "path_selection": "low_overlap", "loop_geometry": "prefer"},
-  "waypoints": [{"lat": 48.871454, "lon": 2.124421, "name": "Machine de Marly"}],
+  "distance_objective": {
+    "target_m": 25000,
+    "tolerance_m": 2000,
+    "maximum_m": null,
+    "priority": "flexible"
+  },
+  "preferences": {
+    "nature": "prefer",
+    "path_selection": "low_overlap",
+    "loop_geometry": "prefer"
+  },
+  "waypoints": [
+    {
+      "id": "route-waypoint-1",
+      "name": "Machine de Marly",
+      "coordinate": {
+        "lat": 48.871454,
+        "lon": 2.124421,
+        "name": "Machine de Marly"
+      },
+      "constraint_strength": "exact"
+    }
+  ],
   "waypoint_order": "optimize"
 }

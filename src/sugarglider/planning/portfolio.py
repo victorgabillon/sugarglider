@@ -99,6 +99,10 @@ def build_portfolio(
 
 def _default_key(candidate: PlanCandidate) -> tuple[object, ...]:
     return (
+        -candidate.diagnostics.requested_stop_count,
+        candidate.diagnostics.approximated_stop_count,
+        sum(stop.distance_m for stop in candidate.approximated_stops),
+        candidate.diagnostics.dropped_stop_count,
         0 if candidate.diagnostics.within_tolerance else 1,
         candidate.diagnostics.target_error_m,
         candidate.diagnostics.immediate_backtracking_m,

@@ -16,7 +16,6 @@ from sugarglider.planning.auto_tour.open_search import OpenSearchMixin
 from sugarglider.planning.auto_tour.quality import AutoTourQualityMixin
 from sugarglider.planning.auto_tour.ranking import (
     canonical_auto_tour_key,
-    maximum_auto_tour_distance_m,
     score_route,
 )
 from sugarglider.planning.auto_tour.repairs import RepairSearchMixin
@@ -30,10 +29,12 @@ from sugarglider.planning.models import AutoTourPlanRequest, PlanRequestBase
 from sugarglider.planning.pipeline import evaluate_candidate_portfolio
 from sugarglider.planning.profile_quality import profile_aware_drop_reason
 from sugarglider.planning.result import (
+    ApproximatedPlanStop,
     DroppedPlanStop,
+    PlanCompromise,
     PlanResult,
     PlanScore,
-    SelectedPlanStop,
+    ReachedPlanStop,
     SelectionMethod,
     SelectionOrigin,
 )
@@ -158,7 +159,10 @@ def _search_request(request: AutoTourPlanRequest) -> AutoTourSearchRequest:
         seed=request.seed,
         profile=request.routing_profile,
         direction_preference=preferences.direction,
-        hard_waypoints=request.hard_waypoints,
+        hard_waypoints=tuple(
+            waypoint.coordinate.model_copy(update={"name": waypoint.name})
+            for waypoint in request.hard_waypoints
+        ),
         requested_stops=tuple(
             RequestedTourPlace(
                 id=stop.id,
@@ -166,8 +170,10 @@ def _search_request(request: AutoTourPlanRequest) -> AutoTourSearchRequest:
                 coordinate=stop.semantic_coordinate,
                 access_search_radius_m=stop.access_search_radius_m,
                 importance=stop.importance,
+                constraint_strength=stop.constraint_strength,
                 osm_reference=stop.osm_reference,
                 approach_override=stop.approach_override,
+                maximum_best_effort_distance_m=(stop.maximum_best_effort_distance_m),
                 original_index=index,
             )
             for index, stop in enumerate(request.requested_stops)
@@ -186,14 +192,13 @@ def _search_request(request: AutoTourPlanRequest) -> AutoTourSearchRequest:
 def _candidate_draft(
     candidate: AutoTourCandidate, request: AutoTourPlanRequest
 ) -> CandidateDraft:
-    selected = tuple(_selected_stop(stop, request) for stop in candidate.selected_stops)
-    dropped = tuple(_dropped_stop(stop, request) for stop in candidate.dropped_stops)
-    objective = request.distance_objective
-    maximum_distance_m = maximum_auto_tour_distance_m(
-        objective.target_m,
-        objective.tolerance_m,
-        priority=objective.priority,
-        requested_maximum_distance_m=objective.maximum_m,
+    reached = tuple(_reached_stop(stop, request) for stop in candidate.selected_stops)
+    approximated = _approximated_stops(candidate, request)
+    approximated_ids = {stop.id for stop in approximated}
+    dropped = tuple(
+        _dropped_stop(stop, request)
+        for stop in candidate.dropped_stops
+        if stop.semantic_poi.id not in approximated_ids
     )
     return CandidateDraft(
         route=candidate.route,
@@ -202,10 +207,14 @@ def _candidate_draft(
         topology=request.topology,
         construction=candidate.construction,
         search_family="auto_tour",
-        selected_stops=selected,
+        reached_stops=reached,
+        approximated_stops=approximated,
         dropped_stops=dropped,
+        compromises=tuple(
+            _approximation_compromise(stop, request) for stop in approximated
+        ),
         quality_inputs=(("poi_reward", candidate.total_poi_reward),),
-        maximum_distance_m=maximum_distance_m,
+        maximum_distance_m=request.distance_objective.maximum_m,
         structural_safety_eligible=all(
             visit.selected for visit in candidate.hard_point_visits
         ),
@@ -221,11 +230,11 @@ def _candidate_draft(
     )
 
 
-def _selected_stop(
+def _reached_stop(
     stop: SelectedPoiStop, request: AutoTourPlanRequest
-) -> SelectedPlanStop:
+) -> ReachedPlanStop:
     semantic = stop.semantic_poi
-    return SelectedPlanStop(
+    return ReachedPlanStop(
         id=semantic.id,
         name=semantic.name,
         semantic_coordinate=semantic.coordinate,
@@ -253,6 +262,89 @@ def _dropped_stop(
         selection_origin=_origin(semantic.origin, semantic.id, request),
         reason=reason,
         considered_approaches=stop.approach_candidates_considered,
+    )
+
+
+def _approximated_stops(
+    candidate: AutoTourCandidate, request: AutoTourPlanRequest
+) -> tuple[ApproximatedPlanStop, ...]:
+    values: list[ApproximatedPlanStop] = []
+    snapped = candidate.snapped_routing_points
+    if snapped is None:
+        return ()
+    for visit in candidate.requested_place_visits:
+        place = visit.requested_place
+        approach = visit.chosen_approach
+        if (
+            visit.decision != "dropped"
+            or place.constraint_strength != "best_effort"
+            or not visit.deliberately_routed
+            or approach is None
+            or visit.graph_snap_distance_m is None
+        ):
+            continue
+        maximum = place.maximum_best_effort_distance_m or place.access_search_radius_m
+        if visit.graph_snap_distance_m > maximum:
+            continue
+        point_index = next(
+            (
+                index
+                for index, point in enumerate(candidate.routing_points)
+                if (point.lat, point.lon)
+                == (approach.coordinate.lat, approach.coordinate.lon)
+            ),
+            None,
+        )
+        if point_index is None or point_index >= len(snapped):
+            continue
+        routed_lon, routed_lat = snapped[point_index]
+        routed = approach.coordinate.model_copy(
+            update={"lat": routed_lat, "lon": routed_lon}
+        )
+        resolved_approach = approach.model_copy(
+            update={
+                "coordinate": routed,
+                "kind": "strict_graph_snap",
+                "semantic_distance_m": visit.graph_snap_distance_m,
+                "provenance": "profile_snap_fallback",
+            }
+        )
+        public = next(stop for stop in request.requested_stops if stop.id == place.id)
+        values.append(
+            ApproximatedPlanStop(
+                id=public.id,
+                name=public.name,
+                semantic_coordinate=public.semantic_coordinate,
+                category="requested_place",
+                importance=public.importance,
+                selection_origin="requested",
+                resolved_approach=resolved_approach,
+                route_progress=visit.route_progress_share,
+                distance_m=visit.graph_snap_distance_m,
+                normal_tolerance_m=visit.arrival_tolerance_m,
+                configured_maximum_m=maximum,
+                reason="nearest_routeable_point_used",
+            )
+        )
+    return tuple(values)
+
+
+def _approximation_compromise(
+    stop: ApproximatedPlanStop, request: AutoTourPlanRequest
+) -> PlanCompromise:
+    return PlanCompromise(
+        code="stop_approximated",
+        severity="warning",
+        constraint_id=stop.id,
+        constraint_name=stop.name,
+        semantic_coordinate=stop.semantic_coordinate,
+        routed_coordinate=stop.resolved_approach.coordinate,
+        distance_m=stop.distance_m,
+        normal_tolerance_m=stop.normal_tolerance_m,
+        configured_maximum_m=stop.configured_maximum_m,
+        reason=stop.reason,
+        profile=request.routing_profile,
+        suggestion="Review the fallback, make the stop exact, or remove it.",
     )
 
 

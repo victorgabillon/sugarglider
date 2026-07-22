@@ -17,6 +17,7 @@ from sugarglider.planning.models import (
     AutoTourPlanRequest,
     WaypointPlanRequest,
 )
+from sugarglider.planning.validation import ExactWaypointNotReachedError
 from sugarglider.planning.waypoint.service import WaypointPlanner
 from sugarglider.pois.index import load_poi_index
 from sugarglider.routing.graphhopper import GraphHopperClient
@@ -151,6 +152,44 @@ async def test_live_canonical_waypoint_loop() -> None:
 
 
 @pytest.mark.asyncio
+async def test_live_marly_strict_failure_and_best_effort_success() -> None:
+    _enabled()
+    strict = _load("examples/marly/all-pois-generation-request.json")
+    best_effort = _load("examples/marly/all-pois-best-effort-generation-request.json")
+    assert isinstance(strict, WaypointPlanRequest)
+    assert isinstance(best_effort, WaypointPlanRequest)
+    base_url = os.getenv("GRAPHHOPPER_URL", "http://localhost:8989")
+    async with httpx.AsyncClient(timeout=300) as client:
+        planner = WaypointPlanner(
+            GraphHopperClient(base_url, client=client),
+            RouteResultFactory(),
+            max_evaluations=48,
+        )
+        with pytest.raises(ExactWaypointNotReachedError) as caught:
+            await planner.generate(strict)
+        result = await planner.generate(best_effort)
+
+    assert caught.value.point_id == "route-waypoint-7"
+    assert caught.value.point_name == "Lisière du Trou d'Enfer — rester hors domaine"
+    assert caught.value.snap_distance_m == pytest.approx(566.2, abs=1)
+    assert caught.value.maximum_snap_distance_m == 300
+    assert len(result.candidates) == 3
+    best = result.candidates[0]
+    assert len(best.reached_stops) + len(best.approximated_stops) == 22
+    assert not best.dropped_stops
+    assert best.route.summary.distance_m == pytest.approx(41_000, abs=2_000)
+    assert any(
+        stop.id == "route-waypoint-7" and stop.distance_m == pytest.approx(566.2, abs=1)
+        for stop in best.approximated_stops
+    )
+    root = ElementTree.fromstring(write_plan_gpx(best))
+    namespace = {"g": GPX_NAMESPACE}
+    assert len(root.findall("g:trk", namespace)) == 1
+    assert len(root.findall("g:trk/g:trkseg", namespace)) == 1
+    assert root.findall("g:rte", namespace) == []
+
+
+@pytest.mark.asyncio
 async def test_live_canonical_waypoint_point_to_point_keeps_endpoints() -> None:
     _enabled()
     document = json.loads(
@@ -162,7 +201,14 @@ async def test_live_canonical_waypoint_point_to_point_keeps_endpoints() -> None:
             "topology": "point_to_point",
             "start": {"lat": 48.853, "lon": 2.369},
             "end": {"lat": 48.871389, "lon": 2.096667},
-            "waypoints": [{"lat": 48.862849, "lon": 2.099448}],
+            "waypoints": [
+                {
+                    "id": "marley-castle",
+                    "name": "Emplacement du château de Marly",
+                    "coordinate": {"lat": 48.862849, "lon": 2.099448},
+                    "constraint_strength": "exact",
+                }
+            ],
             "waypoint_order": "optimize",
         }
     )
@@ -211,7 +257,7 @@ async def test_live_bastille_to_marly_accounts_for_22_requested_stops() -> None:
         ).generate(request)
     best = result.candidates[0]
     requested_decisions = {
-        stop.id for stop in best.selected_stops if stop.selection_origin == "requested"
+        stop.id for stop in best.reached_stops if stop.selection_origin == "requested"
     } | {stop.id for stop in best.dropped_stops if stop.selection_origin == "requested"}
     assert requested_decisions == {stop.id for stop in request.requested_stops}
     assert best.route.geometry[0] != best.route.geometry[-1]
@@ -221,11 +267,13 @@ async def test_live_bastille_to_marly_accounts_for_22_requested_stops() -> None:
     assert best.route.analysis.repetition.repeated_distance.share <= 0.06
     assert all(
         stop.route_to_approach_m <= stop.resolved_approach.arrival_tolerance_m
-        for stop in best.selected_stops
+        for stop in best.reached_stops
     )
     root = ElementTree.fromstring(write_plan_gpx(best))
     namespace = {"g": GPX_NAMESPACE}
-    assert len(root.findall("g:wpt", namespace)) == len(best.selected_stops)
+    assert len(root.findall("g:wpt", namespace)) == (
+        len(best.reached_stops) + len(best.approximated_stops)
+    )
     assert len(root.findall("g:trk", namespace)) == 1
     assert len(root.findall("g:trk/g:trkseg", namespace)) == 1
     assert root.findall("g:rte", namespace) == []
@@ -251,7 +299,7 @@ async def test_live_marly_auto_tour_is_deterministic() -> None:
             ).generate(request)
         best = result.candidates[0]
         requested_selected = sum(
-            stop.selection_origin == "requested" for stop in best.selected_stops
+            stop.selection_origin == "requested" for stop in best.reached_stops
         )
         assert requested_selected >= 1
         assert 30_000 <= best.route.summary.distance_m <= 50_000

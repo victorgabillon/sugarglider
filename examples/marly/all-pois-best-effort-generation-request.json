@@ -8,7 +8,7 @@
   },
   "end": null,
   "kind": "waypoint_route",
-  "name": "Marly 41 km — all original GPX POIs",
+  "name": "Marly 41 km best-effort sightseeing loop",
   "preferences": {
     "loop_geometry": "off",
     "nature": "prefer",
@@ -33,7 +33,9 @@
         "lon": 2.043,
         "name": "Croix Saint-Michel"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-2",
@@ -43,7 +45,9 @@
         "lon": 2.034384,
         "name": "Abbaye de Joyenval"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-3",
@@ -53,7 +57,9 @@
         "lon": 2.02153,
         "name": "Entrée du Désert de Retz"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-4",
@@ -63,7 +69,9 @@
         "lon": 2.044635,
         "name": "Étoile de Montaigu"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-5",
@@ -73,7 +81,9 @@
         "lon": 2.0402,
         "name": "Étoile des Chasseurs"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-6",
@@ -83,7 +93,9 @@
         "lon": 2.083,
         "name": "Étoile du Compas"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-7",
@@ -93,7 +105,9 @@
         "lon": 2.0915,
         "name": "Lisière du Trou d'Enfer — rester hors domaine"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-8",
@@ -103,7 +117,9 @@
         "lon": 2.074,
         "name": "Étoile Douteuse"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-9",
@@ -113,7 +129,9 @@
         "lon": 2.071,
         "name": "Batterie de l'Auberderie"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-10",
@@ -123,7 +141,9 @@
         "lon": 2.096667,
         "name": "Gare de Marly-le-Roi"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-11",
@@ -133,7 +153,9 @@
         "lon": 2.0954,
         "name": "Église Saint-Vigor / Vieux Marly"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-12",
@@ -143,7 +165,9 @@
         "lon": 2.099204,
         "name": "Abreuvoir de Marly"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-13",
@@ -153,7 +177,9 @@
         "lon": 2.103777,
         "name": "Grille du Cœur-Volant"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-14",
@@ -163,7 +189,9 @@
         "lon": 2.124421,
         "name": "Machine de Marly"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-15",
@@ -173,7 +201,9 @@
         "lon": 2.1135,
         "name": "Tour du Levant"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-16",
@@ -183,7 +213,9 @@
         "lon": 2.10833,
         "name": "Aqueduc de Louveciennes — milieu"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-17",
@@ -193,7 +225,9 @@
         "lon": 2.104,
         "name": "Tour du Jongleur"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-18",
@@ -203,7 +237,9 @@
         "lon": 2.107372,
         "name": "Entrée sud du Domaine"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-19",
@@ -213,7 +249,9 @@
         "lon": 2.1017,
         "name": "Grand Miroir"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-20",
@@ -223,7 +261,9 @@
         "lon": 2.099448,
         "name": "Emplacement du château de Marly"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-21",
@@ -233,7 +273,9 @@
         "lon": 2.095,
         "name": "Tapis Vert haut"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     },
     {
       "id": "route-waypoint-22",
@@ -243,7 +285,9 @@
         "lon": 2.0745,
         "name": "Batterie du Champ de Mars"
       },
-      "constraint_strength": "exact"
+      "constraint_strength": "best_effort",
+      "access_search_radius_m": 1000.0,
+      "maximum_best_effort_distance_m": 1000.0
     }
   ]
 }

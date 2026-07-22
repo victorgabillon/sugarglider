@@ -18,7 +18,6 @@ from sugarglider.planning.auto_tour.models import (
     TourControlComparison,
 )
 from sugarglider.planning.auto_tour.ranking import (
-    GLOBAL_AUTO_TOUR_MAXIMUM_DISTANCE_M,
     auto_tour_ranking_key,
     compare_with_control,
     control_comparison,
@@ -32,12 +31,16 @@ from sugarglider.routing.backend import RoutedPath
 from sugarglider.routing.result import RouteResultFactory
 
 
-def test_distance_maximum_is_mode_aware_and_user_bounded() -> None:
-    assert maximum_auto_tour_distance_m(45_000, 2_000, priority="flexible") == (
-        GLOBAL_AUTO_TOUR_MAXIMUM_DISTANCE_M
+def test_only_explicit_distance_maximum_is_hard() -> None:
+    assert maximum_auto_tour_distance_m(45_000, 2_000, priority="flexible") == float(
+        "inf"
     )
-    assert maximum_auto_tour_distance_m(45_000, 2_000, priority="balanced") == (56_250)
-    assert maximum_auto_tour_distance_m(45_000, 2_000, priority="strict") == 56_250
+    assert maximum_auto_tour_distance_m(45_000, 2_000, priority="balanced") == float(
+        "inf"
+    )
+    assert maximum_auto_tour_distance_m(45_000, 2_000, priority="strict") == float(
+        "inf"
+    )
     assert (
         maximum_auto_tour_distance_m(
             45_000,

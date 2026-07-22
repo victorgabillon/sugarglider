@@ -10,7 +10,11 @@ from shapely.geometry import Point
 from sugarglider.analysis.projection import LocalMetricProjection
 from sugarglider.domain.models import RouteResult
 from sugarglider.planning.profiles import routing_profile
-from sugarglider.planning.result import PlanCandidate, SelectedPlanStop
+from sugarglider.planning.result import (
+    ApproximatedPlanStop,
+    PlanCandidate,
+    ReachedPlanStop,
+)
 
 GPX_NAMESPACE = "http://www.topografix.com/GPX/1/1"
 UNSAFE_FILENAME_CHARACTERS = re.compile(r"[<>:\"/\\|?*\x00-\x1f\x7f]+")
@@ -82,11 +86,15 @@ def write_gpx(route: RouteResult) -> bytes:
 
 def write_plan_gpx(candidate: PlanCandidate) -> bytes:
     """Export one immutable canonical candidate without any routing call."""
-    validate_plan_selected_stops(candidate.route, candidate.selected_stops)
+    stops: tuple[ReachedPlanStop | ApproximatedPlanStop, ...] = (
+        *candidate.reached_stops,
+        *candidate.approximated_stops,
+    )
+    validate_plan_stops(candidate.route, stops)
     root = ElementTree.fromstring(write_gpx(candidate.route))
     metadata = root.find(_tag("metadata"))
     insertion_index = list(root).index(metadata) + 1 if metadata is not None else 0
-    for order, stop in enumerate(candidate.selected_stops, start=1):
+    for order, stop in enumerate(stops, start=1):
         approach = stop.resolved_approach
         waypoint = ElementTree.Element(
             _tag("wpt"),
@@ -97,6 +105,7 @@ def write_plan_gpx(candidate: PlanCandidate) -> bytes:
         )
         ElementTree.SubElement(waypoint, _tag("name")).text = clean_xml_text(
             f"{order}. {stop.name}"
+            + (" — approximate" if isinstance(stop, ApproximatedPlanStop) else "")
         )
         ElementTree.SubElement(waypoint, _tag("desc")).text = clean_xml_text(
             f"Visit {order}; {stop.category}; approach {approach.kind}."
@@ -110,11 +119,12 @@ def write_plan_gpx(candidate: PlanCandidate) -> bytes:
     )
 
 
-def validate_plan_selected_stops(
-    route: RouteResult, selected_stops: tuple[SelectedPlanStop, ...]
+def validate_plan_stops(
+    route: RouteResult,
+    stops: tuple[ReachedPlanStop | ApproximatedPlanStop, ...],
 ) -> tuple[float, ...]:
     """Recompute canonical stop arrivals at the GPX trust boundary."""
-    if not selected_stops:
+    if not stops:
         return ()
     if len(route.geometry) < 2:
         raise SelectedStopNotReachedError
@@ -123,7 +133,7 @@ def validate_plan_selected_stops(
     if line.is_empty or not line.is_valid or line.length <= 0:
         raise SelectedStopNotReachedError
     measured: list[float] = []
-    for stop in selected_stops:
+    for stop in stops:
         approach = stop.resolved_approach
         distance = float(
             line.distance(
@@ -134,14 +144,21 @@ def validate_plan_selected_stops(
                 )
             )
         )
-        if (
-            distance > approach.arrival_tolerance_m
-            or abs(distance - stop.route_to_approach_m)
+        if distance > approach.arrival_tolerance_m or (
+            isinstance(stop, ReachedPlanStop)
+            and abs(distance - stop.route_to_approach_m)
             > MAX_REPORTED_STOP_DISTANCE_DIFFERENCE_M
         ):
             raise SelectedStopNotReachedError
         measured.append(distance)
     return tuple(measured)
+
+
+def validate_plan_selected_stops(
+    route: RouteResult, selected_stops: tuple[ReachedPlanStop, ...]
+) -> tuple[float, ...]:
+    """Retained function name for internal callers; public stops are reached."""
+    return validate_plan_stops(route, selected_stops)
 
 
 class SelectedStopNotReachedError(ValueError):

@@ -98,9 +98,7 @@ def canonical_auto_tour_key(
 ) -> tuple[object, ...]:
     """Order published Auto Tours without erasing producer POI semantics."""
     selected_requested = tuple(
-        stop
-        for stop in candidate.selected_stops
-        if stop.selection_origin == "requested"
+        stop for stop in candidate.reached_stops if stop.selection_origin == "requested"
     )
     must_visits = sum(stop.importance == "must_visit" for stop in selected_requested)
     preferred = sum(stop.importance == "prefer" for stop in selected_requested)
@@ -115,6 +113,12 @@ def canonical_auto_tour_key(
         else -1.0
     )
     coverage = (-must_visits, -preferred, -diagnostics.requested_stop_count)
+    compromise_quality = (
+        diagnostics.approximated_stop_count,
+        sum(stop.distance_m for stop in candidate.approximated_stops),
+        sum(stop.importance == "must_visit" for stop in candidate.dropped_stops),
+        diagnostics.dropped_stop_count,
+    )
     distance = (
         0 if diagnostics.within_tolerance else 1,
         diagnostics.target_error_m,
@@ -127,11 +131,12 @@ def canonical_auto_tour_key(
         candidate.id,
     )
     if priority == "strict":
-        return (*distance, *coverage, *quality)
+        return (*coverage, *compromise_quality, *distance, *quality)
     if priority == "balanced":
-        return (*coverage, *distance, *quality)
+        return (*coverage, *compromise_quality, *distance, *quality)
     return (
         *coverage,
+        *compromise_quality,
         backtracking,
         repetition,
         -discovered_utility,
@@ -149,17 +154,10 @@ def maximum_auto_tour_distance_m(
     requested_maximum_distance_m: float | None = None,
 ) -> float:
     """Return the mode-aware hard route ceiling, capped by server policy."""
-    target_derived = target_distance_m + max(
-        2.0 * tolerance_m, 0.25 * target_distance_m
-    )
-    mode_maximum = (
-        GLOBAL_AUTO_TOUR_MAXIMUM_DISTANCE_M
-        if priority == "flexible"
-        else target_derived
-    )
-    if requested_maximum_distance_m is not None:
-        mode_maximum = min(mode_maximum, requested_maximum_distance_m)
-    return min(mode_maximum, GLOBAL_AUTO_TOUR_MAXIMUM_DISTANCE_M)
+    del target_distance_m, tolerance_m, priority
+    if requested_maximum_distance_m is None:
+        return float("inf")
+    return requested_maximum_distance_m
 
 
 def soft_distance_penalty(

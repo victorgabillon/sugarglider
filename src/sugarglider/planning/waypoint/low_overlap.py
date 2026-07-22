@@ -104,6 +104,7 @@ async def refine_low_overlap(
         exact_points=source.exact_points,
         exact_point_positions=source.exact_point_positions,
         original_indices=source.original_indices,
+        exact_point_ids=source.exact_point_ids,
         topology=source.topology,
         construction="low_overlap_beam",
         order_provenance=source.order_provenance,

@@ -128,7 +128,10 @@ def _migrate_auto_tour(
                 source, target_distance_m=target_distance_m
             ),
             "preferences": _auto_tour_preferences(source, topology=topology),
-            "hard_waypoints": source.get("hard_points", []),
+            "hard_waypoints": [
+                _migrate_exact_waypoint(point, index)
+                for index, point in enumerate(source.get("hard_points", []), start=1)
+            ],
             "requested_stops": stops,
             "preferred_discovered_poi_ids": source.get("preferred_poi_ids", []),
             "free_poi_spur_physical_m": source.get("free_poi_spur_repeated_m", 200.0),
@@ -158,10 +161,12 @@ def _migrate_stop(value: object, *, index: int, assumptions: list[str]) -> JsonO
         "name": name,
         "semantic_coordinate": coordinate,
         "importance": value.get("importance", "must_visit"),
+        "constraint_strength": "approach",
         "osm_reference": value.get("osm_reference"),
         "access_search_radius_m": value.get(
             "access_search_radius_m", value.get("visit_radius_m", 500.0)
         ),
+        "maximum_best_effort_distance_m": None,
         "approach_override": value.get("approach_override"),
     }
     if "arrival_tolerance_m" in value:
@@ -268,7 +273,10 @@ def _migrate_waypoint(
                 "priority": "flexible",
             },
             "preferences": _waypoint_preferences(source, topology=topology),
-            "waypoints": points,
+            "waypoints": [
+                _migrate_route_waypoint(point, index)
+                for index, point in enumerate(points, start=1)
+            ],
             "waypoint_order": "fixed" if old_order == "fixed" else "optimize",
         },
         assumptions,
@@ -328,6 +336,27 @@ def _same_coordinate(left: object, right: object) -> bool:
         and left.get("lat") == right.get("lat")
         and left.get("lon") == right.get("lon")
     )
+
+
+def _migrate_exact_waypoint(value: object, index: int) -> JsonObject:
+    if not isinstance(value, dict):
+        raise MigrationError("legacy hard waypoint is not an object")
+    return {
+        "id": f"migrated-exact-waypoint-{index}",
+        "name": value.get("name") or f"Exact waypoint {index}",
+        "coordinate": value,
+    }
+
+
+def _migrate_route_waypoint(value: object, index: int) -> JsonObject:
+    if not isinstance(value, dict):
+        raise MigrationError("legacy waypoint is not an object")
+    return {
+        "id": f"migrated-route-waypoint-{index}",
+        "name": value.get("name") or f"Waypoint {index}",
+        "coordinate": value,
+        "constraint_strength": "exact",
+    }
 
 
 def main() -> int:
