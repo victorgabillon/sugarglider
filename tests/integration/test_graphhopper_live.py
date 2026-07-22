@@ -12,6 +12,8 @@ from sugarglider.analysis.route import RouteAnalyzer, haversine_distance_m
 from sugarglider.domain.models import Coordinate, RouteRequest
 from sugarglider.gpx.writer import GPX_NAMESPACE, write_plan_gpx
 from sugarglider.planning.auto_tour.service import AutoTourPlanner, AutoTourService
+from sugarglider.planning.direction.models import ReversePlanRequest
+from sugarglider.planning.direction.service import ReversePlanner
 from sugarglider.planning.models import (
     PLAN_REQUEST_ADAPTER,
     AutoTourPlanRequest,
@@ -160,14 +162,22 @@ async def test_live_marly_strict_failure_and_best_effort_success() -> None:
     assert isinstance(best_effort, WaypointPlanRequest)
     base_url = os.getenv("GRAPHHOPPER_URL", "http://localhost:8989")
     async with httpx.AsyncClient(timeout=300) as client:
+        backend = GraphHopperClient(base_url, client=client)
         planner = WaypointPlanner(
-            GraphHopperClient(base_url, client=client),
+            backend,
             RouteResultFactory(),
             max_evaluations=48,
         )
         with pytest.raises(ExactWaypointNotReachedError) as caught:
             await planner.generate(strict)
         result = await planner.generate(best_effort)
+        reversed_result = await ReversePlanner(backend, RouteResultFactory()).reverse(
+            ReversePlanRequest(
+                schema_version=1,
+                source_request=best_effort,
+                candidate=result.candidates[0],
+            )
+        )
 
     assert caught.value.point_id == "route-waypoint-7"
     assert caught.value.point_name == "Lisière du Trou d'Enfer — rester hors domaine"
@@ -187,6 +197,104 @@ async def test_live_marly_strict_failure_and_best_effort_success() -> None:
     assert len(root.findall("g:trk", namespace)) == 1
     assert len(root.findall("g:trk/g:trkseg", namespace)) == 1
     assert root.findall("g:rte", namespace) == []
+    reversed_best = reversed_result.result.candidates[0]
+    assert (
+        len(reversed_best.reached_stops)
+        + len(reversed_best.approximated_stops)
+        + len(reversed_best.dropped_stops)
+        == 22
+    )
+    assert reversed_best.routing_profile == best_effort.routing_profile
+    assert reversed_result.result.search_diagnostics.budget.phases["reverse"].used <= 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("fixture", "profile", "topology"),
+    (
+        ("examples/profiles/hike-loop.json", "hike", "loop"),
+        ("examples/profiles/mountain-bike-loop.json", "mountain_bike", "loop"),
+        ("examples/profiles/city-bike-open.json", "city_bike", "point_to_point"),
+    ),
+)
+async def test_live_graph_valid_profile_reversal(
+    fixture: str,
+    profile: RoutingProfileId,
+    topology: str,
+) -> None:
+    _enabled()
+    request = _load(fixture)
+    assert request.routing_profile == profile
+    assert request.topology == topology
+    base_url = os.getenv("GRAPHHOPPER_URL", "http://localhost:8989")
+    async with httpx.AsyncClient(timeout=300) as client:
+        backend = GraphHopperClient(base_url, client=client)
+        factory = RouteResultFactory()
+        if isinstance(request, AutoTourPlanRequest):
+            source_result = await AutoTourPlanner(
+                AutoTourService(
+                    backend,
+                    factory,
+                    structural_result_factory=RouteResultFactory(RouteAnalyzer()),
+                )
+            ).generate(request)
+        else:
+            source_result = await WaypointPlanner(
+                backend, factory, max_evaluations=48
+            ).generate(request)
+        source = source_result.candidates[0]
+        response = await ReversePlanner(backend, factory).reverse(
+            ReversePlanRequest(
+                schema_version=1,
+                source_request=request,
+                candidate=source,
+            )
+        )
+
+    transformed = response.transformed_request
+    reversed_candidate = response.result.candidates[0]
+    assert response.result.routing_profile == profile
+    assert reversed_candidate.route.routing_profile == profile
+    assert reversed_candidate.route.geometry != tuple(reversed(source.route.geometry))
+    assert response.result.search_diagnostics.budget.phases["reverse"].used <= 3
+    if topology == "loop":
+        assert transformed.start == request.start
+        assert reversed_candidate.route.geometry[0] == source.route.geometry[0]
+        directions = {
+            source.traversal.direction,
+            reversed_candidate.traversal.direction,
+        }
+        if "complex_loop" not in directions:
+            assert directions == {"clockwise", "counterclockwise"}
+    else:
+        assert transformed.start == request.end
+        assert transformed.end == request.start
+        assert (
+            haversine_distance_m(
+                reversed_candidate.route.geometry[0],
+                (request.effective_end.lon, request.effective_end.lat),
+            )
+            < 300
+        )
+        assert (
+            haversine_distance_m(
+                reversed_candidate.route.geometry[-1],
+                (request.start.lon, request.start.lat),
+            )
+            < 300
+        )
+    root = ElementTree.fromstring(write_plan_gpx(reversed_candidate))
+    namespace = {"g": GPX_NAMESPACE}
+    trackpoints = root.findall("g:trk/g:trkseg/g:trkpt", namespace)
+    assert len(root.findall("g:trk", namespace)) == 1
+    assert len(root.findall("g:trk/g:trkseg", namespace)) == 1
+    assert root.findall("g:rte", namespace) == []
+    assert float(trackpoints[0].attrib["lon"]) == pytest.approx(
+        reversed_candidate.route.geometry[0][0], abs=1e-8
+    )
+    assert float(trackpoints[-1].attrib["lon"]) == pytest.approx(
+        reversed_candidate.route.geometry[-1][0], abs=1e-8
+    )
 
 
 @pytest.mark.asyncio

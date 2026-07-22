@@ -13,7 +13,9 @@ from sugarglider.planning.result import (
 )
 from sugarglider.routing.backend import RoutedPath
 
-type SearchFamily = Literal["auto_tour", "waypoint_control", "waypoint_ordering"]
+type SearchFamily = Literal[
+    "auto_tour", "waypoint_control", "waypoint_ordering", "reverse"
+]
 
 
 @dataclass(frozen=True)

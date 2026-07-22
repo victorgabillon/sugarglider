@@ -3,6 +3,7 @@
 from dataclasses import replace
 from typing import Protocol
 
+from sugarglider.planning.direction.traversal import build_plan_traversal
 from sugarglider.planning.drafts import CandidateDraft
 from sugarglider.planning.models import PlanRequestBase
 from sugarglider.planning.profile_quality import profile_quality_components
@@ -136,11 +137,14 @@ class CandidateEvaluator:
                 topology=draft.topology,
                 routing_profile=request.routing_profile,
             ),
+            kind=request.kind,
+            topology=request.topology,
             routing_profile=request.routing_profile,
             rank=1,
             roles=(),
             route=route,
             score=score,
+            traversal=build_plan_traversal(request, draft),
             reached_stops=draft.reached_stops,
             approximated_stops=draft.approximated_stops,
             dropped_stops=draft.dropped_stops,

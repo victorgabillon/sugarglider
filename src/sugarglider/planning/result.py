@@ -8,6 +8,7 @@ from sugarglider.domain.models import Coordinate, RouteResult
 from sugarglider.planning.diagnostics import PlanSearchDiagnostics
 from sugarglider.planning.models import (
     CanonicalModel,
+    ConstraintStrength,
     PlanKind,
     RequestedStopImportance,
     RouteTopology,
@@ -41,6 +42,21 @@ type SelectionMethod = Literal[
     "short_excursion",
     "shared_excursion",
 ]
+type RouteTraversalDirection = Literal[
+    "start_to_end",
+    "clockwise",
+    "counterclockwise",
+    "complex_loop",
+]
+type TraversalAnchorKind = Literal[
+    "start",
+    "end",
+    "exact_waypoint",
+    "requested_stop",
+    "approximated_stop",
+    "deliberate_discovered_stop",
+]
+type TraversalOutcome = Literal["reached", "approximated"]
 
 
 class PlanScore(CanonicalModel):
@@ -119,6 +135,39 @@ class PlanCompromise(CanonicalModel):
     suggestion: str
 
 
+class PlanTraversalAnchor(CanonicalModel):
+    id: str
+    name: str
+    kind: TraversalAnchorKind
+    routed_coordinate: Coordinate
+    semantic_coordinate: Coordinate
+    route_progress: float = Field(ge=0, le=1)
+    constraint_strength: ConstraintStrength | None = None
+    outcome: TraversalOutcome
+
+
+class PlanTraversal(CanonicalModel):
+    direction: RouteTraversalDirection
+    anchors: tuple[PlanTraversalAnchor, ...]
+
+    @model_validator(mode="after")
+    def validate_anchor_order(self) -> Self:
+        if not self.anchors or self.anchors[0].kind != "start":
+            raise ValueError("traversal must begin with one start anchor")
+        ids = tuple(anchor.id for anchor in self.anchors)
+        if len(ids) != len(set(ids)):
+            raise ValueError("traversal anchor IDs must be unique")
+        progress = tuple(anchor.route_progress for anchor in self.anchors)
+        if progress != tuple(sorted(progress)):
+            raise ValueError("traversal anchors must be sorted by route progress")
+        if self.direction == "start_to_end":
+            if self.anchors[-1].kind != "end":
+                raise ValueError("open traversal must end with one end anchor")
+        elif any(anchor.kind == "end" for anchor in self.anchors):
+            raise ValueError("loop traversal must not contain an end anchor")
+        return self
+
+
 class PlanCandidateDiagnostics(CanonicalModel):
     safety_eligible: bool
     target_error_m: float = Field(ge=0)
@@ -133,11 +182,14 @@ class PlanCandidateDiagnostics(CanonicalModel):
 
 class PlanCandidate(CanonicalModel):
     id: str
+    kind: PlanKind
+    topology: RouteTopology
     routing_profile: RoutingProfileId
     rank: int = Field(ge=1)
     roles: tuple[CandidateRole, ...]
     route: RouteResult
     score: PlanScore
+    traversal: PlanTraversal
     reached_stops: tuple[ReachedPlanStop, ...] = ()
     approximated_stops: tuple[ApproximatedPlanStop, ...] = ()
     dropped_stops: tuple[DroppedPlanStop, ...] = ()
@@ -169,6 +221,11 @@ class PlanCandidate(CanonicalModel):
             or approximated_ids.intersection(dropped_ids)
         ):
             raise ValueError("a stop must have exactly one final outcome")
+        if self.topology == "point_to_point":
+            if self.traversal.direction != "start_to_end":
+                raise ValueError("open candidate traversal must be start-to-end")
+        elif self.traversal.direction == "start_to_end":
+            raise ValueError("loop candidate traversal must have loop orientation")
         return self
 
 
@@ -181,6 +238,17 @@ class PlanResult(CanonicalModel):
     effective_end: Coordinate
     candidates: tuple[PlanCandidate, ...]
     search_diagnostics: PlanSearchDiagnostics
+
+    @model_validator(mode="after")
+    def validate_candidate_identity(self) -> Self:
+        if any(
+            candidate.kind != self.kind
+            or candidate.topology != self.topology
+            or candidate.routing_profile != self.routing_profile
+            for candidate in self.candidates
+        ):
+            raise ValueError("result candidates must match kind, topology, and profile")
+        return self
 
 
 class PlanGpxRequest(CanonicalModel):

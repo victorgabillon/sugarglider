@@ -26,6 +26,7 @@ from sugarglider.planning.alternative_legs import LowOverlapSettings
 from sugarglider.planning.auto_tour.discovered_pois import TourPoiSettings
 from sugarglider.planning.auto_tour.service import AutoTourPlanner, AutoTourService
 from sugarglider.planning.auto_tour.state import AutoTourSettings
+from sugarglider.planning.direction.service import ReversePlanner
 from sugarglider.planning.pipeline import PlanService
 from sugarglider.planning.waypoint.service import WaypointPlanner
 from sugarglider.pois.errors import PoiIndexError, PoiIndexMissingError
@@ -158,6 +159,11 @@ def create_app(
                     result_factory,
                     max_evaluations=runtime_settings.generation_max_evaluations,
                     structural_result_factory=structural_result_factory,
+                    poi_index=poi_index,
+                ),
+                reverse=ReversePlanner(
+                    backend,
+                    result_factory,
                     poi_index=poi_index,
                 ),
             )

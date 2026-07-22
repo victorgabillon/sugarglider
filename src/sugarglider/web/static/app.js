@@ -1,4 +1,4 @@
-import { ApiError, exportPlanCandidate, generatePlan, getConfig, getPoiStatus, getRoutingProfiles, searchPois, visualizeRoute } from "./api.js";
+import { ApiError, exportPlanCandidate, generatePlan, getConfig, getPoiStatus, getRoutingProfiles, reversePlan, searchPois, visualizeRoute } from "./api.js";
 import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
@@ -227,6 +227,10 @@ function updateOptionsFromControls() {
     name: byId("route-name").value.trim() || "Sugarglider route",
     targetDistanceKm: Number(byId("target-distance").value),
     toleranceKm: Number(byId("tolerance").value),
+    maximumDistanceKm: byId("maximum-distance").value.trim()
+      ? Number(byId("maximum-distance").value)
+      : null,
+    distancePriority: byId("distance-priority").value,
     candidateCount: Number(byId("candidate-count").value),
     seed: Number(byId("seed").value),
     waypointOrder: byId("point-order-mode").value,
@@ -236,10 +240,8 @@ function updateOptionsFromControls() {
     freePoiSpurRepeatedM: Number(byId("free-poi-spur").value),
   };
   state.autoTour.directionPreference = byId("direction-preference").value;
-  state.autoTour.distancePriority = byId("distance-priority").value;
-  state.autoTour.maximumDistanceKm = byId("maximum-distance").value.trim()
-    ? Number(byId("maximum-distance").value)
-    : null;
+  state.autoTour.distancePriority = state.options.distancePriority;
+  state.autoTour.maximumDistanceKm = state.options.maximumDistanceKm;
   state.autoTour.scenicPreference = byId("scenic-preference").value;
   state.autoTour.drinkingWaterPreference = byId("water-preference").value;
   activeEndpoints().routeTopology = byId("route-topology").value;
@@ -258,8 +260,11 @@ function updateControlsFromOptions() {
   byId("loop-geometry-preference").value = state.options.loopGeometryPreference;
   byId("free-poi-spur").value = state.options.freePoiSpurRepeatedM ?? 200;
   byId("direction-preference").value = state.autoTour.directionPreference;
-  byId("distance-priority").value = state.autoTour.distancePriority;
-  byId("maximum-distance").value = state.autoTour.maximumDistanceKm ?? "";
+  byId("distance-priority").value = state.options.distancePriority
+    ?? state.autoTour.distancePriority;
+  byId("maximum-distance").value = state.options.maximumDistanceKm
+    ?? state.autoTour.maximumDistanceKm
+    ?? "";
   byId("scenic-preference").value = state.autoTour.scenicPreference;
   byId("water-preference").value = state.autoTour.drinkingWaterPreference;
   updateProfileDescription();
@@ -796,7 +801,7 @@ function renderMapData() {
     candidate?.diagnostics.details.required_waypoint_order,
     state.selectedPointIndex,
     popupIndex,
-    state.request.status === "running",
+    ["running", "reversing"].includes(state.request.status),
     {
       onDrag: (index, coordinate) => {
         state.points[index] = { ...state.points[index], ...coordinate };
@@ -821,6 +826,7 @@ function renderMapData() {
     state.generationResult?.candidates ?? [],
     state.selectedSignature,
     state.showAllCandidates,
+    state.showDirectionArrows,
     selectCandidate,
   );
   renderVisualization(
@@ -863,12 +869,32 @@ function renderMapData() {
 function candidateBadges(candidate, search) {
   const values = [];
   values.push(`<span class="badge">${escapeHtml(profileDisplayName(candidate.routing_profile))}</span>`);
+  values.push(`<span class="badge">${escapeHtml(directionLabel(candidate.traversal))}</span>`);
   for (const role of candidate.roles) {
     values.push(`<span class="badge">${escapeHtml(friendlyLabel(role))}</span>`);
   }
   if (candidate.rank === 1) values.push('<span class="badge recommended">Recommended</span>');
   values.push(`<span class="badge ${candidate.diagnostics.within_tolerance ? "good" : "warn"}">${candidate.diagnostics.within_tolerance ? "Within tolerance" : "Outside tolerance"}</span>`);
   return values.join("");
+}
+
+function directionLabel(traversal) {
+  return {
+    start_to_end: "Start → End",
+    clockwise: "Clockwise",
+    counterclockwise: "Counterclockwise",
+    complex_loop: "Complex loop",
+  }[traversal?.direction] ?? "Direction unavailable";
+}
+
+function traversalSummary(candidate, result) {
+  const anchors = candidate.traversal?.anchors ?? [];
+  const start = anchors.find((anchor) => anchor.kind === "start")?.name ?? "Start";
+  const end = anchors.find((anchor) => anchor.kind === "end")?.name ?? "End";
+  const label = result.topology === "point_to_point"
+    ? `${start} → ${end}`
+    : directionLabel(candidate.traversal);
+  return `<section class="direction-summary" role="status" aria-label="Route traversal direction"><h3>Traversal direction</h3><p><strong>${escapeHtml(label)}</strong></p><p class="context-note">Direction arrows follow the returned routed geometry. They are planning context, not turn-by-turn instructions.</p></section>`;
 }
 
 function autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare) {
@@ -1198,7 +1224,12 @@ function renderMetrics() {
   const result = state.generationResult;
   byId("metrics-empty").classList.toggle("hidden", Boolean(candidate));
   byId("metrics-content").classList.toggle("hidden", !candidate);
-  byId("download-gpx").disabled = !candidate || state.request.status === "running";
+  const busy = ["running", "reversing"].includes(state.request.status);
+  byId("download-gpx").disabled = !candidate || busy;
+  byId("reverse-route").disabled = !candidate || busy || Boolean(state.importedGpx && !state.generationResult);
+  byId("reverse-route").textContent = state.generationResult?.topology === "loop"
+    ? "Reverse loop direction"
+    : "Reverse direction";
   if (candidate && result) renderCanonicalMetrics(candidate, result);
 }
 function renderCanonicalMetrics(candidate, result) {
@@ -1218,10 +1249,11 @@ function renderCanonicalMetrics(candidate, result) {
     ...(analysis.loop_geometry?.warnings ?? []),
     ...(analysis.nature?.warnings ?? []),
   ])];
-  byId("metrics-content").innerHTML = compromiseSummary(candidate) + endpointSection(result)
+  byId("metrics-content").innerHTML = compromiseSummary(candidate) + traversalSummary(candidate, result) + endpointSection(result)
     + section("Canonical candidate", [
       ["Candidate ID", candidate.id],
       ["Routing profile", profileDisplayName(candidate.routing_profile)],
+      ["Traversal", directionLabel(candidate.traversal)],
       ["Roles", candidate.roles.map(friendlyLabel).join(", ") || "None"],
       ["Distance", formatDistance(candidate.route.summary.distance_m)],
       ["Target error", formatDistance(candidate.diagnostics.target_error_m)],
@@ -1318,11 +1350,13 @@ function wireCompromiseActions(candidate) {
 }
 
 function renderStatus() {
-  const running = state.request.status === "running";
+  const running = ["running", "reversing"].includes(state.request.status);
   const endpoints = activeEndpoints();
   const open = isOpenPlan();
   byId("controls-title").textContent = open ? "Build your route" : "Build your loop";
-  byId("generation-title").textContent = open ? "Planning your route…" : "Planning your loop…";
+  byId("generation-title").textContent = state.request.status === "reversing"
+    ? "Reversing route…"
+    : open ? "Planning your route…" : "Planning your loop…";
   const resolvable = Boolean(
     endpoints.start
     && (endpoints.routeTopology === "loop" || endpoints.end)
@@ -1435,6 +1469,7 @@ async function generate() {
     const result = await generatePlan(request, state.abortController.signal);
     if (state.request.id !== id) return;
     state.generationResult = result;
+    state.generationSourceRequest = request;
     state.selectedSignature = result.candidates[0]?.id ?? null;
     state.visualizationCache.clear();
     state.request = { status: "success", id, startedAt: null };
@@ -1454,6 +1489,114 @@ async function generate() {
     state.request = { status: cancelled ? "cancelled" : "error", id, startedAt: null };
     byId("request-status").textContent = cancelled ? "Generation cancelled." : "Generation failed.";
     if (!cancelled) handleGenerationError(error);
+  } finally {
+    window.clearInterval(elapsedTimer);
+    if (state.request.id === id) {
+      state.abortController = null;
+      renderStatus();
+      renderMapData();
+    }
+  }
+}
+
+async function reverseSelectedRoute() {
+  const sourceCandidate = selectedCandidate();
+  const sourceRequest = state.generationSourceRequest;
+  if (
+    !sourceCandidate
+    || !sourceRequest
+    || ["running", "reversing"].includes(state.request.status)
+  ) return;
+  hideError();
+  const sourceResult = state.generationResult;
+  const id = state.request.id + 1;
+  state.request = { status: "reversing", id, startedAt: Date.now() };
+  state.abortController = new AbortController();
+  byId("request-status").textContent = "Reversing route… 0 s elapsed";
+  elapsedTimer = window.setInterval(() => {
+    if (state.request.status !== "reversing" || state.request.startedAt === null) return;
+    const seconds = Math.floor((Date.now() - state.request.startedAt) / 1000);
+    byId("request-status").textContent = `Reversing route… ${seconds} s elapsed`;
+  }, 1000);
+  render();
+  try {
+    const response = await reversePlan(
+      sourceRequest,
+      sourceCandidate,
+      1,
+      state.abortController.signal,
+    );
+    if (state.request.id !== id) return;
+    applyCanonicalRequestState(response.transformed_request);
+    state.generationSourceRequest = response.transformed_request;
+    state.generationResult = response.result;
+    state.selectedSignature = response.result.candidates[0]?.id ?? null;
+    state.visualizationCache.clear();
+    state.request = { status: "success", id, startedAt: null };
+    const reversed = response.result.candidates[0];
+    const distanceChange = reversed
+      ? reversed.route.summary.distance_m - sourceCandidate.route.summary.distance_m
+      : 0;
+    const outcomeChanges = reversed
+      ? [
+        ["reached", reversed.reached_stops.length - sourceCandidate.reached_stops.length],
+        ["approximated", reversed.approximated_stops.length - sourceCandidate.approximated_stops.length],
+        ["dropped", reversed.dropped_stops.length - sourceCandidate.dropped_stops.length],
+      ].filter(([, difference]) => difference !== 0)
+      : [];
+    const outcomeSummary = outcomeChanges.length
+      ? outcomeChanges.map(([outcome, difference]) => {
+        const count = Math.abs(difference);
+        const noun = `stop${count === 1 ? "" : "s"}`;
+        if (difference < 0) return `${formatCount(count)} fewer ${outcome} ${noun}`;
+        if (outcome === "approximated") return `${formatCount(count)} ${noun} became approximated`;
+        if (outcome === "dropped") return `${formatCount(count)} ${noun} ${count === 1 ? "was" : "were"} dropped`;
+        return `${formatCount(count)} more reached ${noun}`;
+      }).join(", ") + "."
+      : "Stop outcome counts are unchanged.";
+    const distanceSummary = Math.abs(distanceChange) < 50
+      ? "Distance is essentially unchanged."
+      : `${distanceChange >= 0 ? "Distance increased" : "Distance decreased"} by ${formatDistance(Math.abs(distanceChange))}.`;
+    const directionalWarning = response.result.search_diagnostics.warnings.includes(
+      "opposite_direction_uses_different_roads",
+    )
+      ? "The opposite direction uses different roads."
+      : "";
+    const changes = [outcomeSummary, distanceSummary, directionalWarning].filter(Boolean);
+    byId("request-status").textContent = `Route reversed and rerouted for ${profileDisplayName(response.result.routing_profile)}. ${changes.join(" ")}`;
+    render();
+    if (reversed) {
+      fitCoordinates(reversed.route.geometry);
+      await selectCandidate(reversed.id);
+    }
+  } catch (error) {
+    if (state.request.id !== id) return;
+    const cancelled = error.name === "AbortError";
+    state.request = { status: cancelled ? "cancelled" : "error", id, startedAt: null };
+    state.generationResult = sourceResult;
+    state.selectedSignature = sourceCandidate.id;
+    byId("request-status").textContent = cancelled ? "Reversal cancelled." : "Route reversal failed.";
+    if (!cancelled) {
+      if (error instanceof ApiError) {
+        showError(
+          error.message,
+          error.details,
+          error.code,
+          error.code === "exact_waypoint_not_reached"
+            ? exactWaypointContext(error.metadata)
+            : "The selected source route remains displayed.",
+          error.metadata?.suggestion ?? "Review exact constraints or keep the current direction.",
+        );
+      } else {
+        showError(
+          "Route reversal failed.",
+          "A browser error interrupted reversal; no raw traceback is displayed.",
+          "browser_reverse_error",
+          "The selected source route remains displayed.",
+          "Keep the current direction or generate another candidate.",
+        );
+      }
+    }
   } finally {
     window.clearInterval(elapsedTimer);
     if (state.request.id === id) {
@@ -1658,6 +1801,8 @@ function normalizeImportedRequest(value) {
       name: value.name,
       targetDistanceKm: objective.target_m / 1000,
       toleranceKm: objective.tolerance_m / 1000,
+      maximumDistanceKm: objective.maximum_m == null ? null : objective.maximum_m / 1000,
+      distancePriority: objective.priority,
       candidateCount: value.candidate_count,
       seed: value.seed,
       waypointOrder: value.kind === "waypoint_route" ? value.waypoint_order : "fixed",
@@ -1668,6 +1813,53 @@ function normalizeImportedRequest(value) {
     },
     canonical: value,
   };
+}
+
+function applyCanonicalRequestState(value) {
+  const imported = normalizeImportedRequest(value);
+  state.planningMode = imported.canonical.kind;
+  state.routingProfile = imported.canonical.routing_profile;
+  document.querySelectorAll('input[name="planning-mode"]').forEach((input) => {
+    input.checked = input.value === state.planningMode;
+  });
+  state.options = imported.options;
+  if (state.planningMode === "auto_tour") {
+    state.autoTour.start = imported.autoTourStart;
+    state.autoTour.end = imported.end;
+    state.autoTour.hardPoints = imported.hardPoints;
+    state.autoTour.requestedPlaces = imported.requestedPlaces;
+    state.importDiagnostics = imported.importDiagnostics;
+    state.autoTour.maximumDistanceKm = imported.maximumDistanceKm;
+    state.autoTour.routeTopology = imported.routeTopology;
+    state.autoTour.preferredPoiIds = [
+      ...(imported.canonical.preferred_discovered_poi_ids ?? []),
+    ];
+    state.autoTour.distancePriority = imported.canonical.distance_objective.priority;
+    state.autoTour.directionPreference = imported.canonical.preferences.direction;
+    state.autoTour.scenicPreference = imported.canonical.preferences.scenic;
+    state.autoTour.drinkingWaterPreference = imported.canonical.preferences.drinking_water;
+    state.autoTourOptions = { ...imported.options };
+    state.points = [state.autoTour.start, ...state.autoTour.hardPoints].filter(Boolean);
+  } else {
+    state.points = imported.points;
+    state.waypointPoints = [...imported.points];
+    state.waypointEndpoints.start = imported.start;
+    state.waypointEndpoints.end = imported.end;
+    state.waypointEndpoints.routeTopology = imported.routeTopology;
+  }
+  state.selectedPointIndex = state.points.length ? 0 : null;
+  state.selectedRequestedPlaceId = null;
+  state.pendingRequestedPlacePopupId = null;
+  state.pendingPointPopupIndex = null;
+  state.plan = {
+    schema_version: 1,
+    kind: imported.canonical.kind,
+    common: null,
+    auto_tour: null,
+    waypoint_route: null,
+  };
+  updateControlsFromOptions();
+  return imported;
 }
 async function importRequest(file) {
   try {
@@ -1925,6 +2117,10 @@ function bindEvents() {
     state.showNatureContext = event.target.checked;
     renderMapData();
   });
+  byId("show-direction").addEventListener("change", (event) => {
+    state.showDirectionArrows = event.target.checked;
+    renderMapData();
+  });
   byId("show-dropped-requested-radii").addEventListener("change", (event) => {
     state.showDroppedRequestedRadii = event.target.checked;
     renderMapData();
@@ -1934,6 +2130,7 @@ function bindEvents() {
     schedulePoiRefresh();
   });
   byId("download-gpx").addEventListener("click", downloadSelected);
+  byId("reverse-route").addEventListener("click", reverseSelectedRoute);
   byId("export-plan").addEventListener("click", () => {
     try {
       updateOptionsFromControls();

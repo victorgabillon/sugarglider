@@ -34,6 +34,8 @@ export const state = {
     name: "Sugarglider route",
     targetDistanceKm: 20,
     toleranceKm: 2,
+    maximumDistanceKm: null,
+    distancePriority: "flexible",
     candidateCount: 3,
     seed: 0,
     waypointOrder: "fixed",
@@ -48,6 +50,8 @@ export const state = {
     name: "Sugarglider route",
     targetDistanceKm: 20,
     toleranceKm: 2,
+    maximumDistanceKm: null,
+    distancePriority: "flexible",
     candidateCount: 3,
     seed: 0,
     waypointOrder: "fixed",
@@ -56,6 +60,7 @@ export const state = {
     loopGeometryPreference: "off",
   },
   generationResult: null,
+  generationSourceRequest: null,
   selectedSignature: null,
   selectedPointIndex: null,
   pendingPointPopupIndex: null,
@@ -70,6 +75,7 @@ export const state = {
   endpointSetMode: null,
   showAllCandidates: true,
   showNatureContext: false,
+  showDirectionArrows: true,
   showDroppedRequestedRadii: false,
   poiFeatures: [],
   selectedPoiId: null,
@@ -119,6 +125,7 @@ export function switchPlanningMode(mode) {
 
 export function invalidateCandidates() {
   state.generationResult = null;
+  state.generationSourceRequest = null;
   state.selectedSignature = null;
   state.visualizationCache.clear();
 }
@@ -147,9 +154,7 @@ export function pointDisplayName(point, index) {
 }
 
 function commonPlanState(endpoints) {
-  const priority = state.planningMode === "auto_tour"
-    ? state.autoTour.distancePriority
-    : "flexible";
+  const priority = state.options.distancePriority ?? state.autoTour.distancePriority;
   return {
     name: state.options.name,
     topology: endpoints.routeTopology,
@@ -163,11 +168,9 @@ function commonPlanState(endpoints) {
     distance_objective: {
       target_m: state.options.targetDistanceKm * 1000,
       tolerance_m: state.options.toleranceKm * 1000,
-      maximum_m: state.planningMode === "auto_tour"
-        ? state.autoTour.maximumDistanceKm == null
-          ? null
-          : state.autoTour.maximumDistanceKm * 1000
-        : null,
+      maximum_m: state.options.maximumDistanceKm == null
+        ? null
+        : state.options.maximumDistanceKm * 1000,
       priority,
     },
     preferences: state.planningMode === "auto_tour" ? {

@@ -12,6 +12,7 @@ type WaypointConstruction = Literal[
     "round_trip_detour",
     "open_alternative_detour",
     "low_overlap_beam",
+    "reversed_route",
 ]
 
 

@@ -139,6 +139,26 @@ def test_native_waypoint_modules_are_bounded_and_have_no_raw_backend_calls() -> 
     assert raw_violations == {}
 
 
+def test_direction_modules_are_bounded_and_gateway_only() -> None:
+    direction = SOURCE / "planning" / "direction"
+    files = tuple(sorted(direction.glob("*.py")))
+    assert files
+    assert {
+        path.name: len(path.read_text(encoding="utf-8").splitlines())
+        for path in files
+        if len(path.read_text(encoding="utf-8").splitlines()) > 800
+    } == {}
+    raw_call = re.compile(
+        r"(?:self\._backend|(?<!context\.routes\.)\bbackend)\."
+        r"(?:route|round_trip|alternative_routes|isochrone)\("
+    )
+    assert {
+        path.name: raw_call.findall(path.read_text(encoding="utf-8"))
+        for path in files
+        if raw_call.search(path.read_text(encoding="utf-8"))
+    } == {}
+
+
 def test_native_auto_tour_modules_are_bounded_and_gateway_only() -> None:
     auto_tour = SOURCE / "planning" / "auto_tour"
     files = tuple(sorted(auto_tour.glob("*.py")))

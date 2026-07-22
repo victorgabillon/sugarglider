@@ -14,6 +14,8 @@ from sugarglider.planning.auto_tour.state import (
     AutoTourMaximumBelowDirectLowerBoundError,
     AutoTourNoCandidateError,
 )
+from sugarglider.planning.direction.service import ReverseRouteUnavailableError
+from sugarglider.planning.direction.validation import ReverseSourceInvalidError
 from sugarglider.planning.validation import ExactWaypointNotReachedError
 from sugarglider.pois.errors import PoiSearchLimitError
 from sugarglider.routing.graphhopper import (
@@ -53,6 +55,19 @@ class PublicErrorBody(BaseModel):
 
 
 ERRORS: dict[type[Exception], PublicError] = {
+    ReverseSourceInvalidError: PublicError(
+        422,
+        "reverse_source_invalid",
+        "The source request and candidate cannot be safely reversed.",
+    ),
+    ReverseRouteUnavailableError: PublicError(
+        503,
+        "reverse_route_unavailable",
+        (
+            "No graph-valid opposite-direction route could be produced within "
+            "the bounded search."
+        ),
+    ),
     AutoTourMaximumBelowDirectLowerBoundError: PublicError(
         422,
         "auto_tour_maximum_below_direct_lower_bound",

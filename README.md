@@ -272,6 +272,29 @@ associated preference and remain explicit in status and diagnostics. The map con
 to use configured raster tiles with visible attribution; Sugarglider does not prefetch,
 bulk-download, cache, or offer offline tiles.
 
+## Route direction and reversal
+
+Generated candidates carry a canonical traversal record. The selected route displays
+repeated map-aligned arrows and an open-route `Start → End` or loop orientation label.
+`Complex loop` means that crossings, incomplete closure, or ambiguous signed area make
+a clockwise claim misleading; the arrows still show the actual geometry order. The
+arrow toggle is visual only, and arrows describe traversal order rather than legal
+turn-by-turn navigation.
+
+`POST /v2/plans/reverse` accepts the canonical source request and one published
+candidate. The server swaps open endpoints or reverses loop intent, preserves the
+public profile and constraint strengths, then reroutes through the shared cached and
+budgeted GraphHopper boundary. Exact constraints remain hard. Approach and best-effort
+stops are resolved again, so reached, approximated, and dropped outcomes can change.
+Sparse loops use a bounded set of private shape hints sampled from routed geometry;
+those hints never become public stops or GPX waypoints.
+
+Reversal is not a client-side coordinate-array operation. Directional access and
+snapping may produce different roads and distance, and reversing twice is not an exact
+geometry undo. Canonical JSON after reversal contains the transformed request; GPX
+trackpoints preserve the displayed graph-valid traversal. See
+[`docs/pr17-route-direction.md`](docs/pr17-route-direction.md).
+
 ## Architecture
 
 Dependency direction is enforced as:
@@ -315,6 +338,12 @@ paths cross the shared `CandidateDraft` seam; `CandidateEvaluator` performs fina
 nature/loop enrichment once, invokes the Auto Tour scorer, validates safety and stop
 arrivals, and constructs the unranked canonical candidate. Only the shared portfolio
 assigns public roles and ranks.
+
+The focused direction package analyzes final geometry, builds public traversal anchors
+inside shared evaluation, validates reverse source payloads, transforms canonical
+intent, and performs a bounded reverse search. It owns neither a routing cache nor a
+backend call counter; the ordinary planning gateway accounts `approach` and `reverse`
+phases and the ordinary evaluator, scorers, and portfolio reconstruct every result.
 
 The offline `sugarglider-migrate-plan` command is included in wheels. It is the only
 legacy-request conversion surface; runtime HTTP planning accepts canonical schema

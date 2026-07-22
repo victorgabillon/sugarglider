@@ -17,6 +17,11 @@ from sugarglider.planning.validation import (
 
 if TYPE_CHECKING:
     from sugarglider.planning.auto_tour.service import AutoTourPlanner
+    from sugarglider.planning.direction.models import (
+        ReversePlanRequest,
+        ReversePlanResponse,
+    )
+    from sugarglider.planning.direction.service import ReversePlanner
     from sugarglider.planning.models import PlanRequestBase
     from sugarglider.planning.waypoint.service import WaypointPlanner
 
@@ -72,11 +77,16 @@ class PlanService:
         *,
         auto_tour: AutoTourPlanner,
         waypoint: WaypointPlanner,
+        reverse: ReversePlanner,
     ) -> None:
         self._auto_tour = auto_tour
         self._waypoint = waypoint
+        self._reverse = reverse
 
     async def generate(self, request: PlanRequest) -> PlanResult:
         if isinstance(request, AutoTourPlanRequest):
             return await self._auto_tour.generate(request)
         return await self._waypoint.generate(request)
+
+    async def reverse(self, request: ReversePlanRequest) -> ReversePlanResponse:
+        return await self._reverse.reverse(request)

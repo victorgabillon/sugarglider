@@ -167,3 +167,12 @@
   automatic weakened retry.
 - Reached and approximated GPX waypoints use their validated routed coordinates with
   truthful names. Dropped stops are omitted; the GPX remains one track and segment.
+- Every published candidate carries centrally built traversal direction and ordered
+  deliberate anchors. Incidental discovered POIs and private reversal shape hints must
+  never become traversal anchors.
+- Route reversal must reroute through the shared cached gateway and typed reverse
+  budget. Never reverse returned geometry in the browser or call the raw backend from
+  direction modules.
+- Reversal preserves exact constraints, profile, and canonical intent while resolving
+  soft stops and rebuilding analysis, scoring, compromises, roles, ranks, and GPX order.
+  Reversing twice need not reproduce byte-identical geometry.

@@ -204,6 +204,7 @@
         <div class="map-tools" aria-label="Map display controls">
           <label data-icon="alternatives"><input id="show-all" type="checkbox" checked> Show alternatives</label>
           <label data-icon="nature"><input id="show-nature" type="checkbox"> Show nature</label>
+          <label data-icon="direction"><input id="show-direction" type="checkbox" checked> Show direction arrows</label>
           <label id="show-dropped-requested-radii-control" class="advanced-map-control" title="Advanced requested-stop display"><input id="show-dropped-requested-radii" type="checkbox"> Dropped access-search areas</label>
         </div>
         <details class="legend">
@@ -244,6 +245,7 @@
         <div id="metrics-empty" class="metrics-empty"><p>Select a generated candidate to inspect exact route, trail, repetition, and mapped-nature metrics.</p></div>
         <div id="metrics-content" class="hidden"></div>
         <div class="export-actions">
+          <button id="reverse-route" class="button secondary wide" type="button" disabled>Reverse direction</button>
           <button id="download-gpx" class="button primary wide" type="button" data-icon="download" disabled>Download selected GPX</button>
         </div>
       </aside>
