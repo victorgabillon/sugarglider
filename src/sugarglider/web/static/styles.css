@@ -17,6 +17,7 @@
   --route-normal: #214b3b;
   --route-repeated: #d46a1f;
   --route-backtrack: #b73131;
+  --route-spur: #684f86;
   --nature-woodland: #32744d;
   --nature-open: #78a43b;
   --nature-agriculture: #a68b35;
@@ -208,6 +209,7 @@ input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d;
 .line.alternative { border-top-width: 2px; border-top-style: dashed; opacity: .7; }
 .line.repeated { border-color: var(--route-repeated); border-top-style: dashed; }
 .line.backtrack { border-color: var(--route-backtrack); border-top-width: 6px; border-top-style: double; }
+.line.spur { border-color: var(--route-spur); border-top-style: dashed; }
 .line.imported { border-color: var(--import-blue); border-top-style: dotted; }
 .line.woodland { border-color: var(--nature-woodland); border-top-width: 7px; }
 .line.open-natural { border-color: var(--nature-open); border-top-width: 7px; border-top-style: dashed; }
@@ -299,6 +301,8 @@ input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d;
 .loop-geometry-card dl { margin: .35rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: .2rem .5rem; font-size: .62rem; }
 .loop-geometry-card dd { margin: 0; }
 .loop-geometry-card p { margin: .3rem 0 0; font-size: .61rem; }
+.spur-card-summary { margin-top: .55rem; padding-top: .48rem; display: grid; gap: .16rem; border-top: 1px solid var(--border); font-size: .62rem; }
+.spur-card-summary span { color: var(--muted-text); }
 .candidate-card .loop-geometry-details { padding: .4rem .72rem .55rem; }
 .loop-geometry-details .metric-grid { margin-top: .35rem; }
 .card-warnings { margin: 0; padding: .45rem .72rem .55rem 1.7rem; border-top: 1px solid var(--border); color: #765012; background: #fff8e7; font-size: .62rem; line-height: 1.35; }
@@ -323,6 +327,14 @@ dd { min-width: 0; margin: 0; font-weight: 700; text-align: right; overflow-wrap
 .loop-sector-grid strong { overflow-wrap: anywhere; color: var(--text); font-variant-numeric: tabular-nums; }
 .warning-list { padding-left: 1rem; color: #795015; font-size: .72rem; }
 .context-note { color: var(--muted-text); font-size: .68rem; line-height: 1.45; }
+.route-shape-issues > p { font-size: .72rem; line-height: 1.45; }
+.spur-list { display: grid; gap: .5rem; }
+.spur-card { width: 100%; padding: .6rem; display: grid; gap: .18rem; border: 1px solid #b9a8c8; border-radius: 7px; color: var(--text); background: #f7f1fa; text-align: left; }
+.spur-card:hover { border-color: var(--route-spur); background: #f1e8f5; }
+.spur-card strong { color: #51376a; }
+.spur-card span, .spur-card small { font-size: .68rem; line-height: 1.35; }
+.spur-card em { margin-top: .2rem; color: #51376a; font-size: .68rem; font-style: normal; font-weight: 800; }
+.spur-popup { min-width: 210px; }
 .metrics-empty, .empty-copy { color: var(--muted-text); font-size: .78rem; line-height: 1.45; }
 .export-actions { margin-top: .8rem; }
 footer { padding: .48rem 1rem; color: #d6e0da; background: var(--primary-action); font-size: .66rem; text-align: center; }

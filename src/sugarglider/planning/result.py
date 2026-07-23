@@ -177,6 +177,9 @@ class PlanCandidateDiagnostics(CanonicalModel):
     dropped_stop_count: int = Field(default=0, ge=0)
     immediate_backtracking_m: float = Field(ge=0)
     repeated_distance_m: float = Field(ge=0)
+    spur_count: int = Field(default=0, ge=0)
+    spur_repeated_distance_m: float = Field(default=0, ge=0)
+    longest_spur_distance_m: float = Field(default=0, ge=0)
     details: dict[str, Any] = Field(default_factory=dict)
 
 

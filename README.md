@@ -231,6 +231,12 @@ analysis. It does not duplicate repetition, backtracking, routing, nature, or sc
 semantics in JavaScript. Browser GPX inspection remains local-only and preserves track
 segment breaks.
 
+Final candidates also expose deterministic edge-based out-and-back excursion
+diagnostics. The browser identifies branch, turnaround, and rejoin context and lists
+deliberate stops inside each substantial spur. Detection is descriptive only: it does
+not claim an alternative exit exists or change ranking. See
+[`docs/pr19-spur-diagnostics.md`](docs/pr19-spur-diagnostics.md).
+
 ## Migrating old JSON
 
 Runtime import of older request shapes has been removed. The browser reports:

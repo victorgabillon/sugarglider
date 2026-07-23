@@ -2,7 +2,7 @@ import { ApiError, exportPlanCandidate, generatePlan, getConfig, getPoiStatus, g
 import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
-import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, initializeMap, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderVisualization, resizeMap } from "./map.js";
+import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
 import { currentPlanRequest, invalidateCandidates, pointDisplayName, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, state, switchPlanningMode } from "./state.js";
 
 const byId = (id) => document.getElementById(id);
@@ -833,6 +833,7 @@ function renderMapData() {
     candidate ? state.visualizationCache.get(candidate.id) ?? null : null,
     state.showNatureContext,
   );
+  renderSpurs(candidate);
   const allFeatures = state.poiFeatures;
   renderPois(allFeatures, state.selectedPoiId, selectPoi, poiRenderOptions());
   const constraintPlaces = state.planningMode === "auto_tour"
@@ -864,6 +865,7 @@ function renderMapData() {
     },
     requestedPopupId,
   );
+  positionDirectionLayer();
 }
 
 function candidateBadges(candidate, search) {
@@ -1014,6 +1016,14 @@ function loopGeometryCardDetails(geometry) {
   return details;
 }
 
+function spurCardSummary(spurAnalysis) {
+  const analysis = spurAnalysis ?? {
+    spur_count: 0,
+    total_repeated_distance_m: 0,
+  };
+  return `<div class="spur-card-summary"><strong>${formatCount(analysis.spur_count)} out-and-back excursion${analysis.spur_count === 1 ? "" : "s"}</strong><span>${formatDistance(analysis.total_repeated_distance_m)} repeated inside excursions</span></div>`;
+}
+
 function renderCandidatesPanel() {
   const container = byId("candidate-list");
   const result = state.generationResult;
@@ -1048,8 +1058,8 @@ function renderCandidatesPanel() {
     selector.setAttribute("aria-pressed", String(selected));
     selector.setAttribute("aria-label", `Select candidate ${candidate.rank}, ${formatDistance(candidate.route.summary.distance_m)}`);
     selector.innerHTML = state.planningMode === "auto_tour"
-      ? autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare)
-      : (() => { const quality = primaryQualityMetric(analysis); return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate, result.search_diagnostics)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.diagnostics.details.construction ?? "route"))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.diagnostics.target_error_m)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Major road</span><strong>${formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${quality ? metricBar(quality[0], quality[1], "trail", quality[1] == null ? "not evaluated" : formatPercent(quality[1])) : ""}${metricBar("Paved", analysis.paved.share, "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}`; })();
+      ? autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare) + spurCardSummary(analysis.spurs)
+      : (() => { const quality = primaryQualityMetric(analysis); return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate, result.search_diagnostics)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.diagnostics.details.construction ?? "route"))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.diagnostics.target_error_m)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Major road</span><strong>${formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${quality ? metricBar(quality[0], quality[1], "trail", quality[1] == null ? "not evaluated" : formatPercent(quality[1])) : ""}${metricBar("Paved", analysis.paved.share, "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}${spurCardSummary(analysis.spurs)}`; })();
     selector.addEventListener("click", () => selectCandidate(candidate.id));
     card.append(selector);
     card.append(loopGeometryCardDetails(loopGeometry));
@@ -1057,6 +1067,7 @@ function renderCandidatesPanel() {
     const warningCodes = [...new Set([
       ...result.search_diagnostics.warnings,
       ...analysis.warnings,
+      ...(analysis.spurs?.warnings ?? []),
       ...(loopGeometry?.warnings ?? []),
       ...(nature?.warnings ?? []),
     ])];
@@ -1083,6 +1094,25 @@ function renderCandidatesPanel() {
 
 function section(title, rows) {
   return `<section><h3>${escapeHtml(title)}</h3>${metricRows(rows)}</section>`;
+}
+
+function routeShapeIssuesSection(analysis) {
+  const spurAnalysis = analysis.spurs ?? {
+    spurs: [],
+    spur_count: 0,
+    total_repeated_distance_m: 0,
+  };
+  if (!spurAnalysis.spurs.length) {
+    return '<section class="route-shape-issues"><h3>Route shape issues</h3><p>No substantial out-and-back excursion detected.</p><p class="context-note">This does not claim that the route is globally optimal.</p></section>';
+  }
+  const cards = spurAnalysis.spurs.map((spur, index) => {
+    const stopNames = spur.deliberate_stop_names ?? [];
+    const turnaround = stopNames.length
+      ? `near ${stopNames[0]}`
+      : "on the routed corridor";
+    return `<button type="button" class="spur-card" data-spur-id="${escapeHtml(spur.id)}" aria-label="Focus map on out-and-back excursion ${index + 1}"><strong>Out-and-back excursion</strong><span>Repeated corridor: ${formatDistance(spur.repeated_distance_m)}</span><span>Complete excursion: ${formatDistance(spur.total_excursion_distance_m)}</span><span>Turnaround: ${escapeHtml(turnaround)}</span><span>Deliberate stops inside this excursion: ${stopNames.length ? escapeHtml(stopNames.join(", ")) : "None"}</span><em>Candidate for route refinement</em><small>No alternative exit has been tested yet.</small></button>`;
+  }).join("");
+  return `<section class="route-shape-issues"><h3>Route shape issues</h3><p><strong>${formatCount(spurAnalysis.spur_count)} out-and-back excursion${spurAnalysis.spur_count === 1 ? "" : "s"}</strong><br>${formatDistance(spurAnalysis.total_repeated_distance_m)} repeated inside excursions</p><div class="spur-list">${cards}</div></section>`;
 }
 
 function natureSection(nature, search) {
@@ -1246,6 +1276,7 @@ function renderCanonicalMetrics(candidate, result) {
   const warnings = [...new Set([
     ...diagnostics.warnings,
     ...analysis.warnings,
+    ...(analysis.spurs?.warnings ?? []),
     ...(analysis.loop_geometry?.warnings ?? []),
     ...(analysis.nature?.warnings ?? []),
   ])];
@@ -1268,6 +1299,7 @@ function renderCanonicalMetrics(candidate, result) {
       ["Paved", formatPercent(analysis.paved.share)],
       ["Major roads", formatPercent(analysis.major_road.share)],
     ])
+    + routeShapeIssuesSection(analysis)
     + activityQualitySection(analysis)
     + section("Score", [["Total", Number(candidate.score.total).toFixed(6)], ...scoreRows])
     + (result.topology === "loop" ? loopGeometrySection(analysis.loop_geometry) : "")
@@ -1293,6 +1325,16 @@ function constraintStateById(id) {
 }
 
 function wireCompromiseActions(candidate) {
+  byId("metrics-content").querySelectorAll("[data-spur-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const spur = candidate.route.analysis.spurs?.spurs.find(
+        (value) => value.id === button.dataset.spurId,
+      );
+      if (!spur) return;
+      focusSpur(spur);
+      byId("request-status").textContent = "Focused map on the complete out-and-back excursion.";
+    });
+  });
   byId("metrics-content").querySelectorAll(".itinerary-stop[data-itinerary-stop-id]").forEach((item) => {
     const focusStop = () => {
       const id = item.dataset.itineraryStopId;

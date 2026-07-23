@@ -845,6 +845,8 @@ def test_route_direction_arrows_and_graph_reverse_are_explicit() -> None:
     assert '"symbol-placement": "line"' in map_code
     assert '"icon-keep-upright": false' in map_code
     assert '"icon-rotation-alignment": "map"' in map_code
+    assert '"icon-allow-overlap": true' in map_code
+    assert '"icon-ignore-placement": true' in map_code
     assert 'const DIRECTION_SOURCE = "selected-route-direction"' in map_code
     assert "installDirectionArrowImage" in map_code
     assert "candidate.route.geometry" in map_code
@@ -853,6 +855,139 @@ def test_route_direction_arrows_and_graph_reverse_are_explicit() -> None:
         STATIC_DIRECTORY / "icons.js"
     ).read_text(encoding="utf-8")
     assert "showDirectionArrows: true" in state
+
+
+def test_direction_arrows_restore_safe_foreground_layer_order() -> None:
+    app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
+    map_code = (STATIC_DIRECTORY / "map.js").read_text(encoding="utf-8")
+
+    assert "export function positionDirectionLayer()" in map_code
+    assert "if (!ready || !map || !map.getLayer(DIRECTION_LAYER)) return;" in map_code
+    foreground_layers = map_code[
+        map_code.index("const DIRECTION_FOREGROUND_LAYERS") : map_code.index(
+            "const POI_ICON_SVGS"
+        )
+    ]
+    ordering = map_code[
+        map_code.index("export function positionDirectionLayer") : map_code.index(
+            "function svgMarkup"
+        )
+    ]
+    assert "DIRECTION_FOREGROUND_LAYERS.filter" in ordering
+    assert "map.moveLayer(DIRECTION_LAYER, foregroundLayerIds[0])" in map_code
+    assert "map.moveLayer(DIRECTION_LAYER);" in ordering
+    for layer in (
+        "REQUESTED_APPROACH_CONNECTOR_LAYER",
+        "POI_MARKER_LAYER",
+        "REQUESTED_MASCOT_LAYER",
+        "REQUIRED_LABEL_LAYER",
+        "SELECTED_LABEL_LAYER",
+    ):
+        assert layer in foreground_layers
+    assert 'id.startsWith("candidate-")' in map_code
+    assert 'id.startsWith("selected-section-")' in map_code
+    assert "aboveRouteOverlays" in map_code
+    assert "belowMarkersAndLabels" in map_code
+    assert "removeLayer(DIRECTION_LAYER)" in map_code
+    assert "removeSource(DIRECTION_SOURCE)" in map_code
+    assert "directionCandidateId = null" in map_code
+    assert "positionDirectionLayer, renderCandidates" in app
+    assert map_code.count("positionDirectionLayer();") >= 5
+    requested_render = app.index("renderRequestedPlaceMarkers(")
+    final_ordering = app.index("positionDirectionLayer();", requested_render)
+    assert final_ordering > requested_render
+
+    direction_renderer = map_code[
+        map_code.index("function renderDirectionArrows") : map_code.index(
+            "export function directionMapDiagnostics"
+        )
+    ]
+    assert "map.hasImage(DIRECTION_IMAGE)" in direction_renderer
+    assert "removeLayer(DIRECTION_LAYER)" in direction_renderer
+    assert "removeSource(DIRECTION_SOURCE)" in direction_renderer
+    assert "directionCandidateId = candidate.id" in direction_renderer
+    assert direction_renderer.index("removeLayer(DIRECTION_LAYER)") < (
+        direction_renderer.index("if (\n    !enabled")
+    )
+    assert "topology" not in direction_renderer
+
+    visualization_renderer = map_code[
+        map_code.index("export function renderVisualization") : map_code.index(
+            "export function clearRoutes"
+        )
+    ]
+    for overlay in (
+        "selected-section-nature-",
+        "normal:",
+        "repeated:",
+        "immediate_backtrack:",
+    ):
+        assert overlay in visualization_renderer
+    assert visualization_renderer.rindex("positionDirectionLayer();") > (
+        visualization_renderer.index("map.addLayer")
+    )
+
+
+def test_route_spur_diagnostics_render_as_accessible_map_issues() -> None:
+    app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
+    map_code = (STATIC_DIRECTORY / "map.js").read_text(encoding="utf-8")
+    html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
+    styles = (STATIC_DIRECTORY / "styles.css").read_text(encoding="utf-8")
+
+    assert "function routeShapeIssuesSection(analysis)" in app
+    assert "Route shape issues" in app
+    assert "No substantial out-and-back excursion detected." in app
+    assert "Out-and-back excursion" in app
+    assert "Repeated corridor:" in app
+    assert "Complete excursion:" in app
+    assert "Deliberate stops inside this excursion:" in app
+    assert "Candidate for route refinement" in app
+    assert "No alternative exit has been tested yet." in app
+    assert 'type="button" class="spur-card"' in app
+    assert 'data-spur-id="${escapeHtml(spur.id)}"' in app
+    assert "spurAnalysis.spurs.map" in app
+    assert "focusSpur(spur)" in app
+    assert "spur_count" in app
+    assert "total_repeated_distance_m" in app
+    assert "avoidable" not in app
+    assert "unavoidable" not in app
+
+    assert 'const SPUR_SOURCE = "selected-route-spurs"' in map_code
+    assert 'const SPUR_HIGHLIGHT_LAYER = "selected-route-spur-highlights"' in map_code
+    assert 'const SPUR_BRANCH_LAYER = "selected-route-spur-branches"' in map_code
+    assert 'const SPUR_TURNAROUND_LAYER = "selected-route-spur-turnarounds"' in map_code
+    assert "export function renderSpurs(candidate)" in map_code
+    assert 'geometry: { type: "LineString", coordinates: spur.geometry }' in map_code
+    assert 'marker_kind: "branch"' in map_code
+    assert 'marker_kind: "turnaround"' in map_code
+    assert "showSpurPopup(" in map_code
+    assert "clearSpurLayers();" in map_code
+    assert "spurCandidateId = candidate.id" in map_code
+    assert "positionDirectionLayer();" in map_code
+
+    foreground = map_code[
+        map_code.index("const DIRECTION_FOREGROUND_LAYERS") : map_code.index(
+            "const POI_ICON_SVGS"
+        )
+    ]
+    assert foreground.index("SPUR_HIGHLIGHT_LAYER") < foreground.index(
+        "REQUESTED_APPROACH_CONNECTOR_LAYER"
+    )
+    map_render = app[
+        app.index("function renderMapData()") : app.index("function candidateBadges")
+    ]
+    assert (
+        map_render.index("renderVisualization(")
+        < map_render.index("renderSpurs(candidate)")
+        < map_render.index("renderPois(")
+    )
+    assert map_render.rindex("positionDirectionLayer();") > map_render.index(
+        "renderSpurs(candidate)"
+    )
+
+    assert '<i class="line spur"></i>Detected excursion' in html
+    assert ".spur-card" in styles
+    assert ".spur-popup" in styles
 
 
 def test_bastille_to_marly_example_preserves_source_points_and_consumes_end() -> None:

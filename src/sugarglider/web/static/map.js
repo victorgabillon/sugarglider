@@ -29,10 +29,39 @@ const REQUESTED_PREFERRED_LAYER = "auto-tour-requested-preferred-ring";
 const REQUESTED_ORDER_LAYER = "auto-tour-requested-order";
 const REQUESTED_LABEL_LAYER = "auto-tour-requested-labels";
 const REQUESTED_SELECTED_LAYER = "auto-tour-requested-selected";
+const REQUESTED_APPROACH_CONNECTOR_LAYER = "auto-tour-requested-approach-connectors";
+const REQUESTED_APPROACH_MARKER_LAYER = "auto-tour-requested-approach-markers";
 const REQUESTED_RADIUS_SEGMENTS = 48;
 const DIRECTION_SOURCE = "selected-route-direction";
 const DIRECTION_LAYER = "selected-route-direction-arrows";
 const DIRECTION_IMAGE = "route-direction-arrow";
+const SPUR_SOURCE = "selected-route-spurs";
+const SPUR_HIGHLIGHT_LAYER = "selected-route-spur-highlights";
+const SPUR_BRANCH_LAYER = "selected-route-spur-branches";
+const SPUR_TURNAROUND_LAYER = "selected-route-spur-turnarounds";
+const DIRECTION_FOREGROUND_LAYERS = [
+  SPUR_HIGHLIGHT_LAYER,
+  SPUR_BRANCH_LAYER,
+  SPUR_TURNAROUND_LAYER,
+  REQUESTED_APPROACH_CONNECTOR_LAYER,
+  POI_CLUSTER_LAYER,
+  POI_VISITED_LAYER,
+  POI_MARKER_LAYER,
+  REQUESTED_APPROACH_MARKER_LAYER,
+  REQUESTED_MARKER_LAYER,
+  REQUESTED_PREFERRED_LAYER,
+  REQUESTED_SELECTED_LAYER,
+  REQUESTED_MASCOT_LAYER,
+  POI_SELECTED_LAYER,
+  POI_SELECTED_MARKER_LAYER,
+  POI_CLUSTER_COUNT_LAYER,
+  POI_LABEL_LAYER,
+  REQUESTED_ORDER_LAYER,
+  REQUESTED_LABEL_LAYER,
+  POI_SELECTED_LABEL_LAYER,
+  REQUIRED_LABEL_LAYER,
+  SELECTED_LABEL_LAYER,
+];
 
 const POI_ICON_SVGS = {
   "poi-viewpoint": '<path d="M6 36 20 14l8 12 6-8 8 18Z" fill="#fff"/><path d="m13 30 7-11 7 11" fill="none" stroke="#214b3b" stroke-width="3"/>',
@@ -63,6 +92,9 @@ let requestedPlacePopupId = null;
 let requestedRadiusFeatureCount = 0;
 let requestedConnectorFeatureCount = 0;
 let directionCandidateId = null;
+let spurCandidateId = null;
+let spurById = new Map();
+let spurPopup = null;
 
 export function initializeMap(config, handlers) {
   if (!window.maplibregl) {
@@ -100,7 +132,11 @@ export function initializeMap(config, handlers) {
     } catch {
       handlers.onError("Local place icons could not be prepared. Route controls remain available.");
     }
-    installDirectionArrowImage();
+    try {
+      installDirectionArrowImage();
+    } catch {
+      handlers.onError("Local direction arrows could not be prepared. Route controls remain available.");
+    }
     ready = true;
     handlers.onReady();
     handlers.onViewportChange?.(currentViewportBounds());
@@ -156,6 +192,20 @@ export function initializeMap(config, handlers) {
         .catch(() => {});
       return;
     }
+    const spurLayers = [SPUR_TURNAROUND_LAYER, SPUR_BRANCH_LAYER]
+      .filter((id) => map.getLayer(id));
+    const spurFeature = spurLayers.length
+      ? map.queryRenderedFeatures(event.point, { layers: spurLayers })[0]
+      : null;
+    if (spurFeature?.properties?.spur_id) {
+      const spur = spurById.get(spurFeature.properties.spur_id);
+      if (spur) showSpurPopup(
+        spur,
+        spurFeature.properties.marker_kind,
+        spurFeature.geometry.coordinates,
+      );
+      return;
+    }
     const candidateLayers = candidateLineLayerIds();
     const candidate = candidateLayers.length ? map.queryRenderedFeatures(event.point, { layers: candidateLayers })[0] : null;
     if (candidate?.properties?.signature) {
@@ -175,6 +225,8 @@ export function initializeMap(config, handlers) {
         REQUESTED_MASCOT_LAYER,
       ].filter((id) => map.getLayer(id)),
       ...[POI_SELECTED_MARKER_LAYER, POI_MARKER_LAYER, POI_CLUSTER_LAYER]
+        .filter((id) => map.getLayer(id)),
+      ...[SPUR_TURNAROUND_LAYER, SPUR_BRANCH_LAYER]
         .filter((id) => map.getLayer(id)),
       ...[SELECTED_LABEL_LAYER, REQUIRED_LABEL_LAYER].filter((id) => map.getLayer(id)),
     ];
@@ -256,6 +308,19 @@ function moveRequiredLabelsToTop() {
   if (!map) return;
   if (map.getLayer(REQUIRED_LABEL_LAYER)) map.moveLayer(REQUIRED_LABEL_LAYER);
   if (map.getLayer(SELECTED_LABEL_LAYER)) map.moveLayer(SELECTED_LABEL_LAYER);
+}
+
+export function positionDirectionLayer() {
+  if (!ready || !map || !map.getLayer(DIRECTION_LAYER)) return;
+  const foregroundLayerIds = DIRECTION_FOREGROUND_LAYERS.filter((id) => (
+    Boolean(map.getLayer(id))
+  ));
+  for (const id of foregroundLayerIds) map.moveLayer(id);
+  if (foregroundLayerIds.length) {
+    map.moveLayer(DIRECTION_LAYER, foregroundLayerIds[0]);
+  } else {
+    map.moveLayer(DIRECTION_LAYER);
+  }
 }
 
 function svgMarkup(body) {
@@ -691,17 +756,17 @@ function ensureRequestedPlaceLayers() {
   if (!map.getSource(REQUESTED_CONNECTOR_SOURCE)) {
     map.addSource(REQUESTED_CONNECTOR_SOURCE, { type: "geojson", data: EMPTY_COLLECTION });
   }
-  if (!map.getLayer("auto-tour-requested-approach-connectors")) {
+  if (!map.getLayer(REQUESTED_APPROACH_CONNECTOR_LAYER)) {
     map.addLayer({
-      id: "auto-tour-requested-approach-connectors",
+      id: REQUESTED_APPROACH_CONNECTOR_LAYER,
       type: "line",
       source: REQUESTED_CONNECTOR_SOURCE,
       paint: { "line-color": "#59786b", "line-width": 2, "line-opacity": .65, "line-dasharray": [2, 2] },
     }, firstRouteLayerId());
   }
-  if (!map.getLayer("auto-tour-requested-approach-markers")) {
+  if (!map.getLayer(REQUESTED_APPROACH_MARKER_LAYER)) {
     map.addLayer({
-      id: "auto-tour-requested-approach-markers",
+      id: REQUESTED_APPROACH_MARKER_LAYER,
       type: "circle",
       source: REQUESTED_APPROACH_SOURCE,
       paint: { "circle-radius": 5, "circle-color": "#fffef9", "circle-stroke-color": "#214b3b", "circle-stroke-width": 2 },
@@ -1030,6 +1095,7 @@ export function renderRequestedPlaces(
   const reveal = revealId ? requestedPlaceById.get(revealId) : null;
   if (reveal) showRequestedPlacePopup(reveal, true);
   moveRequestedPlaceLayersIntoOrder();
+  positionDirectionLayer();
 }
 
 export function requestedPlaceMapDiagnostics() {
@@ -1055,7 +1121,7 @@ export function requestedPlaceMapDiagnostics() {
     radiusSourceExists: Boolean(map?.getSource(REQUESTED_RADIUS_SOURCE)),
     connectorSourceExists: Boolean(map?.getSource(REQUESTED_CONNECTOR_SOURCE)),
     connectorLayerExists: Boolean(
-      map?.getLayer("auto-tour-requested-approach-connectors"),
+      map?.getLayer(REQUESTED_APPROACH_CONNECTOR_LAYER),
     ),
     connectorFeatureCount: requestedConnectorFeatureCount,
     featureCount: features.length,
@@ -1093,6 +1159,7 @@ export function renderPois(features, selectedId, onSelect, options = {}) {
     poiPopup = null;
   }
   moveRequiredLabelsToTop();
+  positionDirectionLayer();
 }
 
 export function currentViewportBounds() {
@@ -1154,6 +1221,7 @@ export function renderCandidates(
     showDirection,
   );
   moveRequiredLabelsToTop();
+  positionDirectionLayer();
 }
 
 function renderDirectionArrows(candidate, enabled) {
@@ -1161,7 +1229,12 @@ function renderDirectionArrows(candidate, enabled) {
   removeLayer(DIRECTION_LAYER);
   removeSource(DIRECTION_SOURCE);
   directionCandidateId = null;
-  if (!enabled || !candidate || candidate.route.geometry.length < 2) return;
+  if (
+    !enabled
+    || !candidate
+    || candidate.route.geometry.length < 2
+    || !map.hasImage(DIRECTION_IMAGE)
+  ) return;
   sourceData(DIRECTION_SOURCE, {
     type: "Feature",
     properties: { candidate_id: candidate.id },
@@ -1179,8 +1252,8 @@ function renderDirectionArrows(candidate, enabled) {
       "icon-rotation-alignment": "map",
       "icon-pitch-alignment": "map",
       "icon-keep-upright": false,
-      "icon-allow-overlap": false,
-      "icon-ignore-placement": false,
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
     },
     paint: { "icon-opacity": 0.88 },
   });
@@ -1189,11 +1262,176 @@ function renderDirectionArrows(candidate, enabled) {
 
 export function directionMapDiagnostics() {
   const source = map?.getSource(DIRECTION_SOURCE);
+  const layerIds = (map?.getStyle()?.layers ?? []).map((layer) => layer.id);
+  const directionLayerIndex = layerIds.indexOf(DIRECTION_LAYER);
+  const routeOverlayIndices = layerIds
+    .map((id, index) => ({ id, index }))
+    .filter(({ id }) => (
+      id.startsWith("candidate-") || id.startsWith("selected-section-")
+    ))
+    .map(({ index }) => index);
+  const foregroundIndices = DIRECTION_FOREGROUND_LAYERS
+    .map((id) => layerIds.indexOf(id))
+    .filter((index) => index >= 0);
+  const highestRouteOverlayIndex = routeOverlayIndices.length
+    ? Math.max(...routeOverlayIndices)
+    : -1;
+  const firstForegroundIndex = foregroundIndices.length
+    ? Math.min(...foregroundIndices)
+    : -1;
   return {
     sourceExists: Boolean(source),
     layerExists: Boolean(map?.getLayer(DIRECTION_LAYER)),
     imageLoaded: Boolean(map?.hasImage(DIRECTION_IMAGE)),
     candidateId: directionCandidateId,
+    directionLayerIndex,
+    highestRouteOverlayIndex,
+    firstForegroundIndex,
+    aboveRouteOverlays: directionLayerIndex >= 0
+      && directionLayerIndex > highestRouteOverlayIndex,
+    belowMarkersAndLabels: directionLayerIndex >= 0
+      && (firstForegroundIndex < 0 || directionLayerIndex < firstForegroundIndex),
+  };
+}
+
+function spurFeatureCollection(candidate) {
+  const spurs = candidate?.route?.analysis?.spurs?.spurs ?? [];
+  return {
+    type: "FeatureCollection",
+    features: spurs.flatMap((spur) => [
+      {
+        type: "Feature",
+        id: `${spur.id}-excursion`,
+        geometry: { type: "LineString", coordinates: spur.geometry },
+        properties: { spur_id: spur.id, feature_kind: "excursion" },
+      },
+      {
+        type: "Feature",
+        id: `${spur.id}-branch`,
+        geometry: { type: "Point", coordinates: spur.start_coordinate },
+        properties: {
+          spur_id: spur.id,
+          feature_kind: "marker",
+          marker_kind: "branch",
+        },
+      },
+      {
+        type: "Feature",
+        id: `${spur.id}-turnaround`,
+        geometry: { type: "Point", coordinates: spur.turnaround_coordinate },
+        properties: {
+          spur_id: spur.id,
+          feature_kind: "marker",
+          marker_kind: "turnaround",
+        },
+      },
+    ]),
+  };
+}
+
+function clearSpurLayers() {
+  removeLayer(SPUR_TURNAROUND_LAYER);
+  removeLayer(SPUR_BRANCH_LAYER);
+  removeLayer(SPUR_HIGHLIGHT_LAYER);
+  removeSource(SPUR_SOURCE);
+  spurPopup?.remove();
+  spurPopup = null;
+  spurById = new Map();
+  spurCandidateId = null;
+}
+
+function showSpurPopup(spur, markerKind, coordinate) {
+  spurPopup?.remove();
+  const content = document.createElement("div");
+  content.className = "point-popup spur-popup";
+  const heading = document.createElement("strong");
+  heading.textContent = markerKind === "turnaround"
+    ? "Excursion turnaround"
+    : "Excursion branch and rejoin";
+  const description = document.createElement("p");
+  description.textContent = markerKind === "turnaround"
+    ? "The route turns back toward the repeated corridor near this point."
+    : "The out-and-back excursion leaves and later rejoins the route here.";
+  const caution = document.createElement("p");
+  caution.className = "context-note";
+  caution.textContent = "Candidate for route refinement. No alternative exit has been tested yet.";
+  content.append(heading, description, caution);
+  spurPopup = new window.maplibregl.Popup({ offset: 14, closeButton: true })
+    .setLngLat(coordinate)
+    .setDOMContent(content)
+    .addTo(map);
+}
+
+export function renderSpurs(candidate) {
+  if (!ready || !map) return;
+  const spurs = candidate?.route?.analysis?.spurs?.spurs ?? [];
+  if (!candidate || !spurs.length) {
+    clearSpurLayers();
+    return;
+  }
+  clearSpurLayers();
+  spurById = new Map(spurs.map((spur) => [spur.id, spur]));
+  spurCandidateId = candidate.id;
+  sourceData(SPUR_SOURCE, spurFeatureCollection(candidate));
+  map.addLayer({
+    id: SPUR_HIGHLIGHT_LAYER,
+    type: "line",
+    source: SPUR_SOURCE,
+    filter: ["==", ["get", "feature_kind"], "excursion"],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": "#684f86",
+      "line-width": 4,
+      "line-opacity": 0.42,
+      "line-dasharray": [1.2, 1.2],
+    },
+  });
+  map.addLayer({
+    id: SPUR_BRANCH_LAYER,
+    type: "circle",
+    source: SPUR_SOURCE,
+    filter: ["==", ["get", "marker_kind"], "branch"],
+    paint: {
+      "circle-radius": 6,
+      "circle-color": "#fffdf7",
+      "circle-stroke-color": "#684f86",
+      "circle-stroke-width": 3,
+    },
+  });
+  map.addLayer({
+    id: SPUR_TURNAROUND_LAYER,
+    type: "circle",
+    source: SPUR_SOURCE,
+    filter: ["==", ["get", "marker_kind"], "turnaround"],
+    paint: {
+      "circle-radius": 7,
+      "circle-color": "#684f86",
+      "circle-stroke-color": "#fffdf7",
+      "circle-stroke-width": 3,
+    },
+  });
+  positionDirectionLayer();
+}
+
+export function focusSpur(spur) {
+  fitCoordinates(spur?.geometry ?? [
+    spur?.start_coordinate,
+    spur?.turnaround_coordinate,
+    spur?.end_coordinate,
+  ]);
+}
+
+export function spurMapDiagnostics() {
+  const layerIds = (map?.getStyle()?.layers ?? []).map((layer) => layer.id);
+  return {
+    sourceExists: Boolean(map?.getSource(SPUR_SOURCE)),
+    highlightLayerExists: Boolean(map?.getLayer(SPUR_HIGHLIGHT_LAYER)),
+    branchLayerExists: Boolean(map?.getLayer(SPUR_BRANCH_LAYER)),
+    turnaroundLayerExists: Boolean(map?.getLayer(SPUR_TURNAROUND_LAYER)),
+    candidateId: spurCandidateId,
+    spurCount: spurById.size,
+    directionLayerIndex: layerIds.indexOf(DIRECTION_LAYER),
+    highlightLayerIndex: layerIds.indexOf(SPUR_HIGHLIGHT_LAYER),
   };
 }
 
@@ -1203,6 +1441,7 @@ export function renderVisualization(collection, showNature = false) {
   sourceData("selected-sections", collection ?? EMPTY_COLLECTION);
   if (!collection) {
     moveRequiredLabelsToTop();
+    positionDirectionLayer();
     return;
   }
 
@@ -1247,12 +1486,17 @@ export function renderVisualization(collection, showNature = false) {
     });
   });
   moveRequiredLabelsToTop();
+  positionDirectionLayer();
 }
 
 export function clearRoutes() {
   if (!ready) return;
   clearByPrefix("candidate-");
   clearByPrefix("selected-section-");
+  removeLayer(DIRECTION_LAYER);
+  removeSource(DIRECTION_SOURCE);
+  directionCandidateId = null;
+  clearSpurLayers();
   removeSource("selected-sections");
   clearMarkers(optionalMarkers);
 }
