@@ -35,6 +35,8 @@ const labels = {
   auto_tour_isochrone_unavailable: "The isochrone was unavailable; headed GraphHopper round-trip controls were used.",
   graphhopper_round_trip_sampled: "Sampled GraphHopper round trip",
   corridor_continuation: "Corridor continuation repair",
+  spur_closure_repair: "Alternative-exit spur closure",
+  spur_repair_budget_exhausted: "The optional spur-repair route budget was exhausted; original candidates were retained.",
   flexible: "Flexible",
   balanced: "Balanced",
   strict: "Strict",

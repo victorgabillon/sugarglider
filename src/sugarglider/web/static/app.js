@@ -1024,6 +1024,18 @@ function spurCardSummary(spurAnalysis) {
   return `<div class="spur-card-summary"><strong>${formatCount(analysis.spur_count)} out-and-back excursion${analysis.spur_count === 1 ? "" : "s"}</strong><span>${formatDistance(analysis.total_repeated_distance_m)} repeated inside excursions</span></div>`;
 }
 
+function repairSummary(candidate) {
+  const details = candidate.diagnostics?.details ?? {};
+  if (details.construction !== "spur_closure_repair") return "";
+  const sourceRepeated = Number(details.source_spur_repeated_distance_m);
+  const improvement = Number(details.repeated_distance_improvement_m);
+  if (!Number.isFinite(sourceRepeated) || !Number.isFinite(improvement)) return "";
+  const remaining = details.targeted_spur_still_present === "true"
+    ? " A smaller or structurally different excursion remains in the final route."
+    : "";
+  return `<section class="repair-summary"><h3>Route refinement</h3><p>Replaced a ${escapeHtml(formatDistance(sourceRepeated))} repeated excursion with an alternative connector. Repeated distance reduced by ${escapeHtml(formatDistance(improvement))}.${escapeHtml(remaining)}</p></section>`;
+}
+
 function renderCandidatesPanel() {
   const container = byId("candidate-list");
   const result = state.generationResult;
@@ -1058,8 +1070,8 @@ function renderCandidatesPanel() {
     selector.setAttribute("aria-pressed", String(selected));
     selector.setAttribute("aria-label", `Select candidate ${candidate.rank}, ${formatDistance(candidate.route.summary.distance_m)}`);
     selector.innerHTML = state.planningMode === "auto_tour"
-      ? autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare) + spurCardSummary(analysis.spurs)
-      : (() => { const quality = primaryQualityMetric(analysis); return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate, result.search_diagnostics)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.diagnostics.details.construction ?? "route"))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.diagnostics.target_error_m)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Major road</span><strong>${formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${quality ? metricBar(quality[0], quality[1], "trail", quality[1] == null ? "not evaluated" : formatPercent(quality[1])) : ""}${metricBar("Paved", analysis.paved.share, "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}${spurCardSummary(analysis.spurs)}`; })();
+      ? autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare) + repairSummary(candidate) + spurCardSummary(analysis.spurs)
+      : (() => { const quality = primaryQualityMetric(analysis); return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate, result.search_diagnostics)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.diagnostics.details.construction ?? "route"))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.diagnostics.target_error_m)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Major road</span><strong>${formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${quality ? metricBar(quality[0], quality[1], "trail", quality[1] == null ? "not evaluated" : formatPercent(quality[1])) : ""}${metricBar("Paved", analysis.paved.share, "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}${repairSummary(candidate)}${spurCardSummary(analysis.spurs)}`; })();
     selector.addEventListener("click", () => selectCandidate(candidate.id));
     card.append(selector);
     card.append(loopGeometryCardDetails(loopGeometry));
@@ -1096,7 +1108,7 @@ function section(title, rows) {
   return `<section><h3>${escapeHtml(title)}</h3>${metricRows(rows)}</section>`;
 }
 
-function routeShapeIssuesSection(analysis) {
+function routeShapeIssuesSection(analysis, candidate) {
   const spurAnalysis = analysis.spurs ?? {
     spurs: [],
     spur_count: 0,
@@ -1110,7 +1122,10 @@ function routeShapeIssuesSection(analysis) {
     const turnaround = stopNames.length
       ? `near ${stopNames[0]}`
       : "on the routed corridor";
-    return `<button type="button" class="spur-card" data-spur-id="${escapeHtml(spur.id)}" aria-label="Focus map on out-and-back excursion ${index + 1}"><strong>Out-and-back excursion</strong><span>Repeated corridor: ${formatDistance(spur.repeated_distance_m)}</span><span>Complete excursion: ${formatDistance(spur.total_excursion_distance_m)}</span><span>Turnaround: ${escapeHtml(turnaround)}</span><span>Deliberate stops inside this excursion: ${stopNames.length ? escapeHtml(stopNames.join(", ")) : "None"}</span><em>Candidate for route refinement</em><small>No alternative exit has been tested yet.</small></button>`;
+    const refinementStatus = candidate?.diagnostics?.details?.construction === "spur_closure_repair"
+      ? "An alternative exit was tested; this excursion remains in the final route."
+      : "No alternative exit has been tested yet.";
+    return `<button type="button" class="spur-card" data-spur-id="${escapeHtml(spur.id)}" aria-label="Focus map on out-and-back excursion ${index + 1}"><strong>Out-and-back excursion</strong><span>Repeated corridor: ${formatDistance(spur.repeated_distance_m)}</span><span>Complete excursion: ${formatDistance(spur.total_excursion_distance_m)}</span><span>Turnaround: ${escapeHtml(turnaround)}</span><span>Deliberate stops inside this excursion: ${stopNames.length ? escapeHtml(stopNames.join(", ")) : "None"}</span><em>Candidate for route refinement</em><small>${escapeHtml(refinementStatus)}</small></button>`;
   }).join("");
   return `<section class="route-shape-issues"><h3>Route shape issues</h3><p><strong>${formatCount(spurAnalysis.spur_count)} out-and-back excursion${spurAnalysis.spur_count === 1 ? "" : "s"}</strong><br>${formatDistance(spurAnalysis.total_repeated_distance_m)} repeated inside excursions</p><div class="spur-list">${cards}</div></section>`;
 }
@@ -1299,7 +1314,7 @@ function renderCanonicalMetrics(candidate, result) {
       ["Paved", formatPercent(analysis.paved.share)],
       ["Major roads", formatPercent(analysis.major_road.share)],
     ])
-    + routeShapeIssuesSection(analysis)
+    + routeShapeIssuesSection(analysis, candidate)
     + activityQualitySection(analysis)
     + section("Score", [["Total", Number(candidate.score.total).toFixed(6)], ...scoreRows])
     + (result.topology === "loop" ? loopGeometrySection(analysis.loop_geometry) : "")

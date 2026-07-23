@@ -87,6 +87,7 @@ class AutoTourCandidate(ImmutableModel):
     reverse_progress_share: Share | None = None
     endpoint_axis_lateral_deviation_m: NonNegativeFloat | None = None
     near_parallel_corridor_share: Share | None = None
+    repair_metadata: tuple[tuple[str, str], ...] = ()
 
     @model_validator(mode="before")
     @classmethod

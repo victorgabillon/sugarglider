@@ -10,43 +10,16 @@ CANDIDATE_REQUEST=$(mktemp)
 trap 'rm -f "$CANDIDATE_REQUEST"' EXIT HUP INT TERM
 
 curl --fail --silent --show-error "$API_URL/ready" >/dev/null
-curl --fail --silent --show-error \
+curl --fail-with-body --silent --show-error \
     --header "Content-Type: application/json" \
     --data-binary "@$REQUEST_PATH" \
     --output "$JSON_OUTPUT" \
     "$API_URL/v2/plans/generate"
 
-python - "$JSON_OUTPUT" "$CANDIDATE_REQUEST" <<'PY'
-import json
-import sys
+uv run python "$REPOSITORY_ROOT/scripts/prepare_plan_gpx.py" \
+    "$JSON_OUTPUT" "$CANDIDATE_REQUEST"
 
-with open(sys.argv[1], encoding="utf-8") as stream:
-    result = json.load(stream)
-assert result["schema_version"] == 1
-candidates = result["candidates"]
-if not candidates:
-    raise SystemExit("canonical plan returned no candidate")
-candidate = candidates[0]
-assert candidate["rank"] == 1
-assert len(candidate["route"]["geometry"]) > 1
-assert candidate["diagnostics"]["safety_eligible"]
-print(
-    f"{result['kind']} candidate {candidate['id']}: "
-    f"{candidate['route']['summary']['distance_m']:.1f} m; "
-    f"roles={','.join(candidate['roles'])}; "
-    f"selected={len(candidate['selected_stops'])}; "
-    f"dropped={len(candidate['dropped_stops'])}"
-)
-with open(sys.argv[2], "w", encoding="utf-8") as stream:
-    json.dump(
-        {"schema_version": 1, "candidate": candidate},
-        stream,
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-PY
-
-curl --fail --silent --show-error \
+curl --fail-with-body --silent --show-error \
     --header "Content-Type: application/json" \
     --data-binary "@$CANDIDATE_REQUEST" \
     --output "$GPX_OUTPUT" \

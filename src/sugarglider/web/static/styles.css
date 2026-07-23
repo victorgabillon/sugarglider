@@ -279,6 +279,9 @@ input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d;
 .badge.warn { color: #75450b; background: #ffe0ad; }
 .badge.recommended { color: #fff; background: var(--primary-action); }
 .candidate-construction { margin: .2rem 0 .5rem; color: var(--muted-text); font-size: .63rem; font-weight: 750; }
+.repair-summary { margin: .55rem 0; padding: .55rem .65rem; border-left: .2rem solid var(--accent-orange); background: rgb(217 88 43 / 8%); text-align: left; }
+.repair-summary h3, .repair-summary p { margin: 0; }
+.repair-summary p { margin-top: .25rem; font-size: .72rem; line-height: 1.35; }
 .candidate-key-metrics { display: grid; grid-template-columns: 1fr auto; gap: .24rem .5rem; font-size: .68rem; }
 .candidate-key-metrics span:nth-child(odd) { color: var(--muted-text); }
 .candidate-key-metrics strong { text-align: right; }

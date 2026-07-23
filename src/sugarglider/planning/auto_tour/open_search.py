@@ -467,4 +467,6 @@ class OpenSearchMixin:
                     }
                 )
             ),
+            search_context=context,
+            resolved_request=request,
         )

@@ -41,6 +41,7 @@ direction arrows remain above route-analysis lines and below these annotations a
 the ordinary marker/label foreground.
 
 A detected spur does not prove that it is avoidable, undesirable for the user's
-intent, or replaceable by a safe profile-compatible route. PR20 will use these
-intervals for bounded alternative-exit routing and will evaluate any actual repair
-before making such a claim.
+intent, or replaceable by a safe profile-compatible route. PR20 now uses supported
+intervals for bounded alternative-exit routing, but makes an improvement claim only
+after a complete graph-valid repair passes ordinary evaluation. See
+[`pr20-spur-closure-repair.md`](pr20-spur-closure-repair.md).

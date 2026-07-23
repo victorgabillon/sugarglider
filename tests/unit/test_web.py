@@ -934,7 +934,7 @@ def test_route_spur_diagnostics_render_as_accessible_map_issues() -> None:
     html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
     styles = (STATIC_DIRECTORY / "styles.css").read_text(encoding="utf-8")
 
-    assert "function routeShapeIssuesSection(analysis)" in app
+    assert "function routeShapeIssuesSection(analysis, candidate)" in app
     assert "Route shape issues" in app
     assert "No substantial out-and-back excursion detected." in app
     assert "Out-and-back excursion" in app
@@ -943,6 +943,16 @@ def test_route_spur_diagnostics_render_as_accessible_map_issues() -> None:
     assert "Deliberate stops inside this excursion:" in app
     assert "Candidate for route refinement" in app
     assert "No alternative exit has been tested yet." in app
+    assert "function repairSummary(candidate)" in app
+    assert "Route refinement" in app
+    assert "Repeated distance reduced by" in app
+    assert "targeted_spur_still_present" in app
+    assert (
+        "An alternative exit was tested; this excursion remains in the final route."
+        in app
+    )
+    assert "Number.isFinite(sourceRepeated)" in app
+    assert "Number.isFinite(improvement)" in app
     assert 'type="button" class="spur-card"' in app
     assert 'data-spur-id="${escapeHtml(spur.id)}"' in app
     assert "spurAnalysis.spurs.map" in app
@@ -988,6 +998,7 @@ def test_route_spur_diagnostics_render_as_accessible_map_issues() -> None:
     assert '<i class="line spur"></i>Detected excursion' in html
     assert ".spur-card" in styles
     assert ".spur-popup" in styles
+    assert ".repair-summary" in styles
 
 
 def test_bastille_to_marly_example_preserves_source_points_and_consumes_end() -> None:

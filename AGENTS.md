@@ -176,3 +176,6 @@
 - Reversal preserves exact constraints, profile, and canonical intent while resolving
   soft stops and rebuilding analysis, scoring, compromises, roles, ranks, and GPX order.
   Reversing twice need not reproduce byte-identical geometry.
+- Spur-closure refinement must use the shared request context and typed repair budget,
+  preserve exact and deliberate anchors, reject inbound-corridor reuse by routed edge
+  identity, reconstruct a complete routed path, retain originals, and fail nonfatally.
