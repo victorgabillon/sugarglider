@@ -15,6 +15,7 @@ class SearchPhase(StrEnum):
     EXCURSION = "excursion"
     REPAIR = "repair"
     ALTERNATIVE_LEG = "alternative_leg"
+    SPUR_REPAIR = "spur_repair"
     REVERSE = "reverse"
 
 

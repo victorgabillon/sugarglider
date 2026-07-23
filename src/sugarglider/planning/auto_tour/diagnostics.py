@@ -2,7 +2,8 @@
 
 from typing import Annotated, Self
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from sugarglider.domain.endpoints import (
     EndpointVisit,
@@ -10,7 +11,12 @@ from sugarglider.domain.endpoints import (
 )
 from sugarglider.domain.models import Coordinate, ImmutableModel
 from sugarglider.planning.auto_tour.candidate_models import AutoTourCandidate
-from sugarglider.planning.auto_tour.models import NonNegativeFloat, NonNegativeInt
+from sugarglider.planning.auto_tour.models import (
+    AutoTourSearchRequest,
+    NonNegativeFloat,
+    NonNegativeInt,
+)
+from sugarglider.planning.context import PlanningSearchContext
 from sugarglider.planning.diagnostics import PlanSearchDiagnostics
 
 
@@ -107,6 +113,8 @@ class AutoTourSearchSummary(ImmutableModel):
 class AutoTourSearchResult(ImmutableModel):
     """Recommended candidates plus the separately retained no-POI control."""
 
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
     control: AutoTourCandidate
     candidates: tuple[AutoTourCandidate, ...]
     search: AutoTourSearchSummary
@@ -117,6 +125,12 @@ class AutoTourSearchResult(ImmutableModel):
     endpoint_visits: tuple[EndpointVisit, EndpointVisit] | tuple[()] = ()
     endpoint_warnings: tuple[str, ...] = ()
     import_warnings: tuple[str, ...] = ()
+    search_context: SkipJsonSchema[PlanningSearchContext] = Field(
+        exclude=True, repr=False
+    )
+    resolved_request: SkipJsonSchema[AutoTourSearchRequest] = Field(
+        exclude=True, repr=False
+    )
 
     @model_validator(mode="after")
     def validate_result(self) -> Self:

@@ -40,6 +40,7 @@ REQUESTED_PLACE_ROUTE_EVALUATION_BUDGET = 60
 POI_EXPANSIONS_PER_STATE = 4
 LOCAL_REPAIR_ROUTE_EVALUATION_BUDGET = 12
 ALTERNATIVE_LEG_REQUEST_BUDGET = 24
+SPUR_REPAIR_ROUTE_REQUEST_BUDGET = 48
 APPROACH_ROUTE_EVALUATION_BUDGET = 32
 APPROACH_BEAM_WIDTH = 4
 MAX_SNAP_DISPLACEMENT_M = 300.0
@@ -72,6 +73,7 @@ class AutoTourSettings:
     approach_beam_width: int = APPROACH_BEAM_WIDTH
     local_repair_route_evaluation_budget: int = LOCAL_REPAIR_ROUTE_EVALUATION_BUDGET
     alternative_leg_request_budget: int = ALTERNATIVE_LEG_REQUEST_BUDGET
+    spur_repair_route_request_budget: int = SPUR_REPAIR_ROUTE_REQUEST_BUDGET
     max_snap_displacement_m: float = MAX_SNAP_DISPLACEMENT_M
     poi: TourPoiSettings = TourPoiSettings()
 
@@ -98,6 +100,8 @@ class AutoTourSettings:
             raise ValueError("local repair route budget must be between 0 and 12")
         if not 0 <= self.alternative_leg_request_budget <= 24:
             raise ValueError("alternative-leg budget must be between 0 and 24")
+        if not 0 <= self.spur_repair_route_request_budget <= 48:
+            raise ValueError("spur-repair budget must be between 0 and 48")
         if self.max_snap_displacement_m < 0:
             raise ValueError("snap displacement must be non-negative")
 
@@ -110,6 +114,7 @@ class AutoTourSettings:
             + self.requested_place_route_evaluation_budget
             + self.local_repair_route_evaluation_budget
             + self.alternative_leg_request_budget
+            + self.spur_repair_route_request_budget
         )
 
 
@@ -124,6 +129,7 @@ def _search_budget(settings: AutoTourSettings) -> SearchBudget:
     limits[SearchPhase.DISCOVERED_POI] = settings.poi_route_evaluation_budget
     limits[SearchPhase.REPAIR] = settings.local_repair_route_evaluation_budget
     limits[SearchPhase.ALTERNATIVE_LEG] = settings.alternative_leg_request_budget
+    limits[SearchPhase.SPUR_REPAIR] = settings.spur_repair_route_request_budget
     return SearchBudget(
         limits,
         total_limit=settings.total_route_request_budget + 1,

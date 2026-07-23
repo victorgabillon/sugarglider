@@ -457,7 +457,8 @@ def test_named_default_budgets_are_exact_and_bounded() -> None:
         settings.alternative_leg_request_budget == ALTERNATIVE_LEG_REQUEST_BUDGET == 24
     )
     assert settings.requested_place_route_evaluation_budget == 60
-    assert settings.total_route_request_budget == 152
+    assert settings.spur_repair_route_request_budget == 48
+    assert settings.total_route_request_budget == 200
 
 
 @pytest.mark.asyncio

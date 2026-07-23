@@ -4,6 +4,7 @@ from sugarglider.planning.alternative_legs import LowOverlapSettings
 from sugarglider.planning.auto_tour.candidate_models import (
     AutoTourCandidate,
 )
+from sugarglider.planning.auto_tour.discovered_pois import shortlist_route_pois
 from sugarglider.planning.auto_tour.discovered_search import DiscoveredSearchMixin
 from sugarglider.planning.auto_tour.loop_search import LoopSearchMixin
 from sugarglider.planning.auto_tour.models import (
@@ -21,13 +22,21 @@ from sugarglider.planning.auto_tour.ranking import (
 from sugarglider.planning.auto_tour.repairs import RepairSearchMixin
 from sugarglider.planning.auto_tour.requested_search import RequestedSearchMixin
 from sugarglider.planning.auto_tour.skeleton_search import SkeletonSearchMixin
-from sugarglider.planning.auto_tour.state import AutoTourSettings
+from sugarglider.planning.auto_tour.state import AutoTourSettings, _Draft
 from sugarglider.planning.auto_tour.through_routes import ThroughRouteSearchMixin
 from sugarglider.planning.drafts import CandidateDraft
 from sugarglider.planning.evaluator import CandidateEvaluator
 from sugarglider.planning.models import AutoTourPlanRequest, PlanRequestBase
 from sugarglider.planning.pipeline import evaluate_candidate_portfolio
 from sugarglider.planning.profile_quality import profile_aware_drop_reason
+from sugarglider.planning.refinement import (
+    SpurClosureSettings,
+    SpurRepairDiagnosticAccumulator,
+    SpurRepairSource,
+    refine_spur_closures,
+)
+from sugarglider.planning.refinement.models import SpurClosureDraft
+from sugarglider.planning.refinement.rejoin import locate_repair_anchors
 from sugarglider.planning.result import (
     ApproximatedPlanStop,
     DroppedPlanStop,
@@ -38,8 +47,11 @@ from sugarglider.planning.result import (
     SelectionMethod,
     SelectionOrigin,
 )
+from sugarglider.planning.signatures import candidate_signature
+from sugarglider.planning.validation import CandidateEvaluationError
 from sugarglider.pois.index import PoiIndex
 from sugarglider.routing.backend import AutoTourRoutingBackend
+from sugarglider.routing.errors import RoutingError
 from sugarglider.routing.result import RouteResultFactory
 
 
@@ -83,6 +95,92 @@ class AutoTourService(
     def final_result_factory(self) -> RouteResultFactory:
         return self._final_result_factory
 
+    @property
+    def structural_result_factory(self) -> RouteResultFactory:
+        return self._structural_result_factory
+
+    def rebuild_spur_candidate(
+        self,
+        *,
+        request: AutoTourSearchRequest,
+        source: AutoTourCandidate,
+        repaired: SpurClosureDraft,
+    ) -> AutoTourCandidate:
+        """Rebuild all Auto Tour stop and POI outcomes on repaired geometry."""
+        draft = _Draft(
+            route=repaired.route,
+            routed_path=repaired.path,
+            routing_points=repaired.routing_points,
+            signature=candidate_signature(
+                repaired.route,
+                topology=request.resolved_endpoints.topology,
+                routing_profile=request.profile,
+            ),
+            construction="spur_closure_repair",
+            skeleton_id=source.skeleton_id,
+            skeleton_method=source.skeleton_method,
+            direction=source.direction,
+            direction_warnings=(),
+            hard_point_visits=self._hard_point_visits(
+                request,
+                repaired.routing_points,
+                repaired.path.snapped_points,
+            ),
+        )
+        source_draft = _Draft(
+            route=source.route,
+            routed_path=source.routed_path or repaired.path,
+            routing_points=source.routing_points,
+            signature=source.signature,
+            construction=source.construction,
+            skeleton_id=source.skeleton_id,
+            skeleton_method=source.skeleton_method,
+            direction=source.direction,
+            direction_warnings=(),
+            hard_point_visits=source.hard_point_visits,
+        )
+        shortlist = shortlist_route_pois(
+            index=self._poi_index,
+            route_geometry=repaired.route.geometry,
+            routing_points=repaired.routing_points,
+            request=request,
+            settings=self._settings.poi,
+        )
+        deliberate_requested = frozenset(
+            visit.requested_place.original_index
+            for visit in source.requested_place_visits
+            if visit.deliberately_routed
+            and visit.requested_place.original_index is not None
+        )
+        candidate = self._search_candidate(
+            request=request,
+            draft=draft,
+            visits=shortlist.already_collected,
+            rejected=shortlist.rejected,
+            family_control=source_draft,
+            inserted=True,
+            deliberately_routed_requested_indices=deliberate_requested,
+        )
+        comparison = candidate.control_comparison
+        repair_reasons = tuple(
+            reason
+            for reason in comparison.rejection_reasons
+            if reason != "no_positive_soft_objective"
+        )
+        comparison = comparison.model_copy(
+            update={
+                "eligible": not repair_reasons,
+                "rejection_reasons": repair_reasons,
+            }
+        )
+        return candidate.model_copy(
+            update={
+                "control_eligible": comparison.eligible,
+                "control_comparison": comparison,
+                "repair_metadata": repaired.diagnostics.metadata(),
+            }
+        )
+
 
 class AutoTourCandidateScorer:
     """Compute the final score from immutable mode-specific quality inputs."""
@@ -117,7 +215,7 @@ class AutoTourPlanner:
 
     async def generate(self, request: AutoTourPlanRequest) -> PlanResult:
         result = await self._search.generate(_search_request(request))
-        candidates = tuple(
+        original_candidates = tuple(
             self._evaluator.evaluate(
                 request=request,
                 draft=_candidate_draft(candidate, request),
@@ -125,14 +223,98 @@ class AutoTourPlanner:
             )
             for candidate in result.candidates
         )
+        candidates = [*original_candidates]
+        repair_warnings: set[str] = set()
+        repair_diagnostics = SpurRepairDiagnosticAccumulator()
+        settings = SpurClosureSettings()
+        for source, evaluated_source in zip(
+            result.candidates[: settings.maximum_source_candidates],
+            original_candidates[: settings.maximum_source_candidates],
+            strict=True,
+        ):
+            if source.routed_path is None:
+                continue
+            deliberate_coordinates = frozenset(
+                (
+                    anchor.routed_coordinate.lat,
+                    anchor.routed_coordinate.lon,
+                )
+                for anchor in evaluated_source.traversal.anchors
+            )
+            exact_coordinates = frozenset(
+                {
+                    (request.start.lat, request.start.lon),
+                    (request.effective_end.lat, request.effective_end.lon),
+                    *(
+                        (waypoint.coordinate.lat, waypoint.coordinate.lon)
+                        for waypoint in request.hard_waypoints
+                    ),
+                }
+            )
+            repair_source = SpurRepairSource(
+                source_candidate_id=evaluated_source.id,
+                route=evaluated_source.route,
+                routed_path=source.routed_path,
+                routing_points=source.routing_points,
+                anchors=locate_repair_anchors(
+                    evaluated_source.route,
+                    source.routing_points,
+                    exact_coordinates=exact_coordinates,
+                    deliberate_coordinates=deliberate_coordinates,
+                ),
+                topology=request.topology,
+                profile=request.routing_profile,
+                maximum_distance_m=request.distance_objective.maximum_m,
+            )
+            refined = await refine_spur_closures(
+                repair_source,
+                context=result.search_context,
+                result_factory=self._search.structural_result_factory,
+                settings=settings,
+                diagnostics=repair_diagnostics,
+            )
+            repair_warnings.update(refined.warnings)
+            for repaired in refined.drafts:
+                try:
+                    rebuilt = self._search.rebuild_spur_candidate(
+                        request=result.resolved_request,
+                        source=source,
+                        repaired=repaired,
+                    )
+                    if not rebuilt.control_eligible:
+                        repair_diagnostics.repair_drafts_rejected_after_acceptance += 1
+                        continue
+                    evaluated_repair = self._evaluator.evaluate(
+                        request=request,
+                        draft=_candidate_draft(rebuilt, request),
+                        scorer=self._scorer,
+                    )
+                except (CandidateEvaluationError, RoutingError, ValueError):
+                    repair_diagnostics.repair_drafts_rejected_after_acceptance += 1
+                    continue
+                candidates.append(evaluated_repair)
+                repair_diagnostics.repair_candidates_submitted_to_portfolio += 1
         evaluated = evaluate_candidate_portfolio(
             request,
-            candidates,
+            tuple(candidates),
             limit=request.candidate_count,
             ranking_key=lambda candidate: canonical_auto_tour_key(
                 candidate, request.distance_objective.priority
             ),
         )
+        repair_diagnostics.published_repair_candidates += sum(
+            candidate.diagnostics.details.get("construction") == "spur_closure_repair"
+            for candidate in evaluated.candidates
+        )
+        repair_diagnostics.portfolio_excluded_repair_candidates += max(
+            0,
+            repair_diagnostics.repair_candidates_submitted_to_portfolio
+            - repair_diagnostics.published_repair_candidates,
+        )
+        diagnostic_details = {
+            **result.diagnostics.details,
+            "spur_repair": repair_diagnostics.snapshot().as_dict(),
+        }
         return PlanResult(
             kind=request.kind,
             topology=request.topology,
@@ -140,7 +322,23 @@ class AutoTourPlanner:
             effective_start=request.start,
             effective_end=request.effective_end,
             candidates=evaluated.candidates,
-            search_diagnostics=evaluated.attach_rejections(result.diagnostics),
+            search_diagnostics=evaluated.attach_rejections(
+                result.diagnostics.model_copy(
+                    update={
+                        "budget": result.search_context.budget.snapshot(),
+                        "cache": result.search_context.routes.cache_snapshot(),
+                        "warnings": tuple(
+                            sorted(
+                                {
+                                    *result.diagnostics.warnings,
+                                    *repair_warnings,
+                                }
+                            )
+                        ),
+                        "details": diagnostic_details,
+                    }
+                )
+            ),
         )
 
 
@@ -226,6 +424,7 @@ def _candidate_draft(
                 "selected_verified_water_count",
                 str(candidate.selected_verified_water_count),
             ),
+            *candidate.repair_metadata,
         ),
     )
 

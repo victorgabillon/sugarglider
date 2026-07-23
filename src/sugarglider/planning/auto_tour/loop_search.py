@@ -459,4 +459,6 @@ class LoopSearchMixin:
                     }
                 )
             ),
+            search_context=context,
+            resolved_request=request,
         )

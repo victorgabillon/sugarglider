@@ -233,9 +233,13 @@ segment breaks.
 
 Final candidates also expose deterministic edge-based out-and-back excursion
 diagnostics. The browser identifies branch, turnaround, and rejoin context and lists
-deliberate stops inside each substantial spur. Detection is descriptive only: it does
-not claim an alternative exit exists or change ranking. See
-[`docs/pr19-spur-diagnostics.md`](docs/pr19-spur-diagnostics.md).
+deliberate stops inside each substantial spur. Detection alone remains descriptive.
+For supported evidence, both planning modes may use a separately bounded
+`spur_repair` lane to route alternative exits, reject connectors that substantially
+reuse inbound edge IDs, reconstruct a complete route, and submit it to ordinary
+evaluation and portfolio ranking. Originals remain available and repair failure is
+nonfatal. See [`docs/pr19-spur-diagnostics.md`](docs/pr19-spur-diagnostics.md) and
+[`docs/pr20-spur-closure-repair.md`](docs/pr20-spur-closure-repair.md).
 
 ## Migrating old JSON
 
@@ -334,6 +338,13 @@ while point-to-point plans use routed alternative-leg geometry without closing o
 cutting the route. Low-overlap refinement composes continuous GraphHopper legs through
 the same request cache and typed `alternative_leg` budget. Exact endpoints and
 waypoints are checked against backend snaps before shared final evaluation.
+
+The shared `planning/refinement` package consumes finalized source-route evidence and
+uses only that same request context. Its bounded spur-closure lane samples downstream
+rejoins without bypassing exact or deliberate anchors, routes profile-aware connector
+alternatives, composes only continuous routed segments, and returns complete mode
+drafts to the shared evaluator. Internal rejoins never become traversal anchors or
+GPX waypoints.
 
 Auto Tour is likewise native and modular. Its request-scoped service coordinates
 loop/open controls, routed skeletons, requested-stop ordering and subset search,

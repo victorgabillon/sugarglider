@@ -11,6 +11,14 @@ from sugarglider.planning.diagnostics import PlanSearchDiagnostics
 from sugarglider.planning.evaluator import CandidateEvaluator
 from sugarglider.planning.models import WaypointPlanRequest
 from sugarglider.planning.pipeline import evaluate_candidate_portfolio
+from sugarglider.planning.refinement import (
+    SpurClosureSettings,
+    SpurRepairDiagnosticAccumulator,
+    SpurRepairSource,
+    refine_spur_closures,
+)
+from sugarglider.planning.refinement.models import SpurClosureDraft
+from sugarglider.planning.refinement.rejoin import locate_repair_anchors
 from sugarglider.planning.result import PlanCandidate, PlanResult
 from sugarglider.planning.routing_gateway import SearchBudgetExhaustedError
 from sugarglider.planning.validation import (
@@ -61,6 +69,7 @@ class WaypointPlanner:
             backend=self._backend,
             budget=_waypoint_budget(request, self._max_evaluations),
         )
+        repair_diagnostics = SpurRepairDiagnosticAccumulator()
         request, constraint_resolutions = await self._resolve_constraints(
             request, context
         )
@@ -143,6 +152,15 @@ class WaypointPlanner:
                 constraint_resolutions=constraint_resolutions,
             )
 
+        await self._evaluate_spur_repairs(
+            request=request,
+            sources=tuple(routed),
+            context=context,
+            destination=candidates,
+            constraint_resolutions=constraint_resolutions,
+            diagnostics=repair_diagnostics,
+        )
+
         portfolio = evaluate_candidate_portfolio(
             request,
             tuple(candidates),
@@ -158,6 +176,15 @@ class WaypointPlanner:
                     error.point_name or "",
                 ),
             )
+        repair_diagnostics.published_repair_candidates += sum(
+            candidate.diagnostics.details.get("construction") == "spur_closure_repair"
+            for candidate in portfolio.candidates
+        )
+        repair_diagnostics.portfolio_excluded_repair_candidates += max(
+            0,
+            repair_diagnostics.repair_candidates_submitted_to_portfolio
+            - repair_diagnostics.published_repair_candidates,
+        )
         warnings = tuple(
             sorted(
                 {
@@ -174,6 +201,7 @@ class WaypointPlanner:
             details={
                 **context.diagnostics.counters,
                 "portfolio_count": len(portfolio.candidates),
+                "spur_repair": repair_diagnostics.snapshot().as_dict(),
             },
         )
         return PlanResult(
@@ -229,6 +257,7 @@ class WaypointPlanner:
         path: RoutedPath,
         context: PlanningSearchContext,
         constraint_resolutions: tuple[ConstraintResolution, ...],
+        repair: SpurClosureDraft | None = None,
     ) -> PlanCandidate:
         draft = waypoint_draft(
             request=request,
@@ -236,6 +265,7 @@ class WaypointPlanner:
             path=path,
             result_factory=self._result_factory,
             constraint_resolutions=constraint_resolutions,
+            metadata=repair.diagnostics.metadata() if repair is not None else (),
         )
         context.diagnostics.increment("candidate_drafts_created")
         candidate = self._evaluator.evaluate(
@@ -245,6 +275,81 @@ class WaypointPlanner:
         )
         context.diagnostics.increment("candidates_evaluated")
         return candidate
+
+    async def _evaluate_spur_repairs(
+        self,
+        *,
+        request: WaypointPlanRequest,
+        sources: tuple[tuple[WaypointSequenceProposal, RoutedPath, PlanCandidate], ...],
+        context: PlanningSearchContext,
+        destination: list[PlanCandidate],
+        constraint_resolutions: tuple[ConstraintResolution, ...],
+        diagnostics: SpurRepairDiagnosticAccumulator,
+    ) -> None:
+        settings = SpurClosureSettings()
+        ordered = sorted(
+            sources,
+            key=lambda value: (
+                -value[2].diagnostics.spur_repeated_distance_m,
+                value[2].diagnostics.immediate_backtracking_m,
+                value[2].id,
+            ),
+        )[: settings.maximum_source_candidates]
+        for proposal, path, candidate in ordered:
+            deliberate = frozenset(
+                (
+                    anchor.routed_coordinate.lat,
+                    anchor.routed_coordinate.lon,
+                )
+                for anchor in candidate.traversal.anchors
+            )
+            exact = frozenset((point.lat, point.lon) for point in proposal.exact_points)
+            source = SpurRepairSource(
+                source_candidate_id=candidate.id,
+                route=candidate.route,
+                routed_path=path,
+                routing_points=proposal.routing_points,
+                anchors=locate_repair_anchors(
+                    candidate.route,
+                    proposal.routing_points,
+                    exact_coordinates=exact,
+                    deliberate_coordinates=deliberate,
+                ),
+                topology=request.topology,
+                profile=request.routing_profile,
+                maximum_distance_m=request.distance_objective.maximum_m,
+            )
+            refined = await refine_spur_closures(
+                source,
+                context=context,
+                result_factory=self._structural_result_factory,
+                settings=settings,
+                diagnostics=diagnostics,
+            )
+            context.diagnostics.warnings.update(refined.warnings)
+            context.diagnostics.increment("spur_repair_attempts", refined.attempts)
+            for repaired in refined.drafts:
+                try:
+                    repaired_proposal = _repaired_waypoint_proposal(proposal, repaired)
+                    validate_waypoint_path(repaired_proposal, repaired.path)
+                    evaluated = self._evaluate_path(
+                        request,
+                        repaired_proposal,
+                        repaired.path,
+                        context,
+                        constraint_resolutions,
+                        repair=repaired,
+                    )
+                except (CandidateEvaluationError, RoutingError, ValueError) as exc:
+                    diagnostics.repair_drafts_rejected_after_acceptance += 1
+                    if isinstance(exc, ValueError) and "exact waypoint" in str(exc):
+                        diagnostics.reject("exact_constraints")
+                    context.diagnostics.rejections.append(f"spur_closure_repair:{exc}")
+                    context.diagnostics.increment("candidates_rejected")
+                    continue
+                destination.append(evaluated)
+                diagnostics.repair_candidates_submitted_to_portfolio += 1
+                context.diagnostics.increment("spur_repair_candidates")
 
     async def _evaluate_low_overlap(
         self,
@@ -345,7 +450,40 @@ def _waypoint_budget(
     )
     limits[SearchPhase.ALTERNATIVE_LEG] = alternative
     limits[SearchPhase.SKELETON] = remaining - alternative
-    return SearchBudget(limits, total_limit=max_evaluations)
+    limits[SearchPhase.SPUR_REPAIR] = 48
+    return SearchBudget(limits, total_limit=max_evaluations + 48)
+
+
+def _repaired_waypoint_proposal(
+    source: WaypointSequenceProposal,
+    repaired: SpurClosureDraft,
+) -> WaypointSequenceProposal:
+    positions: list[int] = []
+    cursor = 0
+    for exact in source.exact_points:
+        position = next(
+            (
+                index
+                for index in range(cursor, len(repaired.routing_points))
+                if repaired.routing_points[index] == exact
+            ),
+            None,
+        )
+        if position is None:
+            raise ValueError("spur repair lost an exact waypoint")
+        positions.append(position)
+        cursor = position + 1
+    return WaypointSequenceProposal(
+        routing_points=repaired.routing_points,
+        exact_points=source.exact_points,
+        exact_point_positions=tuple(positions),
+        original_indices=source.original_indices,
+        exact_point_ids=source.exact_point_ids,
+        topology=source.topology,
+        construction="spur_closure_repair",
+        order_provenance=source.order_provenance,
+        detour_provenance="spur_closure_repair",
+    )
 
 
 def _waypoint_ranking_key(

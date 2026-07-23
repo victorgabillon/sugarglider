@@ -16,6 +16,7 @@ def waypoint_draft(
     path: RoutedPath,
     result_factory: RouteResultFactory,
     constraint_resolutions: tuple[ConstraintResolution, ...] = (),
+    metadata: tuple[tuple[str, str], ...] = (),
 ) -> CandidateDraft:
     route = result_factory.create(
         name=request.name,
@@ -54,5 +55,6 @@ def waypoint_draft(
                 if proposal.construction == "fixed_control"
                 else "none",
             ),
+            *metadata,
         ),
     )
