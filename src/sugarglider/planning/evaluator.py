@@ -3,6 +3,10 @@
 from dataclasses import replace
 from typing import Protocol
 
+from sugarglider.analysis.spurs import (
+    SpurTraversalAnchor,
+    detect_route_spurs,
+)
 from sugarglider.planning.direction.traversal import build_plan_traversal
 from sugarglider.planning.drafts import CandidateDraft
 from sugarglider.planning.models import PlanRequestBase
@@ -131,6 +135,22 @@ class CandidateEvaluator:
                     ),
                 )
             )
+        traversal = build_plan_traversal(request, draft)
+        spur_analysis = detect_route_spurs(
+            route,
+            tuple(
+                SpurTraversalAnchor(
+                    id=anchor.id,
+                    name=anchor.name,
+                    route_progress=anchor.route_progress,
+                )
+                for anchor in traversal.anchors
+                if anchor.kind not in {"start", "end"}
+            ),
+            topology=request.topology,
+        )
+        analysis = analysis.model_copy(update={"spurs": spur_analysis})
+        route = route.model_copy(update={"analysis": analysis})
         candidate = PlanCandidate(
             id=candidate_signature(
                 route,
@@ -144,7 +164,7 @@ class CandidateEvaluator:
             roles=(),
             route=route,
             score=score,
-            traversal=build_plan_traversal(request, draft),
+            traversal=traversal,
             reached_stops=draft.reached_stops,
             approximated_stops=draft.approximated_stops,
             dropped_stops=draft.dropped_stops,
@@ -177,6 +197,9 @@ class CandidateEvaluator:
                 dropped_stop_count=len(draft.dropped_stops),
                 immediate_backtracking_m=(analysis.immediate_backtrack.distance_m),
                 repeated_distance_m=(analysis.repetition.repeated_distance.distance_m),
+                spur_count=spur_analysis.spur_count,
+                spur_repeated_distance_m=(spur_analysis.total_repeated_distance_m),
+                longest_spur_distance_m=(spur_analysis.longest_spur_distance_m),
                 details={
                     "construction": draft.construction,
                     "search_family": draft.search_family,

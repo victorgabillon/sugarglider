@@ -19,6 +19,9 @@ authoritative for all classifications.
 The browser renders one MapLibre line-symbol layer for the selected generated
 candidate. Its small local canvas arrow follows map rotation and line order, uses
 zoom-sensitive spacing, and is never duplicated into one DOM marker per coordinate.
+The arrow layer is restored above candidate and analysis lines after every map render,
+while approach connectors, POI and requested-place markers, and important labels stay
+in the foreground. Arrow symbols ignore label collision so dense routes remain legible.
 The setting defaults on and survives candidate and planning-mode changes. It is not
 shown for a local GPX or when no generated candidate is selected. These arrows show
 track traversal only; they are not instructions or guarantees about legality, safety,

@@ -10,6 +10,9 @@ type DetailValue = str | int | float | bool | None
 NonNegativeFloat = Annotated[float, Field(ge=0)]
 Share = Annotated[float, Field(ge=0, le=1)]
 NonNegativeInt = Annotated[int, Field(ge=0)]
+SpurLongitude = Annotated[float, Field(ge=-180, le=180)]
+SpurLatitude = Annotated[float, Field(ge=-90, le=90)]
+SpurPosition = tuple[SpurLongitude, SpurLatitude]
 
 
 class _ImmutableAnalysisModel(BaseModel):
@@ -61,6 +64,135 @@ class RepetitionAnalysis(_ImmutableAnalysisModel):
     traversed_edge_run_count: NonNegativeInt
     repeated_edge_count: NonNegativeInt
     repeated_distance: DistanceMetric
+
+
+type RouteSpurKind = Literal["immediate_out_and_back", "repeated_corridor_excursion"]
+type RouteSpurConfidence = Literal["high", "medium", "low"]
+type RouteSpurReasonCode = Literal[
+    "reversed_edge_sequence",
+    "exact_corridor_return",
+    "approximate_corridor_return",
+    "turnaround_connector_present",
+    "contains_deliberate_stop",
+    "incomplete_edge_coverage",
+    "near_route_endpoint",
+    "loop_closure_overlap",
+]
+
+
+class RouteSpur(_ImmutableAnalysisModel):
+    """One maximal edge-proven out-and-back excursion on the final route."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
+
+    id: Annotated[str, Field(min_length=1, max_length=80)]
+    kind: RouteSpurKind
+    start_progress: Share
+    turnaround_progress: Share
+    end_progress: Share
+    start_coordinate: SpurPosition
+    turnaround_coordinate: SpurPosition
+    end_coordinate: SpurPosition
+    geometry: Annotated[tuple[SpurPosition, ...], Field(min_length=2)]
+    outbound_distance_m: NonNegativeFloat
+    return_distance_m: NonNegativeFloat
+    repeated_distance_m: NonNegativeFloat
+    total_excursion_distance_m: NonNegativeFloat
+    turnaround_connector_distance_m: NonNegativeFloat
+    maximum_separation_m: NonNegativeFloat
+    deliberate_stop_ids: tuple[str, ...]
+    deliberate_stop_names: tuple[str, ...]
+    confidence: RouteSpurConfidence
+    reason_codes: tuple[RouteSpurReasonCode, ...]
+
+    @model_validator(mode="after")
+    def validate_structure(self) -> Self:
+        if not (self.start_progress <= self.turnaround_progress <= self.end_progress):
+            raise ValueError("spur progress must follow route traversal order")
+        if self.geometry[0] != self.start_coordinate:
+            raise ValueError("spur geometry must begin at its branch coordinate")
+        if self.geometry[-1] != self.end_coordinate:
+            raise ValueError("spur geometry must end at its rejoin coordinate")
+        if len(self.deliberate_stop_ids) != len(self.deliberate_stop_names):
+            raise ValueError("spur stop IDs and names must have equal lengths")
+        if len(self.deliberate_stop_ids) != len(set(self.deliberate_stop_ids)):
+            raise ValueError("spur stop IDs must be unique")
+        if len(self.reason_codes) != len(set(self.reason_codes)):
+            raise ValueError("spur reason codes must be unique")
+        if not isclose(
+            self.return_distance_m,
+            self.repeated_distance_m,
+            rel_tol=1e-9,
+            abs_tol=1e-6,
+        ):
+            raise ValueError("spur return distance must equal its repeated distance")
+        measured_total = (
+            self.outbound_distance_m
+            + self.turnaround_connector_distance_m
+            + self.return_distance_m
+        )
+        if not isclose(
+            self.total_excursion_distance_m,
+            measured_total,
+            rel_tol=1e-9,
+            abs_tol=1e-6,
+        ):
+            raise ValueError("spur component distances must sum to excursion distance")
+        return self
+
+
+class RouteSpurAnalysis(_ImmutableAnalysisModel):
+    """Non-overlapping spur diagnostics summarized for one final route."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
+
+    spurs: tuple[RouteSpur, ...] = ()
+    spur_count: NonNegativeInt = 0
+    total_excursion_distance_m: NonNegativeFloat = 0.0
+    total_repeated_distance_m: NonNegativeFloat = 0.0
+    longest_spur_distance_m: NonNegativeFloat = 0.0
+    warnings: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_summary(self) -> Self:
+        if self.spur_count != len(self.spurs):
+            raise ValueError("spur count must match detailed spurs")
+        if len({spur.id for spur in self.spurs}) != len(self.spurs):
+            raise ValueError("spur IDs must be unique")
+        if tuple(spur.start_progress for spur in self.spurs) != tuple(
+            sorted(spur.start_progress for spur in self.spurs)
+        ):
+            raise ValueError("spurs must follow route traversal order")
+        if any(
+            earlier.end_progress > later.start_progress
+            for earlier, later in zip(self.spurs, self.spurs[1:], strict=False)
+        ):
+            raise ValueError("spur intervals must not overlap")
+        summaries = (
+            (
+                self.total_excursion_distance_m,
+                sum(spur.total_excursion_distance_m for spur in self.spurs),
+            ),
+            (
+                self.total_repeated_distance_m,
+                sum(spur.repeated_distance_m for spur in self.spurs),
+            ),
+            (
+                self.longest_spur_distance_m,
+                max(
+                    (spur.total_excursion_distance_m for spur in self.spurs),
+                    default=0.0,
+                ),
+            ),
+        )
+        if not all(
+            isclose(actual, expected, rel_tol=1e-9, abs_tol=1e-6)
+            for actual, expected in summaries
+        ):
+            raise ValueError("spur summary distances must match detailed spurs")
+        if len(self.warnings) != len(set(self.warnings)):
+            raise ValueError("spur warnings must be unique")
+        return self
 
 
 class WalkingRouteQuality(_ImmutableAnalysisModel):
@@ -308,6 +440,7 @@ class RouteAnalysis(_ImmutableAnalysisModel):
     repetition: RepetitionAnalysis
     immediate_backtrack: DistanceMetric
     backtrack_edge_id_coverage: DistanceMetric
+    spurs: RouteSpurAnalysis = Field(default_factory=RouteSpurAnalysis)
     loop_geometry: LoopGeometryAnalysis | None = None
     nature: NatureAnalysis | None = None
     warnings: tuple[str, ...]
