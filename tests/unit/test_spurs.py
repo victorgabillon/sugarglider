@@ -16,7 +16,6 @@ from sugarglider.analysis.spurs import (
     _SpurCandidate,
     detect_route_spurs,
     spur_interval_geometry,
-    spur_repair_priority,
 )
 from sugarglider.domain.analysis import RouteSpur, RouteSpurAnalysis
 from sugarglider.domain.models import (
@@ -231,7 +230,6 @@ def test_simple_spur_maps_maximal_interval_and_aggregate_distance() -> None:
         simple_spur().analysis.immediate_backtrack.distance_m
     )
     assert spur_interval_geometry(spur) == spur.geometry
-    assert spur_repair_priority(spur)[0] == pytest.approx(-200)
 
 
 def test_two_separate_spurs_remain_distinct_and_do_not_double_count() -> None:

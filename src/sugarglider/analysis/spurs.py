@@ -169,12 +169,12 @@ def detect_route_spurs(
 
 
 def spur_interval_geometry(spur: RouteSpur) -> tuple[GeoJsonPosition, ...]:
-    """Return the exact routed geometry interval retained for map and PR20 use."""
+    """Return the exact routed geometry interval retained for map display."""
     return spur.geometry
 
 
 def spur_repair_priority(spur: RouteSpur) -> tuple[float, float, float, str]:
-    """Return a deterministic future-repair order without affecting PR19 ranking."""
+    """Rank substantial edge-supported spurs for bounded structural repair."""
     return (
         -spur.repeated_distance_m,
         -spur.total_excursion_distance_m,

@@ -83,7 +83,7 @@ class ConstraintResolver:
                 reason="explicit_exact_coordinate",
             )
 
-        candidates = list(
+        mapped = list(
             self._mapped_approaches(
                 semantic_coordinate,
                 constraint_name,
@@ -91,6 +91,8 @@ class ConstraintResolver:
                 access_search_radius_m,
             )
         )
+        candidates: list[PoiApproachCandidate] = []
+
         if approach_override is not None:
             semantic_distance = _distance(semantic_coordinate, approach_override)
             if semantic_distance <= 1_000.0:
@@ -107,19 +109,25 @@ class ConstraintResolver:
                         provenance="user_override",
                     )
                 )
-        candidates.append(
-            PoiApproachCandidate(
-                id=f"constraint/{constraint_id}/approach/strict-snap",
-                coordinate=semantic_coordinate.model_copy(update={"name": None}),
-                kind="strict_graph_snap",
-                source="imported_coordinate",
-                access="unknown",
-                semantic_distance_m=0.0,
-                arrival_tolerance_m=NORMAL_APPROACH_TOLERANCE_M,
-                name=constraint_name,
-                provenance="imported_coordinate",
-            )
+
+        strict_snap = PoiApproachCandidate(
+            id=f"constraint/{constraint_id}/approach/strict-snap",
+            coordinate=semantic_coordinate.model_copy(update={"name": None}),
+            kind="strict_graph_snap",
+            source="imported_coordinate",
+            access="unknown",
+            semantic_distance_m=0.0,
+            arrival_tolerance_m=NORMAL_APPROACH_TOLERANCE_M,
+            name=constraint_name,
+            provenance="imported_coordinate",
         )
+
+        if strength == "best_effort" and osm_reference is None:
+            candidates.append(strict_snap)
+            candidates.extend(mapped)
+        else:
+            candidates.extend(mapped)
+            candidates.append(strict_snap)
 
         budget_exhausted = False
         for approach in candidates:
@@ -195,7 +203,12 @@ class ConstraintResolver:
                 strength=strength,
                 semantic_coordinate=semantic_coordinate,
                 routed_coordinate=routed,
-                approach=approach.model_copy(update={"coordinate": routed}),
+                approach=approach.model_copy(
+                    update={
+                        "coordinate": routed,
+                        "semantic_distance_m": semantic_distance,
+                    }
+                ),
                 distance_m=semantic_distance,
                 normal_tolerance_m=approach.arrival_tolerance_m,
                 configured_maximum_m=maximum_best_effort_distance_m,
@@ -287,7 +300,11 @@ def mapped_approach_candidates(
     if feature is None or feature.access_status in {"private", "restricted"}:
         return feature, ()
     return feature, tuple(
-        approach
+        approach.model_copy(
+            update={
+                "semantic_distance_m": _distance(coordinate, approach.coordinate),
+            }
+        )
         for approach in approach_candidates_for_feature(feature)
         if approach.access not in {"private", "restricted"}
     )

@@ -3,6 +3,7 @@
 import pytest
 
 from sugarglider.analysis.projection import LocalMetricProjection
+from sugarglider.analysis.route import haversine_distance_m
 from sugarglider.domain.models import Coordinate, PathDetailSegment
 from sugarglider.planning.auto_tour.approaches import (
     choose_route_dependent_approaches,
@@ -133,14 +134,17 @@ def test_obsolete_visit_radius_is_rejected_by_private_search_model() -> None:
         )
 
 
-def test_imported_exact_name_reuses_indexed_osm_approach() -> None:
+def test_coordinate_owned_best_effort_prefers_strict_snap_and_keeps_osm_option() -> (
+    None
+):
     coordinate = _coordinate(0, 0)
-    approach = _approach(_coordinate(10, 0))
+    feature_coordinate = _coordinate(400, 0)
+    approach = _approach(_coordinate(410, 0))
     feature = PoiFeature(
         id="way/1",
         osm_type="way",
         osm_id=1,
-        coordinate=coordinate,
+        coordinate=feature_coordinate,
         category="castle",
         group="scenic",
         display_name="Château de Test",
@@ -163,15 +167,43 @@ def test_imported_exact_name_reuses_indexed_osm_approach() -> None:
                 skipped_invalid_count=0,
             ),
             features=(feature,),
-        )
+        ),
     )
-    place = RequestedTourPlace(name="  CHÂTEAU   DE TEST ", coordinate=coordinate)
+    place = RequestedTourPlace(
+        name="  CHÂTEAU   DE TEST ",
+        coordinate=coordinate,
+        constraint_strength="best_effort",
+    )
 
     resolved = resolve_requested_place(place, index)
 
-    assert resolved.osm_reference == "way/1"
-    assert resolved.chosen_approach == approach
+    expected_distance = haversine_distance_m(
+        (coordinate.lon, coordinate.lat),
+        (approach.coordinate.lon, approach.coordinate.lat),
+    )
+    expected_mapped = approach.model_copy(
+        update={"semantic_distance_m": expected_distance}
+    )
+
+    assert resolved.osm_reference is None
+    assert resolved.chosen_approach is not None
+    assert resolved.chosen_approach.kind == "strict_graph_snap"
+    assert resolved.chosen_approach.coordinate == coordinate
+    assert resolved.chosen_approach.semantic_distance_m == 0.0
+    assert resolved.approach_candidates == (
+        resolved.chosen_approach,
+        expected_mapped,
+    )
     assert resolved.name == place.name
+
+    explicitly_bound = resolve_requested_place(
+        place.model_copy(update={"osm_reference": "way/1"}),
+        index,
+    )
+
+    assert explicitly_bound.osm_reference == "way/1"
+    assert explicitly_bound.approach_candidates == (expected_mapped,)
+    assert explicitly_bound.chosen_approach == expected_mapped
 
 
 def test_user_override_is_first_and_bounded() -> None:

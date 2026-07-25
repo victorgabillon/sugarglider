@@ -1,7 +1,7 @@
 """Behavioral parity fixtures for the native canonical Waypoint pipeline."""
 
 from math import hypot
-from typing import cast
+from typing import Any, cast
 from xml.etree import ElementTree
 
 import pytest
@@ -9,9 +9,15 @@ import pytest
 from sugarglider.domain.models import Coordinate
 from sugarglider.gpx.writer import write_plan_gpx
 from sugarglider.planning.models import PLAN_REQUEST_ADAPTER, WaypointPlanRequest
+from sugarglider.planning.optimization import (
+    OptimizationResult,
+    OptimizationSource,
+    optimize_tours,
+)
 from sugarglider.planning.result import PlanCandidate, PlanGpxRequest, PlanResult
 from sugarglider.planning.validation import ExactWaypointNotReachedError
 from sugarglider.planning.waypoint.service import WaypointPlanner
+from sugarglider.pois.models import PoiApproachCandidate
 from sugarglider.routing.backend import AutoTourRoutingBackend, RoutedPath
 from sugarglider.routing.profiles import RoutingProfileId
 from sugarglider.routing.result import RouteResultFactory
@@ -172,6 +178,127 @@ async def _generate(
     return resolved, result
 
 
+@pytest.mark.asyncio
+async def test_waypoint_route_uses_shared_global_optimizer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[OptimizationSource] = []
+    actual = optimize_tours
+
+    async def capture_sources(
+        sources: tuple[OptimizationSource, ...],
+        **kwargs: Any,
+    ) -> OptimizationResult:
+        captured.extend(sources)
+        return await actual(sources, **kwargs)
+
+    monkeypatch.setattr(
+        "sugarglider.planning.waypoint.service.optimize_tours",
+        capture_sources,
+    )
+    _backend, result = await _generate(
+        _request(
+            topology="point_to_point",
+            waypoints=(),
+            target_m=3_000,
+            tolerance_m=2_000,
+        )
+    )
+
+    assert captured
+    assert all(source.routing_profile == "hike" for source in captured)
+    assert "global_optimization" in result.search_diagnostics.details
+
+
+@pytest.mark.asyncio
+async def test_coordinate_owned_best_effort_cannot_worsen_semantic_approach(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base = _request(
+        topology="point_to_point",
+        waypoints=(FIRST,),
+        order="optimize",
+        target_m=8_000,
+    )
+    waypoint = base.waypoints[0].model_copy(
+        update={
+            "constraint_strength": "best_effort",
+            "maximum_best_effort_distance_m": 1_000.0,
+        }
+    )
+    request = base.model_copy(update={"waypoints": (waypoint,)})
+
+    distant = PoiApproachCandidate(
+        id="node/1/approach/00-exact",
+        coordinate=SECOND.model_copy(update={"name": None}),
+        kind="exact_feature",
+        source="osm_feature",
+        access="public",
+        semantic_distance_m=700.0,
+        arrival_tolerance_m=25.0,
+        name=waypoint.name,
+        osm_type="node",
+        osm_id=1,
+        provenance="feature_geometry",
+    )
+
+    def mapped_candidates(
+        **_kwargs: Any,
+    ) -> tuple[None, tuple[PoiApproachCandidate, ...]]:
+        return None, (distant,)
+
+    captured: list[OptimizationSource] = []
+    actual = optimize_tours
+
+    async def capture_sources(
+        sources: tuple[OptimizationSource, ...],
+        **kwargs: Any,
+    ) -> OptimizationResult:
+        captured.extend(sources)
+        return await actual(sources, **kwargs)
+
+    monkeypatch.setattr(
+        "sugarglider.planning.waypoint.service.mapped_approach_candidates",
+        mapped_candidates,
+    )
+    monkeypatch.setattr(
+        "sugarglider.planning.waypoint.service.optimize_tours",
+        capture_sources,
+    )
+
+    _backend, result = await _generate(request)
+
+    soft_anchors = tuple(
+        anchor
+        for source in captured
+        for anchor in source.anchors
+        if anchor.id == waypoint.id
+    )
+
+    assert soft_anchors
+    assert all(
+        anchor.selected_approach is not None
+        and anchor.selected_approach.kind == "strict_graph_snap"
+        for anchor in soft_anchors
+    )
+    assert all(
+        anchor.maximum_semantic_distance_m
+        == anchor.selected_approach.semantic_distance_m
+        for anchor in soft_anchors
+        if anchor.selected_approach is not None
+    )
+    assert all(distant in anchor.approach_options for anchor in soft_anchors)
+
+    published = tuple(
+        stop
+        for candidate in result.candidates
+        for stop in (*candidate.reached_stops, *candidate.approximated_stops)
+        if stop.id == waypoint.id
+    )
+    assert published
+    assert all(stop.resolved_approach.id != distant.id for stop in published)
+
+
 def _assert_cache_invariants(result: PlanResult) -> None:
     diagnostics = result.search_diagnostics.cache
     assert diagnostics.lookup_count == diagnostics.hit_count + diagnostics.miss_count
@@ -213,7 +340,9 @@ async def test_every_public_profile_propagates_through_waypoint_route(
         profile=profile,
     )
     backend, result = await _generate(request)
-    assert backend.profiles == [profile]
+    assert backend.profiles
+    assert set(backend.profiles) == {profile}
+    assert len(backend.profiles) <= 2
     assert result.routing_profile == profile
     assert all(candidate.routing_profile == profile for candidate in result.candidates)
     assert all(
@@ -258,14 +387,15 @@ async def test_optimized_loop_keeps_start_fixed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_direct_open_zero_waypoint_control_uses_one_call() -> None:
+async def test_direct_open_zero_waypoint_control_and_path_option_are_bounded() -> None:
     request = _request(
         topology="point_to_point", waypoints=(), target_m=3_000, tolerance_m=2_000
     )
     backend, result = await _generate(request)
     assert result.candidates
     assert backend.route_calls == 1
-    assert result.search_diagnostics.budget.total_used == 1
+    assert result.search_diagnostics.budget.total_used == 2
+    assert result.search_diagnostics.budget.phases["global_optimization"].used == 1
     assert (
         result.candidates[0].route.geometry[0]
         != result.candidates[0].route.geometry[-1]

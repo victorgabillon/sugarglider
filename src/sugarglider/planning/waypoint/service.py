@@ -1,24 +1,30 @@
 """Native canonical Waypoint Route orchestration."""
 
+from dataclasses import replace
+
 from sugarglider.analysis.route import RouteAnalyzer
 from sugarglider.planning.budget import SearchBudget, SearchPhase
 from sugarglider.planning.constraints.resolver import (
     ConstraintResolution,
     ConstraintResolver,
+    mapped_approach_candidates,
 )
 from sugarglider.planning.context import PlanningSearchContext
 from sugarglider.planning.diagnostics import PlanSearchDiagnostics
 from sugarglider.planning.evaluator import CandidateEvaluator
 from sugarglider.planning.models import WaypointPlanRequest
-from sugarglider.planning.pipeline import evaluate_candidate_portfolio
-from sugarglider.planning.refinement import (
-    SpurClosureSettings,
-    SpurRepairDiagnosticAccumulator,
-    SpurRepairSource,
-    refine_spur_closures,
+from sugarglider.planning.optimization import (
+    GlobalOptimizationDiagnostics,
+    GlobalOptimizationSettings,
+    OptimizationDraft,
+    SemanticOptimizationSource,
+    SemanticRoutingAnchor,
+    normalized_anchor_progress,
+    optimization_source,
+    optimize_tours,
+    requested_outcomes_regress,
 )
-from sugarglider.planning.refinement.models import SpurClosureDraft
-from sugarglider.planning.refinement.rejoin import locate_repair_anchors
+from sugarglider.planning.pipeline import evaluate_candidate_portfolio
 from sugarglider.planning.result import PlanCandidate, PlanResult
 from sugarglider.planning.routing_gateway import SearchBudgetExhaustedError
 from sugarglider.planning.validation import (
@@ -65,11 +71,11 @@ class WaypointPlanner:
         self._scorer = WaypointCandidateScorer()
 
     async def generate(self, request: WaypointPlanRequest) -> PlanResult:
+        intent_request = request
         context = PlanningSearchContext.create(
             backend=self._backend,
             budget=_waypoint_budget(request, self._max_evaluations),
         )
-        repair_diagnostics = SpurRepairDiagnosticAccumulator()
         request, constraint_resolutions = await self._resolve_constraints(
             request, context
         )
@@ -152,13 +158,16 @@ class WaypointPlanner:
                 constraint_resolutions=constraint_resolutions,
             )
 
-        await self._evaluate_spur_repairs(
+        (
+            optimization_diagnostics,
+            optimization_warnings,
+        ) = await self._evaluate_global_optimization(
             request=request,
+            intent_request=intent_request,
             sources=tuple(routed),
             context=context,
             destination=candidates,
             constraint_resolutions=constraint_resolutions,
-            diagnostics=repair_diagnostics,
         )
 
         portfolio = evaluate_candidate_portfolio(
@@ -176,21 +185,34 @@ class WaypointPlanner:
                     error.point_name or "",
                 ),
             )
-        repair_diagnostics.published_repair_candidates += sum(
-            candidate.diagnostics.details.get("construction") == "spur_closure_repair"
+        optimization_diagnostics.published_candidates = sum(
+            candidate.diagnostics.details.get("construction")
+            == "edge_aware_global_optimization"
             for candidate in portfolio.candidates
         )
-        repair_diagnostics.portfolio_excluded_repair_candidates += max(
-            0,
-            repair_diagnostics.repair_candidates_submitted_to_portfolio
-            - repair_diagnostics.published_repair_candidates,
-        )
+        for candidate in portfolio.candidates:
+            final_target_ids = candidate.diagnostics.details.get(
+                "targeted_spur_ids", ()
+            )
+            published_repairs = 0
+            if isinstance(final_target_ids, (tuple, list)):
+                published_repairs = optimization_diagnostics.record_published_spur_ids(
+                    str(candidate.diagnostics.details.get("source_candidate_id", "")),
+                    tuple(
+                        spur_id
+                        for spur_id in final_target_ids
+                        if isinstance(spur_id, str)
+                    ),
+                )
+            if published_repairs > 1:
+                optimization_diagnostics.composition_states_published += 1
         warnings = tuple(
             sorted(
                 {
                     *context.diagnostics.warnings,
                     *context.diagnostics.rejections,
                     *portfolio.rejection_reasons,
+                    *optimization_warnings,
                 }
             )
         )
@@ -201,7 +223,11 @@ class WaypointPlanner:
             details={
                 **context.diagnostics.counters,
                 "portfolio_count": len(portfolio.candidates),
-                "spur_repair": repair_diagnostics.snapshot().as_dict(),
+                "global_optimization": optimization_diagnostics.as_dict(),
+                "best_excluded_refinement": portfolio.best_excluded_refinement,
+                "best_excluded_structural_refinements": (
+                    portfolio.best_excluded_structural_refinements
+                ),
             },
         )
         return PlanResult(
@@ -257,7 +283,7 @@ class WaypointPlanner:
         path: RoutedPath,
         context: PlanningSearchContext,
         constraint_resolutions: tuple[ConstraintResolution, ...],
-        repair: SpurClosureDraft | None = None,
+        metadata: tuple[tuple[str, str], ...] = (),
     ) -> PlanCandidate:
         draft = waypoint_draft(
             request=request,
@@ -265,7 +291,7 @@ class WaypointPlanner:
             path=path,
             result_factory=self._result_factory,
             constraint_resolutions=constraint_resolutions,
-            metadata=repair.diagnostics.metadata() if repair is not None else (),
+            metadata=metadata,
         )
         context.diagnostics.increment("candidate_drafts_created")
         candidate = self._evaluator.evaluate(
@@ -276,80 +302,86 @@ class WaypointPlanner:
         context.diagnostics.increment("candidates_evaluated")
         return candidate
 
-    async def _evaluate_spur_repairs(
+    async def _evaluate_global_optimization(
         self,
         *,
         request: WaypointPlanRequest,
+        intent_request: WaypointPlanRequest,
         sources: tuple[tuple[WaypointSequenceProposal, RoutedPath, PlanCandidate], ...],
         context: PlanningSearchContext,
         destination: list[PlanCandidate],
         constraint_resolutions: tuple[ConstraintResolution, ...],
-        diagnostics: SpurRepairDiagnosticAccumulator,
-    ) -> None:
-        settings = SpurClosureSettings()
-        ordered = sorted(
-            sources,
-            key=lambda value: (
-                -value[2].diagnostics.spur_repeated_distance_m,
-                value[2].diagnostics.immediate_backtracking_m,
-                value[2].id,
-            ),
-        )[: settings.maximum_source_candidates]
-        for proposal, path, candidate in ordered:
-            deliberate = frozenset(
-                (
-                    anchor.routed_coordinate.lat,
-                    anchor.routed_coordinate.lon,
+    ) -> tuple[GlobalOptimizationDiagnostics, tuple[str, ...]]:
+        settings = GlobalOptimizationSettings()
+        diagnostics = GlobalOptimizationDiagnostics(
+            graphhopper_call_limit=(settings.maximum_uncached_global_optimizer_calls),
+            complete_evaluation_limit=settings.complete_evaluation_limit,
+        )
+        translated = []
+        source_by_id: dict[str, tuple[WaypointSequenceProposal, PlanCandidate]] = {}
+        for proposal, path, candidate in sources:
+            anchor_source = _waypoint_optimization_source(
+                request=request,
+                intent_request=intent_request,
+                proposal=proposal,
+                path=path,
+                candidate=candidate,
+                resolutions=constraint_resolutions,
+                poi_index=self._poi_index,
+            )
+            translated.append(optimization_source(anchor_source, candidate))
+            source_by_id[candidate.id] = (proposal, candidate)
+        result = await optimize_tours(
+            tuple(translated),
+            context=context,
+            result_factory=self._structural_result_factory,
+            seed=request.seed,
+            settings=settings,
+            diagnostics=diagnostics,
+        )
+        for optimized in result.drafts:
+            if diagnostics.complete_evaluations >= settings.complete_evaluation_limit:
+                break
+            diagnostics.complete_evaluations += 1
+            diagnostics.composition_states_evaluated += int(
+                len(optimized.applied_spur_repairs) > 1
+            )
+            source_proposal, source_candidate = source_by_id[
+                optimized.source_candidate_id
+            ]
+            try:
+                optimized_proposal = _optimized_waypoint_proposal(
+                    source_proposal, optimized
                 )
-                for anchor in candidate.traversal.anchors
-            )
-            exact = frozenset((point.lat, point.lon) for point in proposal.exact_points)
-            source = SpurRepairSource(
-                source_candidate_id=candidate.id,
-                route=candidate.route,
-                routed_path=path,
-                routing_points=proposal.routing_points,
-                anchors=locate_repair_anchors(
-                    candidate.route,
-                    proposal.routing_points,
-                    exact_coordinates=exact,
-                    deliberate_coordinates=deliberate,
-                ),
-                topology=request.topology,
-                profile=request.routing_profile,
-                maximum_distance_m=request.distance_objective.maximum_m,
-            )
-            refined = await refine_spur_closures(
-                source,
-                context=context,
-                result_factory=self._structural_result_factory,
-                settings=settings,
-                diagnostics=diagnostics,
-            )
-            context.diagnostics.warnings.update(refined.warnings)
-            context.diagnostics.increment("spur_repair_attempts", refined.attempts)
-            for repaired in refined.drafts:
-                try:
-                    repaired_proposal = _repaired_waypoint_proposal(proposal, repaired)
-                    validate_waypoint_path(repaired_proposal, repaired.path)
-                    evaluated = self._evaluate_path(
-                        request,
-                        repaired_proposal,
-                        repaired.path,
-                        context,
-                        constraint_resolutions,
-                        repair=repaired,
-                    )
-                except (CandidateEvaluationError, RoutingError, ValueError) as exc:
-                    diagnostics.repair_drafts_rejected_after_acceptance += 1
-                    if isinstance(exc, ValueError) and "exact waypoint" in str(exc):
-                        diagnostics.reject("exact_constraints")
-                    context.diagnostics.rejections.append(f"spur_closure_repair:{exc}")
-                    context.diagnostics.increment("candidates_rejected")
+                optimized_resolutions = _optimized_waypoint_resolutions(
+                    constraint_resolutions, optimized
+                )
+                validate_waypoint_path(optimized_proposal, optimized.path)
+                evaluated = self._evaluate_path(
+                    request,
+                    optimized_proposal,
+                    optimized.path,
+                    context,
+                    optimized_resolutions,
+                    metadata=optimized.metadata(),
+                )
+                if requested_outcomes_regress(source_candidate, evaluated):
+                    diagnostics.states_pruned_coverage += 1
                     continue
-                destination.append(evaluated)
-                diagnostics.repair_candidates_submitted_to_portfolio += 1
-                context.diagnostics.increment("spur_repair_candidates")
+                if not evaluated.diagnostics.safety_eligible:
+                    diagnostics.states_pruned_profile += 1
+                    continue
+            except (CandidateEvaluationError, RoutingError, ValueError) as exc:
+                diagnostics.states_pruned_infeasible += 1
+                context.diagnostics.rejections.append(
+                    f"edge_aware_global_optimization:{exc}"
+                )
+                context.diagnostics.increment("candidates_rejected")
+                continue
+            destination.append(evaluated)
+            diagnostics.feasible_evaluated_candidates += 1
+            context.diagnostics.increment("global_optimization_candidates")
+        return diagnostics, result.warnings
 
     async def _evaluate_low_overlap(
         self,
@@ -450,50 +482,201 @@ def _waypoint_budget(
     )
     limits[SearchPhase.ALTERNATIVE_LEG] = alternative
     limits[SearchPhase.SKELETON] = remaining - alternative
-    limits[SearchPhase.SPUR_REPAIR] = 48
-    return SearchBudget(limits, total_limit=max_evaluations + 48)
+    limits[SearchPhase.GLOBAL_OPTIMIZATION] = 64
+    return SearchBudget(limits, total_limit=max_evaluations + 64)
 
 
-def _repaired_waypoint_proposal(
-    source: WaypointSequenceProposal,
-    repaired: SpurClosureDraft,
-) -> WaypointSequenceProposal:
-    positions: list[int] = []
-    cursor = 0
-    for exact in source.exact_points:
-        position = next(
-            (
-                index
-                for index in range(cursor, len(repaired.routing_points))
-                if repaired.routing_points[index] == exact
-            ),
-            None,
+def _waypoint_optimization_source(
+    *,
+    request: WaypointPlanRequest,
+    intent_request: WaypointPlanRequest,
+    proposal: WaypointSequenceProposal,
+    path: RoutedPath,
+    candidate: PlanCandidate,
+    resolutions: tuple[ConstraintResolution, ...],
+    poi_index: PoiIndex | None,
+) -> SemanticOptimizationSource:
+    resolution_by_coordinate = {
+        (resolution.routed_coordinate.lat, resolution.routed_coordinate.lon): resolution
+        for resolution in resolutions
+        if resolution.routed_coordinate is not None
+    }
+    intent_by_id = {waypoint.id: waypoint for waypoint in intent_request.waypoints}
+    exact_ids = dict(
+        zip(
+            proposal.exact_point_positions,
+            proposal.exact_point_ids,
+            strict=True,
         )
-        if position is None:
-            raise ValueError("spur repair lost an exact waypoint")
-        positions.append(position)
-        cursor = position + 1
+    )
+    progress_by_id = {
+        anchor.id.removeprefix("stop/"): anchor.route_progress
+        for anchor in candidate.traversal.anchors
+        if anchor.id.startswith("stop/")
+    }
+    anchors: list[SemanticRoutingAnchor] = []
+    point_count = len(proposal.routing_points)
+    for index, coordinate in enumerate(proposal.routing_points):
+        route_progress = normalized_anchor_progress(index, point_count)
+        if index in exact_ids:
+            anchor_id = exact_ids[index] or f"exact/{index}"
+            anchors.append(
+                SemanticRoutingAnchor(
+                    id=f"exact/{anchor_id}/{index}",
+                    name=coordinate.name or str(anchor_id),
+                    coordinate=coordinate,
+                    semantic_coordinate=coordinate,
+                    kind="exact",
+                    route_progress=route_progress,
+                )
+            )
+            continue
+        resolution = resolution_by_coordinate.get((coordinate.lat, coordinate.lon))
+        waypoint = (
+            intent_by_id.get(resolution.constraint_id)
+            if resolution is not None
+            else None
+        )
+        eligible = (
+            request.waypoint_order == "optimize"
+            and resolution is not None
+            and resolution.status in {"reached_approach", "approximated"}
+            and resolution.approach is not None
+            and waypoint is not None
+            and waypoint.constraint_strength != "exact"
+        )
+        if not eligible:
+            anchors.append(
+                SemanticRoutingAnchor(
+                    id=f"fixed/{index}",
+                    name=coordinate.name or f"Routing point {index}",
+                    coordinate=coordinate,
+                    semantic_coordinate=coordinate,
+                    kind="fixed",
+                    route_progress=route_progress,
+                )
+            )
+            continue
+        assert resolution is not None
+        assert resolution.approach is not None
+        assert waypoint is not None
+        _feature, mapped = mapped_approach_candidates(
+            index=poi_index,
+            coordinate=waypoint.coordinate,
+            name=waypoint.name,
+            osm_reference=None,
+            radius_m=waypoint.access_search_radius_m,
+        )
+        approaches = tuple(
+            {
+                approach.id: approach for approach in (resolution.approach, *mapped)
+            }.values()
+        )
+        anchors.append(
+            SemanticRoutingAnchor(
+                id=resolution.constraint_id,
+                name=resolution.constraint_name,
+                coordinate=coordinate,
+                semantic_coordinate=resolution.semantic_coordinate,
+                kind="soft",
+                route_progress=progress_by_id.get(
+                    resolution.constraint_id, route_progress
+                ),
+                constraint_strength=resolution.strength,
+                outcome=(
+                    "approximated" if resolution.status == "approximated" else "reached"
+                ),
+                current_approach=resolution.approach,
+                approach_candidates=approaches,
+                maximum_semantic_distance_m=(
+                    resolution.approach.semantic_distance_m
+                    if (
+                        resolution.strength == "best_effort"
+                        and resolution.approach.kind == "strict_graph_snap"
+                    )
+                    else (
+                        waypoint.maximum_best_effort_distance_m
+                        or waypoint.access_search_radius_m
+                    )
+                ),
+            )
+        )
+    return SemanticOptimizationSource(
+        source_candidate_id=candidate.id,
+        route=candidate.route,
+        routed_path=path,
+        source_anchor_order=tuple(anchors),
+        exact_boundary_indices=proposal.exact_point_positions,
+        topology=request.topology,
+        profile=request.routing_profile,
+        target_distance_m=request.distance_objective.target_m,
+        tolerance_m=request.distance_objective.tolerance_m,
+        distance_priority=request.distance_objective.priority,
+        maximum_distance_m=request.distance_objective.maximum_m,
+    )
+
+
+def _optimized_waypoint_proposal(
+    source: WaypointSequenceProposal,
+    optimized: OptimizationDraft,
+) -> WaypointSequenceProposal:
+    exact_positions = tuple(
+        index
+        for index, anchor in enumerate(optimized.anchors)
+        if anchor.kind == "exact"
+    )
     return WaypointSequenceProposal(
-        routing_points=repaired.routing_points,
-        exact_points=source.exact_points,
-        exact_point_positions=tuple(positions),
+        routing_points=optimized.routing_points,
+        exact_points=tuple(
+            optimized.routing_points[index] for index in exact_positions
+        ),
+        exact_point_positions=exact_positions,
         original_indices=source.original_indices,
         exact_point_ids=source.exact_point_ids,
         topology=source.topology,
-        construction="spur_closure_repair",
-        order_provenance=source.order_provenance,
-        detour_provenance="spur_closure_repair",
+        construction="edge_aware_global_optimization",
+        order_provenance="edge_aware_global_optimization",
+        detour_provenance="edge_aware_global_optimization",
     )
+
+
+def _optimized_waypoint_resolutions(
+    resolutions: tuple[ConstraintResolution, ...],
+    optimized: OptimizationDraft,
+) -> tuple[ConstraintResolution, ...]:
+    selected = dict(optimized.selected_approaches)
+    values: list[ConstraintResolution] = []
+    for resolution in resolutions:
+        approach = selected.get(resolution.constraint_id)
+        if approach is None:
+            values.append(resolution)
+            continue
+        approximated = (
+            resolution.strength == "best_effort"
+            and approach.kind == "strict_graph_snap"
+            and approach.semantic_distance_m > resolution.normal_tolerance_m
+        )
+        values.append(
+            replace(
+                resolution,
+                status="approximated" if approximated else "reached_approach",
+                routed_coordinate=approach.coordinate,
+                approach=approach,
+                distance_m=approach.semantic_distance_m,
+                reason=(
+                    "nearest_routeable_point_used"
+                    if approximated
+                    else "resolved_profile_compatible_approach"
+                ),
+                warnings=(("access_unknown",) if approach.access == "unknown" else ()),
+            )
+        )
+    return tuple(values)
 
 
 def _waypoint_ranking_key(
     candidate: PlanCandidate, request: WaypointPlanRequest
 ) -> tuple[object, ...]:
-    priority_weight = {
-        "strict": 0,
-        "balanced": 1,
-        "flexible": 2,
-    }[request.distance_objective.priority]
     diagnostics = candidate.diagnostics
     return (
         0 if diagnostics.safety_eligible else 1,
@@ -502,7 +685,9 @@ def _waypoint_ranking_key(
         sum(stop.distance_m for stop in candidate.approximated_stops),
         diagnostics.dropped_stop_count,
         0 if diagnostics.within_tolerance else 1,
-        priority_weight,
+        {"strict": 0, "balanced": 1, "flexible": 2}[
+            request.distance_objective.priority
+        ],
         diagnostics.target_error_m,
         diagnostics.immediate_backtracking_m,
         diagnostics.repeated_distance_m,

@@ -82,7 +82,7 @@ type TourConstruction = Literal[
     "point_to_point_hard_waypoints",
     "point_to_point_alternative",
     "requested_place_family",
-    "spur_closure_repair",
+    "edge_aware_global_optimization",
 ]
 type SkeletonMethod = Literal[
     "isochrone_ellipse",

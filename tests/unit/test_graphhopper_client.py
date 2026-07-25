@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from sugarglider.domain.models import Coordinate
+from sugarglider.routing.backend import CorridorAvoidanceArea
 from sugarglider.routing.graphhopper import (
     GraphHopperClient,
     RoutingPointError,
@@ -228,6 +229,55 @@ async def test_alternatives_post_full_parameters_and_parse_all_distinct_paths() 
         *routing_profile("hike").requested_path_details,
     ]
     assert [path.details["edge_id"][0].value for path in alternatives] == [7, 8]
+
+
+@pytest.mark.asyncio
+async def test_corridor_avoidance_posts_valid_custom_model_area() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/info":
+            return httpx.Response(200, json={"profiles": [{"name": "hike"}]})
+        captured["payload"] = json.loads(request.read())
+        return httpx.Response(200, json=alternative_payload((17,)))
+
+    area = CorridorAvoidanceArea(
+        id="avoid_test",
+        polygon=(
+            (2.090, 48.870),
+            (2.091, 48.870),
+            (2.091, 48.871),
+            (2.090, 48.870),
+        ),
+        source_distance_m=900,
+        buffer_width_m=25,
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        paths = await GraphHopperClient(
+            "http://test", client=http_client
+        ).alternative_routes_avoiding_corridor(
+            Coordinate(lat=48.87, lon=2.09),
+            Coordinate(lat=48.89, lon=2.11),
+            "hike",
+            area,
+            priority_multiplier=0.02,
+        )
+
+    payload = cast(dict[str, object], captured["payload"])
+    custom = cast(dict[str, object], payload["custom_model"])
+    priority = cast(list[dict[str, object]], custom["priority"])
+    areas = cast(dict[str, object], custom["areas"])
+    features = cast(list[dict[str, object]], areas["features"])
+    assert payload["ch.disable"] is True
+    assert payload["algorithm"] == "alternative_route"
+    assert priority == [{"if": "in_avoid_test", "multiply_by": "0.020000"}]
+    assert areas["type"] == "FeatureCollection"
+    assert features[0]["id"] == "avoid_test"
+    assert payload["details"] == [
+        "edge_id",
+        *routing_profile("hike").requested_path_details,
+    ]
+    assert paths[0].details["edge_id"][0].value == 17
 
 
 @pytest.mark.asyncio

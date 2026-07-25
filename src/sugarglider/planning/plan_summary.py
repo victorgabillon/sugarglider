@@ -60,20 +60,64 @@ def prepare_candidate_request(
         f"spurs={spur_count}; spur_repeated={spur_repeated_m:.1f} m",
         f"construction={construction}",
     ]
-    if construction == "spur_closure_repair":
+    if construction == "edge_aware_global_optimization":
+        opposite_improvement = _detail_number(
+            details.get("opposite_direction_improvement_m"),
+            "global-optimization opposite-direction improvement",
+        )
         repeated_improvement = _detail_number(
             details.get("repeated_distance_improvement_m"),
-            "repair repeated-distance improvement",
+            "global-optimization repeated-distance improvement",
         )
         backtracking_improvement = _detail_number(
-            details.get("immediate_backtracking_improvement_m"),
-            "repair backtracking improvement",
+            details.get("backtracking_improvement_m"),
+            "global-optimization backtracking improvement",
         )
         values.append(
-            "repair_improvement="
+            "global_improvement="
+            f"{opposite_improvement:.1f} m opposite-direction/"
             f"{repeated_improvement:.1f} m repeated/"
             f"{backtracking_improvement:.1f} m immediate backtracking"
         )
+    search_diagnostics = result.get("search_diagnostics")
+    if isinstance(search_diagnostics, Mapping):
+        search_details = search_diagnostics.get("details")
+        if isinstance(search_details, Mapping):
+            optimization = search_details.get("global_optimization")
+            if isinstance(optimization, Mapping):
+                sources = _integer(
+                    optimization.get("source_states"),
+                    "global-optimization sources",
+                )
+                accepted = _integer(
+                    optimization.get("accepted_moves"),
+                    "global-optimization accepted moves",
+                )
+                iterations = _integer(
+                    optimization.get("iterations"),
+                    "global-optimization iterations",
+                )
+                published = _integer(
+                    optimization.get("published_candidates"),
+                    "global-optimization published candidates",
+                )
+                evaluations = _integer(
+                    optimization.get("complete_evaluations"),
+                    "global-optimization complete evaluations",
+                )
+                exhausted = _boolean(
+                    optimization.get("budget_exhausted"),
+                    "global-optimization budget status",
+                )
+                values.append(
+                    "global_optimization="
+                    f"{sources} sources/"
+                    f"{iterations} iterations/"
+                    f"{accepted} accepted moves/"
+                    f"{evaluations} complete evaluations/"
+                    f"{published} published/"
+                    f" budget_exhausted={exhausted}"
+                )
     return "; ".join(values), {
         "schema_version": 1,
         "candidate": dict(candidate),
@@ -108,6 +152,12 @@ def _integer(value: object, name: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise PlanSummaryError(f"{name} must be a non-negative integer")
     return value
+
+
+def _boolean(value: object, name: str) -> str:
+    if not isinstance(value, bool):
+        raise PlanSummaryError(f"{name} must be boolean")
+    return str(value).lower()
 
 
 def _detail_number(value: object, name: str) -> float:

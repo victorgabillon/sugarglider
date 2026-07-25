@@ -36,7 +36,12 @@ from sugarglider.planning.validation import (
 )
 from sugarglider.planning.waypoint.service import WaypointPlanner
 from sugarglider.pois.models import PoiApproachCandidate
-from sugarglider.routing.backend import AutoTourRoutingBackend, RoutedPath
+from sugarglider.routing.backend import (
+    AutoTourRoutingBackend,
+    CorridorAvoidanceArea,
+    GraphHopperRoutingCapabilities,
+    RoutedPath,
+)
 from sugarglider.routing.result import RouteResultFactory
 
 
@@ -112,6 +117,41 @@ class _GatewayBackend:
         del start, distance_m, seed, profile, heading_degrees
         self.round_trip_calls += 1
         return self.path
+
+
+class _AvoidingGatewayBackend(_GatewayBackend):
+    def __init__(self, path: RoutedPath) -> None:
+        super().__init__(path)
+        self.avoidance_calls = 0
+
+    @property
+    def routing_capabilities(self) -> GraphHopperRoutingCapabilities:
+        return GraphHopperRoutingCapabilities(True, True, True, True)
+
+    async def alternative_routes_avoiding_corridor(
+        self,
+        start: Coordinate,
+        end: Coordinate,
+        profile: str,
+        area: CorridorAvoidanceArea,
+        *,
+        priority_multiplier: float,
+        max_paths: int,
+        max_weight_factor: float,
+        max_share_factor: float,
+    ) -> tuple[RoutedPath, ...]:
+        del (
+            start,
+            end,
+            profile,
+            area,
+            priority_multiplier,
+            max_paths,
+            max_weight_factor,
+            max_share_factor,
+        )
+        self.avoidance_calls += 1
+        return (self.path,)
 
 
 def _routed_path(route: RouteResult) -> RoutedPath:
@@ -430,6 +470,49 @@ async def test_gateway_caches_alternatives_and_round_trip_detours(
 
 
 @pytest.mark.asyncio
+async def test_gateway_cache_identity_includes_corridor_avoidance_area(
+    route_result: RouteResult,
+) -> None:
+    limits = {phase: 0 for phase in SearchPhase}
+    limits[SearchPhase.GLOBAL_OPTIMIZATION] = 3
+    backend = _AvoidingGatewayBackend(_routed_path(route_result))
+    gateway = CachedRoutingGateway(
+        cast(AutoTourRoutingBackend, backend),
+        SearchBudget(limits, total_limit=3),
+    )
+    start = Coordinate(lat=48.87, lon=2.09)
+    end = Coordinate(lat=48.88, lon=2.10)
+    first = CorridorAvoidanceArea(
+        id="avoid_first",
+        polygon=((2.09, 48.87), (2.10, 48.87), (2.10, 48.88), (2.09, 48.87)),
+        source_distance_m=500,
+        buffer_width_m=25,
+    )
+    second = CorridorAvoidanceArea(
+        id="avoid_second",
+        polygon=((2.09, 48.87), (2.11, 48.87), (2.11, 48.88), (2.09, 48.87)),
+        source_distance_m=600,
+        buffer_width_m=25,
+    )
+
+    await gateway.alternative_routes_avoiding_corridor(
+        start, end, "hike", first, priority_multiplier=0.02
+    )
+    await gateway.alternative_routes_avoiding_corridor(
+        start, end, "hike", first, priority_multiplier=0.02
+    )
+    await gateway.alternative_routes_avoiding_corridor(
+        start, end, "hike", second, priority_multiplier=0.02
+    )
+
+    assert gateway.capabilities.alternative_route_with_custom_model
+    assert backend.avoidance_calls == 2
+    snapshot = gateway.cache_snapshot()
+    assert snapshot.hit_count == 1
+    assert snapshot.miss_count == snapshot.backend_call_count == 2
+
+
+@pytest.mark.asyncio
 async def test_route_cache_key_distinguishes_behavior_options(
     route_result: RouteResult,
 ) -> None:
@@ -484,10 +567,11 @@ async def test_native_waypoint_direct_route_has_truthful_diagnostics(
         cast(AutoTourRoutingBackend, backend), RouteResultFactory()
     ).generate(request)
     assert len(result.candidates) == 1
-    assert result.search_diagnostics.budget.total_used == 1
+    assert result.search_diagnostics.budget.total_used == 2
+    assert result.search_diagnostics.budget.phases["global_optimization"].used == 1
     cache = result.search_diagnostics.cache
-    assert cache.entry_count == cache.miss_count == cache.backend_call_count == 1
-    assert cache.lookup_count == 1
+    assert cache.entry_count == cache.miss_count == cache.backend_call_count == 2
+    assert cache.lookup_count == 2
     details = result.search_diagnostics.details
     assert details["order_proposals_generated"] == 0
     assert details["candidate_drafts_created"] == 1

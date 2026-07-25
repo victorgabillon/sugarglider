@@ -80,6 +80,26 @@ class _DirectionalBackend:
             details={},
         )
 
+    async def alternative_routes(
+        self,
+        start: Coordinate,
+        end: Coordinate,
+        profile: str,
+        *,
+        max_paths: int = 3,
+        max_weight_factor: float = 1.6,
+        max_share_factor: float = 0.5,
+    ) -> tuple[RoutedPath, ...]:
+        del (
+            start,
+            end,
+            profile,
+            max_paths,
+            max_weight_factor,
+            max_share_factor,
+        )
+        return ()
+
 
 class _BestEffortBackend(_DirectionalBackend):
     async def route(

@@ -191,6 +191,27 @@ def test_native_auto_tour_modules_are_bounded_and_gateway_only() -> None:
     } == {}
 
 
+def test_global_optimizer_is_bounded_and_never_calls_backend_directly() -> None:
+    optimization = SOURCE / "planning" / "optimization"
+    files = tuple(sorted(optimization.glob("*.py")))
+    assert files
+    assert {
+        path.name: len(path.read_text(encoding="utf-8").splitlines())
+        for path in files
+        if len(path.read_text(encoding="utf-8").splitlines()) > 800
+    } == {}
+    raw_backend = re.compile(
+        r"(?:self\._backend|\bbackend)\."
+        r"(?:route|round_trip|alternative_routes|"
+        r"alternative_routes_avoiding_corridor|isochrone)\("
+    )
+    assert {
+        path.name: raw_backend.findall(path.read_text(encoding="utf-8"))
+        for path in files
+        if raw_backend.search(path.read_text(encoding="utf-8"))
+    } == {}
+
+
 def test_all_ordinary_planning_modules_fit_the_physical_line_limit() -> None:
     files = tuple(sorted((SOURCE / "planning").rglob("*.py")))
     assert {

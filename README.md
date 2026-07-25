@@ -233,13 +233,12 @@ segment breaks.
 
 Final candidates also expose deterministic edge-based out-and-back excursion
 diagnostics. The browser identifies branch, turnaround, and rejoin context and lists
-deliberate stops inside each substantial spur. Detection alone remains descriptive.
-For supported evidence, both planning modes may use a separately bounded
-`spur_repair` lane to route alternative exits, reject connectors that substantially
-reuse inbound edge IDs, reconstruct a complete route, and submit it to ordinary
-evaluation and portfolio ranking. Originals remain available and repair failure is
-nonfatal. See [`docs/pr19-spur-diagnostics.md`](docs/pr19-spur-diagnostics.md) and
-[`docs/pr20-spur-closure-repair.md`](docs/pr20-spur-closure-repair.md).
+deliberate stops inside each substantial spur. Detection remains descriptive, while
+the shared edge-aware global optimizer can select bounded GraphHopper path options
+and downstream reconnections using actual physical-edge direction. Originals remain
+available and optional optimization failure is nonfatal. See
+[`docs/pr19-spur-diagnostics.md`](docs/pr19-spur-diagnostics.md) and
+[`docs/pr21-soft-stop-local-optimization.md`](docs/pr21-soft-stop-local-optimization.md).
 
 ## Migrating old JSON
 
@@ -339,12 +338,16 @@ cutting the route. Low-overlap refinement composes continuous GraphHopper legs t
 the same request cache and typed `alternative_leg` budget. Exact endpoints and
 waypoints are checked against backend snaps before shared final evaluation.
 
-The shared `planning/refinement` package consumes finalized source-route evidence and
-uses only that same request context. Its bounded spur-closure lane samples downstream
-rejoins without bypassing exact or deliberate anchors, routes profile-aware connector
-alternatives, composes only continuous routed segments, and returns complete mode
-drafts to the shared evaluator. Internal rejoins never become traversal anchors or
-GPX waypoints.
+The shared `planning/optimization` package consumes finalized source-route evidence
+from both planner modes. One bounded edge-aware global optimizer combines path-option
+replacement, soft-stop relocation, swap, 2-opt, alternate approaches, downstream
+spur rejoin, and small ruin/recreate moves. Its lazy path pool uses only the request's
+cached GraphHopper gateway and explicit public profile; immutable states score
+canonical physical-edge direction and reuse before a small Pareto archive reaches the
+shared evaluator. Exact anchors and requested coverage remain authoritative, and the
+original candidates remain publishable when optional optimization finds no qualified
+improvement. See
+[`docs/pr21-soft-stop-local-optimization.md`](docs/pr21-soft-stop-local-optimization.md).
 
 Auto Tour is likewise native and modular. Its request-scoped service coordinates
 loop/open controls, routed skeletons, requested-stop ordering and subset search,

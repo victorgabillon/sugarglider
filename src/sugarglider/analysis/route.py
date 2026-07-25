@@ -124,6 +124,18 @@ class _EdgeRun:
     edge_indices: tuple[int, ...]
 
 
+@dataclass(frozen=True)
+class CanonicalEdgeTraversal:
+    """One normalized physical-edge run with a stable traversal direction."""
+
+    physical_edge_key: int
+    direction: Literal[-1, 1]
+    distance_m: float
+    start: GeoJsonPosition
+    end: GeoJsonPosition
+    edge_indices: tuple[int, ...]
+
+
 def haversine_distance_m(start: GeoJsonPosition, end: GeoJsonPosition) -> float:
     """Return great-circle distance between two GeoJSON-order WGS84 positions."""
     start_lon, start_lat = start
@@ -619,6 +631,43 @@ def repeated_edge_runs(
     if current_id is not None:
         runs.append(_EdgeRun(current_id, current_distance, tuple(current_indices)))
     return tuple(runs)
+
+
+def canonical_edge_traversals(
+    edges: tuple[ProjectedGeometryEdge, ...],
+) -> tuple[CanonicalEdgeTraversal, ...]:
+    """Expose the canonical PR2 edge runs with direction, without raw payloads."""
+    values: list[CanonicalEdgeTraversal] = []
+    for run in repeated_edge_runs(edges):
+        first = edges[run.edge_indices[0]]
+        last = edges[run.edge_indices[-1]]
+        start = first.start
+        end = last.end
+        values.append(
+            CanonicalEdgeTraversal(
+                physical_edge_key=run.edge_id,
+                direction=1 if start <= end else -1,
+                distance_m=run.distance_m,
+                start=start,
+                end=end,
+                edge_indices=run.edge_indices,
+            )
+        )
+    return tuple(values)
+
+
+def opposite_direction_reuse_distance_m(
+    edges: tuple[ProjectedGeometryEdge, ...],
+) -> float:
+    """Measure later physical-edge runs whose direction opposes an earlier use."""
+    directions: dict[int, set[Literal[-1, 1]]] = {}
+    repeated = 0.0
+    for traversal in canonical_edge_traversals(edges):
+        seen = directions.setdefault(traversal.physical_edge_key, set())
+        if seen and traversal.direction not in seen:
+            repeated += traversal.distance_m
+        seen.add(traversal.direction)
+    return repeated
 
 
 def classify_repeated_edges(
