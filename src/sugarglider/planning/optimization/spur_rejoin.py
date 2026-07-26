@@ -35,6 +35,15 @@ from sugarglider.planning.optimization.models import (
     TourOptimizationState,
 )
 from sugarglider.planning.optimization.path_pool import LazyPathPool
+from sugarglider.planning.optimization.spur_splice import (
+    LegSplice as _LegSplice,
+)
+from sugarglider.planning.optimization.spur_splice import (
+    align_connector_endpoints as _align_connector_endpoints,
+)
+from sugarglider.planning.optimization.spur_splice import (
+    leg_splice as _leg_splice,
+)
 from sugarglider.planning.optimization.spur_targets import (
     downstream_rejoins as downstream_rejoins,
 )
@@ -78,6 +87,7 @@ class ConnectorStrategyResult:
 @dataclass(frozen=True)
 class _GuidePlan:
     rejoin: RejoinPosition
+    rejoin_splice: _LegSplice
     guides: tuple[tuple[ConnectorGenerationStrategy, Coordinate], ...]
 
 
@@ -95,6 +105,17 @@ async def structural_spur_actions(
     for target in optimization_targets(source, settings):
         rejoins = downstream_rejoins(source, target, settings)
         diagnostics.register_spur_target(target, rejoin_positions=len(rejoins))
+        turnaround_splice = _leg_splice(
+            state,
+            target,
+            anchor_id=f"{target.stable_id}/turnaround",
+            coordinate=target.turnaround_coordinate,
+            progress=target.turnaround_progress,
+            maximum_distance_m=settings.maximum_source_splice_distance_m,
+        )
+        if turnaround_splice is None:
+            diagnostics.set_spur_reason(target.stable_id, "reconstruction_failed")
+            continue
         capabilities = path_pool.capabilities
         diagnostics.record_avoidance_capability(
             target.stable_id,
@@ -106,19 +127,33 @@ async def structural_spur_actions(
         avoidance_requests = 0
         guide_attempts = 0
         target_has_qualifying_state = False
-        unresolved: list[RejoinPosition] = []
+        unresolved: list[tuple[RejoinPosition, _LegSplice]] = []
 
         # Ordinary connectors are only successful when full reconstruction
         # produces a material targeted repair. Overlap viability is a prefilter.
         for rejoin in rejoins:
+            rejoin_splice = _leg_splice(
+                state,
+                target,
+                anchor_id=rejoin.stable_id,
+                coordinate=rejoin.coordinate,
+                progress=rejoin.source_progress,
+                maximum_distance_m=settings.maximum_source_splice_distance_m,
+            )
+            if rejoin_splice is None:
+                continue
             connectors = await _connector_options(
-                source, target, rejoin, path_pool=path_pool
+                turnaround_splice.anchor,
+                rejoin_splice.anchor,
+                path_pool=path_pool,
             )
             result = await evaluate_connectors(
                 source,
                 state,
                 target,
                 rejoin,
+                turnaround_splice,
+                rejoin_splice,
                 connectors,
                 "ordinary_alternative",
                 path_pool=path_pool,
@@ -136,15 +171,17 @@ async def structural_spur_actions(
                 retained.extend(result.qualifying_actions)
                 target_has_qualifying_state = True
             else:
-                unresolved.append(rejoin)
+                unresolved.append((rejoin, rejoin_splice))
 
         avoidance_supported = (
             capabilities.request_custom_model
             and capabilities.custom_model_areas
             and capabilities.alternative_route_with_custom_model
         )
-        guide_rejoins: list[tuple[RejoinPosition, CorridorAvoidanceArea | None]] = []
-        for rejoin in unresolved:
+        guide_rejoins: list[
+            tuple[RejoinPosition, _LegSplice, CorridorAvoidanceArea | None]
+        ] = []
+        for rejoin, rejoin_splice in unresolved:
             area = (
                 corridor_avoidance_area(evidence, rejoin, settings)
                 if evidence is not None
@@ -158,10 +195,9 @@ async def structural_spur_actions(
             )
             if request_avoidance and area is not None:
                 avoidance_requests += 1
-                turnaround, downstream = _connector_anchors(target, rejoin)
                 avoided = await path_pool.avoiding_options_for(
-                    turnaround,
-                    downstream,
+                    turnaround_splice.anchor,
+                    rejoin_splice.anchor,
                     area,
                     priority_multiplier=settings.avoidance_priority_multiplier,
                 )
@@ -170,6 +206,8 @@ async def structural_spur_actions(
                 state,
                 target,
                 rejoin,
+                turnaround_splice,
+                rejoin_splice,
                 avoided,
                 "custom_model_corridor_avoidance",
                 path_pool=path_pool,
@@ -194,14 +232,20 @@ async def structural_spur_actions(
                 retained.extend(result.qualifying_actions)
                 target_has_qualifying_state = True
             else:
-                guide_rejoins.append((rejoin, area))
+                guide_rejoins.append((rejoin, rejoin_splice, area))
 
         plans: list[_GuidePlan] = []
-        for rejoin, area in guide_rejoins:
+        for rejoin, rejoin_splice, area in guide_rejoins:
             guides = guide_candidates(target, rejoin, area, settings)
             diagnostics.record_guides(target.stable_id, generated=len(guides))
             if guides:
-                plans.append(_GuidePlan(rejoin=rejoin, guides=guides))
+                plans.append(
+                    _GuidePlan(
+                        rejoin=rejoin,
+                        rejoin_splice=rejoin_splice,
+                        guides=guides,
+                    )
+                )
 
         # Allocate guide attempts in two-sided rounds across rejoins. An early
         # rejoin cannot consume the target's entire six-call allowance before a
@@ -226,10 +270,9 @@ async def structural_spur_actions(
                         break
                     strategy, guide = plan.guides[guide_index]
                     guide_attempts += 1
-                    turnaround, downstream = _connector_anchors(target, plan.rejoin)
                     option, rejected_snap = await path_pool.guide_option_for(
-                        turnaround,
-                        downstream,
+                        turnaround_splice.anchor,
+                        plan.rejoin_splice.anchor,
                         guide,
                         strategy=strategy,
                         maximum_snap_distance_m=settings.maximum_guide_snap_distance_m,
@@ -248,6 +291,8 @@ async def structural_spur_actions(
                         state,
                         target,
                         plan.rejoin,
+                        turnaround_splice,
+                        plan.rejoin_splice,
                         connectors,
                         strategy,
                         path_pool=path_pool,
@@ -320,6 +365,8 @@ async def evaluate_connectors(
     state: TourOptimizationState,
     target: SpurOptimizationTarget,
     rejoin: RejoinPosition,
+    turnaround_splice: _LegSplice,
+    rejoin_splice: _LegSplice,
     connectors: tuple[PathOption, ...],
     strategy: ConnectorGenerationStrategy,
     *,
@@ -358,6 +405,8 @@ async def evaluate_connectors(
             state,
             target,
             rejoin,
+            turnaround_splice,
+            rejoin_splice,
             connector,
             path_pool=path_pool,
         )
@@ -481,13 +530,11 @@ def _record_strategy_result(
 
 
 async def _connector_options(
-    source: OptimizationSource,
-    target: SpurOptimizationTarget,
-    rejoin: RejoinPosition,
+    turnaround: OptimizationAnchor,
+    downstream: OptimizationAnchor,
     *,
     path_pool: LazyPathPool,
 ) -> tuple[PathOption, ...]:
-    turnaround, downstream = _connector_anchors(target, rejoin)
     return await path_pool.options_for(
         turnaround,
         downstream,
@@ -496,25 +543,13 @@ async def _connector_options(
     )
 
 
-def _connector_anchors(
-    target: SpurOptimizationTarget,
-    rejoin: RejoinPosition,
-) -> tuple[OptimizationAnchor, OptimizationAnchor]:
-    return (
-        _private_anchor(
-            f"{target.stable_id}/turnaround",
-            target.turnaround_coordinate,
-            target.turnaround_progress,
-        ),
-        _private_anchor(rejoin.stable_id, rejoin.coordinate, rejoin.source_progress),
-    )
-
-
 def _compound_option(
     source: OptimizationSource,
     state: TourOptimizationState,
     target: SpurOptimizationTarget,
     rejoin: RejoinPosition,
+    turnaround_splice: _LegSplice,
+    rejoin_splice: _LegSplice,
     connector: PathOption,
     *,
     path_pool: LazyPathPool,
@@ -523,24 +558,9 @@ def _compound_option(
     source_option = state.path_options[leg_index]
     left = state.anchors[leg_index]
     right = state.anchors[leg_index + 1]
-    denominator = right.source_progress - left.source_progress
-    if denominator <= 0:
-        return None
-    turnaround_share = (target.turnaround_progress - left.source_progress) / denominator
-    rejoin_share = (rejoin.source_progress - left.source_progress) / denominator
-    turnaround_index = _geometry_index(
-        source_option.routed_path,
-        target.turnaround_coordinate,
-        turnaround_share,
-    )
-    rejoin_index = _geometry_index(
-        source_option.routed_path, rejoin.coordinate, rejoin_share
-    )
-    if (
-        turnaround_index is None
-        or rejoin_index is None
-        or rejoin_index <= turnaround_index
-    ):
+    turnaround_index = turnaround_splice.geometry_index
+    rejoin_index = rejoin_splice.geometry_index
+    if rejoin_index <= turnaround_index:
         return None
     prefix = _slice_path(source_option.routed_path, 0, turnaround_index)
     suffix = _slice_path(
@@ -548,8 +568,15 @@ def _compound_option(
         rejoin_index,
         len(source_option.routed_path.geometry) - 1,
     )
+    connector_path = _align_connector_endpoints(
+        connector.routed_path,
+        source_option.routed_path.geometry[turnaround_index],
+        source_option.routed_path.geometry[rejoin_index],
+    )
+    if connector_path is None:
+        return None
     segments = tuple(
-        value for value in (prefix, connector.routed_path, suffix) if value is not None
+        value for value in (prefix, connector_path, suffix) if value is not None
     )
     try:
         compound = compose_routed_segments(segments)
@@ -693,20 +720,6 @@ def _private_anchor(
         source_progress=progress,
         exact_window=0,
     )
-
-
-def _geometry_index(
-    path: RoutedPath, coordinate: Coordinate, expected_share: float
-) -> int | None:
-    matching = tuple(
-        index
-        for index, position in enumerate(path.geometry)
-        if position == (coordinate.lon, coordinate.lat)
-    )
-    if not matching:
-        return None
-    expected = expected_share * (len(path.geometry) - 1)
-    return min(matching, key=lambda index: (abs(index - expected), index))
 
 
 def _slice_path(path: RoutedPath, start: int, end: int) -> RoutedPath | None:

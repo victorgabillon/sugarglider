@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import cast
 
 import pytest
@@ -492,6 +493,57 @@ def test_first_hundred_metres_of_inbound_overlap_is_not_charged() -> None:
     assert overlap.allowed_stem_m == 100
     assert overlap.charged_overlap_m == 0
     assert overlap.overlap_share == 0
+
+
+@pytest.mark.asyncio
+async def test_turnaround_uses_nearby_source_leg_geometry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _source()
+    settings = _settings()
+    original = optimization_targets(source, settings)[0]
+
+    # Mimic a RouteResult/RoutedPath representation difference of about
+    # five metres at the detected turnaround.
+    offset = replace(
+        original,
+        turnaround_coordinate=Coordinate(
+            lat=D.lat + 0.000046,
+            lon=D.lon,
+            name=D.name,
+        ),
+    )
+    monkeypatch.setattr(
+        "sugarglider.planning.optimization.spur_rejoin.optimization_targets",
+        lambda _source, _settings: (offset,),
+    )
+
+    backend = _ConnectorBackend()
+    diagnostics = GlobalOptimizationDiagnostics(64, 24)
+    pool = LazyPathPool(
+        context=_context(backend),
+        profile="hike",
+        result_factory=RouteResultFactory(),
+        settings=settings,
+        diagnostics=diagnostics,
+    )
+    state = await initial_state(source, pool)
+    assert state is not None
+
+    seeds = await structural_spur_seeds(
+        source,
+        state,
+        path_pool=pool,
+        result_factory=RouteResultFactory(),
+        settings=settings,
+        diagnostics=diagnostics,
+    )
+
+    assert seeds
+    assert seeds[0].applied_spur_repairs
+    targeted = diagnostics.as_dict()["targeted_spurs"][0]
+    assert targeted["states_reconstructed"] >= 1
+    assert targeted["states_targeted_improvement"] >= 1
 
 
 @pytest.mark.asyncio

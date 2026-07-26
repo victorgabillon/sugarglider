@@ -102,6 +102,7 @@ class GlobalOptimizationSettings:
     maximum_structural_seeds_retained: int = 8
     maximum_inbound_overlap_share: float = 0.30
     maximum_shared_distance_near_turnaround_m: float = 100.0
+    maximum_source_splice_distance_m: float = 25.0
     rejoin_distances_m: tuple[float, ...] = (
         250.0,
         500.0,
@@ -164,6 +165,7 @@ class GlobalOptimizationSettings:
             self.maximum_extra_distance_m,
             self.maximum_inbound_overlap_share,
             self.maximum_shared_distance_near_turnaround_m,
+            self.maximum_source_splice_distance_m,
             *self.rejoin_distances_m,
             self.corridor_buffer_width_m,
             self.corridor_simplification_m,
@@ -189,6 +191,8 @@ class GlobalOptimizationSettings:
             raise ValueError("inbound overlap share may not exceed 30 percent")
         if self.maximum_shared_distance_near_turnaround_m > 100:
             raise ValueError("turnaround overlap allowance may not exceed 100 metres")
+        if self.maximum_source_splice_distance_m > 25:
+            raise ValueError("source splice distance may not exceed 25 metres")
         if tuple(sorted(set(self.rejoin_distances_m))) != self.rejoin_distances_m:
             raise ValueError("rejoin distances must be unique and increasing")
         if not 0 < self.avoidance_priority_multiplier <= 1:
