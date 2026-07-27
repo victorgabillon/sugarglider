@@ -289,14 +289,23 @@ async def test_coordinate_owned_best_effort_cannot_worsen_semantic_approach(
     )
     assert all(distant in anchor.approach_options for anchor in soft_anchors)
 
-    published = tuple(
+    published_reached = tuple(
         stop
         for candidate in result.candidates
-        for stop in (*candidate.reached_stops, *candidate.approximated_stops)
+        for stop in candidate.reached_stops
         if stop.id == waypoint.id
     )
-    assert published
-    assert all(stop.resolved_approach.id != distant.id for stop in published)
+    published_approximated = tuple(
+        stop
+        for candidate in result.candidates
+        for stop in candidate.approximated_stops
+        if stop.id == waypoint.id
+    )
+    assert published_reached or published_approximated
+    assert all(stop.resolved_approach.id != distant.id for stop in published_reached)
+    assert all(
+        stop.resolved_approach.id != distant.id for stop in published_approximated
+    )
 
 
 def _assert_cache_invariants(result: PlanResult) -> None:
