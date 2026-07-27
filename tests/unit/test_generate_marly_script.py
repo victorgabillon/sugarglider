@@ -15,14 +15,17 @@ from sugarglider.planning.plan_summary import (
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _result(*, repaired: bool = False) -> dict[str, Any]:
+def _result(*, optimized: bool = False) -> dict[str, Any]:
     details = {
-        "construction": ("spur_closure_repair" if repaired else "point_to_point_direct")
+        "construction": (
+            "edge_aware_global_optimization" if optimized else "point_to_point_direct"
+        )
     }
-    if repaired:
+    if optimized:
         details.update(
+            opposite_direction_improvement_m="1750.0",
             repeated_distance_improvement_m="1900.0",
-            immediate_backtracking_improvement_m="1750.0",
+            backtracking_improvement_m="1200.0",
         )
     return {
         "schema_version": 1,
@@ -51,6 +54,18 @@ def _result(*, repaired: bool = False) -> dict[str, Any]:
                 "dropped_stops": [{}, {}, {}],
             }
         ],
+        "search_diagnostics": {
+            "details": {
+                "global_optimization": {
+                    "source_states": 2,
+                    "iterations": 8,
+                    "accepted_moves": 3,
+                    "complete_evaluations": 2,
+                    "published_candidates": 1,
+                    "budget_exhausted": False,
+                }
+            }
+        },
     }
 
 
@@ -60,18 +75,21 @@ def test_summary_uses_current_outcomes_and_tolerates_no_repair_provenance() -> N
     assert "2 reached/1 approximated/3 dropped" in summary
     assert "spurs=2; spur_repeated=2400.0 m" in summary
     assert "construction=point_to_point_direct" in summary
-    assert "repair_improvement" not in summary
+    assert "global_improvement" not in summary
     assert request["schema_version"] == 1
     candidate = request["candidate"]
     assert isinstance(candidate, dict)
     assert candidate["id"] == "candidate-1"
 
 
-def test_repair_summary_prints_both_positive_improvements() -> None:
-    summary, _request = prepare_candidate_request(_result(repaired=True))
+def test_global_optimizer_summary_reports_shape_and_request_counters() -> None:
+    summary, _request = prepare_candidate_request(_result(optimized=True))
 
-    assert "construction=spur_closure_repair" in summary
-    assert "1900.0 m repeated/1750.0 m immediate backtracking" in summary
+    assert "construction=edge_aware_global_optimization" in summary
+    assert "1750.0 m opposite-direction/1900.0 m repeated" in summary
+    assert "1200.0 m immediate backtracking" in summary
+    assert "global_optimization=2 sources/8 iterations/3 accepted moves" in summary
+    assert "2 complete evaluations/1 published/ budget_exhausted=false" in summary
 
 
 def test_obsolete_selected_stops_shape_fails_clearly() -> None:

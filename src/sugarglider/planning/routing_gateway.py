@@ -1,6 +1,7 @@
 """The sole cached, budgeted routing boundary used by planning searches."""
 
 from collections.abc import Awaitable, Callable
+from hashlib import sha256
 from typing import TypeVar, cast
 
 from sugarglider.domain.models import Coordinate
@@ -15,6 +16,9 @@ from sugarglider.planning.diagnostics import CacheDiagnostics
 from sugarglider.planning.profiles import RoutingProfileId, routing_profile
 from sugarglider.routing.backend import (
     AutoTourRoutingBackend,
+    CorridorAvoidanceArea,
+    CorridorAvoidingRoutingBackend,
+    GraphHopperRoutingCapabilities,
     IsochroneResult,
     RoutedPath,
 )
@@ -33,6 +37,17 @@ class CachedRoutingGateway:
         self._backend = backend
         self._budget = budget
         self._cache: RouteCallCache[object] = RouteCallCache()
+
+    @property
+    def capabilities(self) -> GraphHopperRoutingCapabilities:
+        if isinstance(self._backend, CorridorAvoidingRoutingBackend):
+            return self._backend.routing_capabilities
+        return GraphHopperRoutingCapabilities(
+            request_custom_model=False,
+            custom_model_areas=False,
+            alternative_route_with_custom_model=False,
+            internal_via_points=callable(getattr(self._backend, "route", None)),
+        )
 
     async def _resolve(
         self, key: RouteCacheKey, phase: SearchPhase, call: Callable[[], Awaitable[T]]
@@ -123,6 +138,59 @@ class CachedRoutingGateway:
                 start,
                 end,
                 profile,
+                max_paths=max_paths,
+                max_weight_factor=max_weight_factor,
+                max_share_factor=max_share_factor,
+            ),
+        )
+
+    async def alternative_routes_avoiding_corridor(
+        self,
+        start: Coordinate,
+        end: Coordinate,
+        profile: RoutingProfileId,
+        area: CorridorAvoidanceArea,
+        *,
+        priority_multiplier: float,
+        max_paths: int = 3,
+        max_weight_factor: float = 1.8,
+        max_share_factor: float = 0.7,
+        phase: SearchPhase = SearchPhase.GLOBAL_OPTIMIZATION,
+    ) -> tuple[RoutedPath, ...]:
+        """Route with one cached request-specific custom-model area penalty."""
+        if not isinstance(self._backend, CorridorAvoidingRoutingBackend):
+            raise RuntimeError("routing backend does not support corridor avoidance")
+        backend = cast(CorridorAvoidingRoutingBackend, self._backend)
+        area_digest = sha256(repr(area).encode()).hexdigest()
+        settings: tuple[tuple[str, float | int], ...] = (
+            ("max_paths", max_paths),
+            ("max_share_factor", max_share_factor),
+            ("max_weight_factor", max_weight_factor),
+        )
+        key = RouteCacheKey(
+            operation=RoutingOperation.AVOIDING_ALTERNATIVES,
+            profile_id=profile,
+            backend_profile=routing_profile(profile).graphhopper_profile,
+            coordinates=((start.lat, start.lon), (end.lat, end.lon)),
+            alternative_settings=settings,
+            custom_options=(
+                ("avoidance_area_sha256", area_digest),
+                ("avoidance_priority_multiplier", f"{priority_multiplier:.6f}"),
+                (
+                    "snap_preventions",
+                    ",".join(routing_profile(profile).snap_preventions),
+                ),
+            ),
+        )
+        return await self._resolve(
+            key,
+            phase,
+            lambda: backend.alternative_routes_avoiding_corridor(
+                start,
+                end,
+                profile,
+                area,
+                priority_multiplier=priority_multiplier,
                 max_paths=max_paths,
                 max_weight_factor=max_weight_factor,
                 max_share_factor=max_share_factor,

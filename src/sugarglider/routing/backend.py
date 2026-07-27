@@ -2,7 +2,9 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Protocol
+from math import isfinite
+from re import fullmatch
+from typing import Protocol, runtime_checkable
 
 from shapely.geometry import MultiPolygon, Polygon
 
@@ -21,6 +23,43 @@ class RoutedPath:
     geometry: tuple[GeoJsonPosition, ...]
     snapped_points: tuple[GeoJsonPosition, ...] | None
     details: Mapping[str, tuple[PathDetailSegment, ...]]
+
+
+@dataclass(frozen=True)
+class GraphHopperRoutingCapabilities:
+    """Features verified against the packaged GraphHopper configuration."""
+
+    request_custom_model: bool
+    custom_model_areas: bool
+    alternative_route_with_custom_model: bool
+    internal_via_points: bool
+
+
+@dataclass(frozen=True)
+class CorridorAvoidanceArea:
+    """One private bounded GeoJSON polygon used only for route weighting."""
+
+    id: str
+    polygon: tuple[GeoJsonPosition, ...]
+    source_distance_m: float
+    buffer_width_m: float
+
+    def __post_init__(self) -> None:
+        if fullmatch(r"[a-z][a-z0-9_]{0,47}", self.id) is None:
+            raise ValueError("avoidance area ID is not a safe custom-model identifier")
+        if len(self.polygon) < 4 or self.polygon[0] != self.polygon[-1]:
+            raise ValueError("avoidance area must be a closed polygon")
+        if len(self.polygon) > 80:
+            raise ValueError("avoidance area polygon exceeds the complexity bound")
+        if any(
+            not isfinite(value) or value < 0
+            for value in (self.source_distance_m, self.buffer_width_m)
+        ):
+            raise ValueError("avoidance area distances must be finite and nonnegative")
+
+    @property
+    def vertex_count(self) -> int:
+        return len(self.polygon)
 
 
 @dataclass(frozen=True)
@@ -102,3 +141,24 @@ class AutoTourRoutingBackend(RoutingBackend, Protocol):
         buckets: int = 1,
         reverse_flow: bool = False,
     ) -> IsochroneResult: ...
+
+
+@runtime_checkable
+class CorridorAvoidingRoutingBackend(Protocol):
+    """Optional self-hosted capability for request-specific area penalties."""
+
+    @property
+    def routing_capabilities(self) -> GraphHopperRoutingCapabilities: ...
+
+    async def alternative_routes_avoiding_corridor(
+        self,
+        start: Coordinate,
+        end: Coordinate,
+        profile: RoutingProfileId,
+        area: CorridorAvoidanceArea,
+        *,
+        priority_multiplier: float,
+        max_paths: int,
+        max_weight_factor: float,
+        max_share_factor: float,
+    ) -> tuple[RoutedPath, ...]: ...

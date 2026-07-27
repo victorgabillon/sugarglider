@@ -43,7 +43,7 @@ def resolve_requested_stops(
 def resolve_requested_place(
     place: RequestedTourPlace, index: PoiIndex | None
 ) -> RequestedTourPlace:
-    """Resolve override, stable OSM ID, exact name, then strict imported snap target."""
+    """Resolve a requested place without changing its semantic ownership."""
     if place.approach_override is not None:
         distance = haversine_distance_m(
             (place.coordinate.lon, place.coordinate.lat),
@@ -64,34 +64,16 @@ def resolve_requested_place(
             provenance="user_override",
         )
         return place.model_copy(
-            update={"approach_candidates": (override,), "chosen_approach": override}
-        )
-
-    feature, candidates = mapped_approach_candidates(
-        index=index,
-        coordinate=place.coordinate,
-        name=place.name,
-        osm_reference=place.osm_reference,
-        radius_m=place.access_search_radius_m,
-    )
-    if feature is not None:
-        return place.model_copy(
             update={
-                "osm_reference": feature.id,
-                "approach_candidates": candidates,
-                "chosen_approach": candidates[0] if candidates else None,
-                "approach_resolution_drop_reason": (
-                    "private_or_restricted"
-                    if feature.access_status in {"private", "restricted"}
-                    else "no_meaningful_approach"
-                    if not candidates
-                    else None
-                ),
+                "approach_candidates": (override,),
+                "chosen_approach": override,
             }
         )
 
-    exact = PoiApproachCandidate(
-        id=f"requested/{place.id or place.original_index or 0}/approach/90-strict-snap",
+    strict_snap = PoiApproachCandidate(
+        id=(
+            f"requested/{place.id or place.original_index or 0}/approach/90-strict-snap"
+        ),
         coordinate=place.coordinate.model_copy(update={"name": None}),
         kind="strict_graph_snap",
         source="imported_coordinate",
@@ -101,8 +83,51 @@ def resolve_requested_place(
         name=place.name,
         provenance="imported_coordinate",
     )
+
+    feature, mapped_candidates = mapped_approach_candidates(
+        index=index,
+        coordinate=place.coordinate,
+        name=place.name,
+        osm_reference=place.osm_reference,
+        radius_m=place.access_search_radius_m,
+    )
+
+    # A best-effort coordinate without an explicit OSM reference remains
+    # coordinate-owned. An implicit name match is only an alternative.
+    if place.constraint_strength == "best_effort" and place.osm_reference is None:
+        return place.model_copy(
+            update={
+                "approach_candidates": (strict_snap, *mapped_candidates),
+                "chosen_approach": strict_snap,
+                "approach_resolution_drop_reason": None,
+            }
+        )
+
+    # Explicit OSM references, and the existing non-best-effort feature
+    # semantics, remain feature-authoritative.
+    if feature is not None:
+        return place.model_copy(
+            update={
+                "osm_reference": feature.id,
+                "approach_candidates": mapped_candidates,
+                "chosen_approach": (
+                    mapped_candidates[0] if mapped_candidates else None
+                ),
+                "approach_resolution_drop_reason": (
+                    "private_or_restricted"
+                    if feature.access_status in {"private", "restricted"}
+                    else "no_meaningful_approach"
+                    if not mapped_candidates
+                    else None
+                ),
+            }
+        )
+
     return place.model_copy(
-        update={"approach_candidates": (exact,), "chosen_approach": exact}
+        update={
+            "approach_candidates": (strict_snap,),
+            "chosen_approach": strict_snap,
+        }
     )
 
 

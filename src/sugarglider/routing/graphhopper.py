@@ -17,7 +17,13 @@ from sugarglider.domain.models import (
     GeoJsonPosition,
     PathDetailSegment,
 )
-from sugarglider.routing.backend import IsochronePolygon, IsochroneResult, RoutedPath
+from sugarglider.routing.backend import (
+    CorridorAvoidanceArea,
+    GraphHopperRoutingCapabilities,
+    IsochronePolygon,
+    IsochroneResult,
+    RoutedPath,
+)
 from sugarglider.routing.errors import (
     RoutingError,
     RoutingPointError,
@@ -69,6 +75,16 @@ class GraphHopperClient:
         self._client = client
         self._supported_details: dict[GraphHopperProfile, tuple[str, ...]] = {}
         self._advertised_profiles: frozenset[str] | None = None
+
+    @property
+    def routing_capabilities(self) -> GraphHopperRoutingCapabilities:
+        """Return features verified for packaged GraphHopper 11 LM profiles."""
+        return GraphHopperRoutingCapabilities(
+            request_custom_model=True,
+            custom_model_areas=True,
+            alternative_route_with_custom_model=True,
+            internal_via_points=True,
+        )
 
     async def info(self) -> JsonObject:
         """Return validated-enough server information for readiness checks."""
@@ -182,6 +198,88 @@ class GraphHopperClient:
                 distinct.append(path)
         if not distinct:
             raise RoutingUpstreamError("GraphHopper returned no distinct alternatives")
+        return tuple(distinct)
+
+    async def alternative_routes_avoiding_corridor(
+        self,
+        start: Coordinate,
+        end: Coordinate,
+        profile: RoutingProfileId,
+        area: CorridorAvoidanceArea,
+        *,
+        priority_multiplier: float,
+        max_paths: int = 3,
+        max_weight_factor: float = 1.8,
+        max_share_factor: float = 0.7,
+    ) -> tuple[RoutedPath, ...]:
+        """Request alternatives with one private request-specific area penalty."""
+        if (
+            not isfinite(priority_multiplier)
+            or priority_multiplier <= 0
+            or priority_multiplier > 1
+        ):
+            raise ValueError("avoidance priority multiplier must be within (0, 1]")
+        resolved = routing_profile(profile)
+        await self.ensure_profile_available(profile)
+        requested_details = list(await self._details_for_route(profile))
+        payload: JsonObject = {
+            "points": [[start.lon, start.lat], [end.lon, end.lat]],
+            "profile": resolved.graphhopper_profile,
+            "ch.disable": True,
+            "algorithm": "alternative_route",
+            "alternative_route.max_paths": max_paths,
+            "alternative_route.max_weight_factor": max_weight_factor,
+            "alternative_route.max_share_factor": max_share_factor,
+            "custom_model": {
+                "priority": [
+                    {
+                        "if": f"in_{area.id}",
+                        "multiply_by": f"{priority_multiplier:.6f}",
+                    }
+                ],
+                "areas": {
+                    "type": "FeatureCollection",
+                    "features": [
+                        {
+                            "type": "Feature",
+                            "id": area.id,
+                            "properties": {},
+                            "geometry": {
+                                "type": "Polygon",
+                                "coordinates": [
+                                    [[lon, lat] for lon, lat in area.polygon]
+                                ],
+                            },
+                        }
+                    ],
+                },
+            },
+            "points_encoded": False,
+            "instructions": False,
+            "calc_points": True,
+            "elevation": False,
+            "snap_preventions": list(resolved.snap_preventions),
+            "details": requested_details,
+        }
+        response = await self._request_with_detail_fallback(
+            payload, requested_details, resolved.graphhopper_profile
+        )
+        alternatives = self._parse_routes(
+            response,
+            expected_snapped_point_count=2,
+            require_snapped_points=True,
+        )
+        distinct: list[RoutedPath] = []
+        signatures: set[str] = set()
+        for path in alternatives:
+            signature = self._path_signature(path)
+            if signature not in signatures:
+                signatures.add(signature)
+                distinct.append(path)
+        if not distinct:
+            raise RoutingUpstreamError(
+                "GraphHopper returned no distinct corridor-avoiding alternatives"
+            )
         return tuple(distinct)
 
     async def round_trip(

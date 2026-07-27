@@ -1,6 +1,7 @@
 """Bounded deterministic Auto Tour service scenarios with a fake backend."""
 
 from collections import Counter
+from typing import Any
 
 import pytest
 
@@ -12,9 +13,10 @@ from sugarglider.planning.auto_tour.models import (
     AutoTourSearchRequest,
     RequestedTourPlace,
 )
-from sugarglider.planning.auto_tour.service import AutoTourService
+from sugarglider.planning.auto_tour.service import AutoTourPlanner, AutoTourService
 from sugarglider.planning.auto_tour.state import (
     ALTERNATIVE_LEG_REQUEST_BUDGET,
+    GLOBAL_OPTIMIZATION_ROUTE_REQUEST_BUDGET,
     LOCAL_REPAIR_ROUTE_EVALUATION_BUDGET,
     POI_BEAM_WIDTH,
     POI_ROUTE_EVALUATION_BUDGET,
@@ -22,6 +24,15 @@ from sugarglider.planning.auto_tour.state import (
     SKELETON_ROUTE_REQUEST_BUDGET,
     AutoTourMaximumBelowDirectLowerBoundError,
     AutoTourSettings,
+)
+from sugarglider.planning.models import (
+    PLAN_REQUEST_ADAPTER,
+    AutoTourPlanRequest,
+)
+from sugarglider.planning.optimization import (
+    OptimizationResult,
+    OptimizationSource,
+    optimize_tours,
 )
 from sugarglider.pois.index import PoiIndex
 from sugarglider.pois.models import (
@@ -457,8 +468,12 @@ def test_named_default_budgets_are_exact_and_bounded() -> None:
         settings.alternative_leg_request_budget == ALTERNATIVE_LEG_REQUEST_BUDGET == 24
     )
     assert settings.requested_place_route_evaluation_budget == 60
-    assert settings.spur_repair_route_request_budget == 48
-    assert settings.total_route_request_budget == 200
+    assert (
+        settings.global_optimization_route_request_budget
+        == GLOBAL_OPTIMIZATION_ROUTE_REQUEST_BUDGET
+        == 64
+    )
+    assert settings.total_route_request_budget == 216
 
 
 @pytest.mark.asyncio
@@ -622,6 +637,71 @@ async def test_isochrone_failure_falls_back_to_round_trip_controls() -> None:
     assert result.search.round_trip_control_request_count == 2
     assert len(result.candidates) == 3
     assert "auto_tour_isochrone_unavailable" in result.search.warnings
+
+
+@pytest.mark.asyncio
+async def test_one_point_round_trip_source_skips_global_optimization_safely(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[OptimizationSource] = []
+    actual = optimize_tours
+
+    async def capture_sources(
+        sources: tuple[OptimizationSource, ...],
+        **kwargs: Any,
+    ) -> OptimizationResult:
+        captured.extend(sources)
+        return await actual(sources, **kwargs)
+
+    monkeypatch.setattr(
+        "sugarglider.planning.auto_tour.service.optimize_tours",
+        capture_sources,
+    )
+    request = PLAN_REQUEST_ADAPTER.validate_python(
+        {
+            "schema_version": 1,
+            "kind": "auto_tour",
+            "name": "One-point round-trip source",
+            "topology": "loop",
+            "start": START.model_dump(),
+            "routing_profile": "hike",
+            "candidate_count": 1,
+            "seed": 42,
+            "distance_objective": {
+                "target_m": 10_000,
+                "tolerance_m": 1_500,
+                "maximum_m": None,
+                "priority": "flexible",
+            },
+            "preferences": {
+                "nature": "off",
+                "path_selection": "shortest",
+                "scenic": "off",
+                "drinking_water": "off",
+                "loop_geometry": "off",
+                "direction": "any",
+            },
+        }
+    )
+    assert isinstance(request, AutoTourPlanRequest)
+
+    result = await AutoTourPlanner(
+        _service(_Backend(fail_isochrone=True), poi_index=None)
+    ).generate(request)
+
+    single = next(source for source in captured if len(source.anchors) == 1)
+    assert single.anchors[0].kind == "exact"
+    assert single.anchors[0].source_progress == 0.0
+    assert result.candidates
+    assert result.search_diagnostics.budget.phases["global_optimization"].used == 0
+    diagnostics = result.search_diagnostics.details["global_optimization"]
+    assert isinstance(diagnostics, dict)
+    assert diagnostics["source_states"] >= 1
+    assert diagnostics["initial_states"] >= 1
+    assert diagnostics["lazy_path_requests"] == 0
+    assert diagnostics["complete_evaluations"] == 0
+    assert diagnostics["archive_candidates"] == 0
+    assert diagnostics["budget_exhausted"] is False
 
 
 @pytest.mark.asyncio

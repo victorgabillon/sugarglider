@@ -21,6 +21,8 @@ type CandidateRole = Literal[
     "maximum_requested_coverage",
     "smooth_low_detour",
     "distance_focused",
+    "best_structural_refinement",
+    "distinct_structural_refinement",
 ]
 type StopDecision = Literal["pending", "reached", "approximated", "dropped"]
 type CompromiseSeverity = Literal["info", "warning"]
@@ -206,6 +208,8 @@ class PlanCandidate(CanonicalModel):
             "maximum_requested_coverage": 1,
             "smooth_low_detour": 2,
             "distance_focused": 3,
+            "best_structural_refinement": 4,
+            "distinct_structural_refinement": 5,
         }
         if self.roles != tuple(sorted(set(self.roles), key=role_order.__getitem__)):
             raise ValueError("candidate roles must be unique and canonically ordered")

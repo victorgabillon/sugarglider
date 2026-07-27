@@ -179,3 +179,6 @@
 - Spur-closure refinement must use the shared request context and typed repair budget,
   preserve exact and deliberate anchors, reject inbound-corridor reuse by routed edge
   identity, reconstruct a complete routed path, retain originals, and fail nonfatally.
+- Local refinement may relocate only a same-identity soft stop approach or reverse one
+  bounded soft-anchor subsection inside exact boundaries; it must reconstruct through
+  the shared cached gateway, retain originals, and fail nonfatally.

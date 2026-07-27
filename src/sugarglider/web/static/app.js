@@ -1024,16 +1024,73 @@ function spurCardSummary(spurAnalysis) {
   return `<div class="spur-card-summary"><strong>${formatCount(analysis.spur_count)} out-and-back excursion${analysis.spur_count === 1 ? "" : "s"}</strong><span>${formatDistance(analysis.total_repeated_distance_m)} repeated inside excursions</span></div>`;
 }
 
-function repairSummary(candidate) {
+function structuralAlternativeSummary(candidate) {
+  if (
+    !candidate.roles?.includes("best_structural_refinement") &&
+    !candidate.roles?.includes("distinct_structural_refinement")
+  ) return "";
   const details = candidate.diagnostics?.details ?? {};
-  if (details.construction !== "spur_closure_repair") return "";
-  const sourceRepeated = Number(details.source_spur_repeated_distance_m);
-  const improvement = Number(details.repeated_distance_improvement_m);
-  if (!Number.isFinite(sourceRepeated) || !Number.isFinite(improvement)) return "";
-  const remaining = details.targeted_spur_still_present === "true"
-    ? " A smaller or structurally different excursion remains in the final route."
+  const oppositeImprovement = Number(details.opposite_direction_improvement_m);
+  const spurImprovement = Number(details.spur_repeated_distance_improvement_m);
+  const backtrackingImprovement = Number(details.immediate_backtracking_improvement_m);
+  const repetitionImprovement = Number(details.total_repetition_improvement_m);
+  const shapeStatements = [];
+  if (Number.isFinite(oppositeImprovement) && oppositeImprovement > 0) {
+    shapeStatements.push(`${escapeHtml(formatDistance(oppositeImprovement))} less opposite-direction travel.`);
+  }
+  if (Number.isFinite(repetitionImprovement) && repetitionImprovement > 0) {
+    shapeStatements.push(`${escapeHtml(formatDistance(repetitionImprovement))} less repeated travel.`);
+  } else if (Number.isFinite(spurImprovement) && spurImprovement > 0) {
+    shapeStatements.push(`${escapeHtml(formatDistance(spurImprovement))} less repeated excursion travel.`);
+  } else if (Number.isFinite(backtrackingImprovement) && backtrackingImprovement > 0) {
+    shapeStatements.push(`${escapeHtml(formatDistance(backtrackingImprovement))} less immediate backtracking.`);
+  }
+  if (!shapeStatements.length) return "";
+  const distanceChange = Number(details.distance_change_m);
+  const distanceStatement = Number.isFinite(distanceChange)
+    ? distanceChange > 0
+      ? ` Total route is ${escapeHtml(formatDistance(distanceChange))} longer.`
+      : distanceChange < 0
+        ? ` Total route is ${escapeHtml(formatDistance(Math.abs(distanceChange)))} shorter.`
+        : " Total route distance is unchanged."
     : "";
-  return `<section class="repair-summary"><h3>Route refinement</h3><p>Replaced a ${escapeHtml(formatDistance(sourceRepeated))} repeated excursion with an alternative connector. Repeated distance reduced by ${escapeHtml(formatDistance(improvement))}.${escapeHtml(remaining)}</p></section>`;
+  const coverageUnchanged = Number(details.reached_change) === 0
+    && Number(details.approximated_change) === 0
+    && Number(details.dropped_change) === 0;
+  const coverageStatement = coverageUnchanged
+    ? " Requested-place coverage is unchanged."
+    : " Requested-place coverage remains valid.";
+  const heading = candidate.roles?.includes("distinct_structural_refinement")
+    ? "Distinct major-spur alternative"
+    : "Best route-shape alternative";
+  return `<section class="repair-summary structural-alternative-summary"><h3>${heading}</h3><p>${shapeStatements.join(" ")}${distanceStatement}${coverageStatement}</p></section>`;
+}
+
+function bestExcludedRefinementSummary(diagnostics) {
+  const details = diagnostics?.details?.best_excluded_refinement;
+  if (!details) return "";
+  const oppositeImprovement = Number(details.opposite_direction_improvement_m);
+  const spurImprovement = Number(details.spur_repeated_distance_improvement_m);
+  const backtrackingImprovement = Number(details.immediate_backtracking_improvement_m);
+  const repetitionImprovement = Number(details.total_repetition_improvement_m);
+  const removed = Math.max(
+    Number.isFinite(oppositeImprovement) ? oppositeImprovement : 0,
+    Number.isFinite(spurImprovement) ? spurImprovement : 0,
+    Number.isFinite(backtrackingImprovement) ? backtrackingImprovement : 0,
+    Number.isFinite(repetitionImprovement) ? repetitionImprovement : 0,
+  );
+  const distanceChange = Number(details.distance_change_m);
+  const distanceStatement = Number.isFinite(distanceChange)
+    ? distanceChange > 0
+      ? `Added ${escapeHtml(formatDistance(distanceChange))}.`
+      : distanceChange < 0
+        ? `Shortened by ${escapeHtml(formatDistance(Math.abs(distanceChange)))}.`
+        : "Route distance unchanged."
+    : "";
+  const coverageUnchanged = Number(details.reached_change) === 0
+    && Number(details.approximated_change) === 0
+    && Number(details.dropped_change) === 0;
+  return `<section class="repair-summary excluded-refinement-summary"><h3>Best excluded route refinement</h3><p>Removed ${escapeHtml(formatDistance(removed))} of repeated travel. ${distanceStatement} ${coverageUnchanged ? "Requested-place coverage unchanged. " : ""}Not included in the displayed portfolio.</p></section>`;
 }
 
 function renderCandidatesPanel() {
@@ -1070,8 +1127,8 @@ function renderCandidatesPanel() {
     selector.setAttribute("aria-pressed", String(selected));
     selector.setAttribute("aria-label", `Select candidate ${candidate.rank}, ${formatDistance(candidate.route.summary.distance_m)}`);
     selector.innerHTML = state.planningMode === "auto_tour"
-      ? autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare) + repairSummary(candidate) + spurCardSummary(analysis.spurs)
-      : (() => { const quality = primaryQualityMetric(analysis); return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate, result.search_diagnostics)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.diagnostics.details.construction ?? "route"))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.diagnostics.target_error_m)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Major road</span><strong>${formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${quality ? metricBar(quality[0], quality[1], "trail", quality[1] == null ? "not evaluated" : formatPercent(quality[1])) : ""}${metricBar("Paved", analysis.paved.share, "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}${repairSummary(candidate)}${spurCardSummary(analysis.spurs)}`; })();
+      ? autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare) + structuralAlternativeSummary(candidate) + spurCardSummary(analysis.spurs)
+      : (() => { const quality = primaryQualityMetric(analysis); return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate, result.search_diagnostics)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.diagnostics.details.construction ?? "route"))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.diagnostics.target_error_m)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Major road</span><strong>${formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${quality ? metricBar(quality[0], quality[1], "trail", quality[1] == null ? "not evaluated" : formatPercent(quality[1])) : ""}${metricBar("Paved", analysis.paved.share, "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}${structuralAlternativeSummary(candidate)}${spurCardSummary(analysis.spurs)}`; })();
     selector.addEventListener("click", () => selectCandidate(candidate.id));
     card.append(selector);
     card.append(loopGeometryCardDetails(loopGeometry));
@@ -1122,9 +1179,10 @@ function routeShapeIssuesSection(analysis, candidate) {
     const turnaround = stopNames.length
       ? `near ${stopNames[0]}`
       : "on the routed corridor";
-    const refinementStatus = candidate?.diagnostics?.details?.construction === "spur_closure_repair"
-      ? "An alternative exit was tested; this excursion remains in the final route."
-      : "No alternative exit has been tested yet.";
+    const construction = candidate?.diagnostics?.details?.construction;
+    const refinementStatus = construction === "edge_aware_global_optimization"
+      ? "The edge-aware optimizer tested route-wide alternatives; this excursion remains in the final route."
+      : "No published edge-aware alternative removed this excursion.";
     return `<button type="button" class="spur-card" data-spur-id="${escapeHtml(spur.id)}" aria-label="Focus map on out-and-back excursion ${index + 1}"><strong>Out-and-back excursion</strong><span>Repeated corridor: ${formatDistance(spur.repeated_distance_m)}</span><span>Complete excursion: ${formatDistance(spur.total_excursion_distance_m)}</span><span>Turnaround: ${escapeHtml(turnaround)}</span><span>Deliberate stops inside this excursion: ${stopNames.length ? escapeHtml(stopNames.join(", ")) : "None"}</span><em>Candidate for route refinement</em><small>${escapeHtml(refinementStatus)}</small></button>`;
   }).join("");
   return `<section class="route-shape-issues"><h3>Route shape issues</h3><p><strong>${formatCount(spurAnalysis.spur_count)} out-and-back excursion${spurAnalysis.spur_count === 1 ? "" : "s"}</strong><br>${formatDistance(spurAnalysis.total_repeated_distance_m)} repeated inside excursions</p><div class="spur-list">${cards}</div></section>`;
@@ -1319,6 +1377,7 @@ function renderCanonicalMetrics(candidate, result) {
     + section("Score", [["Total", Number(candidate.score.total).toFixed(6)], ...scoreRows])
     + (result.topology === "loop" ? loopGeometrySection(analysis.loop_geometry) : "")
     + natureSection(analysis.nature, { nature_index_available: Boolean(analysis.nature) })
+    + bestExcludedRefinementSummary(diagnostics)
     + section("Search budget", [
       ["Total used", `${diagnostics.budget.total_used} / ${diagnostics.budget.total_limit}`],
       ["Cache hits / misses", `${diagnostics.cache.hit_count} / ${diagnostics.cache.miss_count}`],

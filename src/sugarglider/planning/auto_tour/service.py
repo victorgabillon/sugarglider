@@ -14,6 +14,9 @@ from sugarglider.planning.auto_tour.models import (
     SelectedPoiStop,
 )
 from sugarglider.planning.auto_tour.open_search import OpenSearchMixin
+from sugarglider.planning.auto_tour.optimization_adapter import (
+    auto_tour_optimization_source,
+)
 from sugarglider.planning.auto_tour.quality import AutoTourQualityMixin
 from sugarglider.planning.auto_tour.ranking import (
     canonical_auto_tour_key,
@@ -24,19 +27,20 @@ from sugarglider.planning.auto_tour.requested_search import RequestedSearchMixin
 from sugarglider.planning.auto_tour.skeleton_search import SkeletonSearchMixin
 from sugarglider.planning.auto_tour.state import AutoTourSettings, _Draft
 from sugarglider.planning.auto_tour.through_routes import ThroughRouteSearchMixin
+from sugarglider.planning.direction.analysis import analyze_route_direction
 from sugarglider.planning.drafts import CandidateDraft
 from sugarglider.planning.evaluator import CandidateEvaluator
 from sugarglider.planning.models import AutoTourPlanRequest, PlanRequestBase
+from sugarglider.planning.optimization import (
+    GlobalOptimizationDiagnostics,
+    GlobalOptimizationSettings,
+    OptimizationDraft,
+    optimization_source,
+    optimize_tours,
+    requested_outcomes_regress,
+)
 from sugarglider.planning.pipeline import evaluate_candidate_portfolio
 from sugarglider.planning.profile_quality import profile_aware_drop_reason
-from sugarglider.planning.refinement import (
-    SpurClosureSettings,
-    SpurRepairDiagnosticAccumulator,
-    SpurRepairSource,
-    refine_spur_closures,
-)
-from sugarglider.planning.refinement.models import SpurClosureDraft
-from sugarglider.planning.refinement.rejoin import locate_repair_anchors
 from sugarglider.planning.result import (
     ApproximatedPlanStop,
     DroppedPlanStop,
@@ -99,37 +103,55 @@ class AutoTourService(
     def structural_result_factory(self) -> RouteResultFactory:
         return self._structural_result_factory
 
-    def rebuild_spur_candidate(
+    @property
+    def poi_index(self) -> PoiIndex | None:
+        return self._poi_index
+
+    @property
+    def global_optimization_route_request_budget(self) -> int:
+        return self._settings.global_optimization_route_request_budget
+
+    def rebuild_optimized_candidate(
         self,
         *,
         request: AutoTourSearchRequest,
         source: AutoTourCandidate,
-        repaired: SpurClosureDraft,
+        optimized: OptimizationDraft,
     ) -> AutoTourCandidate:
-        """Rebuild all Auto Tour stop and POI outcomes on repaired geometry."""
+        """Rebuild Auto Tour semantics once for a global-archive state."""
+        resolved_request = _optimized_auto_tour_request(request, optimized)
+        direction_value = analyze_route_direction(
+            optimized.route.geometry,
+            resolved_request.resolved_endpoints.topology,
+        )
+        direction = (
+            direction_value
+            if direction_value in {"clockwise", "counterclockwise"}
+            else "mixed"
+        )
         draft = _Draft(
-            route=repaired.route,
-            routed_path=repaired.path,
-            routing_points=repaired.routing_points,
+            route=optimized.route,
+            routed_path=optimized.path,
+            routing_points=optimized.routing_points,
             signature=candidate_signature(
-                repaired.route,
-                topology=request.resolved_endpoints.topology,
-                routing_profile=request.profile,
+                optimized.route,
+                topology=resolved_request.resolved_endpoints.topology,
+                routing_profile=resolved_request.profile,
             ),
-            construction="spur_closure_repair",
+            construction="edge_aware_global_optimization",
             skeleton_id=source.skeleton_id,
             skeleton_method=source.skeleton_method,
-            direction=source.direction,
+            direction=direction,
             direction_warnings=(),
             hard_point_visits=self._hard_point_visits(
-                request,
-                repaired.routing_points,
-                repaired.path.snapped_points,
+                resolved_request,
+                optimized.routing_points,
+                optimized.path.snapped_points,
             ),
         )
         source_draft = _Draft(
             route=source.route,
-            routed_path=source.routed_path or repaired.path,
+            routed_path=source.routed_path or optimized.path,
             routing_points=source.routing_points,
             signature=source.signature,
             construction=source.construction,
@@ -141,9 +163,9 @@ class AutoTourService(
         )
         shortlist = shortlist_route_pois(
             index=self._poi_index,
-            route_geometry=repaired.route.geometry,
-            routing_points=repaired.routing_points,
-            request=request,
+            route_geometry=optimized.route.geometry,
+            routing_points=optimized.routing_points,
+            request=resolved_request,
             settings=self._settings.poi,
         )
         deliberate_requested = frozenset(
@@ -153,7 +175,7 @@ class AutoTourService(
             and visit.requested_place.original_index is not None
         )
         candidate = self._search_candidate(
-            request=request,
+            request=resolved_request,
             draft=draft,
             visits=shortlist.already_collected,
             rejected=shortlist.rejected,
@@ -162,22 +184,22 @@ class AutoTourService(
             deliberately_routed_requested_indices=deliberate_requested,
         )
         comparison = candidate.control_comparison
-        repair_reasons = tuple(
+        rejection_reasons = tuple(
             reason
             for reason in comparison.rejection_reasons
             if reason != "no_positive_soft_objective"
         )
         comparison = comparison.model_copy(
             update={
-                "eligible": not repair_reasons,
-                "rejection_reasons": repair_reasons,
+                "eligible": not rejection_reasons,
+                "rejection_reasons": rejection_reasons,
             }
         )
         return candidate.model_copy(
             update={
                 "control_eligible": comparison.eligible,
                 "control_comparison": comparison,
-                "repair_metadata": repaired.diagnostics.metadata(),
+                "repair_metadata": optimized.metadata(),
             }
         )
 
@@ -224,76 +246,83 @@ class AutoTourPlanner:
             for candidate in result.candidates
         )
         candidates = [*original_candidates]
-        repair_warnings: set[str] = set()
-        repair_diagnostics = SpurRepairDiagnosticAccumulator()
-        settings = SpurClosureSettings()
+        optimization_settings = GlobalOptimizationSettings(
+            maximum_uncached_global_optimizer_calls=(
+                self._search.global_optimization_route_request_budget
+            )
+        )
+        optimization_diagnostics = GlobalOptimizationDiagnostics(
+            graphhopper_call_limit=(
+                optimization_settings.maximum_uncached_global_optimizer_calls
+            ),
+            complete_evaluation_limit=(optimization_settings.complete_evaluation_limit),
+        )
+        optimization_sources = []
+        internal_by_id: dict[str, AutoTourCandidate] = {}
+        evaluated_by_id = {candidate.id: candidate for candidate in original_candidates}
         for source, evaluated_source in zip(
-            result.candidates[: settings.maximum_source_candidates],
-            original_candidates[: settings.maximum_source_candidates],
+            result.candidates,
+            original_candidates,
             strict=True,
         ):
             if source.routed_path is None:
                 continue
-            deliberate_coordinates = frozenset(
-                (
-                    anchor.routed_coordinate.lat,
-                    anchor.routed_coordinate.lon,
+            local_source = auto_tour_optimization_source(
+                request=request,
+                resolved_request=result.resolved_request,
+                source=source,
+                evaluated=evaluated_source,
+                poi_index=self._search.poi_index,
+            )
+            optimization_sources.append(
+                optimization_source(local_source, evaluated_source)
+            )
+            internal_by_id[evaluated_source.id] = source
+        optimized = await optimize_tours(
+            tuple(optimization_sources),
+            context=result.search_context,
+            result_factory=self._search.structural_result_factory,
+            seed=request.seed,
+            settings=optimization_settings,
+            diagnostics=optimization_diagnostics,
+        )
+        for optimized_draft in optimized.drafts:
+            if (
+                optimization_diagnostics.complete_evaluations
+                >= optimization_settings.complete_evaluation_limit
+            ):
+                break
+            optimization_diagnostics.complete_evaluations += 1
+            optimization_diagnostics.composition_states_evaluated += int(
+                len(optimized_draft.applied_spur_repairs) > 1
+            )
+            source = internal_by_id[optimized_draft.source_candidate_id]
+            evaluated_source = evaluated_by_id[optimized_draft.source_candidate_id]
+            try:
+                rebuilt = self._search.rebuild_optimized_candidate(
+                    request=result.resolved_request,
+                    source=source,
+                    optimized=optimized_draft,
                 )
-                for anchor in evaluated_source.traversal.anchors
-            )
-            exact_coordinates = frozenset(
-                {
-                    (request.start.lat, request.start.lon),
-                    (request.effective_end.lat, request.effective_end.lon),
-                    *(
-                        (waypoint.coordinate.lat, waypoint.coordinate.lon)
-                        for waypoint in request.hard_waypoints
-                    ),
-                }
-            )
-            repair_source = SpurRepairSource(
-                source_candidate_id=evaluated_source.id,
-                route=evaluated_source.route,
-                routed_path=source.routed_path,
-                routing_points=source.routing_points,
-                anchors=locate_repair_anchors(
-                    evaluated_source.route,
-                    source.routing_points,
-                    exact_coordinates=exact_coordinates,
-                    deliberate_coordinates=deliberate_coordinates,
-                ),
-                topology=request.topology,
-                profile=request.routing_profile,
-                maximum_distance_m=request.distance_objective.maximum_m,
-            )
-            refined = await refine_spur_closures(
-                repair_source,
-                context=result.search_context,
-                result_factory=self._search.structural_result_factory,
-                settings=settings,
-                diagnostics=repair_diagnostics,
-            )
-            repair_warnings.update(refined.warnings)
-            for repaired in refined.drafts:
-                try:
-                    rebuilt = self._search.rebuild_spur_candidate(
-                        request=result.resolved_request,
-                        source=source,
-                        repaired=repaired,
-                    )
-                    if not rebuilt.control_eligible:
-                        repair_diagnostics.repair_drafts_rejected_after_acceptance += 1
-                        continue
-                    evaluated_repair = self._evaluator.evaluate(
-                        request=request,
-                        draft=_candidate_draft(rebuilt, request),
-                        scorer=self._scorer,
-                    )
-                except (CandidateEvaluationError, RoutingError, ValueError):
-                    repair_diagnostics.repair_drafts_rejected_after_acceptance += 1
+                if not rebuilt.control_eligible:
+                    optimization_diagnostics.states_pruned_infeasible += 1
                     continue
-                candidates.append(evaluated_repair)
-                repair_diagnostics.repair_candidates_submitted_to_portfolio += 1
+                evaluated_optimized = self._evaluator.evaluate(
+                    request=request,
+                    draft=_candidate_draft(rebuilt, request),
+                    scorer=self._scorer,
+                )
+                if requested_outcomes_regress(evaluated_source, evaluated_optimized):
+                    optimization_diagnostics.states_pruned_coverage += 1
+                    continue
+                if not evaluated_optimized.diagnostics.safety_eligible:
+                    optimization_diagnostics.states_pruned_profile += 1
+                    continue
+            except (CandidateEvaluationError, RoutingError, ValueError):
+                optimization_diagnostics.states_pruned_infeasible += 1
+                continue
+            candidates.append(evaluated_optimized)
+            optimization_diagnostics.feasible_evaluated_candidates += 1
         evaluated = evaluate_candidate_portfolio(
             request,
             tuple(candidates),
@@ -302,18 +331,33 @@ class AutoTourPlanner:
                 candidate, request.distance_objective.priority
             ),
         )
-        repair_diagnostics.published_repair_candidates += sum(
-            candidate.diagnostics.details.get("construction") == "spur_closure_repair"
+        optimization_diagnostics.published_candidates = sum(
+            candidate.diagnostics.details.get("construction")
+            == "edge_aware_global_optimization"
             for candidate in evaluated.candidates
         )
-        repair_diagnostics.portfolio_excluded_repair_candidates += max(
-            0,
-            repair_diagnostics.repair_candidates_submitted_to_portfolio
-            - repair_diagnostics.published_repair_candidates,
-        )
+        for candidate in evaluated.candidates:
+            final_target_ids = candidate.diagnostics.details.get(
+                "targeted_spur_ids", ()
+            )
+            if isinstance(final_target_ids, (tuple, list)):
+                published_repairs = optimization_diagnostics.record_published_spur_ids(
+                    str(candidate.diagnostics.details.get("source_candidate_id", "")),
+                    tuple(
+                        spur_id
+                        for spur_id in final_target_ids
+                        if isinstance(spur_id, str)
+                    ),
+                )
+                if published_repairs > 1:
+                    optimization_diagnostics.composition_states_published += 1
         diagnostic_details = {
             **result.diagnostics.details,
-            "spur_repair": repair_diagnostics.snapshot().as_dict(),
+            "global_optimization": optimization_diagnostics.as_dict(),
+            "best_excluded_refinement": evaluated.best_excluded_refinement,
+            "best_excluded_structural_refinements": (
+                evaluated.best_excluded_structural_refinements
+            ),
         }
         return PlanResult(
             kind=request.kind,
@@ -331,7 +375,7 @@ class AutoTourPlanner:
                             sorted(
                                 {
                                     *result.diagnostics.warnings,
-                                    *repair_warnings,
+                                    *optimized.warnings,
                                 }
                             )
                         ),
@@ -340,6 +384,32 @@ class AutoTourPlanner:
                 )
             ),
         )
+
+
+def _optimized_auto_tour_request(
+    request: AutoTourSearchRequest,
+    optimized: OptimizationDraft,
+) -> AutoTourSearchRequest:
+    selected = dict(optimized.selected_approaches)
+    places: list[RequestedTourPlace] = []
+    for place in request.requested_stops:
+        approach = selected.get(place.id or "")
+        if approach is None:
+            places.append(place)
+            continue
+        candidates = {
+            candidate.id: candidate for candidate in place.approach_candidates
+        }
+        candidates[approach.id] = approach
+        places.append(
+            place.model_copy(
+                update={
+                    "approach_candidates": tuple(candidates.values()),
+                    "chosen_approach": approach,
+                }
+            )
+        )
+    return request.model_copy(update={"requested_stops": tuple(places)})
 
 
 def _search_request(request: AutoTourPlanRequest) -> AutoTourSearchRequest:

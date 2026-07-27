@@ -20,6 +20,7 @@ class RoutingOperation(StrEnum):
     ROUND_TRIP = "round_trip"
     ISOCHRONE = "isochrone"
     ALTERNATIVES = "alternatives"
+    AVOIDING_ALTERNATIVES = "avoiding_alternatives"
 
 
 @dataclass(frozen=True)

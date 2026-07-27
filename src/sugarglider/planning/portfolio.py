@@ -9,6 +9,8 @@ ROLE_ORDER: dict[CandidateRole, int] = {
     "maximum_requested_coverage": 1,
     "smooth_low_detour": 2,
     "distance_focused": 3,
+    "best_structural_refinement": 4,
+    "distinct_structural_refinement": 5,
 }
 
 

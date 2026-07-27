@@ -930,6 +930,7 @@ def test_direction_arrows_restore_safe_foreground_layer_order() -> None:
 
 def test_route_spur_diagnostics_render_as_accessible_map_issues() -> None:
     app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
+    formatting = (STATIC_DIRECTORY / "format.js").read_text(encoding="utf-8")
     map_code = (STATIC_DIRECTORY / "map.js").read_text(encoding="utf-8")
     html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
     styles = (STATIC_DIRECTORY / "styles.css").read_text(encoding="utf-8")
@@ -942,17 +943,28 @@ def test_route_spur_diagnostics_render_as_accessible_map_issues() -> None:
     assert "Complete excursion:" in app
     assert "Deliberate stops inside this excursion:" in app
     assert "Candidate for route refinement" in app
-    assert "No alternative exit has been tested yet." in app
-    assert "function repairSummary(candidate)" in app
-    assert "Route refinement" in app
-    assert "Repeated distance reduced by" in app
-    assert "targeted_spur_still_present" in app
-    assert (
-        "An alternative exit was tested; this excursion remains in the final route."
-        in app
-    )
-    assert "Number.isFinite(sourceRepeated)" in app
-    assert "Number.isFinite(improvement)" in app
+    assert "No published edge-aware alternative removed this excursion." in app
+    assert "The edge-aware optimizer tested route-wide alternatives" in app
+    assert "function structuralAlternativeSummary(candidate)" in app
+    assert "Best route-shape alternative" in app
+    assert "Distinct major-spur alternative" in app
+    assert "less opposite-direction travel" in app
+    assert "less repeated travel" in app
+    assert "Requested-place coverage is unchanged." in app
+    assert "function bestExcludedRefinementSummary(diagnostics)" in app
+    assert "Best excluded route refinement" in app
+    assert "Not included in the displayed portfolio." in app
+    structural_renderer = app[
+        app.index("function structuralAlternativeSummary(candidate)") : app.index(
+            "function bestExcludedRefinementSummary(diagnostics)"
+        )
+    ]
+    assert "edge_id" not in structural_renderer
+    assert "best_structural_refinement" in formatting
+    assert "distinct_structural_refinement" in formatting
+    assert "edge_aware_global_optimization" in formatting
+    assert "global_optimization_budget_exhausted" in formatting
+    assert "global_optimization_time_limit_reached" in formatting
     assert 'type="button" class="spur-card"' in app
     assert 'data-spur-id="${escapeHtml(spur.id)}"' in app
     assert "spurAnalysis.spurs.map" in app
