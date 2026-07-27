@@ -28,6 +28,12 @@ data/nature/*.json.gz
 data/nature/*.tmp
 data/pois/*
 !data/pois/.gitkeep
+data/saved-routes/*
+!data/saved-routes/.gitkeep
+*.sqlite
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
 *.gpx
 
 # IDE

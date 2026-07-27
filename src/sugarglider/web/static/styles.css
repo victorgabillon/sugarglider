@@ -76,6 +76,7 @@ button:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity:
 .notice { position: relative; z-index: 15; padding: .7rem 3.6rem .7rem 1rem; display: grid; grid-template-columns: 2rem 1fr; align-items: start; gap: .75rem; border-bottom: 1px solid; }
 .notice.error { color: #651c1c; border-color: #da9990; background: #ffe5df; }
 .notice.warning { color: #68410c; border-color: #dfbf76; background: #fff3cf; }
+.notice.saved-route { color: #214b3b; border-color: #8bb8a2; background: #eff8f3; }
 .notice-mark { width: 1.8rem; height: 1.8rem; display: grid; place-items: center; border: 2px solid currentColor; border-radius: 50%; font-weight: 900; }
 .notice h2 { margin: 0 0 .15rem; font-size: .9rem; }
 .notice p { margin: 0; font-size: .8rem; line-height: 1.4; }
@@ -85,6 +86,9 @@ button:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity:
 .notice details { margin-top: .35rem; font-size: .72rem; }
 .notice pre { max-height: 10rem; margin: .35rem 0 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .notice > .icon-button { position: absolute; top: .35rem; right: .6rem; }
+.saved-route-link-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: .5rem; align-items: end; margin-top: .5rem; }
+.saved-route-link-row label { grid-column: 1 / -1; }
+.saved-route-link-row input { min-width: 0; }
 
 .planner { min-height: calc(100vh - 102px); display: grid; grid-template-columns: minmax(300px, 342px) minmax(460px, 1fr) minmax(300px, 350px); grid-template-areas: "controls map metrics" "candidates candidates candidates"; }
 .panel { min-width: 0; padding: 1rem; overflow-y: auto; background: var(--panel-background); }
@@ -385,6 +389,9 @@ footer { padding: .48rem 1rem; color: #d6e0da; background: var(--primary-action)
   .poi-row { grid-template-columns: 1.8rem minmax(0, 1fr) auto; }
   .field-pair, .poi-fields { grid-template-columns: 1fr 1fr; }
   .candidate-strip { padding-inline: .75rem; }
+  .saved-route-link-row { grid-template-columns: 1fr 1fr; }
+  .saved-route-link-row input { grid-column: 1 / -1; }
+  .saved-route-link-row button { width: 100%; }
 }
 
 @media (max-width: 390px) {
