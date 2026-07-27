@@ -182,3 +182,12 @@
 - Local refinement may relocate only a same-identity soft stop approach or reverse one
   bounded soft-anchor subsection inside exact boundaries; it must reconstruct through
   the shared cached gateway, retain originals, and fail nonfatally.
+- Loading a saved route must never regenerate, reroute, or rerank it; persisted source
+  requests and candidates remain exact immutable snapshots.
+- Saved-route GPX must serialize the stored candidate directly. Owner tokens must
+  never enter GET models, logs, URLs, HTML, or local/session browser storage.
+- Planning must not import `saved_routes`. Every persisted candidate must pass the
+  neutral submitted-candidate validation shared with route reversal.
+- Snapshot display must not fabricate a `PlanResult`, search budget, cache facts, or
+  other search diagnostics. An immutable snapshot may be copied only through an
+  explicit “Use as a new plan” transition into independent editable planner state.

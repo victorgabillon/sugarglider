@@ -165,6 +165,25 @@ approach or drops the place with a reason. `best_effort` additionally accepts a
 bounded profile-compatible fallback and reports the remaining semantic distance as
 an approximation; it never claims the original place was reached.
 
+### Immutable saved routes
+
+`POST /v2/saved-routes` accepts a canonical `source_request` and one selected
+`PlanCandidate`. The server validates their existing publication contract and stores
+that exact pair in SQLite; it does not generate, reroute, or rerank anything. Creation
+returns an opaque unlisted `/r/{slug}` link and a one-time owner capability. Keep that
+token private and send it only in `X-Saved-Route-Owner-Token` when calling
+`DELETE /v2/saved-routes/{slug}`.
+
+Public reads use `GET /v2/saved-routes/{slug}`. The corresponding
+`GET /v2/saved-routes/{slug}/gpx` serializes the stored candidate directly. Shared
+display is read-only and shows no invented search diagnostics. **Use as a new plan**
+explicitly loads current profile availability and copies the request into independent
+editable state without generating automatically. Saving and invoking the browser
+share sheet remain separate actions. Configure
+the SQLite database with `SUGARGLIDER_SAVED_ROUTE_DATABASE_PATH`, retention with
+`SUGARGLIDER_SAVED_ROUTE_TTL_DAYS`, and the per-snapshot byte limit with
+`SUGARGLIDER_SAVED_ROUTE_MAX_SNAPSHOT_BYTES`.
+
 ## Distance and profiles
 
 `distance_objective` is the only distance objective:

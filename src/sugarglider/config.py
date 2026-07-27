@@ -133,6 +133,26 @@ class Settings(BaseSettings):
         bool,
         Field(validation_alias="SUGARGLIDER_AUTO_TOUR_INCLUDE_BROAD_ATTRACTIONS"),
     ] = False
+    saved_route_database_path: Annotated[
+        Path | None,
+        Field(validation_alias="SUGARGLIDER_SAVED_ROUTE_DATABASE_PATH"),
+    ] = Path("/data/saved-routes/saved-routes.sqlite3")
+    saved_route_ttl_days: Annotated[
+        int,
+        Field(
+            ge=1,
+            le=365,
+            validation_alias="SUGARGLIDER_SAVED_ROUTE_TTL_DAYS",
+        ),
+    ] = 90
+    saved_route_max_snapshot_bytes: Annotated[
+        int,
+        Field(
+            ge=100_000,
+            le=50_000_000,
+            validation_alias="SUGARGLIDER_SAVED_ROUTE_MAX_SNAPSHOT_BYTES",
+        ),
+    ] = 10_000_000
 
     @model_validator(mode="after")
     def validate_poi_limits(self) -> Self:

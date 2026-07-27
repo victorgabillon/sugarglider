@@ -281,6 +281,7 @@ async def test_ui_config_uses_injected_map_settings(
         "poi_index_available": False,
         "poi_default_limit": 500,
         "poi_max_limit": 1000,
+        "saved_routes_available": False,
         "default_planning_mode": "auto_tour",
         "auto_tour_max_hard_waypoints": 6,
         "auto_tour_max_preferred_pois": 8,

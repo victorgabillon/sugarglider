@@ -25,6 +25,12 @@ from sugarglider.routing.graphhopper import (
     RoutingUnavailableError,
     RoutingUpstreamError,
 )
+from sugarglider.saved_routes.errors import (
+    SavedRouteInvalidSnapshotError,
+    SavedRouteNotFoundError,
+    SavedRouteStorageError,
+    SavedRouteTooLargeError,
+)
 
 
 class RouteVisualizationError(ValueError):
@@ -55,6 +61,26 @@ class PublicErrorBody(BaseModel):
 
 
 ERRORS: dict[type[Exception], PublicError] = {
+    SavedRouteInvalidSnapshotError: PublicError(
+        422,
+        "saved_route_candidate_invalid",
+        "The submitted route candidate does not match its canonical source request.",
+    ),
+    SavedRouteNotFoundError: PublicError(
+        404,
+        "saved_route_not_found",
+        "This saved route does not exist or is no longer available.",
+    ),
+    SavedRouteTooLargeError: PublicError(
+        413,
+        "saved_route_too_large",
+        "The selected route is too large to save.",
+    ),
+    SavedRouteStorageError: PublicError(
+        503,
+        "saved_route_storage_unavailable",
+        "Saved-route storage is temporarily unavailable.",
+    ),
     ReverseSourceInvalidError: PublicError(
         422,
         "reverse_source_invalid",

@@ -75,6 +75,7 @@ const labels = {
   auto_tour_no_safe_water_insertion: "No verified-water insertion passed every conservative control gate.",
   auto_tour_route_budget_exhausted: "A strict Auto Tour route-request budget was exhausted.",
   low_overlap_not_natural_improvement: "This alternative is retained only as a trade-off and is not recommendable.",
+  saved_route_snapshot: "Immutable saved snapshot loaded without rerouting.",
 };
 
 export const friendlyLabel = (value) => labels[value] ?? value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());

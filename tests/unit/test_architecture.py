@@ -221,3 +221,84 @@ def test_all_ordinary_planning_modules_fit_the_physical_line_limit() -> None:
         for path in files
         if len(path.read_text(encoding="utf-8").splitlines()) > 800
     } == {}
+
+
+def test_saved_routes_obey_repository_and_framework_boundaries() -> None:
+    saved_routes = SOURCE / "saved_routes"
+    files = tuple(sorted(saved_routes.glob("*.py")))
+    assert files
+    assert not (saved_routes / "store.py").exists()
+    assert {
+        path.name: module
+        for path in files
+        for module in _imports(path)
+        if module.startswith("fastapi")
+    } == {}
+    assert {
+        str(path.relative_to(SOURCE)): module
+        for path in (SOURCE / "planning").rglob("*.py")
+        for module in _imports(path)
+        if module.startswith("sugarglider.saved_routes")
+    } == {}
+    assert {
+        str(path.relative_to(SOURCE)): module
+        for path in SOURCE.rglob("*.py")
+        for module in _imports(path)
+        if module == "sqlite3" and path.name != "sqlite_repository.py"
+    } == {}
+    assert {
+        path.name: len(path.read_text(encoding="utf-8").splitlines())
+        for path in files
+        if len(path.read_text(encoding="utf-8").splitlines()) > 800
+    } == {}
+
+
+def test_saved_route_api_uses_service_and_static_client_owns_http_calls() -> None:
+    api = (SOURCE / "api" / "saved_routes.py").read_text(encoding="utf-8")
+    client = (SOURCE / "web" / "static" / "saved_routes.js").read_text(encoding="utf-8")
+    map_source = (SOURCE / "web" / "static" / "map.js").read_text(encoding="utf-8")
+    assert "SavedRouteServiceDependency" in api
+    assert "sqlite" not in api.lower()
+    assert "SavedRouteRepository" not in api
+    assert "/v2/saved-routes" in client
+    assert "/v2/saved-routes" not in map_source
+
+
+def test_neutral_submitted_candidate_validation_is_shared() -> None:
+    direction = (SOURCE / "planning" / "direction" / "validation.py").read_text(
+        encoding="utf-8"
+    )
+    saved_service = (SOURCE / "saved_routes" / "service.py").read_text(encoding="utf-8")
+    assert "validate_submitted_candidate" in direction
+    assert "SubmittedCandidateInvalidError" in direction
+    assert "validate_submitted_candidate" in saved_service
+    assert "build_plan_traversal" not in saved_service
+    assert "shapely" not in saved_service.lower()
+
+
+def test_saved_route_handlers_are_sync_and_configuration_is_durable() -> None:
+    api = (SOURCE / "api" / "saved_routes.py").read_text(encoding="utf-8")
+    web = (SOURCE / "web" / "routes.py").read_text(encoding="utf-8")
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    for handler in (
+        "create_saved_route",
+        "get_saved_route",
+        "get_saved_route_gpx",
+        "delete_saved_route",
+    ):
+        assert f"def {handler}(" in api
+        assert f"async def {handler}(" not in api
+    assert "def shared_saved_route(" in web
+    assert "async def shared_saved_route(" not in web
+    assert (
+        "${SUGARGLIDER_SAVED_ROUTE_DATABASE_PATH:"
+        "-/data/saved-routes/saved-routes.sqlite3}"
+    ) in compose
+    for invariant in (
+        "must never regenerate, reroute, or rerank",
+        "neutral submitted-candidate validation",
+        "must not fabricate a `PlanResult`",
+        "Use as a new plan",
+    ):
+        assert invariant in agents

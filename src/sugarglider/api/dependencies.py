@@ -6,6 +6,7 @@ from fastapi import Depends, Request
 
 from sugarglider.planning.pipeline import PlanService
 from sugarglider.routing.service import RouteService
+from sugarglider.saved_routes.service import SavedRouteOperations
 
 
 def get_route_service(request: Request) -> RouteService:
@@ -24,3 +25,14 @@ def get_plan_service(request: Request) -> PlanService:
 
 
 PlanServiceDependency = Annotated[PlanService, Depends(get_plan_service)]
+
+
+def get_saved_route_service(request: Request) -> SavedRouteOperations:
+    """Return the application-scoped immutable snapshot service."""
+    service: SavedRouteOperations = request.app.state.saved_route_service
+    return service
+
+
+SavedRouteServiceDependency = Annotated[
+    SavedRouteOperations, Depends(get_saved_route_service)
+]

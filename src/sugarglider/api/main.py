@@ -12,6 +12,7 @@ from sugarglider.analysis.loop_geometry import LoopGeometryRouteAnalyzer
 from sugarglider.analysis.route import RouteAnalyzer
 from sugarglider.api.errors import install_error_handlers
 from sugarglider.api.routes import router
+from sugarglider.api.saved_routes import router as saved_routes_router
 from sugarglider.config import Settings
 from sugarglider.nature.analysis import NatureRouteAnalyzer
 from sugarglider.nature.errors import NatureIndexError, NatureIndexMissingError
@@ -40,6 +41,14 @@ from sugarglider.pois.models import PoiIndexStatus
 from sugarglider.routing.graphhopper import GraphHopperClient
 from sugarglider.routing.result import RouteResultFactory
 from sugarglider.routing.service import RouteService
+from sugarglider.saved_routes.errors import SavedRouteStorageError
+from sugarglider.saved_routes.repository import SavedRouteRepositoryError
+from sugarglider.saved_routes.service import (
+    SavedRouteOperations,
+    SavedRouteService,
+    UnavailableSavedRouteService,
+)
+from sugarglider.saved_routes.sqlite_repository import SQLiteSavedRouteRepository
 from sugarglider.web.models import UiConfig
 from sugarglider.web.routes import STATIC_DIRECTORY
 from sugarglider.web.routes import router as web_router
@@ -51,6 +60,7 @@ def create_app(
     service: RouteService | None = None,
     settings: Settings | None = None,
     plan_service: PlanService | None = None,
+    saved_route_service: SavedRouteOperations | None = None,
 ) -> FastAPI:
     """Build an application, optionally injecting a service for tests."""
 
@@ -58,6 +68,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        active_saved_routes = saved_route_service or _saved_routes(runtime_settings)
         nature_index, nature_status = _load_nature(runtime_settings)
         poi_index, poi_status = _load_pois(runtime_settings)
         nature_analyzer = (
@@ -84,6 +95,7 @@ def create_app(
             poi_index_available=poi_status.available,
             poi_default_limit=runtime_settings.poi_default_limit,
             poi_max_limit=runtime_settings.poi_max_limit,
+            saved_routes_available=active_saved_routes.available,
             auto_tour_scenic_corridor_radius_m=(
                 runtime_settings.auto_tour_scenic_corridor_radius_m
             ),
@@ -99,6 +111,7 @@ def create_app(
         app.state.poi_status = poi_status
         app.state.poi_default_limit = runtime_settings.poi_default_limit
         app.state.poi_max_limit = runtime_settings.poi_max_limit
+        app.state.saved_route_service = active_saved_routes
         if service is not None:
             app.state.route_service = service
             if plan_service is not None:
@@ -173,8 +186,28 @@ def create_app(
     install_error_handlers(app)
     app.include_router(web_router)
     app.include_router(router)
+    app.include_router(saved_routes_router)
     app.mount("/static", StaticFiles(directory=STATIC_DIRECTORY), name="static")
     return app
+
+
+def _saved_routes(settings: Settings) -> SavedRouteOperations:
+    path = settings.saved_route_database_path
+    if path is None:
+        return UnavailableSavedRouteService()
+    try:
+        repository = SQLiteSavedRouteRepository(path)
+        repository.initialize()
+        service = SavedRouteService(
+            repository,
+            ttl_days=settings.saved_route_ttl_days,
+            maximum_snapshot_bytes=settings.saved_route_max_snapshot_bytes,
+        )
+        service.purge_expired()
+        return service
+    except (SavedRouteRepositoryError, SavedRouteStorageError):
+        logger.warning("Saved-route persistence is unavailable")
+        return UnavailableSavedRouteService()
 
 
 def _load_nature(settings: Settings) -> tuple[NatureIndex | None, NatureIndexStatus]:
