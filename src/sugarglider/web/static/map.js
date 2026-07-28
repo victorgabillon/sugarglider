@@ -1224,6 +1224,88 @@ export function renderCandidates(
   positionDirectionLayer();
 }
 
+const OUTING_PALETTE = [
+  "#214b3b",
+  "#315f9b",
+  "#a6572a",
+  "#7b4d91",
+  "#2c7b78",
+  "#9a3f5e",
+  "#6f6828",
+  "#4f5e79",
+];
+let outingRouteCount = 0;
+let selectedOutingParticipantId = null;
+
+export function renderOutingRoutes(participants, selectedParticipantId) {
+  if (!ready || !map) return;
+  clearByPrefix("candidate-");
+  clearByPrefix("outing-route-");
+  outingRouteCount = participants.length;
+  selectedOutingParticipantId = selectedParticipantId;
+  removeLayer(DIRECTION_LAYER);
+  removeSource(DIRECTION_SOURCE);
+  participants.forEach((participant, index) => {
+    const sourceId = `outing-route-${index}`;
+    const selected = participant.participant_id === selectedParticipantId;
+    sourceData(sourceId, {
+      type: "Feature",
+      properties: {
+        participant_id: participant.participant_id,
+        join_order: index,
+      },
+      geometry: {
+        type: "LineString",
+        coordinates: participant.planned_route.candidate.route.geometry,
+      },
+    });
+    map.addLayer({
+      id: `${sourceId}-casing`,
+      type: "line",
+      source: sourceId,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": "#fffdf7",
+        "line-width": selected ? 10 : 6,
+        "line-opacity": selected ? 0.9 : 0.65,
+      },
+    });
+    map.addLayer({
+      id: `${sourceId}-line`,
+      type: "line",
+      source: sourceId,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": OUTING_PALETTE[index % OUTING_PALETTE.length],
+        "line-width": selected ? 7 : 4,
+        "line-opacity": selected ? 1 : 0.72,
+      },
+    });
+  });
+  moveRequiredLabelsToTop();
+}
+
+export function outingRouteRenderDiagnostics() {
+  const layerIds = (map?.getStyle()?.layers ?? [])
+    .map((layer) => layer.id)
+    .filter((id) => id.startsWith("outing-route-"));
+  return {
+    routeCount: outingRouteCount,
+    sourceCount: Object.keys(map?.getStyle()?.sources ?? {})
+      .filter((id) => id.startsWith("outing-route-")).length,
+    layerCount: layerIds.length,
+    selectedParticipantId: selectedOutingParticipantId,
+  };
+}
+
+export function fitOutingRoutes(participants) {
+  fitCoordinates(
+    participants.flatMap(
+      (participant) => participant.planned_route.candidate.route.geometry,
+    ),
+  );
+}
+
 function renderDirectionArrows(candidate, enabled) {
   if (!ready || !map) return;
   removeLayer(DIRECTION_LAYER);
@@ -1492,6 +1574,9 @@ export function renderVisualization(collection, showNature = false) {
 export function clearRoutes() {
   if (!ready) return;
   clearByPrefix("candidate-");
+  clearByPrefix("outing-route-");
+  outingRouteCount = 0;
+  selectedOutingParticipantId = null;
   clearByPrefix("selected-section-");
   removeLayer(DIRECTION_LAYER);
   removeSource(DIRECTION_SOURCE);

@@ -10,6 +10,13 @@ from pydantic import BaseModel, ConfigDict
 
 from sugarglider.domain.endpoints import EndpointSnapTooFarError
 from sugarglider.gpx.writer import SelectedStopNotReachedError
+from sugarglider.outings.errors import (
+    OutingCandidateInvalidError,
+    OutingFullError,
+    OutingNotFoundError,
+    OutingRouteTooLargeError,
+    OutingStorageError,
+)
 from sugarglider.planning.auto_tour.state import (
     AutoTourMaximumBelowDirectLowerBoundError,
     AutoTourNoCandidateError,
@@ -61,6 +68,31 @@ class PublicErrorBody(BaseModel):
 
 
 ERRORS: dict[type[Exception], PublicError] = {
+    OutingNotFoundError: PublicError(
+        404,
+        "outing_not_found",
+        "This outing does not exist or is no longer available.",
+    ),
+    OutingFullError: PublicError(
+        409,
+        "outing_full",
+        "This outing has reached its participant capacity.",
+    ),
+    OutingCandidateInvalidError: PublicError(
+        422,
+        "outing_candidate_invalid",
+        "The participant route does not match its canonical source request.",
+    ),
+    OutingRouteTooLargeError: PublicError(
+        413,
+        "outing_route_too_large",
+        "The participant route is too large to add to this outing.",
+    ),
+    OutingStorageError: PublicError(
+        503,
+        "outing_storage_unavailable",
+        "Outing storage is temporarily unavailable.",
+    ),
     SavedRouteInvalidSnapshotError: PublicError(
         422,
         "saved_route_candidate_invalid",

@@ -191,3 +191,14 @@
 - Snapshot display must not fabricate a `PlanResult`, search budget, cache facts, or
   other search diagnostics. An immutable snapshot may be copied only through an
   explicit “Use as a new plan” transition into independent editable planner state.
+- Outing participant routes are independent; never merge them or infer a shared
+  itinerary, start, destination, profile, distance, or ordered waypoint sequence.
+- Outing route snapshots copy the exact saved request and candidate and remain valid
+  independently of the source saved route. Outing display never reroutes or
+  fabricates search diagnostics.
+- Outing owner, join, and participant capabilities never enter public models or
+  browser storage. Join capabilities use immediately scrubbed URL fragments, never
+  query parameters.
+- PR23 contains no live position, browser geolocation, polling, SSE, WebSockets, or
+  background tracking.
+- Participant GPX serializes only that participant's stored candidate directly.

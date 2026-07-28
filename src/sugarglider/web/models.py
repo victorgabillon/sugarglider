@@ -23,6 +23,8 @@ class UiConfig(ImmutableModel):
     poi_default_limit: Annotated[int, Field(ge=1)]
     poi_max_limit: Annotated[int, Field(ge=1)]
     saved_routes_available: bool
+    outings_available: bool
+    outing_max_participants: Annotated[int, Field(ge=2, le=20)]
     default_planning_mode: Literal["auto_tour"] = "auto_tour"
     auto_tour_max_hard_waypoints: Literal[6] = 6
     auto_tour_max_preferred_pois: Literal[8] = 8

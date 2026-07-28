@@ -65,6 +65,12 @@ export const state = {
   savedRouteSnapshotDisplay: false,
   savedRouteReceipt: null,
   forkedSavedCandidate: null,
+  outingSnapshot: null,
+  outingDisplay: false,
+  selectedOutingParticipantId: null,
+  outingOwnerReceipt: null,
+  outingParticipantReceipt: null,
+  outingInviteToken: null,
   selectedSignature: null,
   selectedPointIndex: null,
   pendingPointPopupIndex: null,
@@ -148,12 +154,24 @@ export function requestedPlaceIdentifier(place, fallbackIndex = 0) {
 }
 
 export function selectedCandidate() {
+  if (state.outingDisplay && state.outingSnapshot) {
+    return state.outingSnapshot.participants.find(
+      (participant) => (
+        participant.participant_id === state.selectedOutingParticipantId
+      ),
+    )?.planned_route.candidate ?? null;
+  }
   return currentDisplayedCandidates().find(
     (candidate) => candidate.id === state.selectedSignature,
   ) ?? null;
 }
 
 export function currentDisplayedCandidates() {
+  if (state.outingDisplay && state.outingSnapshot) {
+    return state.outingSnapshot.participants.map(
+      (participant) => participant.planned_route.candidate,
+    );
+  }
   if (state.savedRouteSnapshotDisplay && state.savedRouteSnapshot) {
     return [state.savedRouteSnapshot.candidate];
   }
@@ -162,6 +180,20 @@ export function currentDisplayedCandidates() {
 }
 
 export function currentDisplayContext() {
+  if (state.outingDisplay && state.outingSnapshot) {
+    const participant = state.outingSnapshot.participants.find(
+      (value) => value.participant_id === state.selectedOutingParticipantId,
+    ) ?? state.outingSnapshot.participants[0];
+    if (!participant) return null;
+    const request = participant.planned_route.source_request;
+    return {
+      kind: request.kind,
+      topology: request.topology,
+      routing_profile: request.routing_profile,
+      effective_start: request.start,
+      effective_end: request.end ?? request.start,
+    };
+  }
   if (state.savedRouteSnapshotDisplay && state.savedRouteSnapshot) {
     const request = state.savedRouteSnapshot.source_request;
     return {
@@ -186,13 +218,18 @@ export function currentDisplayContext() {
 }
 
 export function currentSearchDiagnostics() {
-  return state.savedRouteSnapshotDisplay
+  return state.savedRouteSnapshotDisplay || state.outingDisplay
     ? null
     : state.generationResult?.search_diagnostics ?? null;
 }
 
 export function isSavedRouteSnapshotDisplay() {
   return Boolean(state.savedRouteSnapshotDisplay && state.savedRouteSnapshot);
+}
+
+export function isImmutableSnapshotDisplay() {
+  return isSavedRouteSnapshotDisplay()
+    || Boolean(state.outingDisplay && state.outingSnapshot);
 }
 
 export function pointDisplayName(point, index) {

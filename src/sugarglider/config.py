@@ -153,6 +153,30 @@ class Settings(BaseSettings):
             validation_alias="SUGARGLIDER_SAVED_ROUTE_MAX_SNAPSHOT_BYTES",
         ),
     ] = 10_000_000
+    outing_database_path: Annotated[
+        Path | None,
+        Field(validation_alias="SUGARGLIDER_OUTING_DATABASE_PATH"),
+    ] = Path("/data/outings/outings.sqlite3")
+    outing_ttl_days: Annotated[
+        int,
+        Field(ge=1, le=365, validation_alias="SUGARGLIDER_OUTING_TTL_DAYS"),
+    ] = 30
+    outing_max_participants: Annotated[
+        int,
+        Field(
+            ge=2,
+            le=20,
+            validation_alias="SUGARGLIDER_OUTING_MAX_PARTICIPANTS",
+        ),
+    ] = 8
+    outing_max_route_snapshot_bytes: Annotated[
+        int,
+        Field(
+            ge=100_000,
+            le=50_000_000,
+            validation_alias="SUGARGLIDER_OUTING_MAX_ROUTE_SNAPSHOT_BYTES",
+        ),
+    ] = 10_000_000
 
     @model_validator(mode="after")
     def validate_poi_limits(self) -> Self:
