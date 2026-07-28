@@ -89,6 +89,13 @@ button:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity:
 .saved-route-link-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: .5rem; align-items: end; margin-top: .5rem; }
 .saved-route-link-row label { grid-column: 1 / -1; }
 .saved-route-link-row input { min-width: 0; }
+.outing-form { display: grid; gap: .75rem; margin-top: 1rem; max-width: 38rem; }
+.outing-view { margin-bottom: 1rem; }
+.outing-participant-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .7rem; margin: 1rem 0; }
+.outing-participant-card { display: grid; gap: .2rem; padding: .85rem; border: 2px solid var(--border); border-radius: .8rem; background: var(--elevated-surface); color: inherit; text-align: left; }
+.outing-participant-card.selected { border-color: var(--primary-action); box-shadow: 0 0 0 2px rgb(33 75 59 / 18%); }
+body.outing-mode .panel.controls, body.outing-mode .candidate-strip, body.outing-mode .map-tools, body.outing-mode .legend, body.outing-mode .export-actions { display: none; }
+body.outing-mode .planner { grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr); grid-template-areas: "map metrics"; }
 
 .planner { min-height: calc(100vh - 102px); display: grid; grid-template-columns: minmax(300px, 342px) minmax(460px, 1fr) minmax(300px, 350px); grid-template-areas: "controls map metrics" "candidates candidates candidates"; }
 .panel { min-width: 0; padding: 1rem; overflow-y: auto; background: var(--panel-background); }
@@ -392,6 +399,8 @@ footer { padding: .48rem 1rem; color: #d6e0da; background: var(--primary-action)
   .saved-route-link-row { grid-template-columns: 1fr 1fr; }
   .saved-route-link-row input { grid-column: 1 / -1; }
   .saved-route-link-row button { width: 100%; }
+  body.outing-mode .planner { display: flex; flex-direction: column; }
+  .outing-participant-cards { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 390px) {

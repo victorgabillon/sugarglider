@@ -30,6 +30,8 @@ data/pois/*
 !data/pois/.gitkeep
 data/saved-routes/*
 !data/saved-routes/.gitkeep
+data/outings/*
+!data/outings/.gitkeep
 *.sqlite
 *.sqlite3
 *.sqlite3-wal

@@ -184,6 +184,25 @@ the SQLite database with `SUGARGLIDER_SAVED_ROUTE_DATABASE_PATH`, retention with
 `SUGARGLIDER_SAVED_ROUTE_TTL_DAYS`, and the per-snapshot byte limit with
 `SUGARGLIDER_SAVED_ROUTE_MAX_SNAPSHOT_BYTES`.
 
+### Shared outings with independent routes
+
+`POST /v2/outings` creates an unlisted outing by copying one exact PR22 saved-route
+snapshot for the initial participant. A participant joining through
+`POST /v2/outings/{slug}/participants` supplies a separate saved-route slug, so a
+trail runner and cyclist may keep completely different starts, profiles, geometry,
+distance, topology, and waypoints inside the same outing.
+
+Public viewing uses `/o/{slug}` and `GET /v2/outings/{slug}`. Invitation
+capabilities exist only in the URL fragment (`#invite=...`), which the browser
+captures into memory and immediately removes. Owner, join, and participant
+capabilities are stored only as SHA-256 hashes. Each participant GPX endpoint
+serializes only that participant's copied candidate; deleting the original saved
+route does not affect the outing. PR23 does not collect live positions.
+
+Outings use a separate SQLite database configured with
+`SUGARGLIDER_OUTING_DATABASE_PATH`. See
+[`docs/pr23-shared-outings.md`](docs/pr23-shared-outings.md).
+
 ## Distance and profiles
 
 `distance_objective` is the only distance objective:

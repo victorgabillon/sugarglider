@@ -78,6 +78,52 @@
           <button id="use-saved-route" class="button secondary hidden" type="button">Use as a new plan</button>
           <button id="delete-saved-route" class="text-button hidden" type="button">Delete saved route</button>
           <button id="dismiss-saved-route" class="text-button hidden" type="button">Dismiss</button>
+          <button id="show-create-outing" class="button secondary hidden" type="button">Create outing</button>
+        </div>
+        <form id="create-outing-form" class="outing-form hidden">
+          <label>Outing title<input id="outing-title" maxlength="120" required></label>
+          <label>Your display name<input id="outing-creator-name" maxlength="80" required></label>
+          <button id="create-outing" class="button primary" type="submit">Create outing</button>
+        </form>
+      </div>
+    </section>
+    <section id="outing-receipt-panel" class="notice saved-route hidden" role="status" aria-labelledby="outing-receipt-title">
+      <div class="notice-mark" aria-hidden="true">◎</div>
+      <div class="notice-copy">
+        <h2 id="outing-receipt-title">Outing created</h2>
+        <p>Public outing link: view-only unlisted link.</p>
+        <div class="saved-route-link-row">
+          <input id="outing-public-link" aria-label="Public outing link" readonly>
+          <button id="open-outing" class="button secondary" type="button">Open outing</button>
+          <button id="copy-outing-public-link" class="button secondary" type="button">Copy public link</button>
+        </div>
+        <p>Invitation link: permits joining until the outing expires or is full.</p>
+        <div class="saved-route-link-row">
+          <input id="outing-invite-link" aria-label="Outing invitation link" readonly>
+          <button id="copy-outing-invite-link" class="button secondary" type="button">Copy invitation link</button>
+          <button id="share-outing-invite" class="button secondary" type="button">Share invitation</button>
+          <button id="delete-outing" class="text-button" type="button">Delete outing</button>
+          <button id="dismiss-outing" class="text-button" type="button">Dismiss</button>
+        </div>
+      </div>
+    </section>
+    <section id="outing-view-panel" class="notice outing-view hidden" aria-labelledby="outing-view-title">
+      <div class="notice-copy">
+        <p class="eyebrow">Shared outing</p>
+        <h1 id="outing-view-title"></h1>
+        <p id="outing-view-summary"></p>
+        <p class="context-note">This outing is unlisted, not access-controlled. Anyone with the public link can see participant display names and planned routes. Use a nickname when appropriate. PR23 collects no live position.</p>
+        <div id="outing-participant-cards" class="outing-participant-cards"></div>
+        <form id="join-outing-form" class="outing-form hidden">
+          <h2>Join with your independent route</h2>
+          <label>Display name<input id="outing-join-name" maxlength="80" required></label>
+          <label>Saved-route link or slug<input id="outing-join-route" required></label>
+          <p><a href="/" target="_blank" rel="noopener">Plan and save my route in a new tab</a></p>
+          <button id="join-outing" class="button primary" type="submit">Join outing</button>
+        </form>
+        <div id="outing-participant-actions" class="button-row hidden">
+          <button id="download-my-outing-gpx" class="button secondary" type="button">Download my GPX</button>
+          <button id="leave-outing" class="text-button" type="button">Leave outing</button>
         </div>
       </div>
     </section>

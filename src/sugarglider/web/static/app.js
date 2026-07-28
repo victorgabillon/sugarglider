@@ -2,9 +2,12 @@ import { ApiError, exportPlanCandidate, generatePlan, getConfig, getPoiStatus, g
 import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
-import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
+import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
+import { bindOutingController, startOutingPage } from "./outing_controller.js";
+import { outingSlug } from "./outings.js";
+import { renderOutingCreationAction, renderOutingReceipt } from "./outing_view.js";
 import { createSavedRoute, deleteSavedRoute, downloadSavedRouteGpx, getSavedRoute, savedRouteShareUrl, shareSavedRoute, sharedRouteSlug } from "./saved_routes.js";
-import { currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, invalidateCandidates, isSavedRouteSnapshotDisplay, pointDisplayName, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, state, switchPlanningMode } from "./state.js";
+import { currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, state, switchPlanningMode } from "./state.js";
 
 const byId = (id) => document.getElementById(id);
 let elapsedTimer = null;
@@ -807,6 +810,15 @@ function removePoint(index) {
 }
 
 function renderMapData() {
+  if (state.outingDisplay && state.outingSnapshot) {
+    if (mapReady) {
+      renderOutingRoutes(
+        state.outingSnapshot.participants,
+        state.selectedOutingParticipantId,
+      );
+    }
+    return;
+  }
   if (!mapReady) return;
   const candidate = selectedCandidate();
   const popupIndex = state.pendingPointPopupIndex;
@@ -818,7 +830,7 @@ function renderMapData() {
     candidate?.diagnostics.details.required_waypoint_order,
     state.selectedPointIndex,
     popupIndex,
-    isSavedRouteSnapshotDisplay()
+    isImmutableSnapshotDisplay()
       || ["running", "reversing"].includes(state.request.status),
     {
       onDrag: (index, coordinate) => {
@@ -1352,7 +1364,7 @@ function renderMetrics() {
   byId("metrics-empty").classList.toggle("hidden", Boolean(candidate));
   byId("metrics-content").classList.toggle("hidden", !candidate);
   const busy = ["running", "reversing"].includes(state.request.status);
-  const readOnly = isSavedRouteSnapshotDisplay();
+  const readOnly = isImmutableSnapshotDisplay();
   const savingUnavailable = !state.config?.saved_routes_available;
   byId("download-gpx").disabled = !candidate || busy;
   byId("reverse-route").disabled = readOnly || !candidate || busy || Boolean(state.importedGpx && !state.generationResult);
@@ -1412,7 +1424,7 @@ function renderCanonicalMetrics(candidate, result) {
         ["Cache hits / misses", `${diagnostics.cache.hit_count} / ${diagnostics.cache.miss_count}`],
         ...phaseRows,
       ])
-      : '<section><h3>Search diagnostics</h3><p>Not applicable — loaded immutable snapshot.</p></section>')
+      : `<section><h3>Search diagnostics</h3><p>Not applicable — loaded immutable ${state.outingDisplay ? "outing" : "saved-route"} snapshot.</p></section>`)
     + `<section><h3>Warnings</h3><ul class="warning-list">${warnings.length ? warnings.map((warning) => `<li>${escapeHtml(friendlyLabel(warning))}</li>`).join("") : `<li>${diagnostics ? "No route or search warnings." : "No route warnings. Search diagnostics are not applicable."}</li>`}</ul></section>`;
   wireCompromiseActions(candidate);
 }
@@ -1429,6 +1441,11 @@ function constraintStateById(id) {
 }
 
 function wireCompromiseActions(candidate) {
+  if (isImmutableSnapshotDisplay()) {
+    byId("metrics-content")
+      .querySelectorAll("[data-compromise-action]")
+      .forEach((button) => button.remove());
+  }
   byId("metrics-content").querySelectorAll("[data-spur-id]").forEach((button) => {
     button.addEventListener("click", () => {
       const spur = candidate.route.analysis.spurs?.spurs.find(
@@ -1462,9 +1479,9 @@ function wireCompromiseActions(candidate) {
     });
   });
   byId("metrics-content").querySelectorAll("[data-compromise-action]").forEach((button) => {
-    button.disabled = isSavedRouteSnapshotDisplay();
+    button.disabled = isImmutableSnapshotDisplay();
     button.addEventListener("click", () => {
-      if (isSavedRouteSnapshotDisplay()) return;
+      if (isImmutableSnapshotDisplay()) return;
       const id = button.dataset.constraintId;
       const target = constraintStateById(id);
       if (!target) return;
@@ -1499,7 +1516,7 @@ function wireCompromiseActions(candidate) {
 
 function renderStatus() {
   const running = ["running", "reversing"].includes(state.request.status);
-  const readOnly = isSavedRouteSnapshotDisplay();
+  const readOnly = isImmutableSnapshotDisplay();
   const endpoints = activeEndpoints();
   const open = isOpenPlan();
   byId("controls-title").textContent = open ? "Build your route" : "Build your loop";
@@ -1549,6 +1566,7 @@ function render() {
   renderMapData();
   renderEmptyState();
   renderSavedRoutePanel();
+  renderOutingReceipt(state);
   const imported = state.importedGpx;
   byId("gpx-summary").classList.toggle("hidden", !imported);
   if (imported) {
@@ -2113,6 +2131,7 @@ function renderSavedRoutePanel() {
   const saved = state.savedRouteReceipt ?? state.savedRouteSnapshot;
   const panel = byId("saved-route-panel");
   panel.classList.toggle("hidden", !saved);
+  renderOutingCreationAction(state);
   if (!saved) return;
   const url = savedRouteShareUrl(saved);
   byId("saved-route-link").value = url;
@@ -2438,6 +2457,14 @@ function bindEvents() {
   byId("use-saved-route").addEventListener("click", useSavedRouteAsNewPlan);
   byId("delete-saved-route").addEventListener("click", removeSavedRoute);
   byId("dismiss-saved-route").addEventListener("click", dismissSavedRouteReceipt);
+  bindOutingController({
+    handleError,
+    showError,
+    setStatus: (message) => {
+      byId("request-status").textContent = message;
+    },
+    renderMetrics,
+  });
   byId("reverse-route").addEventListener("click", reverseSelectedRoute);
   byId("export-plan").addEventListener("click", () => {
     try {
@@ -2475,8 +2502,24 @@ function bindEvents() {
 
 async function start() {
   decorateIcons();
-  bindEvents();
   try {
+    const currentOutingSlug = outingSlug();
+    if (currentOutingSlug) {
+      await startOutingPage(currentOutingSlug, {
+        handleError,
+        showError,
+        showMapError,
+        setStatus: (message) => {
+          byId("request-status").textContent = message;
+        },
+        renderMetrics,
+        onMapReady: () => {
+          mapReady = true;
+        },
+      });
+      return;
+    }
+    bindEvents();
     const sharedSlug = sharedRouteSlug();
     let sharedSnapshot = null;
     if (sharedSlug) {

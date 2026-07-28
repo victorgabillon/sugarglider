@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from sugarglider.analysis.loop_geometry import LoopGeometryRouteAnalyzer
 from sugarglider.analysis.route import RouteAnalyzer
 from sugarglider.api.errors import install_error_handlers
+from sugarglider.api.outings import router as outings_router
 from sugarglider.api.routes import router
 from sugarglider.api.saved_routes import router as saved_routes_router
 from sugarglider.config import Settings
@@ -23,6 +24,14 @@ from sugarglider.nature.index import (
     unavailable_nature_status,
 )
 from sugarglider.nature.models import NatureIndexStatus
+from sugarglider.outings.errors import OutingStorageError
+from sugarglider.outings.repository import OutingRepositoryError
+from sugarglider.outings.service import (
+    OutingOperations,
+    OutingService,
+    UnavailableOutingService,
+)
+from sugarglider.outings.sqlite_repository import SQLiteOutingRepository
 from sugarglider.planning.alternative_legs import LowOverlapSettings
 from sugarglider.planning.auto_tour.discovered_pois import TourPoiSettings
 from sugarglider.planning.auto_tour.service import AutoTourPlanner, AutoTourService
@@ -61,6 +70,7 @@ def create_app(
     settings: Settings | None = None,
     plan_service: PlanService | None = None,
     saved_route_service: SavedRouteOperations | None = None,
+    outing_service: OutingOperations | None = None,
 ) -> FastAPI:
     """Build an application, optionally injecting a service for tests."""
 
@@ -69,6 +79,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         active_saved_routes = saved_route_service or _saved_routes(runtime_settings)
+        active_outings = outing_service or _outings(runtime_settings)
         nature_index, nature_status = _load_nature(runtime_settings)
         poi_index, poi_status = _load_pois(runtime_settings)
         nature_analyzer = (
@@ -96,6 +107,8 @@ def create_app(
             poi_default_limit=runtime_settings.poi_default_limit,
             poi_max_limit=runtime_settings.poi_max_limit,
             saved_routes_available=active_saved_routes.available,
+            outings_available=active_outings.available,
+            outing_max_participants=runtime_settings.outing_max_participants,
             auto_tour_scenic_corridor_radius_m=(
                 runtime_settings.auto_tour_scenic_corridor_radius_m
             ),
@@ -112,6 +125,7 @@ def create_app(
         app.state.poi_default_limit = runtime_settings.poi_default_limit
         app.state.poi_max_limit = runtime_settings.poi_max_limit
         app.state.saved_route_service = active_saved_routes
+        app.state.outing_service = active_outings
         if service is not None:
             app.state.route_service = service
             if plan_service is not None:
@@ -187,6 +201,7 @@ def create_app(
     app.include_router(web_router)
     app.include_router(router)
     app.include_router(saved_routes_router)
+    app.include_router(outings_router)
     app.mount("/static", StaticFiles(directory=STATIC_DIRECTORY), name="static")
     return app
 
@@ -208,6 +223,26 @@ def _saved_routes(settings: Settings) -> SavedRouteOperations:
     except (SavedRouteRepositoryError, SavedRouteStorageError):
         logger.warning("Saved-route persistence is unavailable")
         return UnavailableSavedRouteService()
+
+
+def _outings(settings: Settings) -> OutingOperations:
+    path = settings.outing_database_path
+    if path is None:
+        return UnavailableOutingService()
+    try:
+        repository = SQLiteOutingRepository(path)
+        repository.initialize()
+        service = OutingService(
+            repository,
+            ttl_days=settings.outing_ttl_days,
+            max_participants=settings.outing_max_participants,
+            maximum_route_snapshot_bytes=(settings.outing_max_route_snapshot_bytes),
+        )
+        service.purge_expired()
+        return service
+    except (OutingRepositoryError, OutingStorageError):
+        logger.warning("Outing persistence is unavailable")
+        return UnavailableOutingService()
 
 
 def _load_nature(settings: Settings) -> tuple[NatureIndex | None, NatureIndexStatus]:
