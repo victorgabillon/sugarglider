@@ -25,5 +25,17 @@ class OutingStorageError(OutingError):
     """Outing persistence is disabled, unavailable, or corrupt."""
 
 
+class OutingPositionInvalidError(OutingError):
+    """A position timestamp cannot be accepted under server policy."""
+
+
+class OutingPositionSequenceConflictError(OutingError):
+    """A position does not advance the participant's client sequence."""
+
+
+class OutingLiveCursorInvalidError(OutingError):
+    """An SSE replay cursor is malformed."""
+
+
 class OutingCollisionExhaustedError(OutingStorageError):
     """Bounded generation could not produce unique public identifiers."""

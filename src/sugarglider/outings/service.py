@@ -21,6 +21,12 @@ from sugarglider.outings.errors import (
     OutingRouteTooLargeError,
     OutingStorageError,
 )
+from sugarglider.outings.live_repository import (
+    OutingLiveAuthorizationContextError,
+    OutingLiveRepository,
+    OutingLiveRepositoryError,
+    OutingParticipantAuthorizationRecord,
+)
 from sugarglider.outings.models import (
     OutingCreated,
     OutingParticipantJoined,
@@ -81,7 +87,7 @@ class OutingOperations(Protocol):
         slug: str,
         participant_id: str,
         participant_token: str | None,
-    ) -> None: ...
+    ) -> bool: ...
 
     def delete(self, slug: str, owner_token: str | None) -> None: ...
 
@@ -106,6 +112,9 @@ class OutingService:
         participant_public_id_factory: Callable[[], str] | None = None,
         outing_id_factory: Callable[[], str] | None = None,
         participant_id_factory: Callable[[], str] | None = None,
+        live_repository: OutingLiveRepository | None = None,
+        live_event_retention_seconds: int = 900,
+        live_maximum_events_per_outing: int = 1_000,
     ) -> None:
         if not 1 <= ttl_days <= 365:
             raise ValueError("outing TTL must be between 1 and 365 days")
@@ -113,6 +122,10 @@ class OutingService:
             raise ValueError("outing capacity must be between 2 and 20")
         if not 100_000 <= maximum_route_snapshot_bytes <= 50_000_000:
             raise ValueError("outing route snapshot limit is out of bounds")
+        if not 60 <= live_event_retention_seconds <= 86_400:
+            raise ValueError("outing live event retention is out of bounds")
+        if not 10 <= live_maximum_events_per_outing <= 100_000:
+            raise ValueError("outing live event maximum is out of bounds")
         self._repository = repository
         self._ttl_days = ttl_days
         self._max_participants = max_participants
@@ -135,6 +148,9 @@ class OutingService:
         self._participant_id_factory = participant_id_factory or (
             lambda: str(uuid.uuid4())
         )
+        self._live_repository = live_repository
+        self._live_event_retention = timedelta(seconds=live_event_retention_seconds)
+        self._live_maximum_events = live_maximum_events_per_outing
 
     def create(
         self,
@@ -270,7 +286,7 @@ class OutingService:
         slug: str,
         participant_id: str,
         participant_token: str | None,
-    ) -> None:
+    ) -> bool:
         aggregate = self._aggregate(slug)
         participant = next(
             (
@@ -285,13 +301,35 @@ class OutingService:
         ):
             raise OutingNotFoundError
         try:
-            removed = self._repository.delete_participant(
-                aggregate.outing.id, participant_id
-            )
-        except OutingRepositoryError as exc:
+            if self._live_repository is None:
+                removed = self._repository.delete_participant(
+                    aggregate.outing.id, participant_id
+                )
+                live_changed = False
+            else:
+                now = _utc(self._clock())
+                result = self._live_repository.delete_participant_with_live_cleanup(
+                    OutingParticipantAuthorizationRecord(
+                        outing_id=aggregate.outing.id,
+                        participant_row_id=participant.id,
+                        participant_public_id=participant.public_id,
+                        participant_token_hash=participant.participant_token_hash,
+                        outing_expires_at_utc=aggregate.outing.expires_at_utc,
+                        participant_join_order=participant.join_order,
+                    ),
+                    occurred_at=now,
+                    retention_cutoff=now - self._live_event_retention,
+                    maximum_event_count=self._live_maximum_events,
+                )
+                removed = result.removed
+                live_changed = result.event is not None
+        except OutingLiveAuthorizationContextError as exc:
+            raise OutingNotFoundError from exc
+        except (OutingRepositoryError, OutingLiveRepositoryError) as exc:
             raise OutingStorageError from exc
         if not removed:
             raise OutingNotFoundError
+        return live_changed
 
     def delete(self, slug: str, owner_token: str | None) -> None:
         aggregate = self._aggregate(slug)
@@ -445,7 +483,7 @@ class UnavailableOutingService:
         slug: str,
         participant_id: str,
         participant_token: str | None,
-    ) -> None:
+    ) -> bool:
         del slug, participant_id, participant_token
         raise OutingStorageError
 

@@ -25,6 +25,9 @@ class UiConfig(ImmutableModel):
     saved_routes_available: bool
     outings_available: bool
     outing_max_participants: Annotated[int, Field(ge=2, le=20)]
+    outing_live_positions_available: bool
+    outing_live_stale_after_seconds: Annotated[int, Field(ge=15, le=3_600)]
+    outing_live_expire_after_seconds: Annotated[int, Field(ge=60, le=86_400)]
     default_planning_mode: Literal["auto_tour"] = "auto_tour"
     auto_tour_max_hard_waypoints: Literal[6] = 6
     auto_tour_max_preferred_pois: Literal[8] = 8

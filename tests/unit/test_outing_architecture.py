@@ -49,6 +49,7 @@ def test_sqlite_is_confined_to_approved_adapters() -> None:
         if "sqlite3" in _imports(path)
     }
     assert production_importers == {
+        "outings/live_sqlite_repository.py",
         "outings/sqlite_repository.py",
         "saved_routes/sqlite_repository.py",
     }
@@ -89,10 +90,30 @@ def test_outing_http_and_capabilities_are_isolated_from_map_and_storage() -> Non
         "indexedDB",
         "document.cookie",
         "geolocation",
+        "watchPosition",
+        "getCurrentPosition",
         "EventSource",
         "WebSocket",
     ):
         assert forbidden not in all_frontend
+
+
+def test_pr24_live_invariants_are_durable_repository_rules() -> None:
+    rules = (ROOT / "AGENTS.md").read_text()
+    for required in (
+        "live positions belong to participant identity",
+        "No owner, join, or participant capability may enter SSE",
+        "current-position table is authoritative",
+        "Client sequence, not captured time or receive time",
+        "Stale and expired are distinct",
+        "participant leave atomically clears",
+        "durable per-outing cursor",
+        "explicit SQLite read transaction",
+        "Async SSE handlers must offload every synchronous SQLite",
+        "PR24 contains no frontend geolocation, EventSource",
+        "historical-location API",
+    ):
+        assert required in rules
 
 
 def test_invitation_fragment_is_scrubbed_and_never_uses_a_query() -> None:

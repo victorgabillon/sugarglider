@@ -87,13 +87,22 @@ def test_initialization_is_idempotent_and_has_exact_application_tables(
             row[1]
             for row in connection.execute("PRAGMA table_info(outing_participants)")
         }
-    assert tables == {"outings", "outing_participants"}
+    assert tables == {
+        "outings",
+        "outing_participants",
+        "outing_live_positions",
+        "outing_live_events",
+    }
     assert {
         "idx_outings_public_slug",
         "idx_outings_expires_at_utc",
         "idx_outing_participants_outing_id",
         "idx_outing_participants_outing_public_id",
         "idx_outing_participants_outing_join_order",
+        "idx_outing_live_positions_outing_id",
+        "idx_outing_live_positions_received_at_utc",
+        "idx_outing_live_events_outing_event_id",
+        "idx_outing_live_events_created_at_utc",
     } <= indexes
     assert journal == "wal"
     assert foreign_keys == 0  # Connections configure it per operation.
@@ -107,6 +116,7 @@ def test_initialization_is_idempotent_and_has_exact_application_tables(
         "created_at_utc",
         "expires_at_utc",
         "max_participants",
+        "live_event_cursor",
     }
     assert participant_columns == {
         "id",
@@ -126,6 +136,102 @@ def test_initialization_is_idempotent_and_has_exact_application_tables(
         assert configured.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     with pytest.raises(sqlite3.ProgrammingError):
         configured.execute("SELECT 1")
+
+
+def test_existing_pr23_two_table_database_is_migrated_without_row_changes(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "pr23.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.executescript(
+            """
+            PRAGMA foreign_keys = ON;
+            CREATE TABLE outings (
+                id TEXT PRIMARY KEY,
+                schema_version INTEGER NOT NULL,
+                public_slug TEXT NOT NULL UNIQUE,
+                owner_token_hash BLOB NOT NULL,
+                join_token_hash BLOB NOT NULL,
+                title TEXT NOT NULL,
+                created_at_utc TEXT NOT NULL,
+                expires_at_utc TEXT NOT NULL,
+                max_participants INTEGER NOT NULL
+            );
+            CREATE TABLE outing_participants (
+                id TEXT PRIMARY KEY,
+                outing_id TEXT NOT NULL,
+                public_id TEXT NOT NULL,
+                participant_token_hash BLOB NOT NULL,
+                display_name TEXT NOT NULL,
+                source_request_json TEXT NOT NULL,
+                candidate_json TEXT NOT NULL,
+                joined_at_utc TEXT NOT NULL,
+                join_order INTEGER NOT NULL,
+                FOREIGN KEY (outing_id) REFERENCES outings(id) ON DELETE CASCADE,
+                UNIQUE (outing_id, public_id),
+                UNIQUE (outing_id, join_order)
+            );
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO outings VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "outing-before-migration",
+                1,
+                "pr23_slug_12345678901",
+                b"o" * 32,
+                b"j" * 32,
+                "Existing outing",
+                "2026-07-27T00:00:00.000000Z",
+                "2026-08-27T00:00:00.000000Z",
+                8,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO outing_participants VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "participant-before-migration",
+                "outing-before-migration",
+                "participant_1234567890",
+                b"p" * 32,
+                "Existing participant",
+                '{"source":"unchanged"}',
+                '{"candidate":"unchanged"}',
+                "2026-07-27T00:00:00.000000Z",
+                0,
+            ),
+        )
+        before_outing = connection.execute("SELECT * FROM outings").fetchone()
+        before_participant = connection.execute(
+            "SELECT * FROM outing_participants"
+        ).fetchone()
+
+    repository = SQLiteOutingRepository(path)
+    repository.initialize()
+    repository.initialize()
+
+    with sqlite3.connect(path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(outings)")}
+        migrated_outing = connection.execute(
+            """
+            SELECT id, schema_version, public_slug, owner_token_hash,
+                   join_token_hash, title, created_at_utc, expires_at_utc,
+                   max_participants
+            FROM outings
+            """
+        ).fetchone()
+        migrated_participant = connection.execute(
+            "SELECT * FROM outing_participants"
+        ).fetchone()
+        cursor = connection.execute("SELECT live_event_cursor FROM outings").fetchone()
+    assert before_outing == migrated_outing
+    assert before_participant == migrated_participant
+    assert "live_event_cursor" in columns
+    assert cursor == (0,)
 
 
 def test_create_round_trip_order_delete_and_cascade(tmp_path: Path) -> None:

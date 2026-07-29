@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS outings (
     title TEXT NOT NULL,
     created_at_utc TEXT NOT NULL,
     expires_at_utc TEXT NOT NULL,
-    max_participants INTEGER NOT NULL
+    max_participants INTEGER NOT NULL,
+    live_event_cursor INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_outings_public_slug ON outings(public_slug);
 CREATE INDEX IF NOT EXISTS idx_outings_expires_at_utc ON outings(expires_at_utc);
@@ -54,6 +55,44 @@ CREATE INDEX IF NOT EXISTS idx_outing_participants_outing_public_id
     ON outing_participants(outing_id, public_id);
 CREATE INDEX IF NOT EXISTS idx_outing_participants_outing_join_order
     ON outing_participants(outing_id, join_order);
+
+CREATE TABLE IF NOT EXISTS outing_live_positions (
+    participant_row_id TEXT PRIMARY KEY,
+    outing_id TEXT NOT NULL,
+    participant_public_id TEXT NOT NULL,
+    client_sequence INTEGER NOT NULL,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    accuracy_m REAL NOT NULL,
+    altitude_m REAL,
+    speed_m_s REAL,
+    heading_deg REAL,
+    captured_at_utc TEXT NOT NULL,
+    received_at_utc TEXT NOT NULL,
+    FOREIGN KEY (participant_row_id)
+        REFERENCES outing_participants(id) ON DELETE CASCADE,
+    FOREIGN KEY (outing_id) REFERENCES outings(id) ON DELETE CASCADE,
+    UNIQUE (outing_id, participant_public_id)
+);
+CREATE INDEX IF NOT EXISTS idx_outing_live_positions_outing_id
+    ON outing_live_positions(outing_id);
+CREATE INDEX IF NOT EXISTS idx_outing_live_positions_received_at_utc
+    ON outing_live_positions(received_at_utc);
+
+CREATE TABLE IF NOT EXISTS outing_live_events (
+    outing_id TEXT NOT NULL,
+    event_id INTEGER NOT NULL,
+    event_type TEXT NOT NULL,
+    participant_public_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at_utc TEXT NOT NULL,
+    PRIMARY KEY (outing_id, event_id),
+    FOREIGN KEY (outing_id) REFERENCES outings(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_outing_live_events_outing_event_id
+    ON outing_live_events(outing_id, event_id);
+CREATE INDEX IF NOT EXISTS idx_outing_live_events_created_at_utc
+    ON outing_live_events(created_at_utc);
 """
 
 
@@ -68,6 +107,37 @@ class SQLiteOutingRepository:
             self._database_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             with self._connection() as connection:
                 connection.executescript(_SCHEMA)
+                connection.isolation_level = None
+                connection.execute("BEGIN IMMEDIATE")
+                try:
+                    columns = {
+                        str(row["name"])
+                        for row in connection.execute("PRAGMA table_info(outings)")
+                    }
+                    if "live_event_cursor" not in columns:
+                        connection.execute(
+                            """
+                            ALTER TABLE outings
+                            ADD COLUMN live_event_cursor INTEGER NOT NULL DEFAULT 0
+                            """
+                        )
+                        connection.execute(
+                            """
+                            UPDATE outings
+                            SET live_event_cursor = COALESCE(
+                                (
+                                    SELECT MAX(event_id)
+                                    FROM outing_live_events
+                                    WHERE outing_live_events.outing_id = outings.id
+                                ),
+                                0
+                            )
+                            """
+                        )
+                    connection.commit()
+                except BaseException:
+                    connection.rollback()
+                    raise
         except (OSError, sqlite3.Error) as exc:
             raise OutingRepositoryError("outing initialization failed") from exc
 

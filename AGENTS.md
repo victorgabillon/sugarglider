@@ -199,6 +199,26 @@
 - Outing owner, join, and participant capabilities never enter public models or
   browser storage. Join capabilities use immediately scrubbed URL fragments, never
   query parameters.
-- PR23 contains no live position, browser geolocation, polling, SSE, WebSockets, or
-  background tracking.
 - Participant GPX serializes only that participant's stored candidate directly.
+- Outing live positions belong to participant identity, never to a shared route;
+  they must not be snapped, projected, or interpreted as route progress.
+- Publishing and clearing a live position require the existing participant
+  capability. Public live reads are protected only by the unlisted outing slug.
+- No owner, join, or participant capability may enter SSE, public live models, a
+  query parameter, or any other URL.
+- The current-position table is authoritative and the durable SSE replay log is
+  strictly bounded. Never reconstruct current state from events or expose a
+  historical-location API.
+- Client sequence, not captured time or receive time, orders participant position
+  updates. Stale and expired are distinct server-controlled states.
+- Every successful live-backed participant leave atomically clears any current
+  position and appends exactly one durable participant-left tombstone; outing
+  deletion cascades all live state.
+- Outing live event IDs come only from the durable per-outing cursor and remain
+  monotonic when bounded replay retention removes every event row.
+- Live snapshot positions, cursor, and retained replay bound must come from one
+  explicit SQLite read transaction; reset IDs may never outrun serialized state.
+- Async SSE handlers must offload every synchronous SQLite operation and use the
+  process-local broker only as a payload-free wakeup optimization.
+- PR24 contains no frontend geolocation, EventSource, moving markers, background
+  tracking, or service-worker behavior; those browser concerns remain PR25 work.

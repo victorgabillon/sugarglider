@@ -13,7 +13,10 @@ from sugarglider.gpx.writer import SelectedStopNotReachedError
 from sugarglider.outings.errors import (
     OutingCandidateInvalidError,
     OutingFullError,
+    OutingLiveCursorInvalidError,
     OutingNotFoundError,
+    OutingPositionInvalidError,
+    OutingPositionSequenceConflictError,
     OutingRouteTooLargeError,
     OutingStorageError,
 )
@@ -68,6 +71,11 @@ class PublicErrorBody(BaseModel):
 
 
 ERRORS: dict[type[Exception], PublicError] = {
+    OutingLiveCursorInvalidError: PublicError(
+        400,
+        "outing_live_cursor_invalid",
+        "The live-event replay cursor is invalid.",
+    ),
     OutingNotFoundError: PublicError(
         404,
         "outing_not_found",
@@ -77,6 +85,16 @@ ERRORS: dict[type[Exception], PublicError] = {
         409,
         "outing_full",
         "This outing has reached its participant capacity.",
+    ),
+    OutingPositionInvalidError: PublicError(
+        422,
+        "outing_position_invalid",
+        "The live position timestamp cannot be accepted.",
+    ),
+    OutingPositionSequenceConflictError: PublicError(
+        409,
+        "outing_position_sequence_conflict",
+        "The live position sequence conflicts with current state.",
     ),
     OutingCandidateInvalidError: PublicError(
         422,

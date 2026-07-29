@@ -8,9 +8,11 @@ participant contributes a shorter `city_bike` point-to-point route. The service
 does not assume shared geometry, starts, destinations, profiles, distances,
 topology, waypoints, direction, or departure plan.
 
-PR23 deliberately contains no live position, geolocation, tracking, SSE,
+PR23 deliberately introduced no live position, geolocation, tracking, SSE,
 WebSockets, polling, ETA, rendezvous, messaging, navigation, route changes, user
-accounts, or invitation delivery. PR24 owns the future live-position boundary.
+accounts, or invitation delivery. PR24 subsequently adds backend current-position
+publication and durable bounded SSE. It does not change PR23 route snapshots and
+does not add browser geolocation or live rendering.
 
 ## Domain and copied-route semantics
 
@@ -110,7 +112,8 @@ visibly distinguished, and sharing/copying occurs only after an explicit click.
 ## Persistence and configuration
 
 The standard-library SQLite adapter uses one short-lived connection per operation
-with WAL, a 5,000 ms busy timeout, and foreign keys enabled. It creates exactly:
+with WAL, a 5,000 ms busy timeout, and foreign keys enabled. PR23 originally
+created:
 
 - `outings`: internal ID, schema version, public slug, owner/join token hashes,
   title, UTC timestamps, and capacity;
@@ -121,6 +124,13 @@ with WAL, a 5,000 ms busy timeout, and foreign keys enabled. It creates exactly:
 Creating the outing and initial participant is one transaction. Joining uses
 `BEGIN IMMEDIATE`, so capacity checking and insertion are atomic under concurrent
 requests. Deleting an outing cascades participants.
+
+PR24 initializes two additive tables in the same database:
+`outing_live_positions` and `outing_live_events`. It also adds the
+`outings.live_event_cursor` column with a zero default so bounded replay retention
+cannot reuse event IDs. Existing outing, participant, and copied-route values remain
+unchanged during the idempotent migration. See
+[`pr24-live-positions-sse.md`](pr24-live-positions-sse.md).
 
 Configuration defaults:
 
@@ -149,8 +159,8 @@ without fabricating a `PlanResult` or search diagnostics.
 
 Anyone holding the public link can see participant display names and planned
 routes. The outing is unlisted, not private, encrypted, or access-controlled.
-Participants should use nicknames when appropriate. PR23 collects no live
-position.
+Participants should use nicknames when appropriate. When PR24 live sharing is
+used, anyone holding the unlisted outing link can also read current positions.
 
 ## Manual acceptance
 

@@ -244,7 +244,8 @@ def test_saved_routes_obey_repository_and_framework_boundaries() -> None:
         str(path.relative_to(SOURCE)): module
         for path in SOURCE.rglob("*.py")
         for module in _imports(path)
-        if module == "sqlite3" and path.name != "sqlite_repository.py"
+        if module == "sqlite3"
+        and path.name not in {"sqlite_repository.py", "live_sqlite_repository.py"}
     } == {}
     assert {
         path.name: len(path.read_text(encoding="utf-8").splitlines())
