@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Header, Response, status
 
 from sugarglider.api.dependencies import (
     AuthorizedOutingJoinTokenDependency,
+    OutingLiveBrokerDependency,
     OutingServiceDependency,
     SavedRouteServiceDependency,
 )
@@ -114,12 +115,15 @@ def leave_outing(
     slug: str,
     participant_id: str,
     outings: OutingServiceDependency,
+    live_broker: OutingLiveBrokerDependency,
     participant_token: Annotated[
         str | None,
         Header(alias="X-Sugarglider-Participant-Token"),
     ] = None,
 ) -> Response:
-    outings.remove_participant(slug, participant_id, participant_token)
+    live_changed = outings.remove_participant(slug, participant_id, participant_token)
+    if live_changed:
+        live_broker.notify(slug)
     return Response(
         status_code=status.HTTP_204_NO_CONTENT,
         headers={"Cache-Control": "no-store"},
@@ -130,12 +134,14 @@ def leave_outing(
 def delete_outing(
     slug: str,
     outings: OutingServiceDependency,
+    live_broker: OutingLiveBrokerDependency,
     owner_token: Annotated[
         str | None,
         Header(alias="X-Sugarglider-Outing-Owner-Token"),
     ] = None,
 ) -> Response:
     outings.delete(slug, owner_token)
+    live_broker.notify(slug)
     return Response(
         status_code=status.HTTP_204_NO_CONTENT,
         headers={"Cache-Control": "no-store"},

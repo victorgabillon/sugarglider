@@ -177,9 +177,75 @@ class Settings(BaseSettings):
             validation_alias="SUGARGLIDER_OUTING_MAX_ROUTE_SNAPSHOT_BYTES",
         ),
     ] = 10_000_000
+    outing_live_stale_after_seconds: Annotated[
+        int,
+        Field(
+            ge=15,
+            le=3_600,
+            validation_alias="SUGARGLIDER_OUTING_LIVE_STALE_AFTER_SECONDS",
+        ),
+    ] = 120
+    outing_live_expire_after_seconds: Annotated[
+        int,
+        Field(
+            ge=60,
+            le=86_400,
+            validation_alias="SUGARGLIDER_OUTING_LIVE_EXPIRE_AFTER_SECONDS",
+        ),
+    ] = 3_600
+    outing_live_max_update_age_seconds: Annotated[
+        int,
+        Field(
+            ge=30,
+            le=86_400,
+            validation_alias="SUGARGLIDER_OUTING_LIVE_MAX_UPDATE_AGE_SECONDS",
+        ),
+    ] = 600
+    outing_live_future_tolerance_seconds: Annotated[
+        int,
+        Field(
+            ge=0,
+            le=600,
+            validation_alias="SUGARGLIDER_OUTING_LIVE_FUTURE_TOLERANCE_SECONDS",
+        ),
+    ] = 30
+    outing_live_event_retention_seconds: Annotated[
+        int,
+        Field(
+            ge=60,
+            le=86_400,
+            validation_alias="SUGARGLIDER_OUTING_LIVE_EVENT_RETENTION_SECONDS",
+        ),
+    ] = 900
+    outing_live_max_events_per_outing: Annotated[
+        int,
+        Field(
+            ge=10,
+            le=100_000,
+            validation_alias="SUGARGLIDER_OUTING_LIVE_MAX_EVENTS_PER_OUTING",
+        ),
+    ] = 1_000
+    outing_live_sse_keepalive_seconds: Annotated[
+        int,
+        Field(
+            ge=5,
+            le=60,
+            validation_alias="SUGARGLIDER_OUTING_LIVE_SSE_KEEPALIVE_SECONDS",
+        ),
+    ] = 15
 
     @model_validator(mode="after")
-    def validate_poi_limits(self) -> Self:
+    def validate_cross_setting_limits(self) -> Self:
         if self.poi_default_limit > self.poi_max_limit:
             raise ValueError("POI default limit cannot exceed the maximum limit")
+        if (
+            self.outing_live_stale_after_seconds
+            >= self.outing_live_expire_after_seconds
+        ):
+            raise ValueError("outing live stale duration must be below expiry")
+        if (
+            self.outing_live_sse_keepalive_seconds
+            >= self.outing_live_event_retention_seconds
+        ):
+            raise ValueError("outing live SSE keepalive must be below event retention")
         return self

@@ -197,11 +197,22 @@ capabilities exist only in the URL fragment (`#invite=...`), which the browser
 captures into memory and immediately removes. Owner, join, and participant
 capabilities are stored only as SHA-256 hashes. Each participant GPX endpoint
 serializes only that participant's copied candidate; deleting the original saved
-route does not affect the outing. PR23 does not collect live positions.
+route does not affect the outing.
 
 Outings use a separate SQLite database configured with
 `SUGARGLIDER_OUTING_DATABASE_PATH`. See
 [`docs/pr23-shared-outings.md`](docs/pr23-shared-outings.md).
+
+PR24 adds participant-authorized current positions to the same outing database.
+`PUT` and `DELETE` on
+`/v2/outings/{slug}/participants/{participant_id}/position` require the existing
+participant capability. Public unlisted reads use
+`GET /v2/outings/{slug}/live`; durable bounded SSE uses
+`GET /v2/outings/{slug}/events`. Positions are ordered by client sequence, remain
+unsnapped, become stale separately from expiry, and are not retained as historical
+tracks. PR24 adds backend support only—browser geolocation and `EventSource` remain
+future PR25 work. See
+[`docs/pr24-live-positions-sse.md`](docs/pr24-live-positions-sse.md).
 
 ## Distance and profiles
 

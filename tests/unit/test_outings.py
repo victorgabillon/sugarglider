@@ -665,6 +665,8 @@ async def test_real_app_startup_initializes_outing_schema(tmp_path: Path) -> Non
     )
     async with app.router.lifespan_context(app):
         assert app.state.outing_service.available
+        assert app.state.outing_live_service.available
+        assert app.state.outing_live_broker is not None
         assert database_path.exists()
         with SQLiteOutingRepository(database_path)._connection() as connection:
             tables = {
@@ -676,7 +678,12 @@ async def test_real_app_startup_initializes_outing_schema(tmp_path: Path) -> Non
                     """
                 )
             }
-    assert tables == {"outings", "outing_participants"}
+    assert tables == {
+        "outings",
+        "outing_participants",
+        "outing_live_positions",
+        "outing_live_events",
+    }
 
 
 @pytest.mark.asyncio
@@ -763,6 +770,7 @@ async def test_outing_startup_failure_isolated_from_saved_routes_and_planning(
             )
         assert app.state.plan_service is plan_service
         assert app.state.outing_service.available is False
+        assert app.state.outing_live_service.available is False
     assert fetched.status_code == planned.status_code == health.status_code == 200
     assert plan_service.calls == 1
     assert failed.status_code == 503
