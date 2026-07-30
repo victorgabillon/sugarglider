@@ -1,4 +1,5 @@
 import { gpxFeatureCollection } from "./gpx.js";
+import { liveFreshness } from "./outing_live_state.js";
 import { requestedPlaceIdentifier } from "./state.js";
 
 const REQUIRED_LABEL_SOURCE = "required-point-labels";
@@ -35,6 +36,22 @@ const REQUESTED_RADIUS_SEGMENTS = 48;
 const DIRECTION_SOURCE = "selected-route-direction";
 const DIRECTION_LAYER = "selected-route-direction-arrows";
 const DIRECTION_IMAGE = "route-direction-arrow";
+const OUTING_LIVE_POSITION_SOURCE = "outing-live-position-current";
+const OUTING_LIVE_ACCURACY_SOURCE = "outing-live-accuracy-current";
+const OUTING_LIVE_ACCURACY_FILL_LAYER = "outing-live-accuracy-fill";
+const OUTING_LIVE_ACCURACY_OUTLINE_LAYER = "outing-live-accuracy-outline";
+const OUTING_LIVE_POSITION_CASING_LAYER = "outing-live-position-casing";
+const OUTING_LIVE_POSITION_MARKER_LAYER = "outing-live-position-marker";
+const OUTING_LIVE_POSITION_SELECTED_LAYER = "outing-live-position-selected";
+const OUTING_LIVE_POSITION_LABEL_LAYER = "outing-live-position-label";
+const OUTING_LIVE_LAYERS = [
+  OUTING_LIVE_ACCURACY_FILL_LAYER,
+  OUTING_LIVE_ACCURACY_OUTLINE_LAYER,
+  OUTING_LIVE_POSITION_CASING_LAYER,
+  OUTING_LIVE_POSITION_MARKER_LAYER,
+  OUTING_LIVE_POSITION_SELECTED_LAYER,
+  OUTING_LIVE_POSITION_LABEL_LAYER,
+];
 const SPUR_SOURCE = "selected-route-spurs";
 const SPUR_HIGHLIGHT_LAYER = "selected-route-spur-highlights";
 const SPUR_BRANCH_LAYER = "selected-route-spur-branches";
@@ -95,6 +112,7 @@ let directionCandidateId = null;
 let spurCandidateId = null;
 let spurById = new Map();
 let spurPopup = null;
+let outingLiveParticipantSelectHandler = null;
 
 export function initializeMap(config, handlers) {
   if (!window.maplibregl) {
@@ -145,6 +163,21 @@ export function initializeMap(config, handlers) {
     if (ready) handlers.onViewportChange?.(currentViewportBounds());
   });
   map.on("click", (event) => {
+    const liveLayers = [
+      OUTING_LIVE_POSITION_SELECTED_LAYER,
+      OUTING_LIVE_POSITION_LABEL_LAYER,
+      OUTING_LIVE_POSITION_MARKER_LAYER,
+      OUTING_LIVE_POSITION_CASING_LAYER,
+    ].filter((id) => map.getLayer(id));
+    const livePosition = liveLayers.length
+      ? map.queryRenderedFeatures(event.point, { layers: liveLayers })[0]
+      : null;
+    if (livePosition?.properties?.participant_id) {
+      outingLiveParticipantSelectHandler?.(
+        livePosition.properties.participant_id,
+      );
+      return;
+    }
     const labelLayers = [SELECTED_LABEL_LAYER, REQUIRED_LABEL_LAYER].filter((id) => map.getLayer(id));
     const label = labelLayers.length ? map.queryRenderedFeatures(event.point, { layers: labelLayers })[0] : null;
     if (label?.properties?.source_index !== undefined) {
@@ -229,6 +262,7 @@ export function initializeMap(config, handlers) {
       ...[SPUR_TURNAROUND_LAYER, SPUR_BRANCH_LAYER]
         .filter((id) => map.getLayer(id)),
       ...[SELECTED_LABEL_LAYER, REQUIRED_LABEL_LAYER].filter((id) => map.getLayer(id)),
+      ...OUTING_LIVE_LAYERS.filter((id) => map.getLayer(id)),
     ];
     const interactive = interactiveLayers.length && map.queryRenderedFeatures(event.point, { layers: interactiveLayers }).length;
     map.getCanvas().style.cursor = interactive ? "pointer" : "";
@@ -1236,6 +1270,15 @@ const OUTING_PALETTE = [
 ];
 let outingRouteCount = 0;
 let selectedOutingParticipantId = null;
+let outingLivePositionCount = 0;
+let outingLiveAccuracyCount = 0;
+let outingLiveFreshCount = 0;
+let outingLiveStaleCount = 0;
+let outingLiveSelectedParticipantId = null;
+
+export function outingParticipantColor(joinOrder) {
+  return OUTING_PALETTE[joinOrder % OUTING_PALETTE.length];
+}
 
 export function renderOutingRoutes(participants, selectedParticipantId) {
   if (!ready || !map) return;
@@ -1276,13 +1319,14 @@ export function renderOutingRoutes(participants, selectedParticipantId) {
       source: sourceId,
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": OUTING_PALETTE[index % OUTING_PALETTE.length],
+        "line-color": outingParticipantColor(index),
         "line-width": selected ? 7 : 4,
         "line-opacity": selected ? 1 : 0.72,
       },
     });
   });
   moveRequiredLabelsToTop();
+  positionOutingLiveLayers();
 }
 
 export function outingRouteRenderDiagnostics() {
@@ -1304,6 +1348,224 @@ export function fitOutingRoutes(participants) {
       (participant) => participant.planned_route.candidate.route.geometry,
     ),
   );
+}
+
+export function renderOutingLivePositions(
+  participants,
+  livePositions,
+  selectedParticipantId,
+  estimatedServerNow,
+  onParticipantSelect,
+) {
+  if (!ready || !map) return;
+  outingLiveParticipantSelectHandler = onParticipantSelect;
+  outingLiveSelectedParticipantId = selectedParticipantId;
+  const participantsById = new Map(
+    participants.map((participant, index) => [
+      participant.participant_id,
+      { participant, joinOrder: index },
+    ]),
+  );
+  const positionFeatures = [];
+  const accuracyFeatures = [];
+  outingLiveFreshCount = 0;
+  outingLiveStaleCount = 0;
+  for (const position of livePositions) {
+    const matched = participantsById.get(position.participant_id);
+    const freshness = liveFreshness(position, estimatedServerNow);
+    if (!matched || freshness === "expired") continue;
+    const { participant, joinOrder } = matched;
+    const color = outingParticipantColor(joinOrder);
+    const selected = position.participant_id === selectedParticipantId;
+    const opacity = freshness === "fresh" ? 1 : 0.46;
+    const properties = {
+      participant_id: position.participant_id,
+      display_name: participant.display_name,
+      join_order: joinOrder,
+      color,
+      opacity,
+      selected,
+      freshness,
+      live_label: (
+        `${participant.display_name} · `
+        + `${freshness === "fresh" ? "Live" : "Stale"}`
+      ),
+      accuracy_m: position.accuracy_m,
+    };
+    positionFeatures.push({
+      type: "Feature",
+      properties,
+      geometry: {
+        type: "Point",
+        coordinates: [position.coordinate.lon, position.coordinate.lat],
+      },
+    });
+    accuracyFeatures.push({
+      type: "Feature",
+      properties,
+      geometry: accuracyPolygon(
+        position.coordinate.lon,
+        position.coordinate.lat,
+        position.accuracy_m,
+      ),
+    });
+    if (freshness === "fresh") outingLiveFreshCount += 1;
+    else outingLiveStaleCount += 1;
+  }
+  outingLivePositionCount = positionFeatures.length;
+  outingLiveAccuracyCount = accuracyFeatures.length;
+  sourceData(OUTING_LIVE_POSITION_SOURCE, {
+    type: "FeatureCollection",
+    features: positionFeatures,
+  });
+  sourceData(OUTING_LIVE_ACCURACY_SOURCE, {
+    type: "FeatureCollection",
+    features: accuracyFeatures,
+  });
+  ensureOutingLiveLayers();
+  positionOutingLiveLayers();
+}
+
+export function clearOutingLivePositions() {
+  clearByPrefix("outing-live-position-");
+  clearByPrefix("outing-live-accuracy-");
+  outingLiveParticipantSelectHandler = null;
+  outingLivePositionCount = 0;
+  outingLiveAccuracyCount = 0;
+  outingLiveFreshCount = 0;
+  outingLiveStaleCount = 0;
+  outingLiveSelectedParticipantId = null;
+}
+
+export function outingLiveRenderDiagnostics() {
+  const layerIds = (map?.getStyle()?.layers ?? [])
+    .map((layer) => layer.id)
+    .filter((id) => OUTING_LIVE_LAYERS.includes(id));
+  return {
+    positionSourceExists: Boolean(map?.getSource(OUTING_LIVE_POSITION_SOURCE)),
+    accuracySourceExists: Boolean(map?.getSource(OUTING_LIVE_ACCURACY_SOURCE)),
+    expectedLayerCount: OUTING_LIVE_LAYERS.length,
+    layerCount: layerIds.length,
+    renderedCurrentPositionCount: outingLivePositionCount,
+    renderedAccuracyPolygonCount: outingLiveAccuracyCount,
+    freshCount: outingLiveFreshCount,
+    staleCount: outingLiveStaleCount,
+    selectedParticipantId: outingLiveSelectedParticipantId,
+    duplicateLayerCount: layerIds.length - new Set(layerIds).size,
+  };
+}
+
+function ensureOutingLiveLayers() {
+  addOutingLiveLayer({
+    id: OUTING_LIVE_ACCURACY_FILL_LAYER,
+    type: "fill",
+    source: OUTING_LIVE_ACCURACY_SOURCE,
+    paint: {
+      "fill-color": ["get", "color"],
+      "fill-opacity": ["*", ["get", "opacity"], 0.13],
+    },
+  });
+  addOutingLiveLayer({
+    id: OUTING_LIVE_ACCURACY_OUTLINE_LAYER,
+    type: "line",
+    source: OUTING_LIVE_ACCURACY_SOURCE,
+    paint: {
+      "line-color": ["get", "color"],
+      "line-opacity": ["*", ["get", "opacity"], 0.5],
+      "line-width": 1.5,
+    },
+  });
+  addOutingLiveLayer({
+    id: OUTING_LIVE_POSITION_CASING_LAYER,
+    type: "circle",
+    source: OUTING_LIVE_POSITION_SOURCE,
+    paint: {
+      "circle-radius": 10,
+      "circle-color": "#fffdf7",
+      "circle-opacity": ["get", "opacity"],
+    },
+  });
+  addOutingLiveLayer({
+    id: OUTING_LIVE_POSITION_MARKER_LAYER,
+    type: "circle",
+    source: OUTING_LIVE_POSITION_SOURCE,
+    paint: {
+      "circle-radius": 7,
+      "circle-color": ["get", "color"],
+      "circle-opacity": ["get", "opacity"],
+      "circle-stroke-color": "#1e2b25",
+      "circle-stroke-width": 1,
+    },
+  });
+  addOutingLiveLayer({
+    id: OUTING_LIVE_POSITION_SELECTED_LAYER,
+    type: "circle",
+    source: OUTING_LIVE_POSITION_SOURCE,
+    filter: ["==", ["get", "selected"], true],
+    paint: {
+      "circle-radius": 14,
+      "circle-color": "rgba(255,255,255,0)",
+      "circle-stroke-color": "#f4b942",
+      "circle-stroke-width": 4,
+    },
+  });
+  addOutingLiveLayer({
+    id: OUTING_LIVE_POSITION_LABEL_LAYER,
+    type: "symbol",
+    source: OUTING_LIVE_POSITION_SOURCE,
+    layout: {
+      "text-field": ["get", "live_label"],
+      "text-font": ["Open Sans Semibold"],
+      "text-size": 11,
+      "text-offset": [0, 1.6],
+      "text-anchor": "top",
+      "text-allow-overlap": false,
+    },
+    paint: {
+      "text-color": "#21332b",
+      "text-opacity": ["get", "opacity"],
+      "text-halo-color": "#fffdf7",
+      "text-halo-width": 2,
+    },
+  });
+}
+
+function addOutingLiveLayer(layer) {
+  if (!map.getLayer(layer.id)) map.addLayer(layer);
+}
+
+function positionOutingLiveLayers() {
+  if (!map) return;
+  for (const layerId of OUTING_LIVE_LAYERS) {
+    if (map.getLayer(layerId)) map.moveLayer(layerId);
+  }
+}
+
+function accuracyPolygon(longitude, latitude, accuracyM) {
+  const earthRadiusM = 6_371_008.8;
+  const angularDistance = accuracyM / earthRadiusM;
+  const latitudeRadians = latitude * Math.PI / 180;
+  const longitudeRadians = longitude * Math.PI / 180;
+  const coordinates = [];
+  for (let index = 0; index <= 48; index += 1) {
+    const bearing = 2 * Math.PI * index / 48;
+    const polygonLatitude = Math.asin(
+      Math.sin(latitudeRadians) * Math.cos(angularDistance)
+      + Math.cos(latitudeRadians) * Math.sin(angularDistance)
+      * Math.cos(bearing),
+    );
+    const polygonLongitude = longitudeRadians + Math.atan2(
+      Math.sin(bearing) * Math.sin(angularDistance)
+      * Math.cos(latitudeRadians),
+      Math.cos(angularDistance)
+      - Math.sin(latitudeRadians) * Math.sin(polygonLatitude),
+    );
+    coordinates.push([
+      ((polygonLongitude * 180 / Math.PI + 540) % 360) - 180,
+      polygonLatitude * 180 / Math.PI,
+    ]);
+  }
+  return { type: "Polygon", coordinates: [coordinates] };
 }
 
 function renderDirectionArrows(candidate, enabled) {

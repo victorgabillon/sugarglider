@@ -1,3 +1,5 @@
+import { emptyOutingLiveState } from "./outing_live_state.js";
+
 export const state = {
   plan: {
     schema_version: 1,
@@ -71,6 +73,15 @@ export const state = {
   outingOwnerReceipt: null,
   outingParticipantReceipt: null,
   outingInviteToken: null,
+  outingLiveState: emptyOutingLiveState(),
+  outingLiveConnectionStatus: "closed",
+  outingTrackingStatus: "inactive",
+  outingTrackingMessage: "Position sharing stopped",
+  outingTrackingLastPublishedAt: null,
+  outingTrackingActive: false,
+  outingTrackingTransitionPending: false,
+  outingTrackingClearFailed: false,
+  outingClosed: false,
   selectedSignature: null,
   selectedPointIndex: null,
   pendingPointPopupIndex: null,

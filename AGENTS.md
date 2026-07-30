@@ -220,5 +220,26 @@
   explicit SQLite read transaction; reset IDs may never outrun serialized state.
 - Async SSE handlers must offload every synchronous SQLite operation and use the
   process-local broker only as a payload-free wakeup optimization.
-- PR24 contains no frontend geolocation, EventSource, moving markers, background
-  tracking, or service-worker behavior; those browser concerns remain PR25 work.
+- PR25 browser geolocation starts only from an explicit participant click and is
+  foreground-only. Loading, joining, creating, opening, or reconnecting an outing
+  must never request location permission or start sharing automatically.
+- Public outing viewing uses capability-free EventSource requests. Participant
+  capabilities remain only in the current JavaScript in-memory receipt and never
+  enter URLs, HTML, browser storage, logs, live public state, or map data.
+- Foreground publication is single-flight and coalesces only the latest unsent
+  sample. It stores no coordinate history and never builds a breadcrumb or activity
+  track.
+- Tracker watches, timers, HTTP operations, clears, and finalizers must own one
+  monotonic session generation. Explicit Stop serializes behind a definite active
+  PUT outcome; uncertain transport outcomes retain the expiry warning and retry.
+- EventSource, recovery, and membership callbacks must own the current outing slug
+  and lifecycle epoch. Membership refreshes coalesce concurrent invalidations with
+  a dirty serialized rerun, and freshness ticks must preserve participant-card DOM
+  identity and keyboard focus.
+- Live markers and accuracy areas use the exact unsnapped participant coordinates.
+  They never infer route progress, movement, speed, heading, or route deviation.
+- Live freshness and expiry use server-controlled timestamps. Closing, suspending,
+  or hiding a tab is not reliable clearing; explicit Stop is the reliable action and
+  pagehide cleanup remains best effort.
+- PR25 has no PWA, service worker, manifest, background geolocation, notification,
+  persistent offline queue, or wake-lock behavior.

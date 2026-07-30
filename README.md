@@ -203,6 +203,17 @@ Outings use a separate SQLite database configured with
 `SUGARGLIDER_OUTING_DATABASE_PATH`. See
 [`docs/pr23-shared-outings.md`](docs/pr23-shared-outings.md).
 
+Authenticated current positions and durable SSE replay are the PR24 backend
+protocol. PR25 consumes that protocol on the outing page: public viewers receive
+unsnapped current markers and accuracy areas, while a participant with a same-tab
+in-memory receipt may explicitly start foreground browser sharing. Sharing never
+starts on page load, creation, joining, or reconnection. Publication is latest-only
+and single-flight, retains no historical track, and serializes explicit Stop after a
+definite active PUT outcome. An uncertain network outcome remains visibly
+unreliable until SSE or expiry resolves it; page closure is only best effort. See
+[`docs/pr24-live-positions-sse.md`](docs/pr24-live-positions-sse.md) and
+[`docs/pr25-foreground-live-map.md`](docs/pr25-foreground-live-map.md).
+
 PR24 adds participant-authorized current positions to the same outing database.
 `PUT` and `DELETE` on
 `/v2/outings/{slug}/participants/{participant_id}/position` require the existing

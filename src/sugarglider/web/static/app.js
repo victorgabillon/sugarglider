@@ -175,6 +175,7 @@ function preferPoi(feature) {
 }
 
 async function fetchViewportPois(id, bounds) {
+  if (state.outingDisplay) return;
   if (!state.config?.poi_index_available) return;
   const normalized = normalizedViewportBounds(bounds);
   const request = normalized ? poiRequestBody(normalized) : null;
@@ -216,6 +217,7 @@ async function fetchViewportPois(id, bounds) {
 }
 
 function schedulePoiRefresh(bounds = currentViewportBounds()) {
+  if (state.outingDisplay) return;
   if (!state.config?.poi_index_available) return;
   pendingPoiBounds = bounds;
   window.clearTimeout(poiDebounceTimer);
