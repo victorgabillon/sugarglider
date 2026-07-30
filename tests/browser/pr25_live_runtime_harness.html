@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>PR25 live runtime harness</title>
+  <pre id="result">running</pre>
+  <script>
+    window.pr25HarnessResult = document.getElementById("result");
+    window.pr25UnhandledRejection = null;
+    window.addEventListener("unhandledrejection", (event) => {
+      window.pr25UnhandledRejection = event.reason;
+      window.pr25HarnessResult.dataset.status = "failed";
+      window.pr25HarnessResult.textContent = (
+        event.reason instanceof Error
+          ? event.reason.stack
+          : String(event.reason)
+      );
+    });
+  </script>
+  <script type="module">
+    import { runPr25LiveRuntimeHarness } from "./pr25_live_runtime_harness.js";
+
+    const result = window.pr25HarnessResult;
+    try {
+      const scenarios = await runPr25LiveRuntimeHarness();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      if (window.pr25UnhandledRejection !== null) {
+        throw window.pr25UnhandledRejection;
+      }
+      result.dataset.status = "passed";
+      result.textContent = JSON.stringify(scenarios);
+    } catch (error) {
+      result.dataset.status = "failed";
+      result.textContent = error instanceof Error ? error.stack : String(error);
+    }
+  </script>
+</html>

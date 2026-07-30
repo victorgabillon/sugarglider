@@ -91,9 +91,23 @@ button:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity:
 .saved-route-link-row input { min-width: 0; }
 .outing-form { display: grid; gap: .75rem; margin-top: 1rem; max-width: 38rem; }
 .outing-view { margin-bottom: 1rem; }
+.outing-live-panel { margin-top: .9rem; padding: .8rem; border: 1px solid #b8cbbb; border-radius: .8rem; background: #edf4ec; }
+.outing-live-panel .section-heading { align-items: baseline; }
+.outing-live-panel .section-heading strong { color: var(--primary-action); font-size: .75rem; }
+.outing-live-panel > p { margin-top: .35rem; }
+.outing-live-own-controls { margin-top: .65rem; padding-top: .65rem; border-top: 1px solid #c8d7c9; }
+.outing-live-own-controls .button { min-height: 44px; }
+.outing-live-own-controls .status { min-height: 1.2rem; }
 .outing-participant-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .7rem; margin: 1rem 0; }
 .outing-participant-card { display: grid; gap: .2rem; padding: .85rem; border: 2px solid var(--border); border-radius: .8rem; background: var(--elevated-surface); color: inherit; text-align: left; }
 .outing-participant-card.selected { border-color: var(--primary-action); box-shadow: 0 0 0 2px rgb(33 75 59 / 18%); }
+.outing-participant-heading { display: flex; align-items: center; gap: .45rem; }
+.outing-participant-swatch { width: .85rem; height: .85rem; flex: 0 0 auto; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #6d756f; }
+.outing-participant-live { margin-top: .35rem; font-size: .7rem; font-weight: 900; text-transform: uppercase; }
+.outing-participant-live.fresh { color: #23633e; }
+.outing-participant-live.stale { color: #75520f; text-decoration: underline dotted; text-underline-offset: .18rem; }
+.outing-participant-live.not-sharing { color: var(--muted-text); }
+.outing-participant-live-facts { min-height: 1em; color: var(--muted-text); font-size: .68rem; }
 body.outing-mode .panel.controls, body.outing-mode .candidate-strip, body.outing-mode .map-tools, body.outing-mode .legend, body.outing-mode .export-actions { display: none; }
 body.outing-mode .planner { grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr); grid-template-areas: "map metrics"; }
 
@@ -408,6 +422,8 @@ footer { padding: .48rem 1rem; color: #d6e0da; background: var(--primary-action)
   .poi-fields { grid-template-columns: 1fr 1fr; }
   .map-empty-state { width: calc(100% - 1rem); }
   .candidate-list { grid-template-columns: repeat(5, minmax(270px, 1fr)); }
+  .outing-live-own-controls .button-row { display: grid; grid-template-columns: 1fr; }
+  .outing-live-own-controls .button { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

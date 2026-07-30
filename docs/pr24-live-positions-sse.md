@@ -131,6 +131,12 @@ keepalive timeout queries SQLite, so another API process's commits are eventuall
 delivered. All synchronous SQLite work is dispatched through the application
 threadpool rather than run on the event loop.
 
+PR24 owns this backend protocol, persistence, authorization, freshness, and replay
+grammar. The capability-free public EventSource client, explicit foreground browser
+geolocation, latest-only publication controller, and unsnapped live map overlays are
+implemented by PR25 without changing these endpoints. See
+[`pr25-foreground-live-map.md`](pr25-foreground-live-map.md).
+
 ## Configuration
 
 Defaults and bounds are:

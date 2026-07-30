@@ -94,9 +94,13 @@
         <p>Public outing link: view-only unlisted link.</p>
         <div class="saved-route-link-row">
           <input id="outing-public-link" aria-label="Public outing link" readonly>
-          <button id="open-outing" class="button secondary" type="button">Open outing</button>
+          <button id="open-outing" class="button secondary" type="button">Open public view</button>
           <button id="copy-outing-public-link" class="button secondary" type="button">Copy public link</button>
         </div>
+        <div class="button-row">
+          <button id="open-outing-live-here" class="button primary hidden" type="button">Open live outing in this tab</button>
+        </div>
+        <p class="context-note">Opening here keeps your participant capability only in this tab's memory so you can explicitly start foreground sharing. Reloading intentionally returns to viewer-only mode.</p>
         <p>Invitation link: permits joining until the outing expires or is full.</p>
         <div class="saved-route-link-row">
           <input id="outing-invite-link" aria-label="Outing invitation link" readonly>
@@ -112,7 +116,22 @@
         <p class="eyebrow">Shared outing</p>
         <h1 id="outing-view-title"></h1>
         <p id="outing-view-summary"></p>
-        <p class="context-note">This outing is unlisted, not access-controlled. Anyone with the public link can see participant display names and planned routes. Use a nickname when appropriate. PR23 collects no live position.</p>
+        <p class="context-note">This outing is unlisted, not access-controlled. Anyone with the public link can see participant display names, planned routes, and currently shared positions. Use a nickname when appropriate.</p>
+        <section id="outing-live-panel" class="outing-live-panel hidden" aria-labelledby="outing-live-title">
+          <div class="section-heading">
+            <h2 id="outing-live-title">Live positions</h2>
+            <strong id="outing-live-connection" aria-live="polite">Connecting</strong>
+          </div>
+          <p id="outing-live-summary">No current positions.</p>
+          <div id="outing-live-own-controls" class="outing-live-own-controls hidden">
+            <div class="button-row">
+              <button id="start-outing-live-sharing" class="button primary" type="button">Start sharing</button>
+              <button id="stop-outing-live-sharing" class="button secondary hidden" type="button">Stop sharing</button>
+            </div>
+            <p id="outing-live-tracking-status" class="status" aria-live="polite">Position sharing stopped</p>
+          </div>
+          <p class="context-note">Sharing starts only after pressing Start and uses foreground browser location. No historical activity track is retained. Press Stop for reliable removal. If this tab closes or is suspended first, the last position may remain visible until server expiry.</p>
+        </section>
         <div id="outing-participant-cards" class="outing-participant-cards"></div>
         <form id="join-outing-form" class="outing-form hidden">
           <h2>Join with your independent route</h2>
@@ -124,6 +143,9 @@
         <div id="outing-participant-actions" class="button-row hidden">
           <button id="download-my-outing-gpx" class="button secondary" type="button">Download my GPX</button>
           <button id="leave-outing" class="text-button" type="button">Leave outing</button>
+        </div>
+        <div id="outing-owner-actions" class="button-row hidden">
+          <button id="delete-outing-owner-view" class="text-button" type="button">Delete outing</button>
         </div>
       </div>
     </section>

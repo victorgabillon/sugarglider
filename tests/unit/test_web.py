@@ -179,8 +179,33 @@ async def test_application_and_static_assets_are_served(
     index = await client.get("/")
     css = await client.get("/static/styles.css")
     javascript = await client.get("/static/app.js")
+    outing_controller = await client.get("/static/outing_controller.js")
+    live_modules = [
+        await client.get(f"/static/{name}")
+        for name in (
+            "outing_live.js",
+            "outing_live_lifecycle.js",
+            "outing_live_state.js",
+            "outing_tracking.js",
+        )
+    ]
     missing = await client.get("/static/missing.js")
     assert index.status_code == css.status_code == javascript.status_code == 200
+    assert all(response.status_code == 200 for response in live_modules)
+    assert all(
+        response.headers["content-type"].startswith(
+            ("text/javascript", "application/javascript")
+        )
+        for response in live_modules
+    )
+    assert outing_controller.status_code == 200
+    for module_name in (
+        "outing_live.js",
+        "outing_live_lifecycle.js",
+        "outing_live_state.js",
+        "outing_tracking.js",
+    ):
+        assert f'from "./{module_name}"' in outing_controller.text
     assert index.headers["content-type"].startswith("text/html")
     assert "<main" in index.text and "<nav" in index.text and "<footer" in index.text
     assert "maplibre-gl@4.7.1" in index.text
