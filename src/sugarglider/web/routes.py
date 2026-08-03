@@ -21,6 +21,38 @@ async def index() -> FileResponse:
 
 
 @router.get(
+    "/manifest.webmanifest",
+    response_class=FileResponse,
+    include_in_schema=False,
+)
+async def web_manifest() -> FileResponse:
+    """Return the capability-free install manifest from the origin root."""
+    return FileResponse(
+        STATIC_DIRECTORY / "manifest.webmanifest",
+        media_type="application/manifest+json",
+        headers={"X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.get(
+    "/service-worker.js",
+    response_class=FileResponse,
+    include_in_schema=False,
+)
+async def service_worker() -> FileResponse:
+    """Return the application worker with an origin-root scope."""
+    return FileResponse(
+        STATIC_DIRECTORY / "service-worker.js",
+        media_type="application/javascript",
+        headers={
+            "Cache-Control": "no-cache",
+            "Service-Worker-Allowed": "/",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.get(
     "/r/{slug}",
     response_class=FileResponse,
     include_in_schema=False,

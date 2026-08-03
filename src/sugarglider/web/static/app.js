@@ -3,9 +3,43 @@ import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPerce
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
 import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
-import { bindOutingController, startOutingPage } from "./outing_controller.js";
+import {
+  bindOutingController,
+  forgetCurrentOutingParticipant,
+  outingOutboxPresenceIsCurrent,
+  outingMutationIsPending,
+  renderCurrentOutingConnectivity,
+  rememberCurrentOutingParticipant,
+  retryCurrentOutingConnection,
+  startOutingPage,
+} from "./outing_controller.js";
+import {
+  clearUnavailableSavedRouteState,
+  readOptionalStorage,
+  resolveNetworkResource,
+  settleOptionalPersistence,
+} from "./pwa_network.js";
 import { outingSlug } from "./outings.js";
 import { renderOutingCreationAction, renderOutingReceipt } from "./outing_view.js";
+import {
+  applyOfflineCopyRefresh,
+  clearOfflineSnapshotStatus,
+  initializePwaRuntime,
+  loadOfflineSnapshot,
+  markOfflineSnapshot,
+  offlineMapConfig,
+  refreshOfflineSnapshot,
+  reportOptionalStorageFailure,
+  removeOfflineSnapshot,
+  restorePublicConfig,
+  setPwaNetworkStatus,
+  storePublicConfig,
+  transportFailure,
+} from "./pwa_runtime.js";
+import {
+  renderOfflineCopyControls,
+  renderPwaStatus,
+} from "./pwa_view.js";
 import { createSavedRoute, deleteSavedRoute, downloadSavedRouteGpx, getSavedRoute, savedRouteShareUrl, shareSavedRoute, sharedRouteSlug } from "./saved_routes.js";
 import { currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, state, switchPlanningMode } from "./state.js";
 
@@ -14,6 +48,8 @@ let elapsedTimer = null;
 let mapReady = false;
 let poiDebounceTimer = null;
 let pendingPoiBounds = null;
+let savedRoutePageEpoch = 0;
+let savedRouteReconnectOperation = null;
 
 const PRIMARY_SCENIC_CATEGORIES = [
   "viewpoint",
@@ -1368,7 +1404,9 @@ function renderMetrics() {
   const busy = ["running", "reversing"].includes(state.request.status);
   const readOnly = isImmutableSnapshotDisplay();
   const savingUnavailable = !state.config?.saved_routes_available;
-  byId("download-gpx").disabled = !candidate || busy;
+  byId("download-gpx").disabled = !candidate
+    || busy
+    || serverFeaturesUnavailable();
   byId("reverse-route").disabled = readOnly || !candidate || busy || Boolean(state.importedGpx && !state.generationResult);
   byId("save-route").disabled = savingUnavailable || readOnly || !candidate || busy;
   byId("save-route-selected").disabled = savingUnavailable || readOnly || !candidate || busy;
@@ -1569,11 +1607,21 @@ function render() {
   renderEmptyState();
   renderSavedRoutePanel();
   renderOutingReceipt(state);
+  renderPwaStatus(state);
+  renderOfflineCopyControls(state);
   const imported = state.importedGpx;
   byId("gpx-summary").classList.toggle("hidden", !imported);
   if (imported) {
     byId("gpx-details").textContent = `${imported.filename} · ${formatCount(imported.pointCount)} trackpoints · ${formatDistance(imported.distanceM)} locally calculated`;
   }
+}
+
+function renderPwaApplication() {
+  if (state.outingDisplay) {
+    renderCurrentOutingConnectivity();
+    return;
+  }
+  render();
 }
 
 async function selectCandidate(candidateId) {
@@ -2112,7 +2160,7 @@ async function importGpx(file) {
 
 async function downloadSelected() {
   const candidate = selectedCandidate();
-  if (!candidate) return;
+  if (!candidate || serverFeaturesUnavailable()) return;
   try {
     const { blob, filename } = isSavedRouteSnapshotDisplay()
       ? await downloadSavedRouteGpx(state.savedRouteSnapshot.slug)
@@ -2138,7 +2186,9 @@ function renderSavedRoutePanel() {
   const url = savedRouteShareUrl(saved);
   byId("saved-route-link").value = url;
   byId("saved-route-message").textContent = isSavedRouteSnapshotDisplay()
-    ? "Read-only immutable snapshot. No generation, rerouting, or reranking occurs when this link opens."
+    ? state.offlineSnapshotKind === "saved_route"
+      ? "Showing the exact explicit offline copy. The server snapshot is not being claimed available; mutations and GPX are disabled."
+      : "Read-only immutable snapshot. No generation, rerouting, or reranking occurs when this link opens."
     : state.savedRouteReceipt
       ? "Route saved. The exact source request and selected candidate are stored behind this unlisted link."
       : "The original immutable snapshot remains available at this link.";
@@ -2148,16 +2198,22 @@ function renderSavedRoutePanel() {
   );
   byId("use-saved-route").classList.toggle(
     "hidden",
-    !isSavedRouteSnapshotDisplay(),
+    !isSavedRouteSnapshotDisplay() || serverFeaturesUnavailable(),
   );
   byId("delete-saved-route").classList.toggle(
     "hidden",
-    !state.savedRouteReceipt?.owner_token,
+    !state.savedRouteReceipt?.owner_token
+      || serverFeaturesUnavailable(),
   );
   byId("dismiss-saved-route").classList.toggle(
     "hidden",
     !state.savedRouteReceipt,
   );
+}
+
+function serverFeaturesUnavailable() {
+  return state.networkStatus === "offline"
+    || Boolean(state.offlineSnapshotKind);
 }
 
 async function saveSelectedRoute() {
@@ -2502,9 +2558,192 @@ function bindEvents() {
   window.addEventListener("resize", resizeMap);
 }
 
+async function loadSavedRoutePage(slug) {
+  const epoch = ++savedRoutePageEpoch;
+  try {
+    const loaded = await resolveNetworkResource({
+      loadResource: () => getSavedRoute(slug),
+      loadConfig: () => getConfig(),
+      loadStoredConfig: restorePublicConfig,
+      fallbackConfig: (snapshot) => onlineFallbackConfig(snapshot),
+    });
+    if (epoch !== savedRoutePageEpoch) return null;
+    state.config = loaded.config;
+    clearOfflineSnapshotStatus();
+    void persistSavedRouteNetworkData(
+      loaded,
+      () => epoch === savedRoutePageEpoch,
+    );
+    return loaded.resource;
+  } catch (error) {
+    if (epoch !== savedRoutePageEpoch) return null;
+    if (error?.code === "saved_route_not_found") {
+      await Promise.allSettled([
+        removeOfflineSnapshot("saved_route", slug),
+      ]);
+      if (epoch !== savedRoutePageEpoch) return null;
+      throw error;
+    }
+    if (!transportFailure(error)) throw error;
+    const [recordResult, configResult] = await Promise.allSettled([
+      loadOfflineSnapshot("saved_route", slug),
+      restorePublicConfig(),
+    ]);
+    if (epoch !== savedRoutePageEpoch) return null;
+    const record = recordResult.status === "fulfilled"
+      ? recordResult.value
+      : null;
+    if (!record) throw error;
+    const storedConfig = configResult.status === "fulfilled"
+      ? configResult.value
+      : null;
+    state.config = offlineMapConfig(storedConfig, record.payload);
+    markOfflineSnapshot("saved_route", slug);
+    return record.payload;
+  }
+}
+
+async function retrySavedRouteConnection() {
+  const slug = state.savedRouteSnapshot?.slug;
+  if (!slug) return false;
+  if (savedRouteReconnectOperation) {
+    return savedRouteReconnectOperation.promise;
+  }
+  const epoch = savedRoutePageEpoch;
+  const identity = Object.freeze({ epoch, slug });
+  const operation = { identity, promise: null };
+  savedRouteReconnectOperation = operation;
+  operation.promise = (async () => {
+    try {
+      const wasOfflineSnapshot = state.offlineSnapshotKind === "saved_route";
+      const loaded = await resolveNetworkResource({
+        loadResource: () => getSavedRoute(slug),
+        loadConfig: () => getConfig(),
+        loadStoredConfig: restorePublicConfig,
+        fallbackConfig: (snapshot) => onlineFallbackConfig(snapshot),
+      });
+      if (!currentSavedRouteReconnect(operation)) return false;
+      const snapshot = loaded.resource;
+      state.config = loaded.config;
+      clearOfflineSnapshotStatus();
+      displaySavedRoute(snapshot);
+      renderSnapshotProfileIdentity(snapshot.candidate.routing_profile);
+      if (wasOfflineSnapshot) {
+        mapReady = false;
+        initializeMap(state.config, {
+          onReady: () => {
+            mapReady = true;
+            renderMapData();
+            fitCoordinates(snapshot.candidate.route.geometry);
+          },
+          onError: showMapError,
+          onViewportChange: () => {},
+          onMapClick: () => {},
+        });
+      }
+      render();
+      if (wasOfflineSnapshot) await selectCandidate(snapshot.candidate.id);
+      if (!currentSavedRouteReconnect(operation)) return false;
+      await persistSavedRouteNetworkData(
+        loaded,
+        () => currentSavedRouteReconnect(operation),
+      );
+      if (!currentSavedRouteReconnect(operation)) return false;
+      byId("request-status").textContent = (
+        "Saved route reconnected from its fresh immutable server snapshot."
+      );
+      return true;
+    } catch (error) {
+      if (!currentSavedRouteReconnect(operation)) return false;
+      if (error?.code === "saved_route_not_found") {
+        const cleanup = await settleOptionalPersistence([
+          () => removeOfflineSnapshot("saved_route", slug),
+        ]);
+        if (!currentSavedRouteReconnect(operation)) return false;
+        clearUnavailableSavedRouteState(state, slug);
+        clearRoutes();
+        render();
+        if (cleanup.failed) reportOptionalStorageFailure();
+        handleError(error, "The saved route no longer exists.");
+      } else if (transportFailure(error)) {
+        setPwaNetworkStatus("offline");
+      } else {
+        setPwaNetworkStatus("online");
+        handleError(error, "The saved route could not be refreshed.");
+      }
+      return false;
+    } finally {
+      if (savedRouteReconnectOperation === operation) {
+        savedRouteReconnectOperation = null;
+      }
+    }
+  })();
+  return operation.promise;
+}
+
+function currentSavedRouteReconnect(operation) {
+  return savedRouteReconnectOperation === operation
+    && operation.identity.epoch === savedRoutePageEpoch
+    && state.savedRouteSnapshot?.slug === operation.identity.slug;
+}
+
+function onlineFallbackConfig(snapshot) {
+  return { ...offlineMapConfig(null, snapshot), offline_mode: false };
+}
+
+async function persistSavedRouteNetworkData(loaded, isCurrent) {
+  const actions = [
+    () => refreshOfflineSnapshot("saved_route", loaded.resource),
+  ];
+  if (loaded.configFromNetwork) {
+    actions.push(() => storePublicConfig(loaded.config));
+  }
+  const persisted = await settleOptionalPersistence(actions);
+  if (!isCurrent()) return;
+  if (persisted.results[0].status === "fulfilled") {
+    applyOfflineCopyRefresh(persisted.results[0].value);
+  }
+  if (persisted.failed) reportOptionalStorageFailure();
+}
+
+async function retryCurrentConnection() {
+  if (state.outingDisplay) return retryCurrentOutingConnection();
+  if (state.savedRouteSnapshotDisplay) return retrySavedRouteConnection();
+  try {
+    const [config, catalog] = await Promise.all([
+      getConfig(),
+      getRoutingProfiles(),
+    ]);
+    state.config = config;
+    state.routingProfileCatalog = catalog;
+    clearOfflineSnapshotStatus();
+    const persisted = await settleOptionalPersistence([
+      () => storePublicConfig(config),
+    ]);
+    if (persisted.failed) reportOptionalStorageFailure();
+    window.location.reload();
+    return true;
+  } catch (error) {
+    if (transportFailure(error)) setPwaNetworkStatus("offline");
+    else {
+      setPwaNetworkStatus("online");
+      handleError(error, "The application could not be refreshed.");
+    }
+    return false;
+  }
+}
+
 async function start() {
   decorateIcons();
   try {
+    await initializePwaRuntime({
+      render: renderPwaApplication,
+      retry: retryCurrentConnection,
+      rememberParticipant: rememberCurrentOutingParticipant,
+      forgetParticipant: forgetCurrentOutingParticipant,
+      isMutationPending: outingMutationIsPending,
+      ownsOutboxPresence: outingOutboxPresenceIsCurrent,
+    });
     const currentOutingSlug = outingSlug();
     if (currentOutingSlug) {
       await startOutingPage(currentOutingSlug, {
@@ -2525,15 +2764,29 @@ async function start() {
     const sharedSlug = sharedRouteSlug();
     let sharedSnapshot = null;
     if (sharedSlug) {
-      [state.config, sharedSnapshot] = await Promise.all([
-        getConfig(),
-        getSavedRoute(sharedSlug),
-      ]);
+      sharedSnapshot = await loadSavedRoutePage(sharedSlug);
     } else {
-      [state.config, state.routingProfileCatalog] = await Promise.all([
-        getConfig(),
-        getRoutingProfiles(),
-      ]);
+      try {
+        [state.config, state.routingProfileCatalog] = await Promise.all([
+          getConfig(),
+          getRoutingProfiles(),
+        ]);
+        clearOfflineSnapshotStatus();
+        const persisted = await settleOptionalPersistence([
+          () => storePublicConfig(state.config),
+        ]);
+        if (persisted.failed) reportOptionalStorageFailure();
+      } catch (error) {
+        if (!transportFailure(error)) throw error;
+        const storedConfig = await readOptionalStorage(
+          restorePublicConfig,
+          { onFailure: reportOptionalStorageFailure },
+        );
+        state.config = offlineMapConfig(storedConfig, null);
+        state.routingProfileCatalog = { profiles: [] };
+        state.poiIndexStatus = { available: false, feature_count: null };
+        setPwaNetworkStatus("offline");
+      }
     }
     if (sharedSnapshot) {
       state.poiIndexStatus = { available: false, feature_count: null };
@@ -2542,6 +2795,7 @@ async function start() {
     } else {
       renderRoutingProfiles();
       try {
+        if (state.networkStatus === "offline") throw new TypeError();
         state.poiIndexStatus = await getPoiStatus();
       } catch {
         state.poiIndexStatus = { available: false, feature_count: null };
@@ -2637,8 +2891,18 @@ async function start() {
     render();
     if (sharedSnapshot) {
       fitCoordinates(sharedSnapshot.candidate.route.geometry);
-      await selectCandidate(sharedSnapshot.candidate.id);
-      byId("request-status").textContent = "Immutable saved route loaded without generation, rerouting, or reranking.";
+      if (state.networkStatus !== "offline") {
+        await selectCandidate(sharedSnapshot.candidate.id);
+        byId("request-status").textContent = "Immutable saved route loaded without generation, rerouting, or reranking.";
+      } else {
+        byId("request-status").textContent = (
+          "Showing the exact saved offline copy without API calls, generation, rerouting, reranking, or live data."
+        );
+      }
+    } else if (state.networkStatus === "offline") {
+      byId("request-status").textContent = (
+        "Sugarglider is offline. The application shell is ready; reconnect to plan a route."
+      );
     }
   } catch (error) {
     handleError(error, "The Sugarglider API is unavailable.");

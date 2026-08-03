@@ -54,6 +54,22 @@ export function discardStaleParticipantReceipt(
   return true;
 }
 
+export function installAuthoritativeOutingSnapshot(
+  state,
+  snapshot,
+  { shutdownTracker, syncTrackerState },
+) {
+  const previousReceipt = state.outingParticipantReceipt;
+  state.outingSnapshot = snapshot;
+  if (!discardStaleParticipantReceipt(state, snapshot, {
+    shutdownTracker,
+    syncTrackerState,
+  })) return null;
+  state.participantRemembered = false;
+  state.durableOutboxPresent = false;
+  return previousReceipt;
+}
+
 export function createGuardedSingleFlight({
   isCurrent,
   onStart,

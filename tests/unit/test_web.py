@@ -214,6 +214,23 @@ async def test_application_and_static_assets_are_served(
 
 
 @pytest.mark.asyncio
+async def test_manifest_and_service_worker_use_root_security_headers(
+    client: httpx.AsyncClient,
+) -> None:
+    manifest = await client.get("/manifest.webmanifest")
+    worker = await client.get("/service-worker.js")
+    assert manifest.status_code == worker.status_code == 200
+    assert manifest.headers["content-type"].startswith("application/manifest+json")
+    assert manifest.headers["x-content-type-options"] == "nosniff"
+    assert worker.headers["content-type"].startswith(
+        ("text/javascript", "application/javascript")
+    )
+    assert worker.headers["cache-control"] == "no-cache"
+    assert worker.headers["service-worker-allowed"] == "/"
+    assert worker.headers["x-content-type-options"] == "nosniff"
+
+
+@pytest.mark.asyncio
 async def test_every_runtime_brand_asset_is_served_as_png(
     client: httpx.AsyncClient,
 ) -> None:

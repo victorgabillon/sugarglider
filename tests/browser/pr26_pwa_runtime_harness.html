@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>PR26 PWA runtime harness</title>
+  <pre id="result">running</pre>
+  <script>
+    window.pr26HarnessResult = document.getElementById("result");
+    window.pr26UnhandledRejection = null;
+    window.addEventListener("error", (event) => {
+      window.pr26HarnessResult.dataset.status = "failed";
+      window.pr26HarnessResult.textContent = event.error?.stack ?? event.message;
+      document.title = "PR26 PWA runtime harness failed";
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      window.pr26UnhandledRejection = event.reason;
+      window.pr26HarnessResult.dataset.status = "failed";
+      window.pr26HarnessResult.textContent = (
+        event.reason instanceof Error
+          ? event.reason.stack
+          : String(event.reason)
+      );
+      document.title = "PR26 PWA runtime harness failed";
+    });
+  </script>
+  <script type="module">
+    import { runPr26PwaRuntimeHarness } from "./pr26_pwa_runtime_harness.js";
+
+    const result = window.pr26HarnessResult;
+    try {
+      const scenarios = await runPr26PwaRuntimeHarness();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      if (window.pr26UnhandledRejection !== null) {
+        throw window.pr26UnhandledRejection;
+      }
+      if (result.dataset.status === "failed") {
+        throw new Error(result.textContent);
+      }
+      result.dataset.status = "passed";
+      result.textContent = JSON.stringify(scenarios);
+      document.title = `PR26 PWA runtime harness passed ${scenarios.length}`;
+    } catch (error) {
+      result.dataset.status = "failed";
+      result.textContent = error instanceof Error ? error.stack : String(error);
+      document.title = "PR26 PWA runtime harness failed";
+    }
+  </script>
+</html>

@@ -8,6 +8,10 @@ import {
 } from "./outing_live_state.js";
 import { participantReceiptBelongsToOuting } from "./outing_live_lifecycle.js";
 import { publicOutingUrl } from "./outings.js";
+import {
+  renderOfflineCopyControls,
+  renderRememberedParticipantControls,
+} from "./pwa_view.js";
 
 const byId = (id) => document.getElementById(id);
 let participantSelectHandler = null;
@@ -22,6 +26,8 @@ export function renderOutingCreationAction(state) {
     state.config?.outings_available
     && state.config?.saved_routes_available
     && slug
+    && state.networkStatus !== "offline"
+    && state.offlineSnapshotKind !== "saved_route"
     && !["running", "reversing"].includes(state.request.status),
   );
   byId("show-create-outing").classList.toggle("hidden", !slug);
@@ -35,12 +41,13 @@ export function setOutingMutationControls(state, pending) {
     byId("show-create-outing").disabled = true;
     byId("create-outing").disabled = true;
   }
-  byId("join-outing").disabled = pending || state.outingClosed;
+  const offline = outingOffline(state);
+  byId("join-outing").disabled = pending || state.outingClosed || offline;
   byId("delete-outing").disabled = pending;
   byId("delete-outing-owner-view").disabled = (
-    pending || state.outingClosed
+    pending || state.outingClosed || offline
   );
-  byId("leave-outing").disabled = pending || state.outingClosed;
+  byId("leave-outing").disabled = pending || state.outingClosed || offline;
 }
 
 export function renderOutingReceipt(state) {
@@ -110,24 +117,6 @@ export function showOutingView(state, handlers) {
   );
   participantSelectHandler = handlers.select;
   renderParticipantCardsStructure(state, handlers.select);
-  byId("join-outing-form").classList.toggle(
-    "hidden",
-    !state.outingInviteToken,
-  );
-  const own = state.outingParticipantReceipt;
-  const hasParticipantReceipt = participantReceiptBelongsToOuting(own, outing);
-  byId("outing-participant-actions").classList.toggle(
-    "hidden",
-    !hasParticipantReceipt,
-  );
-  const owner = state.outingOwnerReceipt;
-  byId("outing-owner-actions").classList.toggle(
-    "hidden",
-    state.outingClosed || !owner || owner.slug !== outing.slug,
-  );
-  byId("join-outing").disabled = state.outingClosed;
-  byId("leave-outing").disabled = state.outingClosed;
-  byId("delete-outing-owner-view").disabled = state.outingClosed;
   byId("metrics-title").textContent = "Participant route details";
   byId("search-summary").textContent = (
     `${outing.participants.length} independent immutable route snapshot`
@@ -145,7 +134,41 @@ export function showOutingView(state, handlers) {
   byId("delete-outing-owner-view").onclick = handlers.deleteOwner;
   byId("start-outing-live-sharing").onclick = handlers.startSharing;
   byId("stop-outing-live-sharing").onclick = handlers.stopSharing;
+  byId("remember-outing-participant").onclick = (
+    handlers.rememberParticipant
+  );
+  byId("forget-outing-participant").onclick = handlers.forgetParticipant;
+  renderOutingConnectivityControls(state);
+}
+
+export function renderOutingConnectivityControls(state) {
+  const outing = state.outingSnapshot;
+  if (!outing) return;
+  const offline = outingOffline(state);
+  byId("join-outing-form").classList.toggle(
+    "hidden",
+    !state.outingInviteToken || offline,
+  );
+  const own = state.outingParticipantReceipt;
+  const hasParticipantReceipt = participantReceiptBelongsToOuting(own, outing);
+  byId("outing-participant-actions").classList.toggle(
+    "hidden",
+    !hasParticipantReceipt || offline,
+  );
+  const owner = state.outingOwnerReceipt;
+  byId("outing-owner-actions").classList.toggle(
+    "hidden",
+    state.outingClosed
+      || offline
+      || !owner
+      || owner.slug !== outing.slug,
+  );
+  byId("join-outing").disabled = state.outingClosed || offline;
+  byId("leave-outing").disabled = state.outingClosed || offline;
+  byId("delete-outing-owner-view").disabled = state.outingClosed || offline;
   renderOutingLiveView(state);
+  renderRememberedParticipantControls(state);
+  renderOfflineCopyControls(state);
 }
 
 export function renderOutingLiveView(state) {
@@ -160,18 +183,23 @@ export function renderOutingLiveView(state) {
     (position) => liveFreshness(position, serverNow) === "fresh",
   ).length;
   const staleCount = visible.length - freshCount;
-  byId("outing-live-connection").textContent = connectionLabel(
-    state.outingClosed
+  const offline = outingOffline(state);
+  byId("outing-live-connection").textContent = offline
+    ? "Offline"
+    : connectionLabel(
+      state.outingClosed
       ? "outing_closed"
       : available
         ? state.outingLiveConnectionStatus
         : "unavailable",
-  );
-  byId("outing-live-summary").textContent = (
-    `${visible.length} currently shared position`
-    + `${visible.length === 1 ? "" : "s"}`
-    + ` · ${freshCount} Live · ${staleCount} Stale`
-  );
+    );
+  byId("outing-live-summary").textContent = offline
+    ? "Live positions unavailable offline."
+    : (
+      `${visible.length} currently shared position`
+      + `${visible.length === 1 ? "" : "s"}`
+      + ` · ${freshCount} Live · ${staleCount} Stale`
+    );
 
   const receipt = state.outingParticipantReceipt;
   const hasParticipantReceipt = participantReceiptBelongsToOuting(
@@ -181,7 +209,8 @@ export function renderOutingLiveView(state) {
   const ownsParticipant = Boolean(
     available
     && !state.outingClosed
-    && hasParticipantReceipt,
+    && hasParticipantReceipt
+    && (!offline || state.participantRemembered)
   );
   const controls = byId("outing-live-own-controls");
   controls.classList.toggle("hidden", !ownsParticipant);
@@ -194,6 +223,9 @@ export function renderOutingLiveView(state) {
   const start = byId("start-outing-live-sharing");
   const stop = byId("stop-outing-live-sharing");
   start.classList.toggle("hidden", !ownsParticipant || state.outingTrackingActive);
+  start.textContent = state.durableOutboxPresent
+    ? "Resume sharing"
+    : "Start sharing";
   start.disabled = (
     !ownsParticipant
     || state.outingTrackingActive
@@ -211,9 +243,14 @@ export function renderOutingLiveView(state) {
   stop.classList.toggle("hidden", !canStop);
   stop.disabled = state.outingTrackingTransitionPending;
   byId("outing-live-tracking-status").textContent = ownsParticipant
-    ? state.outingTrackingMessage
+    ? (
+      offline && !state.outingTrackingActive
+        ? "Offline — Start can retain only the latest fix for explicit foreground resume."
+        : state.outingTrackingMessage
+    )
     : "Viewer mode — position sharing controls require an in-memory participant receipt.";
   updateParticipantCards(state);
+  renderRememberedParticipantControls(state);
 }
 
 function renderParticipantCardsStructure(state, onSelect) {
@@ -335,4 +372,9 @@ function connectionLabel(status) {
     outing_closed: "Outing closed",
     closed: "Live updates unavailable",
   }[status] ?? "Live updates unavailable";
+}
+
+function outingOffline(state) {
+  return state.networkStatus === "offline"
+    || state.offlineSnapshotKind === "outing";
 }

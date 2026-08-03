@@ -196,9 +196,10 @@
 - Outing route snapshots copy the exact saved request and candidate and remain valid
   independently of the source saved route. Outing display never reroutes or
   fabricates search diagnostics.
-- Outing owner, join, and participant capabilities never enter public models or
-  browser storage. Join capabilities use immediately scrubbed URL fragments, never
-  query parameters.
+- Outing owner and join capabilities never enter public models or browser storage.
+  Participant capabilities remain memory-only by default and may enter the explicit
+  PR26 remembered-participant store only after the disclosed user action. Join
+  capabilities use immediately scrubbed URL fragments, never query parameters.
 - Participant GPX serializes only that participant's stored candidate directly.
 - Outing live positions belong to participant identity, never to a shared route;
   they must not be snapped, projected, or interpreted as route progress.
@@ -224,11 +225,12 @@
   foreground-only. Loading, joining, creating, opening, or reconnecting an outing
   must never request location permission or start sharing automatically.
 - Public outing viewing uses capability-free EventSource requests. Participant
-  capabilities remain only in the current JavaScript in-memory receipt and never
-  enter URLs, HTML, browser storage, logs, live public state, or map data.
+  capabilities never enter URLs, HTML, logs, live public state, or map data; absent
+  explicit PR26 Remember they remain only in the current JavaScript in-memory receipt.
 - Foreground publication is single-flight and coalesces only the latest unsent
   sample. It stores no coordinate history and never builds a breadcrumb or activity
-  track.
+  track; an explicitly remembered participant may persist only PR26's one
+  latest-only resume-required sample.
 - Tracker watches, timers, HTTP operations, clears, and finalizers must own one
   monotonic session generation. Explicit Stop serializes behind a definite active
   PUT outcome; uncertain transport outcomes retain the expiry warning and retry.
@@ -243,3 +245,35 @@
   pagehide cleanup remains best effort.
 - PR25 has no PWA, service worker, manifest, background geolocation, notification,
   persistent offline queue, or wake-lock behavior.
+- PR26's service worker caches only an explicit same-origin application-shell
+  allowlist. It never caches APIs, unlisted route or outing navigations, SSE, GPX,
+  capabilities, positions, or raster tiles, and never accesses application
+  IndexedDB data. Cache lookup is restricted to the active Sugarglider cache,
+  capability-bearing requests are ignored, and module updates bypass HTTP cache.
+- Public saved routes and outings enter explicit offline snapshot storage only after
+  Save for offline use. Those copies reject every token/capability and all live
+  positions, events, and cursors, preserve exact immutable route snapshots, and
+  never regenerate, reroute, rerank, or fabricate diagnostics.
+- Only the focused PWA store module may open IndexedDB. Remembered participant
+  sessions contain exactly the whitelisted participant fields, never owner or
+  invitation authority, and restoring one never starts geolocation or publication.
+- The durable position outbox is latest-only, token-free, sequence-free, and
+  history-free. A matching sample ID is required for deletion, restored samples
+  require explicit foreground Start/Resume, and Stop, Forget, removal, expiry, or
+  clearing offline data invalidates pending writes and removes it. Recency compare,
+  participant replacement, and the eight-copy snapshot limit remain transactional;
+  future samples are invalid.
+- Valid public network snapshots remain authoritative when optional browser storage
+  fails. Remembered-session restoration and reconnect callbacks must retain slug,
+  page-epoch, tracker-generation, and operation ownership before mutating UI state.
+- IndexedDB and CacheStorage remain optional. Open, prune, read, cleanup, and cache
+  write failures must not replace valid network data or prevent online application
+  or offline-shell startup.
+- Remembered-participant removal and latest-outbox writes are atomic across the
+  participant-session and position-outbox stores. A stale tab may never write a
+  coordinate after its matching session is forgotten or replaced.
+- Definite authenticated participant not-found cleanup removes the matching durable
+  identity even when Stop or a newer tracker generation wins concurrently; stale
+  callbacks must not alter newer in-memory authority.
+- PR26 has no Background Sync, periodic sync, service-worker position publication,
+  push, notification, background geolocation, wake lock, or native execution.

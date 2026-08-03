@@ -214,6 +214,18 @@ unreliable until SSE or expiry resolves it; page closure is only best effort. Se
 [`docs/pr24-live-positions-sse.md`](docs/pr24-live-positions-sse.md) and
 [`docs/pr25-foreground-live-map.md`](docs/pr25-foreground-live-map.md).
 
+The browser is also an installable PWA. Its service worker caches only the local
+application shell and never APIs, unlisted route/outing responses, live data, GPX,
+capabilities, or map tiles. Public routes and outings become available offline only
+after **Save for offline use**. Participant capability persistence is separately
+opt-in through **Remember this participant on this device**; restore never starts
+geolocation or publication. A remembered active participant may retain only one
+latest resume-required position sample, which only a visible foreground page can
+send after explicit Start/Resume. Snapshot limits and latest-sample replacement are
+transactional, and optional browser-storage failures never override validated
+network snapshots. See
+[`docs/pr26-pwa-offline-resilience.md`](docs/pr26-pwa-offline-resilience.md).
+
 PR24 adds participant-authorized current positions to the same outing database.
 `PUT` and `DELETE` on
 `/v2/outings/{slug}/participants/{participant_id}/position` require the existing
