@@ -43,12 +43,14 @@ export function createOutingTracker({
   onStatus,
   onPublished,
   onCleared,
+  onPermanentFailure,
   clock = () => Date.now(),
   schedule = (callback, delay) => window.setTimeout(callback, delay),
   cancelScheduled = (timer) => window.clearTimeout(timer),
   geolocation = browserGeolocation(),
   createAbortController = () => new AbortController(),
   stopPublishWaitMs = STOP_PUBLISH_WAIT_MS,
+  durableSamples = null,
 } = {}) {
   let generationCounter = 0;
   let activeGeneration = 0;
@@ -75,7 +77,14 @@ export function createOutingTracker({
     );
   }
 
-  function start(receipt, { available, currentPosition = null } = {}) {
+  function start(
+    receipt,
+    {
+      available,
+      currentPosition = null,
+      resumeSample = null,
+    } = {},
+  ) {
     if (transitionOperation || currentWatchActive()) return false;
     const generation = advanceGeneration();
     resetForNewSession(generation);
@@ -123,6 +132,9 @@ export function createOutingTracker({
         (error) => receiveError(generation, error),
         WATCH_OPTIONS,
       );
+      if (resumeSample) {
+        queueRestoredSample(generation, receipt, resumeSample);
+      }
       updateStatus(generation, "waiting", "Waiting for a location fix");
       return true;
     } catch {
@@ -148,9 +160,13 @@ export function createOutingTracker({
     if (transitionOperation) return { cleared: false, pending: true };
     const publish = activePublish;
     const generation = invalidateLocalSession({ abortPublish: false });
+    const durableStop = Promise.resolve(
+      durableSamples?.stop?.(receipt, { generation }),
+    ).catch(() => {});
     const transition = { generation, kind: "stop" };
     transitionOperation = transition;
     if (!clearServer || !validReceipt(receipt)) {
+      await durableStop;
       activeReceipt = null;
       clearingFailed = false;
       finishTransition(transition);
@@ -160,6 +176,7 @@ export function createOutingTracker({
 
     updateStatus(generation, "stopping", "Stopping position sharing");
     const publishOutcome = await waitForPublishOutcome(publish, generation);
+    await durableStop;
     if (!ownsTransition(transition)) {
       return { cleared: false, pending: false, stale: true };
     }
@@ -284,14 +301,58 @@ export function createOutingTracker({
       );
       return;
     }
-    pendingSample = {
+    pendingSample = durablePendingSample(
       generation,
-      value: { ...sample, conflictRetried: false },
-    };
+      activeReceipt,
+      { ...sample, conflictRetried: false },
+    );
     updateStatus(generation, "sharing", "Sharing current position");
     if (!retryForGeneration(generation)) {
       scheduleCadence(generation, publicationDelay());
     }
+  }
+
+  function queueRestoredSample(generation, receipt, record) {
+    if (
+      !ownsSamplingGeneration(generation)
+      || record?.outing_slug !== receipt.slug
+      || record?.participant_id !== receipt.participant_id
+    ) return;
+    const value = {
+      coordinate: record.coordinate,
+      accuracy_m: record.accuracy_m,
+      altitude_m: record.altitude_m,
+      speed_m_s: record.speed_m_s,
+      heading_deg: record.heading_deg,
+      captured_at: record.captured_at,
+      conflictRetried: false,
+    };
+    pendingSample = {
+      generation,
+      value,
+      durability: durableSamples ? Promise.resolve(
+        durableSamples?.prepareRestored?.(
+          receipt,
+          record,
+          { generation },
+        ) ?? null,
+      ).catch(() => null) : null,
+    };
+    scheduleCadence(generation, 0);
+  }
+
+  function durablePendingSample(generation, receipt, value) {
+    return {
+      generation,
+      value,
+      durability: durableSamples ? Promise.resolve(
+        durableSamples?.prepare?.(
+          receipt,
+          value,
+          { generation },
+        ) ?? null,
+      ).catch(() => null) : null,
+    };
   }
 
   function receiveError(generation, error) {
@@ -358,28 +419,6 @@ export function createOutingTracker({
     ) return;
     const pending = pendingSample;
     pendingSample = null;
-    const sequence = nextSequence();
-    if (sequence === null) {
-      invalidateLocalSession({ abortPublish: true });
-      activeReceipt = null;
-      updateStatus(
-        activeGeneration,
-        "sequence_exhausted",
-        "Position sharing stopped because its sequence limit was reached.",
-      );
-      return;
-    }
-    const sample = pending.value;
-    const payload = {
-      schema_version: 1,
-      sequence,
-      coordinate: sample.coordinate,
-      accuracy_m: sample.accuracy_m,
-      altitude_m: sample.altitude_m,
-      speed_m_s: sample.speed_m_s,
-      heading_deg: sample.heading_deg,
-      captured_at: sample.captured_at,
-    };
     let resolveTerminal;
     const operation = {
       generation,
@@ -392,18 +431,50 @@ export function createOutingTracker({
       promise: null,
     };
     activePublish = operation;
-    operation.promise = performPublish(operation, sample, payload);
+    operation.promise = performPublish(operation, pending);
   }
 
-  async function performPublish(operation, sample, payload) {
+  async function performPublish(operation, pending) {
     let outcome = "uncertain";
+    const sample = pending.value;
+    const publicationReceipt = activeReceipt;
+    let durableSample = null;
     try {
-      const receipt = activeReceipt;
-      if (!validReceipt(receipt)) return outcome;
+      if (pending.durability) {
+        durableSample = await pending.durability;
+      }
+      if (!ownsPublish(operation)) return outcome;
+      if (!validReceipt(publicationReceipt)) return outcome;
+      const sequence = nextSequence();
+      if (sequence === null) {
+        invalidateLocalSession({ abortPublish: true });
+        activeReceipt = null;
+        await discardDurableSample(
+          publicationReceipt,
+          durableSample,
+          operation.generation,
+        );
+        updateStatus(
+          activeGeneration,
+          "sequence_exhausted",
+          "Position sharing stopped because its sequence limit was reached.",
+        );
+        return outcome;
+      }
+      const payload = {
+        schema_version: 1,
+        sequence,
+        coordinate: sample.coordinate,
+        accuracy_m: sample.accuracy_m,
+        altitude_m: sample.altitude_m,
+        speed_m_s: sample.speed_m_s,
+        heading_deg: sample.heading_deg,
+        captured_at: sample.captured_at,
+      };
       const published = await publishPosition(
-        receipt.slug,
-        receipt.participant_id,
-        receipt.participant_token,
+        publicationReceipt.slug,
+        publicationReceipt.participant_id,
+        publicationReceipt.participant_token,
         payload,
         { signal: operation.controller.signal },
       );
@@ -413,6 +484,13 @@ export function createOutingTracker({
       if (!Number.isSafeInteger(published?.sequence)) {
         throw new Error("Published position was invalid.");
       }
+      await Promise.resolve(
+        durableSamples?.published?.(
+          publicationReceipt,
+          durableSample,
+          { generation: operation.generation },
+        ),
+      ).catch(() => {});
       lastAcceptedSequence = published.sequence;
       lastPublishedAt = clock();
       retryDelayMs = INITIAL_RETRY_MS;
@@ -426,15 +504,24 @@ export function createOutingTracker({
     } catch (error) {
       outcome = definiteHttpOutcome(error) ? "definite" : "uncertain";
       settlePublishOutcome(operation, outcome);
+      if (error?.code === "outing_not_found") {
+        await handlePermanentParticipantFailure(
+          operation,
+          publicationReceipt,
+          error,
+          durableSample,
+        );
+        return outcome;
+      }
       if (!ownsPublish(operation)) return outcome;
       if (outcome === "uncertain") sessionHasUncertainPublish = true;
       if (
         error?.code === "outing_position_sequence_conflict"
         && !sample.conflictRetried
       ) {
-        await recoverSequence(operation, sample);
+        await recoverSequence(operation, sample, durableSample);
       } else if (transientFailure(error)) {
-        retainLatestSample(operation.generation, sample);
+        retainLatestSample(operation.generation, pending);
         updateStatus(
           operation.generation,
           "retrying",
@@ -442,6 +529,11 @@ export function createOutingTracker({
         );
         scheduleRetry(operation.generation);
       } else {
+        await discardDurableSample(
+          publicationReceipt,
+          durableSample,
+          operation.generation,
+        );
         updateStatus(
           operation.generation,
           "temporary_error",
@@ -463,7 +555,7 @@ export function createOutingTracker({
     }
   }
 
-  async function recoverSequence(operation, sample) {
+  async function recoverSequence(operation, sample, durableSample) {
     if (!ownsPublish(operation) || !validReceipt(activeReceipt)) return;
     const receipt = activeReceipt;
     try {
@@ -482,16 +574,37 @@ export function createOutingTracker({
           current.sequence,
         );
       }
-      const latest = pendingForGeneration(operation.generation)
-        ? pendingSample.value
-        : sample;
-      pendingSample = {
-        generation: operation.generation,
-        value: { ...latest, conflictRetried: true },
-      };
+      if (pendingForGeneration(operation.generation)) {
+        pendingSample.value = {
+          ...pendingSample.value,
+          conflictRetried: true,
+        };
+      } else {
+        pendingSample = durablePendingSample(
+          operation.generation,
+          receipt,
+          { ...sample, conflictRetried: true },
+        );
+      }
     } catch (error) {
+      if (error?.code === "outing_not_found") {
+        await handlePermanentParticipantFailure(
+          operation,
+          receipt,
+          error,
+          durableSample,
+        );
+        return;
+      }
       if (!ownsPublish(operation)) return;
-      retainLatestSample(operation.generation, sample);
+      retainLatestSample(
+        operation.generation,
+        durablePendingSample(
+          operation.generation,
+          receipt,
+          sample,
+        ),
+      );
       updateStatus(
         operation.generation,
         "retrying",
@@ -502,11 +615,52 @@ export function createOutingTracker({
     }
   }
 
-  function retainLatestSample(generation, sample) {
+  async function handlePermanentParticipantFailure(
+    operation,
+    receipt,
+    error,
+    durableSample,
+  ) {
+    await discardDurableSample(
+      receipt,
+      durableSample,
+      operation.generation,
+    );
+    let failureGeneration = operation.generation;
+    if (ownsPublish(operation)) {
+      failureGeneration = invalidateLocalSession({ abortPublish: true });
+      activeReceipt = null;
+      updateStatus(
+        failureGeneration,
+        "inactive",
+        "Participant access is no longer available.",
+      );
+    }
+    await Promise.resolve(onPermanentFailure?.({
+      receipt: {
+        slug: receipt.slug,
+        participant_id: receipt.participant_id,
+      },
+      generation: failureGeneration,
+      code: error.code,
+    })).catch(() => {});
+  }
+
+  function retainLatestSample(generation, pending) {
     if (!ownsSamplingGeneration(generation)) return;
     if (!pendingForGeneration(generation)) {
-      pendingSample = { generation, value: sample };
+      pendingSample = pending;
     }
+  }
+
+  async function discardDurableSample(receipt, prepared, generation) {
+    await Promise.resolve(
+      durableSamples?.discard?.(
+        receipt,
+        prepared,
+        { generation },
+      ),
+    ).catch(() => {});
   }
 
   function beginClear(

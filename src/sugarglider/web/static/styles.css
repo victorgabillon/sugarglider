@@ -77,6 +77,7 @@ button:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity:
 .notice.error { color: #651c1c; border-color: #da9990; background: #ffe5df; }
 .notice.warning { color: #68410c; border-color: #dfbf76; background: #fff3cf; }
 .notice.saved-route { color: #214b3b; border-color: #8bb8a2; background: #eff8f3; }
+.notice.pwa-status { color: #29473d; border-color: #a9b9aa; background: #f4f4e9; }
 .notice-mark { width: 1.8rem; height: 1.8rem; display: grid; place-items: center; border: 2px solid currentColor; border-radius: 50%; font-weight: 900; }
 .notice h2 { margin: 0 0 .15rem; font-size: .9rem; }
 .notice p { margin: 0; font-size: .8rem; line-height: 1.4; }
@@ -97,6 +98,11 @@ button:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity:
 .outing-live-panel > p { margin-top: .35rem; }
 .outing-live-own-controls { margin-top: .65rem; padding-top: .65rem; border-top: 1px solid #c8d7c9; }
 .outing-live-own-controls .button { min-height: 44px; }
+.remember-actions { margin-top: .7rem; padding-top: .7rem; border-top: 1px solid #c9d7cc; }
+.remember-actions .button,
+.remember-actions .text-button,
+.pwa-status .button,
+.pwa-status .text-button { min-height: 44px; }
 .outing-live-own-controls .status { min-height: 1.2rem; }
 .outing-participant-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .7rem; margin: 1rem 0; }
 .outing-participant-card { display: grid; gap: .2rem; padding: .85rem; border: 2px solid var(--border); border-radius: .8rem; background: var(--elevated-surface); color: inherit; text-align: left; }
@@ -424,6 +430,10 @@ footer { padding: .48rem 1rem; color: #d6e0da; background: var(--primary-action)
   .candidate-list { grid-template-columns: repeat(5, minmax(270px, 1fr)); }
   .outing-live-own-controls .button-row { display: grid; grid-template-columns: 1fr; }
   .outing-live-own-controls .button { width: 100%; }
+  .remember-actions .button-row,
+  .pwa-status .button-row { display: grid; grid-template-columns: 1fr; }
+  .remember-actions button,
+  .pwa-status button { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

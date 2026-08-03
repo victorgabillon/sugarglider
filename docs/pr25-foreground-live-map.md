@@ -29,9 +29,11 @@ display names, and planned routes. Public viewing opens EventSource without a qu
 fragment, or capability and never asks for geolocation permission.
 
 Owner, invitation, and participant capabilities are never written to HTML, map data,
-public live state, history, logs, or browser storage. A participant capability exists
-only in the current JavaScript in-memory receipt. Reloading therefore intentionally
-returns the page to viewer-only mode.
+public live state, history, or logs. PR25's default participant capability exists
+only in the current JavaScript in-memory receipt, so reloading returns to viewer-only
+mode. PR26 preserves that default while adding a separately disclosed, explicit
+**Remember this participant on this device** action; it never persists owner or
+invitation authority and never starts sharing on restore.
 
 After creating an outing, **Open public view** opens the capability-free link in a
 new tab. **Open live outing in this tab** fetches the ordinary snapshot, derives the
@@ -138,7 +140,9 @@ that nicknames may be appropriate. It also states that sharing is foreground-onl
 that no historical track is retained, and that closing or suspending the tab can
 leave the last position visible until server expiry.
 
-PR25 deliberately has no service worker, install manifest, background location,
-persistent queue, notification, wake lock, WebSocket, route matching, ETA,
-rendezvous, or messaging behavior. Those concerns remain outside this change and
-form part of the PR26 boundary.
+PR25 itself deliberately introduced no service worker, install manifest, background
+location, persistent queue, notification, wake lock, WebSocket, route matching, ETA,
+rendezvous, or messaging behavior. PR26 subsequently adds an application shell,
+explicit public offline copies, and an opt-in latest-only resume sample. The PR25
+memory-only default and foreground-only geolocation/publication rules remain
+authoritative; PR26 adds no background location or publication.

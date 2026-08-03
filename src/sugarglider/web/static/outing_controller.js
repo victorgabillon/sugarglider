@@ -1,5 +1,8 @@
 import { getConfig } from "./api.js";
 import {
+  foregroundOutboxFlushAllowed,
+} from "./outing_durable_session.js";
+import {
   clearOutingLivePositions,
   fitOutingRoutes,
   initializeMap,
@@ -28,7 +31,7 @@ import {
   createDirtyRerun,
   createGuardedSingleFlight,
   createOutingLiveLifecycle,
-  discardStaleParticipantReceipt,
+  installAuthoritativeOutingSnapshot,
 } from "./outing_live_lifecycle.js";
 import { createOutingTracker } from "./outing_tracking.js";
 import {
@@ -47,6 +50,7 @@ import {
 import {
   bindOutingCreationControls,
   prepareOutingPage,
+  renderOutingConnectivityControls,
   renderOutingLiveView,
   renderOutingReceipt,
   savedRouteSlugForOuting,
@@ -54,6 +58,36 @@ import {
   showOutingView,
   triggerOutingDownload,
 } from "./outing_view.js";
+import {
+  applyPermanentParticipantFailureState,
+  applyRememberedParticipantResult,
+  completeParticipantForget,
+  createEpochOperationOwner,
+  readOptionalStorage,
+  resolveNetworkResource,
+  runBestEffortStorage,
+  settleOptionalPersistence,
+} from "./pwa_network.js";
+import {
+  applyOfflineCopyRefresh,
+  clearOfflineSnapshotStatus,
+  durableSampleAdapter,
+  forgetParticipant as forgetRememberedParticipant,
+  forgetParticipantIdentity,
+  loadOfflineSnapshot,
+  markOfflineSnapshot,
+  offlineMapConfig,
+  readRememberedOutbox,
+  refreshOfflineSnapshot,
+  reportOptionalStorageFailure,
+  removeOfflineSnapshot,
+  rememberParticipant as persistRememberedParticipant,
+  restorePublicConfig,
+  restoreRememberedParticipant,
+  setPwaNetworkStatus,
+  storePublicConfig,
+  transportFailure,
+} from "./pwa_runtime.js";
 import { selectedCandidate, state } from "./state.js";
 
 let callbacks = null;
@@ -63,6 +97,16 @@ let outingLiveFreshnessTimer = null;
 let outingLiveSession = null;
 let outingTracker = null;
 let lifecycleEventsBound = false;
+let positionStartPending = false;
+let outingPageEpoch = 0;
+let requestedOutingSlug = null;
+let outingReconnectOperation = null;
+const outingPageOperations = createEpochOperationOwner(
+  (operation) => (
+    operation.epoch === outingPageEpoch
+    && operation.slug === requestedOutingSlug
+  ),
+);
 const outingLiveLifecycle = createOutingLiveLifecycle();
 const outingLiveRecovery = createGuardedSingleFlight({
   isCurrent: currentOutingLiveSession,
@@ -102,6 +146,11 @@ function renderCurrentOutingLiveState() {
     serverNow,
     selectOutingParticipant,
   );
+}
+
+export function renderCurrentOutingConnectivity() {
+  renderOutingConnectivityControls(state);
+  setOutingMutationControls(state, outingMutationPending);
 }
 
 function closeOutingLiveConnection() {
@@ -268,11 +317,23 @@ async function refreshOutingSnapshotForMembershipChange(
 
 function applyRefreshedOutingMembership(snapshot, session) {
   if (snapshot.slug !== session.slug) return;
-  state.outingSnapshot = snapshot;
-  discardStaleParticipantReceipt(state, snapshot, {
-    shutdownTracker: () => outingTracker?.shutdown(),
-    syncTrackerState: syncOutingTrackingState,
-  });
+  const removedReceipt = installAuthoritativeOutingSnapshot(
+    state,
+    snapshot,
+    {
+      shutdownTracker: () => outingTracker?.shutdown(),
+      syncTrackerState: syncOutingTrackingState,
+    },
+  );
+  if (removedReceipt) {
+    void runBestEffortStorage(
+      [() => forgetParticipantIdentity(
+        removedReceipt.slug,
+        removedReceipt.participant_id,
+      )],
+      { onFailure: reportOptionalStorageFailure },
+    );
+  }
   if (!snapshot.participants.some(
     (participant) => (
       participant.participant_id === state.selectedOutingParticipantId
@@ -339,6 +400,18 @@ function handleOutingClosed(session = outingLiveSession) {
   stopOutingLiveExperience({ stopTracking: true, clearPositions: true });
   state.outingLiveConnectionStatus = "outing_closed";
   state.outingLiveState = emptyOutingLiveState();
+  const slug = state.outingSnapshot?.slug;
+  if (slug) {
+    void runBestEffortStorage([
+      () => forgetRememberedParticipant(slug, { updateState: false }),
+      () => removeOfflineSnapshot("outing", slug),
+    ], { onFailure: reportOptionalStorageFailure });
+  }
+  if (state.outingParticipantReceipt?.slug === slug) {
+    state.outingParticipantReceipt = null;
+  }
+  state.participantRemembered = false;
+  state.durableOutboxPresent = false;
   showOutingView(state, outingViewHandlers());
   renderOutingLiveView(state);
   setStatus("Outing closed.");
@@ -355,6 +428,34 @@ function currentOutingLiveSession(session) {
 function currentOutingOperation(activeOperation, operation) {
   return activeOperation === operation
     && currentOutingLiveSession(operation.session);
+}
+
+export function outingOutboxPresenceIsCurrent(ownership) {
+  const receipt = state.outingParticipantReceipt;
+  return Boolean(
+    receipt
+    && ownership?.outingSlug === receipt.slug
+    && ownership?.participantId === receipt.participant_id
+    && ownership?.generation === outingTracker?.status().generation
+  );
+}
+
+async function handlePermanentParticipantFailure(failure) {
+  if (failure?.code !== "outing_not_found") return;
+  await forgetParticipantIdentity(
+    failure.receipt.slug,
+    failure.receipt.participant_id,
+  );
+  if (!applyPermanentParticipantFailureState(
+    state,
+    failure,
+    outingTracker?.status().generation,
+  )) return;
+  syncOutingTrackingState();
+  showOutingView(state, outingViewHandlers());
+  setStatus(
+    "Participant access is no longer available. The remembered participant and unsent position were removed.",
+  );
 }
 
 function ensureOutingTracker() {
@@ -387,6 +488,8 @@ function ensureOutingTracker() {
       );
       renderCurrentOutingLiveState();
     },
+    onPermanentFailure: handlePermanentParticipantFailure,
+    durableSamples: durableSampleAdapter,
   });
   return outingTracker;
 }
@@ -402,19 +505,42 @@ function syncOutingTrackingState() {
   renderCurrentOutingLiveState();
 }
 
-function startCurrentOutingPositionSharing() {
+async function startCurrentOutingPositionSharing() {
+  if (positionStartPending) return;
   const receipt = state.outingParticipantReceipt;
   const outing = state.outingSnapshot;
   if (!receipt || !outing || receipt.slug !== outing.slug) return;
-  const tracker = ensureOutingTracker();
-  tracker.start(receipt, {
-    available: Boolean(state.config?.outing_live_positions_available),
-    currentPosition: livePositionForParticipant(
-      state.outingLiveState,
-      receipt.participant_id,
-    ),
-  });
-  syncOutingTrackingState();
+  if (state.networkStatus === "offline" && !state.participantRemembered) {
+    setStatus(
+      "Remember this participant before starting while offline so only the latest fix can be retained.",
+    );
+    return;
+  }
+  positionStartPending = true;
+  state.outingTrackingTransitionPending = true;
+  renderCurrentOutingLiveState();
+  try {
+    const resumeSample = state.participantRemembered
+      ? await readRememberedOutbox(receipt)
+      : null;
+    if (
+      receipt !== state.outingParticipantReceipt
+      || outing !== state.outingSnapshot
+    ) return;
+    state.durableOutboxPresent = Boolean(resumeSample);
+    const tracker = ensureOutingTracker();
+    tracker.start(receipt, {
+      available: Boolean(state.config?.outing_live_positions_available),
+      currentPosition: livePositionForParticipant(
+        state.outingLiveState,
+        receipt.participant_id,
+      ),
+      resumeSample,
+    });
+  } finally {
+    positionStartPending = false;
+    syncOutingTrackingState();
+  }
 }
 
 async function stopCurrentOutingPositionSharing() {
@@ -445,7 +571,13 @@ function prepareParticipantTracker() {
 function bindOutingLifecycleEvents() {
   if (lifecycleEventsBound) return;
   lifecycleEventsBound = true;
-  window.addEventListener("online", () => outingTracker?.online());
+  window.addEventListener("online", () => {
+    if (foregroundOutboxFlushAllowed({
+      visible: document.visibilityState === "visible",
+      remembered: state.participantRemembered,
+      trackingActive: Boolean(outingTracker?.status().active),
+    })) outingTracker.online();
+  });
   window.addEventListener("pagehide", () => {
     const receipt = state.outingParticipantReceipt;
     if (receipt) outingTracker?.pagehide(receipt);
@@ -640,6 +772,12 @@ async function leaveCurrentOuting() {
       receipt.participant_id,
       receipt.participant_token,
     );
+    await forgetRememberedParticipant(
+      receipt.slug,
+      { updateState: false },
+    );
+    state.participantRemembered = false;
+    state.durableOutboxPresent = false;
     state.outingParticipantReceipt = null;
     state.outingSnapshot = await getOuting(receipt.slug);
     state.selectedOutingParticipantId = (
@@ -676,7 +814,68 @@ function outingViewHandlers() {
     deleteOwner: removeCurrentOuting,
     startSharing: startCurrentOutingPositionSharing,
     stopSharing: stopCurrentOutingPositionSharing,
+    rememberParticipant: rememberCurrentOutingParticipant,
+    forgetParticipant: forgetCurrentOutingParticipant,
   };
+}
+
+export async function rememberCurrentOutingParticipant() {
+  const receipt = state.outingParticipantReceipt;
+  const outing = state.outingSnapshot;
+  if (
+    !receipt
+    || !outing
+    || receipt.slug !== outing.slug
+    || !outing.participants.some(
+      (participant) => participant.participant_id === receipt.participant_id,
+    )
+  ) return;
+  if (!window.confirm(
+    "Remember this participant capability on this browser profile? Anyone with access to this profile may act as this participant. Remembering does not start location sharing.",
+  )) return;
+  try {
+    await persistRememberedParticipant(receipt, outing.expires_at);
+    showOutingView(state, outingViewHandlers());
+    setStatus(
+      "Participant remembered on this device. Position sharing remains stopped.",
+    );
+  } catch (error) {
+    reportError(error, "This participant could not be remembered.");
+  }
+}
+
+export async function forgetCurrentOutingParticipant() {
+  const receipt = state.outingParticipantReceipt;
+  if (!receipt) return;
+  const tracker = ensureOutingTracker();
+  const clearServer = state.networkStatus !== "offline";
+  const result = await completeParticipantForget({
+    clearServer,
+    stop: () => tracker.stop(receipt, { clearServer }),
+    forget: () => forgetRememberedParticipant(receipt.slug),
+  });
+  if (state.outingParticipantReceipt === receipt) {
+    state.outingParticipantReceipt = null;
+  }
+  state.participantRemembered = false;
+  state.durableOutboxPresent = false;
+  syncOutingTrackingState();
+  showOutingView(state, outingViewHandlers());
+  if (result.warningRequired) {
+    setStatus(
+      "Participant forgotten from this device. Stop was not confirmed; the last position may remain until expiry.",
+    );
+  } else {
+    setStatus(
+      "Participant forgotten from this device. The outing and its route remain unchanged.",
+    );
+  }
+  if (result.storageFailure) {
+    reportError(
+      result.storageFailure,
+      "The browser could not confirm removal from durable storage.",
+    );
+  }
 }
 
 async function enterCreatedOutingHere() {
@@ -746,15 +945,81 @@ export function bindOutingController(nextCallbacks) {
 export async function startOutingPage(slug, nextCallbacks) {
   callbacks = nextCallbacks;
   bindOutingLifecycleEvents();
+  const pageEpoch = ++outingPageEpoch;
+  requestedOutingSlug = slug;
+  const pageOperation = outingPageOperations.begin({
+    slug,
+    epoch: pageEpoch,
+  });
   state.outingInviteToken = captureOutingInviteToken();
-  [state.config, state.outingSnapshot] = await Promise.all([
-    getConfig(),
-    getOuting(slug),
-  ]);
+  let offline = false;
+  try {
+    const loaded = await resolveNetworkResource({
+      loadResource: () => getOuting(slug),
+      loadConfig: () => getConfig(),
+      loadStoredConfig: restorePublicConfig,
+      fallbackConfig: (snapshot) => onlineFallbackConfig(snapshot),
+    });
+    if (!outingPageOperations.owns(pageOperation)) return;
+    state.config = loaded.config;
+    state.outingSnapshot = loaded.resource;
+    clearOfflineSnapshotStatus();
+    void persistOutingNetworkData(
+      loaded,
+      pageOperation,
+      () => outingPageOperations.owns(pageOperation)
+        && state.outingSnapshot?.slug === slug,
+    );
+  } catch (error) {
+    if (!outingPageOperations.owns(pageOperation)) return;
+    if (error?.code === "outing_not_found") {
+      await Promise.allSettled([
+        removeOfflineSnapshot("outing", slug),
+        forgetRememberedParticipant(slug, { updateState: false }),
+      ]);
+      if (!outingPageOperations.owns(pageOperation)) return;
+      state.participantRemembered = false;
+      state.durableOutboxPresent = false;
+      throw error;
+    }
+    if (!transportFailure(error)) throw error;
+    const [recordResult, configResult] = await Promise.allSettled([
+      loadOfflineSnapshot("outing", slug),
+      restorePublicConfig(),
+    ]);
+    if (!outingPageOperations.owns(pageOperation)) return;
+    const record = recordResult.status === "fulfilled"
+      ? recordResult.value
+      : null;
+    if (!record) throw error;
+    const storedConfig = configResult.status === "fulfilled"
+      ? configResult.value
+      : null;
+    offline = true;
+    state.outingSnapshot = record.payload;
+    state.config = offlineMapConfig(storedConfig, record.payload);
+    state.outingInviteToken = null;
+    markOfflineSnapshot("outing", slug);
+  }
+  if (!currentLoadedOutingPage(pageOperation)) return;
   state.outingDisplay = true;
-  state.selectedOutingParticipantId = (
-    state.outingSnapshot.participants[0]?.participant_id ?? null
+  state.outingParticipantReceipt = null;
+  const loadedOuting = state.outingSnapshot;
+  const restored = await readOptionalStorage(
+    () => restoreRememberedParticipant(loadedOuting, {
+      isCurrent: () => currentLoadedOutingPage(pageOperation),
+    }),
+    { onFailure: reportOptionalStorageFailure },
   );
+  if (!currentLoadedOutingPage(pageOperation)) return;
+  applyRememberedParticipantResult(state, loadedOuting, restored, {
+    isCurrent: () => currentLoadedOutingPage(pageOperation),
+  });
+  if (!restored) {
+    state.selectedOutingParticipantId = (
+      loadedOuting.participants[0]?.participant_id ?? null
+    );
+  }
   state.selectedSignature = selectedCandidate()?.id ?? null;
   initializeMap(state.config, {
     onReady: () => {
@@ -773,9 +1038,172 @@ export async function startOutingPage(slug, nextCallbacks) {
   showOutingView(state, outingViewHandlers());
   callbacks.renderMetrics();
   prepareOutingPage();
-  startOutingLiveExperience(slug);
-  setStatus(
-    "Independent immutable participant routes loaded. Live viewing does not request location permission.",
-  );
+  if (offline) {
+    state.outingLiveState = emptyOutingLiveState();
+    state.outingLiveConnectionStatus = "unavailable";
+    clearOutingLivePositions();
+    renderCurrentOutingLiveState();
+    setStatus(
+      "Showing an explicit offline outing copy. Live positions and server mutations are unavailable.",
+    );
+  } else {
+    startOutingLiveExperience(slug);
+    setStatus(
+      "Independent immutable participant routes loaded. Live viewing does not request location permission.",
+    );
+  }
   window.addEventListener("resize", resizeMap);
+}
+
+export async function retryCurrentOutingConnection() {
+  const slug = state.outingSnapshot?.slug;
+  if (!slug) return false;
+  if (outingReconnectOperation) return outingReconnectOperation.promise;
+  const epoch = outingPageEpoch;
+  const identity = Object.freeze({ epoch, slug });
+  const operation = { identity, promise: null };
+  outingReconnectOperation = operation;
+  operation.promise = (async () => {
+    try {
+      const wasOfflineSnapshot = state.offlineSnapshotKind === "outing";
+      const loaded = await resolveNetworkResource({
+        loadResource: () => getOuting(slug),
+        loadConfig: () => getConfig(),
+        loadStoredConfig: restorePublicConfig,
+        fallbackConfig: (snapshot) => onlineFallbackConfig(snapshot),
+      });
+      if (!currentOutingReconnect(operation)) return false;
+      state.config = loaded.config;
+      const removedReceipt = installAuthoritativeOutingSnapshot(
+        state,
+        loaded.resource,
+        {
+          shutdownTracker: () => outingTracker?.shutdown(),
+          syncTrackerState: syncOutingTrackingState,
+        },
+      );
+      clearOfflineSnapshotStatus();
+      if (removedReceipt) {
+        const cleanup = await settleOptionalPersistence([
+          () => forgetParticipantIdentity(
+            removedReceipt.slug,
+            removedReceipt.participant_id,
+          ),
+        ]);
+        if (!currentOutingReconnect(operation)) return false;
+        if (cleanup.failed) reportOptionalStorageFailure();
+      }
+      const restored = await readOptionalStorage(
+        () => restoreRememberedParticipant(loaded.resource, {
+          isCurrent: () => currentOutingReconnect(operation),
+        }),
+        { onFailure: reportOptionalStorageFailure },
+      );
+      if (!currentOutingReconnect(operation)) return false;
+      applyRememberedParticipantResult(
+        state,
+        loaded.resource,
+        restored,
+        { isCurrent: () => currentOutingReconnect(operation) },
+      );
+      if (!loaded.resource.participants.some(
+        (participant) => (
+          participant.participant_id === state.selectedOutingParticipantId
+        ),
+      )) {
+        state.selectedOutingParticipantId = (
+          loaded.resource.participants[0]?.participant_id ?? null
+        );
+      }
+      showOutingView(state, outingViewHandlers());
+      if (wasOfflineSnapshot) initializeOutingMap();
+      else {
+        renderOutingRoutes(
+          loaded.resource.participants,
+          state.selectedOutingParticipantId,
+        );
+      }
+      startOutingLiveExperience(slug);
+      await persistOutingNetworkData(
+        loaded,
+        operation,
+        () => currentOutingReconnect(operation),
+      );
+      if (!currentOutingReconnect(operation)) return false;
+      setStatus("Outing reconnected. Live viewing resumed.");
+      return true;
+    } catch (error) {
+      if (!currentOutingReconnect(operation)) return false;
+      if (error?.code === "outing_not_found") {
+        await Promise.allSettled([
+          removeOfflineSnapshot("outing", slug),
+          forgetRememberedParticipant(slug, { updateState: false }),
+        ]);
+        if (!currentOutingReconnect(operation)) return false;
+        handleOutingClosed();
+      } else if (transportFailure(error)) {
+        setPwaNetworkStatus("offline");
+      } else {
+        setPwaNetworkStatus("online");
+        reportError(error, "The outing could not be refreshed.");
+      }
+      return false;
+    } finally {
+      if (outingReconnectOperation === operation) {
+        outingReconnectOperation = null;
+      }
+    }
+  })();
+  return operation.promise;
+}
+
+function currentLoadedOutingPage(operation) {
+  return outingPageOperations.owns(operation)
+    && state.outingSnapshot?.slug === operation.slug;
+}
+
+function currentOutingReconnect(operation) {
+  return outingReconnectOperation === operation
+    && operation.identity.epoch === outingPageEpoch
+    && state.outingSnapshot?.slug === operation.identity.slug;
+}
+
+function onlineFallbackConfig(snapshot) {
+  return { ...offlineMapConfig(null, snapshot), offline_mode: false };
+}
+
+async function persistOutingNetworkData(loaded, identity, isCurrent) {
+  const actions = [
+    () => refreshOfflineSnapshot("outing", loaded.resource),
+  ];
+  if (loaded.configFromNetwork) {
+    actions.push(() => storePublicConfig(loaded.config));
+  }
+  const persisted = await settleOptionalPersistence(actions);
+  if (!isCurrent(identity)) return;
+  if (persisted.results[0].status === "fulfilled") {
+    applyOfflineCopyRefresh(persisted.results[0].value);
+  }
+  if (persisted.failed) reportOptionalStorageFailure();
+}
+
+function initializeOutingMap() {
+  initializeMap(state.config, {
+    onReady: () => {
+      callbacks?.onMapReady();
+      renderOutingRoutes(
+        state.outingSnapshot.participants,
+        state.selectedOutingParticipantId,
+      );
+      fitOutingRoutes(state.outingSnapshot.participants);
+      renderCurrentOutingLiveState();
+    },
+    onError: callbacks.showMapError,
+    onViewportChange: () => {},
+    onMapClick: () => {},
+  });
+}
+
+export function outingMutationIsPending() {
+  return outingMutationPending || positionStartPending;
 }

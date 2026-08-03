@@ -420,9 +420,7 @@ async def test_startup_initializes_purges_and_isolates_expected_failure(
             assert (await api.get("/health")).status_code == 200
 
 
-def test_shared_frontend_uses_snapshot_endpoints_without_generation_or_storage() -> (
-    None
-):
+def test_shared_frontend_uses_snapshots_without_implicit_storage() -> None:
     saved_routes = (STATIC_DIRECTORY / "saved_routes.js").read_text(encoding="utf-8")
     application = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
     map_source = (STATIC_DIRECTORY / "map.js").read_text(encoding="utf-8")
@@ -432,7 +430,8 @@ def test_shared_frontend_uses_snapshot_endpoints_without_generation_or_storage()
     assert "/v2/saved-routes/${encodeURIComponent(slug)}/gpx" in saved_routes
     assert "/v2/plans/generate" not in saved_routes
     assert "/v2/saved-routes" not in map_source
-    assert "getSavedRoute(sharedSlug)" in application
+    assert "getSavedRoute(slug)" in application
+    assert "loadSavedRoutePage(sharedSlug)" in application
     assert "getRoutingProfiles()" in application
     assert application.index("if (sharedSlug)") < application.index(
         "getRoutingProfiles()", application.index("async function start()")

@@ -100,9 +100,11 @@ def test_outing_http_geolocation_and_eventsource_are_scoped_to_focused_modules()
     }
     for path_fragment in ("/live", "/events", "/position"):
         assert path_fragment in live
-        assert {
-            name for name, source in sources.items() if path_fragment in source
-        } == {"outing_live.js"}
+        owners = {name for name, source in sources.items() if path_fragment in source}
+        expected = {"outing_live.js"}
+        if path_fragment in {"/live", "/events"}:
+            expected.add("service_worker_policy.js")
+        assert owners == expected
     assert {
         name
         for name, source in sources.items()
@@ -111,15 +113,19 @@ def test_outing_http_geolocation_and_eventsource_are_scoped_to_focused_modules()
     for forbidden in (
         "localStorage",
         "sessionStorage",
-        "indexedDB",
         "document.cookie",
         "WebSocket",
-        "serviceWorker",
         "sendBeacon",
         "Notification",
         "wakeLock",
     ):
         assert forbidden not in all_frontend
+    assert {name for name, source in sources.items() if "indexedDB" in source} == {
+        "pwa_store.js"
+    }
+    assert {name for name, source in sources.items() if "serviceWorker" in source} == {
+        "pwa_controller.js"
+    }
     event_stream = live[live.index("export function connectOutingLiveEvents") :]
     event_source_line = next(
         line for line in event_stream.splitlines() if "new EventSource" in line
@@ -344,7 +350,6 @@ def test_new_modules_remain_focused_and_below_size_limit() -> None:
         *OUTINGS.glob("*.py"),
         SOURCE / "api" / "outings.py",
         STATIC_DIRECTORY / "outings.js",
-        STATIC_DIRECTORY / "outing_controller.js",
         STATIC_DIRECTORY / "outing_view.js",
     ]
     assert all(len(path.read_text().splitlines()) <= 800 for path in paths)
@@ -775,10 +780,12 @@ def test_pr25_membership_refresh_discards_only_stale_participant_receipt() -> No
             "function handleOutingMembershipRefreshError"
         )
     ]
-    assert "discardStaleParticipantReceipt(state, snapshot" in refresh
+    assert "installAuthoritativeOutingSnapshot(" in refresh
     assert "outingTracker?.shutdown()" in refresh
     assert "syncTrackerState: syncOutingTrackingState" in refresh
     assert "state.outingOwnerReceipt" not in refresh
+    assert "forgetParticipantIdentity(" in refresh
+    assert "runBestEffortStorage(" in refresh
     discard = lifecycle[
         lifecycle.index(
             "export function discardStaleParticipantReceipt"
@@ -847,8 +854,6 @@ def test_pr25_frontend_boundaries_and_module_sizes_are_explicit() -> None:
         "outing_live.js",
         "outing_live_lifecycle.js",
         "outing_live_state.js",
-        "outing_tracking.js",
-        "outing_controller.js",
         "outing_view.js",
     )
     assert {

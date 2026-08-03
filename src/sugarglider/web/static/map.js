@@ -115,10 +115,12 @@ let spurPopup = null;
 let outingLiveParticipantSelectHandler = null;
 
 export function initializeMap(config, handlers) {
+  resetMapInstance();
   if (!window.maplibregl) {
-    handlers.onError("MapLibre could not load. Check the browser network policy or CDN availability.");
+    handlers.onError("The packaged MapLibre runtime could not load.");
     return false;
   }
+  const offline = Boolean(config.offline_mode);
   try {
     map = new window.maplibregl.Map({
       container: "map",
@@ -127,15 +129,23 @@ export function initializeMap(config, handlers) {
       style: {
         version: 8,
         glyphs: `${window.location.origin}/static/fonts/{fontstack}/{range}.pbf`,
-        sources: {
-          osm: {
-            type: "raster",
-            tiles: [config.tile_url_template],
-            tileSize: 256,
-            attribution: config.tile_attribution,
+        sources: offline
+          ? {}
+          : {
+            osm: {
+              type: "raster",
+              tiles: [config.tile_url_template],
+              tileSize: 256,
+              attribution: config.tile_attribution,
+            },
           },
-        },
-        layers: [{ id: "osm", type: "raster", source: "osm" }],
+        layers: offline
+          ? [{
+            id: "offline-background",
+            type: "background",
+            paint: { "background-color": "#e8e2d5" },
+          }]
+          : [{ id: "osm", type: "raster", source: "osm" }],
       },
       attributionControl: true,
     });
@@ -273,6 +283,28 @@ export function initializeMap(config, handlers) {
     handlers.onError(`Map resource error: ${message}`);
   });
   return true;
+}
+
+function resetMapInstance() {
+  ready = false;
+  for (const marker of [
+    ...requiredMarkers,
+    ...endpointMarkers,
+    ...optionalMarkers,
+    ...waypointMarkers,
+  ]) marker.remove();
+  requiredMarkers = [];
+  endpointMarkers = [];
+  optionalMarkers = [];
+  waypointMarkers = [];
+  poiPopup?.remove();
+  requestedPlacePopup?.remove();
+  spurPopup?.remove();
+  poiPopup = null;
+  requestedPlacePopup = null;
+  spurPopup = null;
+  if (map) map.remove();
+  map = null;
 }
 
 function installDirectionArrowImage() {

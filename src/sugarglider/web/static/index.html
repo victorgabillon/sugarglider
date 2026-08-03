@@ -7,10 +7,11 @@
     <meta name="theme-color" content="#214b3b">
     <title>Sugarglider — natural trail loop planner</title>
     <link rel="icon" type="image/png" href="/static/brand/sugarglider-compact-icon.png">
-    <!-- MapLibre GL JS 4.7.1, BSD-3-Clause: https://maplibre.org/ -->
-    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <!-- Official maplibre-gl@4.7.1 distribution, BSD-3-Clause: https://maplibre.org/ -->
+    <link rel="stylesheet" href="/static/vendor/maplibre-gl-4.7.1/maplibre-gl.css">
     <link rel="stylesheet" href="/static/styles.css">
-    <script defer src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script defer src="/static/vendor/maplibre-gl-4.7.1/maplibre-gl.js"></script>
     <script type="module" src="/static/app.js"></script>
   </head>
   <body>
@@ -65,6 +66,18 @@
       <div class="notice-mark" aria-hidden="true">!</div>
       <div class="notice-copy"><h2 id="map-error-title">Map display warning</h2><p id="map-error-message"></p></div>
     </section>
+    <section id="pwa-status-panel" class="notice pwa-status hidden" role="status" aria-live="polite" aria-atomic="true">
+      <div class="notice-mark" aria-hidden="true">↻</div>
+      <div class="notice-copy">
+        <h2 id="pwa-network-status">Online</h2>
+        <p id="pwa-status-message">App ready.</p>
+        <div class="button-row">
+          <button id="retry-connection" class="button secondary hidden" type="button">Retry connection</button>
+          <button id="reload-pwa-update" class="button primary hidden" type="button">Reload to update</button>
+          <button id="clear-offline-data" class="text-button" type="button">Clear saved offline data</button>
+        </div>
+      </div>
+    </section>
     <section id="saved-route-panel" class="notice saved-route hidden" role="status" aria-labelledby="saved-route-title">
       <div class="notice-mark" aria-hidden="true">↗</div>
       <div class="notice-copy">
@@ -79,6 +92,9 @@
           <button id="delete-saved-route" class="text-button hidden" type="button">Delete saved route</button>
           <button id="dismiss-saved-route" class="text-button hidden" type="button">Dismiss</button>
           <button id="show-create-outing" class="button secondary hidden" type="button">Create outing</button>
+          <button id="save-saved-route-offline" class="button secondary hidden" type="button">Save for offline use</button>
+          <button id="remove-saved-route-offline" class="text-button hidden" type="button">Remove offline copy</button>
+          <p class="help">This browser keeps at most eight explicit offline copies. Saving another copy may replace the oldest one, and the browser may still evict stored data.</p>
         </div>
         <form id="create-outing-form" class="outing-form hidden">
           <label>Outing title<input id="outing-title" maxlength="120" required></label>
@@ -117,6 +133,12 @@
         <h1 id="outing-view-title"></h1>
         <p id="outing-view-summary"></p>
         <p class="context-note">This outing is unlisted, not access-controlled. Anyone with the public link can see participant display names, planned routes, and currently shared positions. Use a nickname when appropriate.</p>
+        <div class="button-row">
+          <button id="save-outing-offline" class="button secondary hidden" type="button">Save for offline use</button>
+          <button id="remove-outing-offline" class="text-button hidden" type="button">Remove offline copy</button>
+          <p class="help">This browser keeps at most eight explicit offline copies. Saving another copy may replace the oldest one, and the browser may still evict stored data.</p>
+        </div>
+        <p id="offline-map-status" class="context-note hidden">The basemap is unavailable offline. Stored route geometry is shown on a neutral background.</p>
         <section id="outing-live-panel" class="outing-live-panel hidden" aria-labelledby="outing-live-title">
           <div class="section-heading">
             <h2 id="outing-live-title">Live positions</h2>
@@ -143,6 +165,14 @@
         <div id="outing-participant-actions" class="button-row hidden">
           <button id="download-my-outing-gpx" class="button secondary" type="button">Download my GPX</button>
           <button id="leave-outing" class="text-button" type="button">Leave outing</button>
+        </div>
+        <div id="outing-remember-actions" class="remember-actions hidden">
+          <div class="button-row">
+            <button id="remember-outing-participant" class="button secondary" type="button">Remember this participant on this device</button>
+            <button id="forget-outing-participant" class="text-button hidden" type="button">Forget this participant from this device</button>
+          </div>
+          <p class="context-note">Anyone with access to this browser profile may act as this outing participant. This is device persistence, not account authentication. Remembering never starts location sharing. Forget or clear site data to remove it; it also expires with the outing.</p>
+          <p id="outing-outbox-status" class="status hidden">One unsent current-position sample is stored on this device. Press Start to resume.</p>
         </div>
         <div id="outing-owner-actions" class="button-row hidden">
           <button id="delete-outing-owner-view" class="text-button" type="button">Delete outing</button>
