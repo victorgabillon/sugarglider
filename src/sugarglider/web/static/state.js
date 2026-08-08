@@ -129,6 +129,114 @@ export const state = {
   },
 };
 
+const ROUTE_TOPOLOGIES = new Set(["loop", "point_to_point"]);
+const PLANNING_MODES = new Set(["auto_tour", "waypoint_route"]);
+
+function requireRouteTopology(routeTopology) {
+  if (!ROUTE_TOPOLOGIES.has(routeTopology)) {
+    throw new Error(`Unsupported route topology: ${routeTopology}`);
+  }
+}
+
+export function setRouteTopology(endpoints, routeTopology) {
+  requireRouteTopology(routeTopology);
+  const clearedExplicitEnd = routeTopology === "loop"
+    && endpoints.end !== null
+    && endpoints.end !== undefined;
+  endpoints.routeTopology = routeTopology;
+  if (routeTopology === "loop") endpoints.end = null;
+  return clearedExplicitEnd;
+}
+
+export function assignRouteEndpoint(endpoints, kind, point) {
+  if (!["start", "end"].includes(kind)) {
+    throw new Error(`Unsupported route endpoint: ${kind}`);
+  }
+  if (kind === "end" && endpoints.routeTopology === "loop" && point !== null) {
+    endpoints.end = null;
+    return false;
+  }
+  endpoints[kind] = point;
+  return true;
+}
+
+export function routeEndpointPresentation(routeTopology) {
+  requireRouteTopology(routeTopology);
+  const loop = routeTopology === "loop";
+  return {
+    hardEndAvailable: !loop,
+    loopEndExplanationVisible: loop,
+  };
+}
+
+export function renderEndpointTopologyControls(
+  hardEndControl,
+  loopEndExplanation,
+  routeTopology,
+  { controlsDisabled = false } = {},
+) {
+  const presentation = routeEndpointPresentation(routeTopology);
+  hardEndControl.hidden = !presentation.hardEndAvailable;
+  hardEndControl.classList.toggle("hidden", !presentation.hardEndAvailable);
+  hardEndControl.disabled = controlsDisabled || !presentation.hardEndAvailable;
+  hardEndControl.setAttribute(
+    "aria-hidden",
+    String(!presentation.hardEndAvailable),
+  );
+  loopEndExplanation.hidden = !presentation.loopEndExplanationVisible;
+  loopEndExplanation.classList.toggle(
+    "hidden",
+    !presentation.loopEndExplanationVisible,
+  );
+  return presentation;
+}
+
+export function generationAvailability({
+  planningMode,
+  routeTopology,
+  start,
+  end,
+  mandatoryPointCount,
+  pointValidationMessage,
+  profileAvailable,
+}) {
+  requireRouteTopology(routeTopology);
+  if (!PLANNING_MODES.has(planningMode)) {
+    throw new Error(`Unsupported planning mode: ${planningMode}`);
+  }
+  if (pointValidationMessage) {
+    return { enabled: false, reason: pointValidationMessage };
+  }
+  if (!start) {
+    return {
+      enabled: false,
+      reason: routeTopology === "loop"
+        ? "Choose a start point for this loop."
+        : "Choose a start point.",
+    };
+  }
+  if (routeTopology === "point_to_point" && !end) {
+    return { enabled: false, reason: "Choose an end point." };
+  }
+  if (
+    planningMode === "waypoint_route"
+    && routeTopology === "loop"
+    && mandatoryPointCount < 1
+  ) {
+    return {
+      enabled: false,
+      reason: "Add at least one required waypoint for this loop.",
+    };
+  }
+  if (!profileAvailable) {
+    return {
+      enabled: false,
+      reason: "The selected routing profile is unavailable.",
+    };
+  }
+  return { enabled: true, reason: "" };
+}
+
 export function saveActivePoints() {
   if (state.planningMode === "auto_tour") {
     if (state.autoTour.start) {
@@ -264,6 +372,7 @@ export function pointDisplayName(point, index) {
 }
 
 function commonPlanState(endpoints) {
+  setRouteTopology(endpoints, endpoints.routeTopology);
   const priority = state.options.distancePriority ?? state.autoTour.distancePriority;
   return {
     name: state.options.name,

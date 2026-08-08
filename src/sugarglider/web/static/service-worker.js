@@ -6,7 +6,7 @@ import {
 } from "/static/service_worker_policy.js";
 
 const SHELL_CACHE_PREFIX = "sugarglider-shell-";
-const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v2`;
+const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v3`;
 const ROOT_SHELL = "/";
 const shellCache = createCurrentCacheAccess(caches, SHELL_CACHE);
 

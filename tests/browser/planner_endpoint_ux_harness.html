@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Planner endpoint UX harness</title>
+  <link rel="stylesheet" href="../../src/sugarglider/web/static/styles.css">
+  <section class="endpoint-controls" aria-label="Route endpoints">
+    <p id="loop-end-explanation" class="field-help endpoint-explanation">End is the start for loop routes.</p>
+    <fieldset id="hard-end-control" class="endpoint-control hidden" hidden disabled>
+      <legend>Hard end</legend>
+      <div id="mobile-endpoint-fields" class="field-pair">
+        <label>Latitude<input type="number"></label>
+        <label>Longitude<input type="number"></label>
+      </div>
+    </fieldset>
+  </section>
+  <pre id="result">running</pre>
+  <script>
+    window.plannerEndpointHarnessResult = document.getElementById("result");
+    window.plannerEndpointUnhandledRejection = null;
+    window.addEventListener("unhandledrejection", (event) => {
+      window.plannerEndpointUnhandledRejection = event.reason;
+      window.plannerEndpointHarnessResult.dataset.status = "failed";
+      window.plannerEndpointHarnessResult.textContent = String(event.reason);
+    });
+  </script>
+  <script type="module">
+    import { runPlannerEndpointUxHarness } from "./planner_endpoint_ux_harness.js";
+
+    try {
+      const scenarios = runPlannerEndpointUxHarness();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      if (window.plannerEndpointUnhandledRejection) {
+        throw window.plannerEndpointUnhandledRejection;
+      }
+      window.plannerEndpointHarnessResult.dataset.status = "passed";
+      window.plannerEndpointHarnessResult.textContent = JSON.stringify(scenarios);
+    } catch (error) {
+      window.plannerEndpointHarnessResult.dataset.status = "failed";
+      window.plannerEndpointHarnessResult.textContent = error instanceof Error
+        ? error.stack
+        : String(error);
+    }
+  </script>
+</html>

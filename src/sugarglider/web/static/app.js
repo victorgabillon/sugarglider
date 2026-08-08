@@ -41,7 +41,7 @@ import {
   renderPwaStatus,
 } from "./pwa_view.js";
 import { createSavedRoute, deleteSavedRoute, downloadSavedRouteGpx, getSavedRoute, savedRouteShareUrl, shareSavedRoute, sharedRouteSlug } from "./saved_routes.js";
-import { currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, state, switchPlanningMode } from "./state.js";
+import { assignRouteEndpoint, currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, generationAvailability, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, renderEndpointTopologyControls, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, setRouteTopology, state, switchPlanningMode } from "./state.js";
 
 const byId = (id) => document.getElementById(id);
 let elapsedTimer = null;
@@ -207,7 +207,9 @@ function preferPoi(feature) {
   }
   state.autoTour.preferredPoiIds.push(feature.id);
   invalidateAndRender();
-  byId("request-status").textContent = `${feature.display_name} added as a soft Auto Tour preference.`;
+  setEditableRequestStatus(
+    `${feature.display_name} added as a soft Auto Tour preference.`,
+  );
 }
 
 async function fetchViewportPois(id, bounds) {
@@ -287,7 +289,11 @@ function updateOptionsFromControls() {
   state.autoTour.maximumDistanceKm = state.options.maximumDistanceKm;
   state.autoTour.scenicPreference = byId("scenic-preference").value;
   state.autoTour.drinkingWaterPreference = byId("water-preference").value;
-  activeEndpoints().routeTopology = byId("route-topology").value;
+  const routeTopology = byId("route-topology").value;
+  setRouteTopology(activeEndpoints(), routeTopology);
+  if (routeTopology === "loop" && state.endpointSetMode === "end") {
+    state.endpointSetMode = null;
+  }
 }
 
 function updateControlsFromOptions() {
@@ -394,23 +400,34 @@ function isOpenPlan() {
 }
 
 function assignActiveEndpoint(kind, point) {
+  const endpoints = activeEndpoints();
   if (state.planningMode === "auto_tour") {
     saveActivePoints();
-    state.autoTour[kind] = point;
+    if (!assignRouteEndpoint(endpoints, kind, point)) {
+      state.endpointSetMode = null;
+      return false;
+    }
     if (kind === "start") {
       state.points = point
         ? [point, ...state.autoTour.hardPoints]
         : [...state.autoTour.hardPoints];
     }
   } else {
-    state.waypointEndpoints[kind] = point;
+    if (!assignRouteEndpoint(endpoints, kind, point)) {
+      state.endpointSetMode = null;
+      return false;
+    }
   }
+  return true;
 }
 
 function endpointFromControls(kind) {
   if (!byId(`hard-${kind}-enabled`).checked) return null;
-  const lat = Number(byId(`hard-${kind}-lat`).value);
-  const lon = Number(byId(`hard-${kind}-lon`).value);
+  const latitudeValue = byId(`hard-${kind}-lat`).value.trim();
+  const longitudeValue = byId(`hard-${kind}-lon`).value.trim();
+  if (!latitudeValue || !longitudeValue) return null;
+  const lat = Number(latitudeValue);
+  const lon = Number(longitudeValue);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   return {
     name: byId(`hard-${kind}-name`).value.trim() || `Hard ${kind}`,
@@ -421,6 +438,10 @@ function endpointFromControls(kind) {
 
 function updateEndpointControls() {
   const endpoints = activeEndpoints();
+  setRouteTopology(endpoints, endpoints.routeTopology);
+  if (endpoints.routeTopology === "loop" && state.endpointSetMode === "end") {
+    state.endpointSetMode = null;
+  }
   byId("route-topology").value = endpoints.routeTopology;
   for (const kind of ["start", "end"]) {
     const point = endpoints[kind];
@@ -428,8 +449,16 @@ function updateEndpointControls() {
     byId(`hard-${kind}-name`).value = point?.name ?? "";
     byId(`hard-${kind}-lat`).value = point?.lat ?? "";
     byId(`hard-${kind}-lon`).value = point?.lon ?? "";
+    byId(`set-hard-${kind}`).textContent = state.endpointSetMode === kind
+      ? `Click map for ${kind}`
+      : "Set on map";
   }
   const topology = endpoints.routeTopology;
+  renderEndpointTopologyControls(
+    byId("hard-end-control"),
+    byId("loop-end-explanation"),
+    topology,
+  );
   const orderSelect = byId("point-order-mode");
   if (state.planningMode === "waypoint_route") {
     const optimized = orderSelect.querySelector('option[data-optimized="true"]');
@@ -619,12 +648,8 @@ function pointValidation() {
     return "Every point needs valid latitude and longitude coordinates.";
   }
   const endpoints = activeEndpoints();
-  if (!endpoints.start) return "Choose an explicit start.";
   if (endpoints.routeTopology === "loop" && endpoints.end) {
     return "Loop plans must not contain an end.";
-  }
-  if (endpoints.routeTopology === "point_to_point" && !endpoints.end) {
-    return "Point-to-point plans require an explicit end.";
   }
   for (const [label, point] of [["Hard start", endpoints.start], ["Hard end", endpoints.end]]) {
     if (point && !validPoint(point)) return `${label} needs valid coordinates.`;
@@ -637,6 +662,26 @@ function pointValidation() {
     && endpoints.start.lon === endpoints.end.lon
   ) return "Point-to-point start and end must have distinct coordinates.";
   return "";
+}
+
+function currentGenerationAvailability() {
+  const endpoints = activeEndpoints();
+  return generationAvailability({
+    planningMode: state.planningMode,
+    routeTopology: endpoints.routeTopology,
+    start: endpoints.start,
+    end: endpoints.end,
+    mandatoryPointCount: state.points.length,
+    pointValidationMessage: pointValidation(),
+    profileAvailable: Boolean(selectedProfileStatus()?.available),
+  });
+}
+
+function setEditableRequestStatus(message) {
+  const availability = currentGenerationAvailability();
+  byId("request-status").textContent = availability.enabled
+    ? message
+    : availability.reason;
 }
 
 function invalidateAndRender() {
@@ -1549,7 +1594,7 @@ function wireCompromiseActions(candidate) {
         item.approachOverride = { ...stop.resolved_approach.coordinate };
       }
       invalidateAndRender();
-      byId("request-status").textContent = "Constraint updated. Generate again to apply it.";
+      setEditableRequestStatus("Constraint updated. Generate again to apply it.");
     });
   });
 }
@@ -1557,36 +1602,30 @@ function wireCompromiseActions(candidate) {
 function renderStatus() {
   const running = ["running", "reversing"].includes(state.request.status);
   const readOnly = isImmutableSnapshotDisplay();
-  const endpoints = activeEndpoints();
   const open = isOpenPlan();
   byId("controls-title").textContent = open ? "Build your route" : "Build your loop";
   byId("generation-title").textContent = state.request.status === "reversing"
     ? "Reversing route…"
     : open ? "Planning your route…" : "Planning your loop…";
-  const resolvable = Boolean(
-    endpoints.start
-    && (endpoints.routeTopology === "loop" || endpoints.end)
-    && (
-      state.planningMode === "auto_tour"
-      || endpoints.routeTopology === "point_to_point"
-      || state.points.length >= 1
-    )
-  );
-  const profileAvailable = Boolean(selectedProfileStatus()?.available);
-  byId("generate").disabled = readOnly || running || !resolvable || !profileAvailable || Boolean(pointValidation());
+  const availability = currentGenerationAvailability();
+  byId("generate").disabled = readOnly || running || !availability.enabled;
   byId("generate-top").disabled = byId("generate").disabled;
   byId("cancel").classList.toggle("hidden", !running);
   byId("generation-state").classList.toggle("hidden", !running);
   document
     .querySelectorAll("#route-form input, #route-form select, #poi-list input, #poi-list button, #add-point-mode, #clear-points, input[name='planning-mode']")
     .forEach((control) => { control.disabled = running || readOnly; });
+  renderEndpointTopologyControls(
+    byId("hard-end-control"),
+    byId("loop-end-explanation"),
+    activeEndpoints().routeTopology,
+    { controlsDisabled: running || readOnly },
+  );
   byId("route-form").closest(".panel.controls").inert = readOnly;
   byId("clear-results").disabled = readOnly;
   byId("request-status").classList.toggle("running", running);
-  if (!running && !resolvable) {
-    byId("request-status").textContent = state.planningMode === "auto_tour"
-      ? "Set a hard start or add a place from which the start can be inferred."
-      : "Set both hard endpoints or add enough mandatory waypoints to infer them.";
+  if (!running && !readOnly && !availability.enabled) {
+    byId("request-status").textContent = availability.reason;
   }
 }
 
@@ -1648,6 +1687,8 @@ async function selectCandidate(candidateId) {
 function validateRequestControls() {
   updateOptionsFromControls();
   saveActivePoints();
+  const availability = currentGenerationAvailability();
+  if (!availability.enabled) throw new Error(availability.reason);
   const request = currentPlanRequest();
   if (request.distance_objective.target_m < 1000 || request.distance_objective.target_m > 200000) {
     throw new Error("Target distance must be between 1 and 200 km.");
@@ -1663,7 +1704,6 @@ function validateRequestControls() {
   ) {
     throw new Error("Maximum distance must be blank or between 0.1 and 200 km.");
   }
-  if (pointValidation()) throw new Error(pointValidation());
   return request;
 }
 
@@ -2132,9 +2172,9 @@ async function importRequest(file) {
     state.pendingPointPopupIndex = null;
     updateControlsFromOptions();
     invalidateAndRender();
-    byId("request-status").textContent = state.planningMode === "auto_tour"
+    setEditableRequestStatus(state.planningMode === "auto_tour"
       ? `${file.name} loaded. ${state.importDiagnostics.supplied_location_count} supplied locations: ${state.importDiagnostics.consumed_as_start_count} START, ${state.importDiagnostics.consumed_as_end_count} END, ${state.autoTour.requestedPlaces.length} requested places; ${state.importDiagnostics.discarded_count} discarded.`
-      : `${file.name} loaded. All ${state.points.length} named waypoint constraints and strengths are ready for review.`;
+      : `${file.name} loaded. All ${state.points.length} named waypoint constraints and strengths are ready for review.`);
     fitCoordinates([
       ...imported.points,
       ...imported.hardPoints,
@@ -2323,7 +2363,9 @@ async function useSavedRouteAsNewPlan() {
       ? `Local OSM places index ready · ${formatCount(state.poiIndexStatus.feature_count)} regional features.`
       : "POI index unavailable. Place discovery is disabled; routing still works.";
     render();
-    byId("request-status").textContent = "Saved request copied into a new editable plan. Generate when ready.";
+    setEditableRequestStatus(
+      "Saved request copied into a new editable plan. Generate when ready.",
+    );
   } catch (error) {
     handleError(error, "The saved route could not be prepared as a new plan.");
   }
@@ -2386,9 +2428,9 @@ function updateFailedExactPoint(action) {
   }
   hideError();
   invalidateAndRender();
-  byId("request-status").textContent = action === "move"
+  setEditableRequestStatus(action === "move"
     ? "Drag the selected waypoint or place it on the map, then generate again."
-    : "Constraint updated. Generate again to apply it.";
+    : "Constraint updated. Generate again to apply it.");
 }
 
 function bindEvents() {

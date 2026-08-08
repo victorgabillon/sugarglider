@@ -452,11 +452,12 @@ def test_packaged_static_directory_contains_application() -> None:
     assert (STATIC_DIRECTORY / "app.js").is_file()
 
 
-def test_frontend_exposes_separate_optional_endpoints_and_open_metrics() -> None:
+def test_frontend_exposes_topology_aware_endpoints_and_open_metrics() -> None:
     html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
     app = (STATIC_DIRECTORY / "app.js").read_text(encoding="utf-8")
     state_code = (STATIC_DIRECTORY / "state.js").read_text(encoding="utf-8")
     map_code = (STATIC_DIRECTORY / "map.js").read_text(encoding="utf-8")
+    styles = (STATIC_DIRECTORY / "styles.css").read_text(encoding="utf-8")
 
     for control_id in (
         "route-topology",
@@ -476,6 +477,19 @@ def test_frontend_exposes_separate_optional_endpoints_and_open_metrics() -> None
         assert f'id="{control_id}"' in html
     assert "waypointEndpoints" in state_code
     assert 'routeTopology: "loop"' in state_code
+    assert "setRouteTopology" in app
+    assert "assignRouteEndpoint" in app
+    assert "renderEndpointTopologyControls" in app
+    assert "generationAvailability" in app
+    assert "if (!latitudeValue || !longitudeValue) return null;" in app
+    assert "End is the start for loop routes." in html
+    assert 'id="hard-end-control" aria-hidden="true" hidden disabled' in html
+    assert 'aria-describedby="request-status"' in html
+    assert '"Choose a start point for this loop."' in state_code
+    assert '"Choose a start point."' in state_code
+    assert '"Choose an end point."' in state_code
+    assert '"The selected routing profile is unavailable."' in state_code
+    assert ".endpoint-control .button-row { display: grid;" in styles
     assert "topology: endpoints.routeTopology" in state_code
     assert 'endpoints.routeTopology === "point_to_point"' in state_code
     assert "endpointSetMode" in state_code
@@ -486,6 +500,34 @@ def test_frontend_exposes_separate_optional_endpoints_and_open_metrics() -> None
     assert "Effective start" in app
     assert "Effective end" in app
     assert 'result.topology === "loop" ? loopGeometrySection' in app
+
+
+def test_planner_endpoint_browser_harness_covers_all_mode_topology_cases() -> None:
+    harness = (
+        REPOSITORY_ROOT / "tests/browser/planner_endpoint_ux_harness.js"
+    ).read_text(encoding="utf-8")
+    harness_html = (
+        REPOSITORY_ROOT / "tests/browser/planner_endpoint_ux_harness.html"
+    ).read_text(encoding="utf-8")
+
+    assert harness.count('scenarios.push("') == 8
+    for scenario in (
+        "loop_cannot_set_distinct_hard_end",
+        "point_to_point_to_loop_clears_end",
+        "loop_to_point_to_point_exposes_and_requires_end",
+        "auto_tour_loop_with_start_is_generatable",
+        "auto_tour_point_to_point_requires_start_and_end",
+        "waypoint_route_point_to_point_requires_start_and_end",
+        "disabled_generate_reasons_are_actionable",
+        "all_valid_mode_topology_combinations_remain_available",
+    ):
+        assert f'scenarios.push("{scenario}")' in harness
+    assert "assignRouteEndpoint" in harness
+    assert "setRouteTopology" in harness
+    assert "generationAvailability" in harness
+    assert "renderEndpointTopologyControls" in harness
+    assert 'addEventListener("unhandledrejection"' in harness_html
+    assert 'class="field-pair"' in harness_html
 
 
 def test_font_license_provenance_and_glyphs_are_in_wheel(tmp_path: Path) -> None:
