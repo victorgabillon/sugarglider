@@ -7,6 +7,7 @@ import {
   visibleLivePositions,
 } from "./outing_live_state.js";
 import { participantReceiptBelongsToOuting } from "./outing_live_lifecycle.js";
+import { nativeStatusBelongsToOuting } from "./outing_native_bridge.js";
 import { publicOutingUrl } from "./outings.js";
 import {
   renderOfflineCopyControls,
@@ -206,49 +207,79 @@ export function renderOutingLiveView(state) {
     receipt,
     outing,
   );
+  const nativeOwnsParticipant = nativeStatusBelongsToOuting(
+    state.nativeTrackingIdentity,
+    outing,
+  );
   const ownsParticipant = Boolean(
-    available
+    (available || nativeOwnsParticipant)
     && !state.outingClosed
-    && hasParticipantReceipt
-    && (!offline || state.participantRemembered)
+    && (hasParticipantReceipt || nativeOwnsParticipant)
+    && (
+      nativeOwnsParticipant
+      || !offline
+      || state.participantRemembered
+    )
   );
   const controls = byId("outing-live-own-controls");
   controls.classList.toggle("hidden", !ownsParticipant);
-  const ownPosition = ownsParticipant
+  const ownParticipantId = receipt?.participant_id
+    ?? state.nativeTrackingIdentity?.participant_id;
+  const ownPosition = ownsParticipant && ownParticipantId
     ? livePositionForParticipant(
       state.outingLiveState,
-      receipt.participant_id,
+      ownParticipantId,
     )
     : null;
   const start = byId("start-outing-live-sharing");
   const stop = byId("stop-outing-live-sharing");
-  start.classList.toggle("hidden", !ownsParticipant || state.outingTrackingActive);
-  start.textContent = state.durableOutboxPresent
-    ? "Resume sharing"
-    : "Start sharing";
+  start.classList.toggle(
+    "hidden",
+    !hasParticipantReceipt
+      || state.outingTrackingActive
+      || state.outingTrackingTransitionPending,
+  );
+  start.textContent = state.nativeTrackingAvailable
+    ? "Start Android background sharing"
+    : state.durableOutboxPresent
+      ? "Resume sharing"
+      : "Start sharing";
   start.disabled = (
-    !ownsParticipant
+    !hasParticipantReceipt
     || state.outingTrackingActive
     || state.outingTrackingTransitionPending
     || state.outingTrackingStatus === "unsupported"
+    || state.nativeTrackingOtherActive
   );
   const canStop = Boolean(
     ownsParticipant
     && (
-      state.outingTrackingActive
-      || ownPosition
-      || state.outingTrackingClearFailed
+      state.outingTrackingBackend === "native"
+        ? state.outingTrackingActive || state.outingTrackingTransitionPending
+        : (
+          state.outingTrackingActive
+          || ownPosition
+          || state.outingTrackingClearFailed
+        )
     ),
   );
   stop.classList.toggle("hidden", !canStop);
   stop.disabled = state.outingTrackingTransitionPending;
   byId("outing-live-tracking-status").textContent = ownsParticipant
     ? (
-      offline && !state.outingTrackingActive
+      state.nativeTrackingOtherActive && !nativeOwnsParticipant
+        ? "Another Android participant is currently sharing. Stop it from its outing or persistent notification before starting this participant."
+        : offline && !state.outingTrackingActive
         ? "Offline — Start can retain only the latest fix for explicit foreground resume."
         : state.outingTrackingMessage
     )
     : "Viewer mode — position sharing controls require an in-memory participant receipt.";
+  byId("outing-live-sharing-disclosure").textContent = (
+    state.outingTrackingBackend === "native"
+      || state.nativeTrackingAvailable
+  )
+    ? "Android background sharing starts only after pressing Start and confirming the native disclosure. It continues while minimized or screen-locked with a persistent notification. Anyone with the unlisted link can see the current position. Only the latest position is retained, not a historical track. Press Stop in the app or notification; an uncertain clear may remain visible until server expiry."
+    : "Sharing starts only after pressing Start and uses foreground browser location. No historical activity track is retained. Press Stop for reliable removal. If this tab closes or is suspended first, the last position may remain visible until server expiry.";
   updateParticipantCards(state);
   renderRememberedParticipantControls(state);
 }

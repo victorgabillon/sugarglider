@@ -41,3 +41,13 @@ data/outings/*
 # IDE
 .idea/
 .vscode/
+
+# Android local and generated files
+android/.gradle/
+android/**/build/
+android/local.properties
+*.apk
+*.aab
+*.jks
+*.keystore
+captures/

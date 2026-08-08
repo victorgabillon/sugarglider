@@ -33,6 +33,15 @@ import {
   createOutingLiveLifecycle,
   installAuthoritativeOutingSnapshot,
 } from "./outing_live_lifecycle.js";
+import {
+  applyNativeTerminalFailureToCurrentPage,
+  createRetainedTerminalFailureProcessor,
+  nativeStatusBelongsToOuting,
+  nativeStatusBusy,
+  nativeTrackingBridge,
+  projectNativeStatusForCurrentOuting,
+  resetNativePageProjection,
+} from "./outing_native_bridge.js";
 import { createOutingTracker } from "./outing_tracking.js";
 import {
   captureOutingInviteToken,
@@ -97,6 +106,7 @@ let outingLiveFreshnessTimer = null;
 let outingLiveSession = null;
 let outingTracker = null;
 let lifecycleEventsBound = false;
+let nativeBridgeEventsBound = false;
 let positionStartPending = false;
 let outingPageEpoch = 0;
 let requestedOutingSlug = null;
@@ -108,6 +118,30 @@ const outingPageOperations = createEpochOperationOwner(
   ),
 );
 const outingLiveLifecycle = createOutingLiveLifecycle();
+const nativeTerminalFailureProcessor = createRetainedTerminalFailureProcessor({
+  matches: nativeTerminalFailureMatchesCurrentPage,
+  clearInMemory: (failure) => (
+    applyNativeTerminalFailureToCurrentPage(state, failure)
+  ),
+  durableCleanup: (failure) => runBestEffortStorage([
+    () => forgetParticipantIdentity(
+      failure.outing_slug,
+      failure.participant_id,
+    ),
+  ]),
+  acknowledge: (failure) => (
+    nativeTrackingBridge.acknowledgeTerminalFailure(failure)
+  ),
+  onCleared: () => {
+    outingTracker?.shutdown();
+    showOutingView(state, outingViewHandlers());
+    renderCurrentOutingLiveState();
+    setStatus(
+      "Participant access is no longer available. Native and remembered participant authority were removed.",
+    );
+  },
+  onStorageFailure: reportOptionalStorageFailure,
+});
 const outingLiveRecovery = createGuardedSingleFlight({
   isCurrent: currentOutingLiveSession,
   onStart: beginOutingLiveRecovery,
@@ -317,6 +351,7 @@ async function refreshOutingSnapshotForMembershipChange(
 
 function applyRefreshedOutingMembership(snapshot, session) {
   if (snapshot.slug !== session.slug) return;
+  const nativeBeforeRefresh = state.nativeServiceStatus;
   const removedReceipt = installAuthoritativeOutingSnapshot(
     state,
     snapshot,
@@ -333,6 +368,19 @@ function applyRefreshedOutingMembership(snapshot, session) {
       )],
       { onFailure: reportOptionalStorageFailure },
     );
+  }
+  if (
+    nativeBeforeRefresh?.active
+    && nativeBeforeRefresh.outing_slug === snapshot.slug
+    && !snapshot.participants.some(
+      (participant) => participant.participant_id === nativeBeforeRefresh.participant_id,
+    )
+  ) {
+    void nativeTrackingBridge.stop({
+      outingSlug: nativeBeforeRefresh.outing_slug,
+      participantId: nativeBeforeRefresh.participant_id,
+    });
+    resetNativePageProjection(state);
   }
   if (!snapshot.participants.some(
     (participant) => (
@@ -375,6 +423,7 @@ function startOutingLiveExperience(slug) {
     }
   }, 1_000);
   outingLiveFreshnessTimer = timer;
+  void synchronizeNativeTrackingStatus();
 }
 
 function stopOutingLiveExperience({
@@ -390,7 +439,16 @@ function stopOutingLiveExperience({
     window.clearInterval(outingLiveFreshnessTimer.id);
     outingLiveFreshnessTimer = null;
   }
-  if (stopTracking) outingTracker?.shutdown();
+  if (stopTracking) {
+    outingTracker?.shutdown();
+    if (
+      state.outingTrackingBackend === "native"
+      && nativeStatusBelongsToOuting(
+        nativeTrackingBridge.status(),
+        state.outingSnapshot,
+      )
+    ) void stopMatchingNativeTracking(state.nativeTrackingIdentity);
+  }
   if (clearPositions) clearOutingLivePositions();
 }
 
@@ -412,6 +470,7 @@ function handleOutingClosed(session = outingLiveSession) {
   }
   state.participantRemembered = false;
   state.durableOutboxPresent = false;
+  resetNativePageProjection(state);
   showOutingView(state, outingViewHandlers());
   renderOutingLiveView(state);
   setStatus("Outing closed.");
@@ -494,7 +553,103 @@ function ensureOutingTracker() {
   return outingTracker;
 }
 
+function bindNativeBridgeEvents() {
+  if (nativeBridgeEventsBound) return;
+  nativeBridgeEventsBound = true;
+  nativeTrackingBridge.subscribe((event) => {
+    state.nativeTrackingAvailable = nativeTrackingBridge.available();
+    if (event.kind === "status") applyNativeTrackingStatus(event.status);
+    else if (event.kind === "permanent_failure") {
+      void applyNativePermanentFailure(event.failure).catch(
+        reportOptionalStorageFailure,
+      );
+    }
+  });
+  void nativeTrackingBridge.initialize().then((available) => {
+    state.nativeTrackingAvailable = available;
+    if (available) void synchronizeNativeTrackingStatus();
+  });
+}
+
+async function synchronizeNativeTrackingStatus() {
+  if (!state.outingSnapshot) return;
+  const status = await nativeTrackingBridge.getStatus();
+  state.nativeTrackingAvailable = nativeTrackingBridge.available();
+  if (status) applyNativeTrackingStatus(status);
+}
+
+function applyNativeTrackingStatus(status) {
+  if (!projectNativeStatusForCurrentOuting(state, status)) {
+    renderCurrentOutingLiveState();
+    return;
+  }
+  state.outingTrackingMessage = nativeTrackingMessage(status);
+  renderCurrentOutingLiveState();
+}
+
+async function applyNativePermanentFailure(failure) {
+  if (!Number.isSafeInteger(failure.event_id)) {
+    applyNativeStartRejection(failure);
+    return;
+  }
+  await nativeTerminalFailureProcessor.process(failure);
+}
+
+function nativeTerminalFailureMatchesCurrentPage(failure) {
+  return Boolean(
+    state.outingSnapshot?.slug === failure.outing_slug
+    && (
+      state.outingSnapshot.participants.some(
+        (participant) => participant.participant_id === failure.participant_id,
+      )
+      || (
+        state.outingParticipantReceipt?.slug === failure.outing_slug
+        && state.outingParticipantReceipt.participant_id === failure.participant_id
+      )
+      || (
+        state.nativeTrackingIdentity?.outing_slug === failure.outing_slug
+        && state.nativeTrackingIdentity.participant_id === failure.participant_id
+      )
+    )
+  );
+}
+
+function applyNativeStartRejection(failure) {
+  if (!nativeStatusBelongsToOuting(failure, state.outingSnapshot)) return;
+  state.outingTrackingTransitionPending = false;
+  const message = {
+    permission_denied: "Android background sharing was not started: confirmation or location permission was denied.",
+    approximate_location: "Android background sharing requires precise location permission.",
+    notification_permission_denied: "Android background sharing requires notification permission.",
+    location_disabled: "Turn on Android location services before starting sharing.",
+    different_participant_active: "Another Android participant is currently sharing. Stop it from its outing or notification first.",
+    stop_in_progress: "Android background sharing is still stopping. Wait for Stop to finish before starting again.",
+    start_in_progress: "Android background sharing is already starting.",
+    outing_not_found: "This outing is expired or unavailable; Android sharing was not started.",
+  }[failure.code] ?? "Android background sharing could not be started.";
+  state.outingTrackingMessage = message;
+  renderCurrentOutingLiveState();
+  setStatus(message);
+}
+
+function nativeTrackingMessage(status) {
+  if (status.stop_warning) return status.stop_warning;
+  return {
+    starting: "Starting Android background sharing",
+    waiting: "Waiting for a precise Android location fix",
+    sharing: "Android background sharing is active — it continues with the screen locked",
+    offline_retrying: "Offline — Android is retaining only the latest fix and retrying",
+    stopping: "Stopping Android background sharing",
+    stopped: "Android background sharing stopped",
+    outing_closed: "Outing closed — Android sharing stopped",
+  }[status.state] ?? "Android background sharing stopped";
+}
+
 function syncOutingTrackingState() {
+  if (state.outingTrackingBackend === "native") {
+    renderCurrentOutingLiveState();
+    return;
+  }
   if (!outingTracker) return;
   const tracking = outingTracker.status();
   state.outingTrackingStatus = tracking.status;
@@ -510,16 +665,51 @@ async function startCurrentOutingPositionSharing() {
   const receipt = state.outingParticipantReceipt;
   const outing = state.outingSnapshot;
   if (!receipt || !outing || receipt.slug !== outing.slug) return;
-  if (state.networkStatus === "offline" && !state.participantRemembered) {
-    setStatus(
-      "Remember this participant before starting while offline so only the latest fix can be retained.",
+  if (nativeStatusBusy(state.nativeServiceStatus)) {
+    const nativeBelongs = nativeStatusBelongsToOuting(
+      state.nativeServiceStatus,
+      outing,
     );
-    return;
+    if (!nativeBelongs || state.nativeServiceStatus.state === "stopping") {
+      setStatus(
+        state.nativeServiceStatus.state === "stopping"
+          ? "Android background sharing is still stopping. Wait for Stop to finish before starting again."
+          : "Another Android participant is currently sharing. Stop it before starting this participant.",
+      );
+      return;
+    }
   }
   positionStartPending = true;
   state.outingTrackingTransitionPending = true;
   renderCurrentOutingLiveState();
   try {
+    const nativeAvailable = await nativeTrackingBridge.initialize();
+    state.nativeTrackingAvailable = nativeAvailable;
+    if (
+      !nativeAvailable
+      && state.networkStatus === "offline"
+      && !state.participantRemembered
+    ) {
+      setStatus(
+        "Remember this participant before starting while offline so only the latest fix can be retained.",
+      );
+      return;
+    }
+    if (nativeAvailable) {
+      const currentPosition = livePositionForParticipant(
+        state.outingLiveState,
+        receipt.participant_id,
+      );
+      const reply = await nativeTrackingBridge.start({
+        receipt,
+        outingExpiresAt: outing.expires_at,
+        currentSequence: currentPosition?.sequence ?? 0,
+      });
+      if (reply && reply.type !== "permanent_failure") {
+        applyNativeTrackingStatus(reply);
+      }
+      return;
+    }
     const resumeSample = state.participantRemembered
       ? await readRememberedOutbox(receipt)
       : null;
@@ -529,6 +719,8 @@ async function startCurrentOutingPositionSharing() {
     ) return;
     state.durableOutboxPresent = Boolean(resumeSample);
     const tracker = ensureOutingTracker();
+    state.outingTrackingBackend = "browser";
+    state.nativeTrackingIdentity = null;
     tracker.start(receipt, {
       available: Boolean(state.config?.outing_live_positions_available),
       currentPosition: livePositionForParticipant(
@@ -539,12 +731,38 @@ async function startCurrentOutingPositionSharing() {
     });
   } finally {
     positionStartPending = false;
+    if (state.outingTrackingBackend !== "native") {
+      state.outingTrackingTransitionPending = false;
+    }
     syncOutingTrackingState();
   }
 }
 
 async function stopCurrentOutingPositionSharing() {
   const receipt = state.outingParticipantReceipt;
+  if (state.outingTrackingBackend === "native") {
+    state.outingTrackingTransitionPending = true;
+    renderCurrentOutingLiveState();
+    const identity = state.nativeTrackingIdentity;
+    if (!identity) return { cleared: false, pending: false };
+    const reply = await nativeTrackingBridge.stop({
+      outingSlug: identity.outing_slug,
+      participantId: identity.participant_id,
+    });
+    if (reply && reply.type !== "permanent_failure") {
+      applyNativeTrackingStatus(reply);
+      return {
+        cleared: reply.state === "stopped" && !reply.stop_warning,
+        pending: reply.state === "stopping",
+        uncertain: Boolean(reply.stop_warning),
+      };
+    } else if (!reply) {
+      state.outingTrackingTransitionPending = false;
+      renderCurrentOutingLiveState();
+      return { cleared: false, pending: false, uncertain: true };
+    }
+    return { cleared: false, pending: false, uncertain: true };
+  }
   if (!receipt) return;
   const tracker = ensureOutingTracker();
   await tracker.stop(receipt, { clearServer: true });
@@ -552,11 +770,27 @@ async function stopCurrentOutingPositionSharing() {
 }
 
 function stopTrackerBeforeOutingMutation() {
+  if (state.outingTrackingBackend === "native") {
+    void stopMatchingNativeTracking(state.nativeTrackingIdentity);
+  }
   outingTracker?.shutdown();
   syncOutingTrackingState();
 }
 
+function stopMatchingNativeTracking(identity) {
+  if (!identity) return Promise.resolve(null);
+  return nativeTrackingBridge.stop({
+    outingSlug: identity.outing_slug,
+    participantId: identity.participant_id,
+  });
+}
+
 function prepareParticipantTracker() {
+  if (nativeTrackingBridge.available()) {
+    state.nativeTrackingAvailable = true;
+    void synchronizeNativeTrackingStatus();
+    return;
+  }
   const tracker = ensureOutingTracker();
   syncOutingTrackingState();
   if (!tracker.supported()) {
@@ -571,6 +805,7 @@ function prepareParticipantTracker() {
 function bindOutingLifecycleEvents() {
   if (lifecycleEventsBound) return;
   lifecycleEventsBound = true;
+  bindNativeBridgeEvents();
   window.addEventListener("online", () => {
     if (foregroundOutboxFlushAllowed({
       visible: document.visibilityState === "visible",
@@ -851,7 +1086,9 @@ export async function forgetCurrentOutingParticipant() {
   const clearServer = state.networkStatus !== "offline";
   const result = await completeParticipantForget({
     clearServer,
-    stop: () => tracker.stop(receipt, { clearServer }),
+    stop: () => state.outingTrackingBackend === "native"
+      ? stopCurrentOutingPositionSharing()
+      : tracker.stop(receipt, { clearServer }),
     forget: () => forgetRememberedParticipant(receipt.slug),
   });
   if (state.outingParticipantReceipt === receipt) {

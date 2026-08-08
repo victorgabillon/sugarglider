@@ -4,6 +4,7 @@ from collections import Counter
 from dataclasses import dataclass
 
 from sugarglider.domain.models import RouteResult
+from sugarglider.nature.scoring import available_nature_score
 from sugarglider.planning.auto_tour.candidate_models import (
     AutoTourCandidate,
 )
@@ -94,7 +95,10 @@ def score_route(
 
 
 def canonical_auto_tour_key(
-    candidate: PlanCandidate, priority: DistancePriority
+    candidate: PlanCandidate,
+    priority: DistancePriority,
+    *,
+    include_nature: bool = True,
 ) -> tuple[object, ...]:
     """Order published Auto Tours without erasing producer POI semantics."""
     selected_requested = tuple(
@@ -107,10 +111,9 @@ def canonical_auto_tour_key(
     repetition = diagnostics.repeated_distance_m
     backtracking = diagnostics.immediate_backtracking_m
     discovered_utility = candidate.score.components.get("poi_reward", 0.0)
+    available_score = available_nature_score(route.analysis.nature)
     nature_score = (
-        route.analysis.nature.nature_score
-        if route.analysis.nature is not None
-        else -1.0
+        available_score if include_nature and available_score is not None else 0.0
     )
     coverage = (-must_visits, -preferred, -diagnostics.requested_stop_count)
     compromise_quality = (
@@ -333,11 +336,13 @@ def control_comparison(route: RouteResult, signature: str) -> TourControlCompari
     )
 
 
-def auto_tour_ranking_key(candidate: AutoTourCandidate) -> tuple[object, ...]:
+def auto_tour_ranking_key(
+    candidate: AutoTourCandidate, *, include_nature: bool = True
+) -> tuple[object, ...]:
     """Return the documented lexicographic Auto Tour recommendation order."""
     analysis = candidate.route.analysis
     geometry = analysis.loop_geometry
-    nature = analysis.nature
+    nature_score = available_nature_score(analysis.nature)
     hard_feasible = all(visit.selected for visit in candidate.hard_point_visits)
     if candidate.distance_priority == "strict":
         return (
@@ -352,7 +357,7 @@ def auto_tour_ranking_key(candidate: AutoTourCandidate) -> tuple[object, ...]:
             -candidate.selected_preferred_place_count,
             candidate.poi_excursion_penalty_m_equivalent,
             -candidate.total_poi_reward if candidate.control_eligible else 0.0,
-            (0, -nature.nature_score) if nature is not None else (1, 0.0),
+            -nature_score if include_nature and nature_score is not None else 0.0,
             candidate.route_score.total,
             candidate.signature,
         )
@@ -389,7 +394,7 @@ def auto_tour_ranking_key(candidate: AutoTourCandidate) -> tuple[object, ...]:
         analysis.repetition.repeated_distance.share,
         (0, geometry.penalty_breakdown.total) if geometry is not None else (1, 0.0),
         -candidate.total_poi_reward,
-        (0, -nature.nature_score) if nature is not None else (1, 0.0),
+        -nature_score if include_nature and nature_score is not None else 0.0,
         candidate.soft_distance_penalty,
         0 if candidate.control_eligible else 1,
         candidate.route_score.total,

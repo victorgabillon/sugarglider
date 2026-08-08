@@ -4,6 +4,7 @@
 
 from typing import cast
 
+from sugarglider.nature.scoring import available_nature_score
 from sugarglider.planning.alternative_legs import (
     LowOverlapBeamSearch,
 )
@@ -73,9 +74,19 @@ class RepairSearchMixin:
             states=states,
             state=state,
         )
+        eligible_values = tuple(
+            value for value in states if value.candidate.control_eligible
+        )
+        eligible_nature_comparable = all(
+            available_nature_score(value.candidate.route.analysis.nature) is not None
+            for value in eligible_values
+        )
         eligible = sorted(
-            (value for value in states if value.candidate.control_eligible),
-            key=lambda value: auto_tour_ranking_key(value.candidate),
+            eligible_values,
+            key=lambda value: auto_tour_ranking_key(
+                value.candidate,
+                include_nature=eligible_nature_comparable,
+            ),
         )[:2]
         repaired: list[_InsertionState] = [
             *requested_repairs,
@@ -211,16 +222,23 @@ class RepairSearchMixin:
             request.path_selection_mode == "low_overlap"
             and self._settings.alternative_leg_request_budget > 0
         ):
+            requested_values = tuple(
+                value for value in states if value.deliberately_routed_requested_indices
+            )
+            requested_nature_comparable = all(
+                available_nature_score(value.candidate.route.analysis.nature)
+                is not None
+                for value in requested_values
+            )
             requested_repair_sources = sorted(
-                (
-                    value
-                    for value in states
-                    if value.deliberately_routed_requested_indices
-                ),
+                requested_values,
                 key=lambda value: (
                     -value.candidate.selected_must_visit_count,
                     -value.candidate.selected_preferred_place_count,
-                    auto_tour_ranking_key(value.candidate),
+                    auto_tour_ranking_key(
+                        value.candidate,
+                        include_nature=requested_nature_comparable,
+                    ),
                 ),
             )[:1]
             alternative_sources = tuple(
@@ -342,18 +360,26 @@ class RepairSearchMixin:
         state: _SearchState,
     ) -> tuple[_InsertionState, ...]:
         """Stop forcing soft coordinates that snapped outside their visit radius."""
+        source_values = tuple(
+            source
+            for source in states
+            if source.deliberately_routed_requested_indices
+            and source.draft.route.analysis.immediate_backtrack.distance_m > 300.0
+            and source.draft.route.summary.distance_m <= _maximum_distance(request)
+        )
+        source_nature_comparable = all(
+            available_nature_score(source.candidate.route.analysis.nature) is not None
+            for source in source_values
+        )
         ordered_sources = sorted(
-            (
-                source
-                for source in states
-                if source.deliberately_routed_requested_indices
-                and source.draft.route.analysis.immediate_backtrack.distance_m > 300.0
-                and source.draft.route.summary.distance_m <= _maximum_distance(request)
-            ),
+            source_values,
             key=lambda source: (
                 -source.candidate.selected_must_visit_count,
                 -source.candidate.selected_preferred_place_count,
-                auto_tour_ranking_key(source.candidate),
+                auto_tour_ranking_key(
+                    source.candidate,
+                    include_nature=source_nature_comparable,
+                ),
             ),
         )
         sources_by_skeleton: dict[str, _InsertionState] = {}

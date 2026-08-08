@@ -277,3 +277,22 @@
   callbacks must not alter newer in-memory authority.
 - PR26 has no Background Sync, periodic sync, service-worker position publication,
   push, notification, background geolocation, wake lock, or native execution.
+- PR27 Android sharing starts only from a visible Activity after explicit native
+  disclosure and precise-location plus notification permission. It never requests
+  `ACCESS_BACKGROUND_LOCATION`, auto-starts, or restarts after process death or reboot.
+- The Android WebView bridge uses an exact configured origin, main-frame-only
+  `WebViewCompat.addWebMessageListener`; never add `addJavascriptInterface`, wildcard
+  origins, cross-origin participant authority, redirect-following authenticated calls,
+  or custom TLS trust.
+- Native Android tracking owns at most one encrypted participant session and one
+  latest pending fix. It retains no coordinate history, publishes through the existing
+  PR24 endpoint at most once per five seconds, and never changes browser-only PR25/PR26
+  behavior.
+- Android location sharing runs only as a non-exported location foreground service
+  with an ongoing notification and idempotent in-app/notification Stop. It remains
+  `START_NOT_STICKY` and uses no background jobs, alarms, boot receiver, proprietary
+  geolocation SDK, or wake lock.
+- Native-to-web messages contain no participant token or coordinate. Permanent
+  authenticated not-found cleanup must clear only its matching encrypted session even
+  after Stop or generation invalidation, while stale callbacks cannot mutate a newer
+  WebView or participant state.

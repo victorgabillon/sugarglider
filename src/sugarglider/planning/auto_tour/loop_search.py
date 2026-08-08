@@ -6,6 +6,7 @@ from time import perf_counter
 from typing import cast
 
 from sugarglider.domain.endpoints import validated_endpoint_visits
+from sugarglider.nature.scoring import available_nature_score
 from sugarglider.planning.auto_tour.approaches import (
     choose_route_dependent_approaches,
     resolve_requested_stops,
@@ -128,8 +129,17 @@ class LoopSearchMixin:
         if not controls:
             raise AutoTourNoCandidateError
 
+        controls_nature_comparable = all(
+            available_nature_score(draft.route.analysis.nature) is not None
+            for draft in controls
+        )
         global_control_draft = min(
-            controls, key=lambda draft: _control_key(draft, request)
+            controls,
+            key=lambda draft: _control_key(
+                draft,
+                request,
+                include_nature=controls_nature_comparable,
+            ),
         )
         request = request.model_copy(
             update={
@@ -281,7 +291,15 @@ class LoopSearchMixin:
                 ),
             )
         )
-        selected = sorted(recommendation_pool, key=auto_tour_ranking_key)[
+        include_nature = all(
+            available_nature_score(candidate.route.analysis.nature) is not None
+            for candidate in recommendation_pool
+        )
+
+        def ranking_key(candidate: AutoTourCandidate) -> tuple[object, ...]:
+            return auto_tour_ranking_key(candidate, include_nature=include_nature)
+
+        selected = sorted(recommendation_pool, key=ranking_key)[
             : request.candidate_count
         ]
         requested_representative = min(
@@ -297,7 +315,7 @@ class LoopSearchMixin:
             key=lambda candidate: (
                 -candidate.selected_must_visit_count,
                 -candidate.selected_preferred_place_count,
-                auto_tour_ranking_key(candidate),
+                ranking_key(candidate),
             ),
             default=None,
         )
@@ -308,7 +326,7 @@ class LoopSearchMixin:
             not in {candidate.signature for candidate in selected}
         ):
             selected[-1] = requested_representative
-            selected.sort(key=auto_tour_ranking_key)
+            selected.sort(key=ranking_key)
         selected = list(
             _mark_cross_candidate_requested_routing(
                 _apply_requested_search_failure_context(tuple(selected), state)

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>PR27 native bridge harness</title>
+  <pre id="result">running</pre>
+  <script>
+    window.pr27HarnessResult = document.getElementById("result");
+    window.pr27UnhandledRejection = null;
+    window.addEventListener("unhandledrejection", (event) => {
+      window.pr27UnhandledRejection = event.reason;
+      window.pr27HarnessResult.dataset.status = "failed";
+      window.pr27HarnessResult.textContent = String(event.reason);
+    });
+  </script>
+  <script type="module">
+    import { runPr27NativeBridgeHarness } from "./pr27_native_bridge_harness.js";
+
+    try {
+      const scenarios = await runPr27NativeBridgeHarness();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      if (window.pr27UnhandledRejection) throw window.pr27UnhandledRejection;
+      window.pr27HarnessResult.dataset.status = "passed";
+      window.pr27HarnessResult.textContent = JSON.stringify(scenarios);
+    } catch (error) {
+      window.pr27HarnessResult.dataset.status = "failed";
+      window.pr27HarnessResult.textContent = error instanceof Error
+        ? error.stack
+        : String(error);
+    }
+  </script>
+</html>

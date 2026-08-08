@@ -110,10 +110,16 @@ async def optimize_tours(
             continue
         initial.append(state)
     unique_initial = {state.stable_signature: state for state in initial}
+    initial_nature_comparable = all(
+        state.objective_components.nature_utility is not None
+        for state in unique_initial.values()
+    )
     initial = sorted(
         unique_initial.values(),
         key=lambda state: (
-            state.objective_components.lexicographic_key(),
+            state.objective_components.lexicographic_key(
+                include_nature=initial_nature_comparable
+            ),
             state.stable_signature,
         ),
     )
@@ -121,7 +127,10 @@ async def optimize_tours(
     if not initial:
         _record_timing(accumulator, timer, wall_started, cpu_started)
         return OptimizationResult(drafts=(), warnings=())
-    archive = ParetoArchive(resolved)
+    archive = ParetoArchive(
+        resolved,
+        include_nature=initial_nature_comparable,
+    )
     for state in initial:
         archive.add(state)
     initial_signatures = {state.stable_signature for state in initial}
@@ -165,10 +174,16 @@ async def optimize_tours(
                 )
     if structural:
         current_states.extend(structural)
+        current_nature_comparable = all(
+            value.objective_components.nature_utility is not None
+            for value in current_states
+        )
         best = min(
             current_states,
             key=lambda value: (
-                value.objective_components.lexicographic_key(),
+                value.objective_components.lexicographic_key(
+                    include_nature=current_nature_comparable
+                ),
                 value.stable_signature,
             ),
         )
@@ -429,7 +444,7 @@ def _structural_state_key(
     return (
         -len(state.applied_spur_repairs),
         -sum(repair.improvement_m for repair in state.applied_spur_repairs),
-        state.objective_components.lexicographic_key(),
+        state.objective_components.lexicographic_key(include_nature=False),
         state.stable_signature,
     )
 
@@ -484,10 +499,15 @@ def _record_best_improvements(
         - draft.resulting_objective.immediate_backtracking_m
         for draft in drafts
     )
+    nature_comparable = all(
+        draft.resulting_objective.nature_utility is not None for draft in drafts
+    )
     best = min(
         drafts,
         key=lambda draft: (
-            draft.resulting_objective.lexicographic_key(),
+            draft.resulting_objective.lexicographic_key(
+                include_nature=nature_comparable
+            ),
             draft.stable_signature,
         ),
     )

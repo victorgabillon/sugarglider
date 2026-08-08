@@ -29,6 +29,26 @@ The browser and API are then available at `http://localhost:8000`. GraphHopper i
 external process; domain and planning code only use it through the typed routing
 adapter.
 
+### Android development shell
+
+The self-contained Kotlin project under `android/` wraps the existing web interface
+and adds user-initiated screen-off sharing through an Android location foreground
+service. It still requires a reachable Sugarglider server; the API, SQLite databases,
+GraphHopper, and map data are not embedded in the APK.
+
+With JDK 17 and Android SDK 36 installed:
+
+```sh
+make android-check
+make android-apk
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Debug builds accept `http://10.0.2.2:8000` and private-LAN HTTP origins for local
+development. Release builds accept HTTPS only and have cleartext traffic disabled.
+See [`docs/pr27-android-background-tracking.md`](docs/pr27-android-background-tracking.md)
+for architecture, privacy, build, setup, and device-acceptance details.
+
 ## Canonical plan API
 
 The planning surface is:

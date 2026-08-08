@@ -59,7 +59,12 @@ def accept_state(
         return True
     progress = min(1.0, iteration / settings.maximum_iterations)
     temperature = max(1.0, 50_000.0 * (1.0 - progress))
-    delta = acceptance_energy(proposed) - acceptance_energy(current)
+    include_nature = (
+        proposed.nature_utility is not None and current.nature_utility is not None
+    )
+    delta = acceptance_energy(
+        proposed, include_nature=include_nature
+    ) - acceptance_energy(current, include_nature=include_nature)
     if delta <= 0:
         return True
     probability = exp(-min(delta / temperature, 700.0))

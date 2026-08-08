@@ -8,7 +8,10 @@ import pytest_asyncio
 from fastapi import FastAPI
 
 from sugarglider.api.main import create_app
+from sugarglider.domain.analysis import DistanceMetric, NatureAnalysis
 from sugarglider.domain.models import Coordinate, RouteResult
+from sugarglider.nature.analysis import NATURE_GEOMETRY_OVERLAY_WARNING
+from sugarglider.nature.scoring import score_nature
 from sugarglider.planning.diagnostics import (
     BudgetDiagnostics,
     CacheDiagnostics,
@@ -228,6 +231,35 @@ def waypoint_request() -> dict[str, object]:
     }
 
 
+def _unavailable_nature_analysis(route_distance_m: float) -> NatureAnalysis:
+    zero = DistanceMetric(distance_m=0, share=0)
+    breakdown = score_nature(
+        woodland_share=0,
+        open_natural_share=0,
+        agriculture_share=0,
+        park_or_protected_share=0,
+        near_water_share=0,
+        urban_share=0,
+        unknown_share=1,
+    )
+    return NatureAnalysis(
+        available=False,
+        index_format_version=1,
+        index_feature_count=3,
+        woodland=zero,
+        open_natural=zero,
+        agriculture=zero,
+        water_crossing=zero,
+        urban=zero,
+        unknown_landcover=DistanceMetric(distance_m=route_distance_m, share=1),
+        park_or_protected=zero,
+        near_water=zero,
+        nature_score=breakdown.final_score,
+        score_breakdown=breakdown,
+        warnings=(NATURE_GEOMETRY_OVERLAY_WARNING,),
+    )
+
+
 @pytest.mark.asyncio
 async def test_generate_uses_discriminated_canonical_request(
     client: httpx.AsyncClient, plan_service: _PlanService
@@ -238,6 +270,42 @@ async def test_generate_uses_discriminated_canonical_request(
     assert response.json()["candidates"][0]["id"] == "candidate-1"
     assert plan_service.request is not None
     assert plan_service.request.kind == "waypoint_route"
+
+
+@pytest.mark.asyncio
+async def test_generate_returns_structured_candidate_after_nature_overlay_failure(
+    client: httpx.AsyncClient,
+    plan_service: _PlanService,
+    plan_result: PlanResult,
+) -> None:
+    candidate = plan_result.candidates[0]
+    route = candidate.route
+    nature = _unavailable_nature_analysis(route.summary.distance_m)
+    failed_nature_route = route.model_copy(
+        update={
+            "analysis": route.analysis.model_copy(update={"nature": nature}),
+        }
+    )
+    plan_service.result = plan_result.model_copy(
+        update={
+            "candidates": (candidate.model_copy(update={"route": failed_nature_route}),)
+        }
+    )
+
+    response = await client.post("/v2/plans/generate", json=waypoint_request())
+
+    assert response.status_code == 200
+    body = response.json()
+    public_route = body["candidates"][0]["route"]
+    assert public_route["geometry"] == [list(point) for point in route.geometry]
+    assert public_route["analysis"]["nature"]["available"] is False
+    assert public_route["analysis"]["nature"]["warnings"] == [
+        NATURE_GEOMETRY_OVERLAY_WARNING
+    ]
+    assert public_route["analysis"]["nature"]["woodland"]["distance_m"] == 0
+    assert public_route["analysis"]["nature"]["unknown_landcover"][
+        "distance_m"
+    ] == pytest.approx(route.summary.distance_m)
 
 
 @pytest.mark.asyncio

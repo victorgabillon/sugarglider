@@ -192,8 +192,14 @@ def state_from_selected_path_options(
 class ParetoArchive:
     """Small deterministic non-dominated archive of feasible complete states."""
 
-    def __init__(self, settings: GlobalOptimizationSettings) -> None:
+    def __init__(
+        self,
+        settings: GlobalOptimizationSettings,
+        *,
+        include_nature: bool = True,
+    ) -> None:
         self._limit = settings.pareto_archive_size
+        self._include_nature = include_nature
         self._states: dict[str, TourOptimizationState] = {}
 
     def add(self, state: TourOptimizationState) -> bool:
@@ -202,7 +208,11 @@ class ParetoArchive:
         if state.stable_signature in self._states:
             return False
         if any(
-            pareto_dominates(existing.objective_components, state.objective_components)
+            pareto_dominates(
+                existing.objective_components,
+                state.objective_components,
+                include_nature=self._include_nature,
+            )
             for existing in self._states.values()
         ):
             return False
@@ -210,14 +220,18 @@ class ParetoArchive:
             signature: existing
             for signature, existing in self._states.items()
             if not pareto_dominates(
-                state.objective_components, existing.objective_components
+                state.objective_components,
+                existing.objective_components,
+                include_nature=self._include_nature,
             )
         }
         self._states[state.stable_signature] = state
         ordered = sorted(
             self._states.values(),
             key=lambda value: (
-                value.objective_components.lexicographic_key(),
+                value.objective_components.lexicographic_key(
+                    include_nature=self._include_nature
+                ),
                 value.stable_signature,
             ),
         )[: self._limit]
@@ -229,7 +243,9 @@ class ParetoArchive:
             sorted(
                 self._states.values(),
                 key=lambda value: (
-                    value.objective_components.lexicographic_key(),
+                    value.objective_components.lexicographic_key(
+                        include_nature=self._include_nature
+                    ),
                     value.stable_signature,
                 ),
             )
