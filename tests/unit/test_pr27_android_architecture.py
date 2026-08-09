@@ -195,6 +195,7 @@ def test_legacy_and_predictive_back_share_outing_confirmation_policy() -> None:
     assert "handleAndroidBack" in legacy
     assert "handleAndroidBack" in predictive
     assert "BackNavigationPolicy.decide" in handler
+    assert "moveTaskToBackground = { moveTaskToBack(true) }" in handler
     assert "showOutingLeaveConfirmation" in handler
     assert "LocationSharingService" not in handler + policy
     assert "ACTION_STOP" not in handler + policy
@@ -202,6 +203,7 @@ def test_legacy_and_predictive_back_share_outing_confirmation_policy() -> None:
     assert "goBack" not in predictive
     assert "trackingStatus.isNativeBusy()" in policy
     assert "trackingStatus.outingSlug == outingSlug" in policy
+    assert "BackNavigationTarget.BACKGROUND_TASK" in policy
     assert "Leave this outing screen?" in strings
     assert (
         "Android background sharing will continue even if you leave this screen."

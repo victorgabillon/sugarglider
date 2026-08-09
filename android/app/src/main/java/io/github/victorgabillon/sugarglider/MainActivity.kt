@@ -775,6 +775,7 @@ class MainActivity : Activity() {
                 if (current === webView && current?.canGoBack() == true) current.goBack()
             },
             navigateSystemBack = navigateSystemBack,
+            moveTaskToBackground = { moveTaskToBack(true) },
             showOutingConfirmation = ::showOutingLeaveConfirmation,
         )
     }

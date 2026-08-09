@@ -5,6 +5,7 @@ import java.net.URI
 internal enum class BackNavigationTarget {
     WEB_VIEW_HISTORY,
     SYSTEM,
+    BACKGROUND_TASK,
 }
 
 internal sealed interface BackNavigationDecision {
@@ -24,7 +25,8 @@ internal object BackNavigationPolicy {
         canGoBack: Boolean,
         trackingStatus: NativeTrackingStatus,
     ): BackNavigationDecision {
-        val outingSlug = outingSlug(currentUrl, configuredOrigin)
+        val page = sameOriginPage(currentUrl, configuredOrigin)
+        val outingSlug = outingSlug(page)
         if (outingSlug != null) {
             return BackNavigationDecision.ConfirmOutingLeave(
                 outingSlug = outingSlug,
@@ -37,12 +39,15 @@ internal object BackNavigationPolicy {
                 },
             )
         }
+        if (page?.isExactPlannerRoot() == true) {
+            return BackNavigationDecision.Navigate(BackNavigationTarget.BACKGROUND_TASK)
+        }
         return BackNavigationDecision.Navigate(
             if (canGoBack) BackNavigationTarget.WEB_VIEW_HISTORY else BackNavigationTarget.SYSTEM,
         )
     }
 
-    private fun outingSlug(currentUrl: String?, configuredOrigin: String?): String? {
+    private fun sameOriginPage(currentUrl: String?, configuredOrigin: String?): URI? {
         val origin = configuredOrigin?.let {
             ServerOrigin.parse(it, allowDevelopmentHttp = true)
         } ?: return null
@@ -57,11 +62,18 @@ internal object BackNavigationPolicy {
             allowDevelopmentHttp = true,
         ) ?: return null
         if (pageOrigin.normalized != origin.normalized) return null
-        val path = page.rawPath ?: return null
+        return page
+    }
+
+    private fun outingSlug(page: URI?): String? {
+        val path = page?.rawPath ?: return null
         if (!path.startsWith(OUTING_PATH_PREFIX)) return null
         val slug = path.removePrefix(OUTING_PATH_PREFIX)
         return slug.takeIf(OUTING_SLUG_PATTERN::matches)
     }
+
+    private fun URI.isExactPlannerRoot(): Boolean =
+        (rawPath.isNullOrEmpty() || rawPath == "/") && rawQuery == null && rawFragment == null
 
     private const val OUTING_PATH_PREFIX = "/o/"
 }
@@ -71,6 +83,7 @@ internal object BackNavigationController {
         decision: BackNavigationDecision,
         navigateWebViewBack: () -> Unit,
         navigateSystemBack: () -> Unit,
+        moveTaskToBackground: () -> Unit,
         showOutingConfirmation: (BackNavigationDecision.ConfirmOutingLeave, () -> Unit) -> Unit,
     ) {
         when (decision) {
@@ -78,6 +91,7 @@ internal object BackNavigationController {
                 decision.target,
                 navigateWebViewBack,
                 navigateSystemBack,
+                moveTaskToBackground,
             )
             is BackNavigationDecision.ConfirmOutingLeave -> {
                 var consumed = false
@@ -88,6 +102,7 @@ internal object BackNavigationController {
                         decision.leaveTarget,
                         navigateWebViewBack,
                         navigateSystemBack,
+                        moveTaskToBackground,
                     )
                 }
             }
@@ -98,10 +113,12 @@ internal object BackNavigationController {
         target: BackNavigationTarget,
         navigateWebViewBack: () -> Unit,
         navigateSystemBack: () -> Unit,
+        moveTaskToBackground: () -> Unit,
     ) {
         when (target) {
             BackNavigationTarget.WEB_VIEW_HISTORY -> navigateWebViewBack()
             BackNavigationTarget.SYSTEM -> navigateSystemBack()
+            BackNavigationTarget.BACKGROUND_TASK -> moveTaskToBackground()
         }
     }
 }

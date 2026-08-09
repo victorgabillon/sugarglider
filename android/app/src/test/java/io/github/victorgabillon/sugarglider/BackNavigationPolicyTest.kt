@@ -7,6 +7,28 @@ import org.junit.Test
 
 class BackNavigationPolicyTest {
     @Test
+    fun exactPlannerRootWithoutHistoryBackgroundsInsteadOfFinishing() {
+        val rig = BackRig(decision("$ORIGIN/", canGoBack = false))
+
+        rig.handle()
+
+        assertEquals(1, rig.backgroundRequests)
+        assertEquals(0, rig.webViewBacks)
+        assertEquals(0, rig.systemBacks)
+    }
+
+    @Test
+    fun exactPlannerRootWithHistoryStillBackgroundsInsteadOfNavigating() {
+        val rig = BackRig(decision(ORIGIN, canGoBack = true))
+
+        rig.handle()
+
+        assertEquals(1, rig.backgroundRequests)
+        assertEquals(0, rig.webViewBacks)
+        assertEquals(0, rig.systemBacks)
+    }
+
+    @Test
     fun outingWithHistoryRequiresConfirmationWithoutImmediateNavigation() {
         val rig = BackRig(
             decision(
@@ -89,7 +111,7 @@ class BackNavigationPolicyTest {
 
     @Test
     fun nonOutingPageWithHistoryUsesExistingWebViewBack() {
-        val rig = BackRig(decision("$ORIGIN/", canGoBack = true))
+        val rig = BackRig(decision("$ORIGIN/saved-routes", canGoBack = true))
 
         rig.handle()
 
@@ -100,7 +122,7 @@ class BackNavigationPolicyTest {
 
     @Test
     fun pageWithoutHistoryAllowsSystemBack() {
-        val rig = BackRig(decision("$ORIGIN/", canGoBack = false))
+        val rig = BackRig(decision("$ORIGIN/saved-routes", canGoBack = false))
 
         rig.handle()
 
@@ -139,6 +161,23 @@ class BackNavigationPolicyTest {
         }
     }
 
+    @Test
+    fun otherOriginsMalformedUrlsAndRootVariantsAreNotPlannerRoot() {
+        for (
+            url in listOf(
+                "https://other.example/",
+                "$ORIGIN/?view=planner",
+                "$ORIGIN/#planner",
+                "not a valid URL",
+            )
+        ) {
+            assertEquals(
+                BackNavigationDecision.Navigate(BackNavigationTarget.WEB_VIEW_HISTORY),
+                decision(url, canGoBack = true),
+            )
+        }
+    }
+
     private fun decision(
         currentUrl: String,
         canGoBack: Boolean,
@@ -155,6 +194,7 @@ class BackNavigationPolicyTest {
     ) {
         var webViewBacks = 0
         var systemBacks = 0
+        var backgroundRequests = 0
         var confirmations = 0
         var confirmation: BackNavigationDecision.ConfirmOutingLeave? = null
         private var leaveAction: (() -> Unit)? = null
@@ -164,6 +204,7 @@ class BackNavigationPolicyTest {
                 decision = decision,
                 navigateWebViewBack = { webViewBacks += 1 },
                 navigateSystemBack = { systemBacks += 1 },
+                moveTaskToBackground = { backgroundRequests += 1 },
                 showOutingConfirmation = { received, leave ->
                     confirmations += 1
                     confirmation = received
