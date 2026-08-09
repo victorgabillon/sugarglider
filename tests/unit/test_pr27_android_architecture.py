@@ -178,6 +178,37 @@ def test_native_stopping_state_blocks_start_and_server_change() -> None:
     assert "|| state.outingTrackingTransitionPending" in view
 
 
+def test_legacy_and_predictive_back_share_outing_confirmation_policy() -> None:
+    activity = (KOTLIN / "MainActivity.kt").read_text()
+    policy = (KOTLIN / "BackNavigationPolicy.kt").read_text()
+    strings = (APP / "res" / "values" / "strings.xml").read_text()
+    legacy = activity[activity.index("override fun onBackPressed()") :]
+    legacy = legacy[: legacy.index("private fun showServerConfiguration()")]
+    predictive = activity[
+        activity.index("private fun registerPredictiveBackCallback()") :
+    ]
+    predictive = predictive[
+        : predictive.index("private fun unregisterPredictiveBackCallback()")
+    ]
+    handler = activity[activity.index("private fun handleAndroidBack") :]
+    handler = handler[: handler.index("private fun registerPredictiveBackCallback()")]
+    assert "handleAndroidBack" in legacy
+    assert "handleAndroidBack" in predictive
+    assert "BackNavigationPolicy.decide" in handler
+    assert "showOutingLeaveConfirmation" in handler
+    assert "LocationSharingService" not in handler + policy
+    assert "ACTION_STOP" not in handler + policy
+    assert "goBack" not in legacy
+    assert "goBack" not in predictive
+    assert "trackingStatus.isNativeBusy()" in policy
+    assert "trackingStatus.outingSlug == outingSlug" in policy
+    assert "Leave this outing screen?" in strings
+    assert (
+        "Android background sharing will continue even if you leave this screen."
+        in strings
+    )
+
+
 def test_bridge_requests_are_page_scoped_and_terminal_cleanup_is_exact() -> None:
     bridge = (STATIC / "outing_native_bridge.js").read_text()
     protocol = (KOTLIN / "BridgeProtocol.kt").read_text()

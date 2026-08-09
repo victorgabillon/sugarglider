@@ -48,6 +48,7 @@ class MainActivity : Activity() {
     private var pendingStart: PendingStart? = null
     private var pendingDeepLinkSlug: String? = null
     private var backInvokedCallback: OnBackInvokedCallback? = null
+    private var outingLeaveDialog: AlertDialog? = null
     private val bridgeLedger = BridgeRequestLedger()
     private val statusObserver = NativeStatusRepository.Observer { status, terminalFailure ->
         runOnUiThread {
@@ -90,6 +91,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         pendingStart = null
+        dismissOutingLeaveDialog()
         unregisterPredictiveBackCallback()
         application.statusRepository.removeObserver(statusObserver)
         destroyWebView()
@@ -138,7 +140,7 @@ class MainActivity : Activity() {
     @Suppress("DEPRECATION")
     @SuppressLint("GestureBackNavigation")
     override fun onBackPressed() {
-        if (!handleWebViewBack()) super.onBackPressed()
+        handleAndroidBack(::performLegacySystemBack)
     }
 
     private fun showServerConfiguration() {
@@ -266,7 +268,10 @@ class MainActivity : Activity() {
 
     private fun originIsolatingClient(origin: String): WebViewClient = object : WebViewClient() {
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
-            if (view === webView) invalidateBridgePage()
+            if (view === webView) {
+                dismissOutingLeaveDialog()
+                invalidateBridgePage()
+            }
             super.onPageStarted(view, url, favicon)
         }
 
@@ -756,17 +761,64 @@ class MainActivity : Activity() {
         return segments.single().takeIf(OUTING_SLUG_PATTERN::matches)
     }
 
-    private fun handleWebViewBack(): Boolean {
+    private fun handleAndroidBack(navigateSystemBack: () -> Unit) {
         val current = webView
-        if (current?.canGoBack() != true) return false
-        current.goBack()
-        return true
+        val decision = BackNavigationPolicy.decide(
+            currentUrl = current?.url,
+            configuredOrigin = configuredOrigin,
+            canGoBack = current?.canGoBack() == true,
+            trackingStatus = application.statusRepository.current(),
+        )
+        BackNavigationController.handle(
+            decision = decision,
+            navigateWebViewBack = {
+                if (current === webView && current?.canGoBack() == true) current.goBack()
+            },
+            navigateSystemBack = navigateSystemBack,
+            showOutingConfirmation = ::showOutingLeaveConfirmation,
+        )
+    }
+
+    @Suppress("DEPRECATION")
+    private fun performLegacySystemBack() {
+        super.onBackPressed()
+    }
+
+    private fun showOutingLeaveConfirmation(
+        decision: BackNavigationDecision.ConfirmOutingLeave,
+        leaveScreen: () -> Unit,
+    ) {
+        if (outingLeaveDialog?.isShowing == true) return
+        val message = if (decision.backgroundSharingContinues) {
+            getString(R.string.outing_back_sharing_continues)
+        } else {
+            getString(R.string.outing_back_returns_to_previous)
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.outing_back_title)
+            .setMessage(message)
+            .setPositiveButton(R.string.outing_back_stay, null)
+            .setNegativeButton(R.string.outing_back_leave) { _, _ -> leaveScreen() }
+            .create()
+        outingLeaveDialog = dialog
+        dialog.setOnDismissListener {
+            if (outingLeaveDialog === dialog) outingLeaveDialog = null
+        }
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.requestFocus()
+        }
+        dialog.show()
+    }
+
+    private fun dismissOutingLeaveDialog() {
+        outingLeaveDialog?.dismiss()
+        outingLeaveDialog = null
     }
 
     private fun registerPredictiveBackCallback() {
         if (Build.VERSION.SDK_INT < 33) return
         val callback = OnBackInvokedCallback {
-            if (!handleWebViewBack()) finishAfterTransition()
+            handleAndroidBack(::finishAfterTransition)
         }
         backInvokedCallback = callback
         onBackInvokedDispatcher.registerOnBackInvokedCallback(
