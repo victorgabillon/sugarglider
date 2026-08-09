@@ -160,6 +160,43 @@ export function assignRouteEndpoint(endpoints, kind, point) {
   return true;
 }
 
+export function nextImplicitEndpointKind({
+  endpoints,
+  settingRequestedApproachId = null,
+  endpointSetMode = null,
+  addPointMode = false,
+}) {
+  requireRouteTopology(endpoints.routeTopology);
+  if (settingRequestedApproachId || endpointSetMode || addPointMode) return null;
+  if (!endpoints.start) return "start";
+  if (endpoints.routeTopology === "point_to_point" && !endpoints.end) {
+    return "end";
+  }
+  return null;
+}
+
+export function applyImplicitEndpointMapClick({
+  endpoints,
+  coordinate,
+  assignEndpoint,
+  settingRequestedApproachId = null,
+  endpointSetMode = null,
+  addPointMode = false,
+}) {
+  const kind = nextImplicitEndpointKind({
+    endpoints,
+    settingRequestedApproachId,
+    endpointSetMode,
+    addPointMode,
+  });
+  if (!kind) return null;
+  const assigned = assignEndpoint(kind, {
+    name: kind === "start" ? "Hard start" : "Hard end",
+    ...coordinate,
+  });
+  return assigned === false ? null : kind;
+}
+
 export function routeEndpointPresentation(routeTopology) {
   requireRouteTopology(routeTopology);
   const loop = routeTopology === "loop";
@@ -210,13 +247,14 @@ export function generationAvailability({
   if (!start) {
     return {
       enabled: false,
-      reason: routeTopology === "loop"
-        ? "Choose a start point for this loop."
-        : "Choose a start point.",
+      reason: "Click the map to choose your start point.",
     };
   }
   if (routeTopology === "point_to_point" && !end) {
-    return { enabled: false, reason: "Choose an end point." };
+    return {
+      enabled: false,
+      reason: "Now click the map to choose your end point.",
+    };
   }
   if (
     planningMode === "waypoint_route"

@@ -1,4 +1,5 @@
 import {
+  applyImplicitEndpointMapClick,
   assignRouteEndpoint,
   generationAvailability,
   renderEndpointTopologyControls,
@@ -7,6 +8,8 @@ import {
 
 const START = Object.freeze({ name: "Start", lat: 48.87, lon: 2.09 });
 const END = Object.freeze({ name: "End", lat: 48.88, lon: 2.1 });
+const MAP_CLICK = Object.freeze({ lat: 48.89, lon: 2.11 });
+const LATER_CLICK = Object.freeze({ lat: 48.9, lon: 2.12 });
 
 export function runPlannerEndpointUxHarness() {
   const scenarios = [];
@@ -27,6 +30,22 @@ export function runPlannerEndpointUxHarness() {
   scenarios.push("disabled_generate_reasons_are_actionable");
   scenarioAllValidCombinationsRemainAvailable();
   scenarios.push("all_valid_mode_topology_combinations_remain_available");
+  scenarioLoopOrdinaryClickSetsMissingStart();
+  scenarios.push("loop_ordinary_click_sets_missing_start");
+  scenarioLoopOrdinaryClickPreservesExistingStart();
+  scenarios.push("loop_ordinary_click_preserves_existing_start");
+  scenarioPointToPointFirstClickSetsStart();
+  scenarios.push("point_to_point_first_click_sets_start");
+  scenarioPointToPointSecondClickSetsEnd();
+  scenarios.push("point_to_point_second_click_sets_end");
+  scenarioPointToPointLaterClickPreservesEndpoints();
+  scenarios.push("point_to_point_later_click_preserves_endpoints");
+  scenarioExplicitEndpointModeCanReplaceEndpoint();
+  scenarios.push("explicit_endpoint_mode_can_replace_endpoint");
+  scenarioExplicitWaypointAndPoiModesSuppressImplicitEndpoints();
+  scenarios.push("explicit_waypoint_and_poi_modes_suppress_implicit_endpoints");
+  scenarioImplicitPlacementIsSharedByBothPlanningModes();
+  scenarios.push("implicit_placement_is_shared_by_both_planning_modes");
 
   return scenarios;
 }
@@ -75,7 +94,7 @@ function scenarioLoopToPointToPointRequiresEnd() {
   equal(presentation.hardEndAvailable, true, "point-to-point exposes Hard end");
   equal(
     availability({ routeTopology: endpoints.routeTopology, end: endpoints.end }).reason,
-    "Choose an end point.",
+    "Now click the map to choose your end point.",
     "point-to-point requires its newly exposed end",
   );
 }
@@ -96,7 +115,7 @@ function scenarioAutoTourPointToPointRequiresEndpoints() {
       start: null,
       end: null,
     }).reason,
-    "Choose a start point.",
+    "Click the map to choose your start point.",
     "Auto Tour open route first requires a start",
   );
   equal(
@@ -105,7 +124,7 @@ function scenarioAutoTourPointToPointRequiresEndpoints() {
       routeTopology: "point_to_point",
       end: null,
     }).reason,
-    "Choose an end point.",
+    "Now click the map to choose your end point.",
     "Auto Tour open route then requires an end",
   );
 }
@@ -118,7 +137,7 @@ function scenarioWaypointPointToPointRequiresEndpoints() {
       start: null,
       end: null,
     }).reason,
-    "Choose a start point.",
+    "Click the map to choose your start point.",
     "Waypoint open route first requires a start",
   );
   equal(
@@ -127,7 +146,7 @@ function scenarioWaypointPointToPointRequiresEndpoints() {
       routeTopology: "point_to_point",
       end: null,
     }).reason,
-    "Choose an end point.",
+    "Now click the map to choose your end point.",
     "Waypoint open route then requires an end",
   );
 }
@@ -135,7 +154,7 @@ function scenarioWaypointPointToPointRequiresEndpoints() {
 function scenarioDisabledReasonsAreActionable() {
   equal(
     availability({ start: null }).reason,
-    "Choose a start point for this loop.",
+    "Click the map to choose your start point.",
     "loop missing-start reason is explicit",
   );
   equal(
@@ -153,6 +172,105 @@ function scenarioDisabledReasonsAreActionable() {
     precise,
     "precise point validation outranks generic disabled reasons",
   );
+}
+
+function scenarioLoopOrdinaryClickSetsMissingStart() {
+  const endpoints = endpointState("loop", null, null);
+  equal(
+    ordinaryMapClick(endpoints, MAP_CLICK),
+    "start",
+    "first loop click targets the missing start",
+  );
+  coordinateEqual(endpoints.start, MAP_CLICK, "first loop click stores its coordinate");
+  equal(endpoints.end, null, "loop click never creates an end");
+}
+
+function scenarioLoopOrdinaryClickPreservesExistingStart() {
+  const endpoints = endpointState("loop", null);
+  equal(ordinaryMapClick(endpoints, LATER_CLICK), null, "complete loop ignores later click");
+  equal(endpoints.start, START, "later loop click retains the original start object");
+}
+
+function scenarioPointToPointFirstClickSetsStart() {
+  const endpoints = endpointState("point_to_point", null, null);
+  equal(ordinaryMapClick(endpoints, MAP_CLICK), "start", "first open-route click sets start");
+  coordinateEqual(endpoints.start, MAP_CLICK, "open-route start uses clicked coordinate");
+  equal(endpoints.end, null, "first open-route click leaves end missing");
+}
+
+function scenarioPointToPointSecondClickSetsEnd() {
+  const endpoints = endpointState("point_to_point", null, null);
+  ordinaryMapClick(endpoints, MAP_CLICK);
+  equal(ordinaryMapClick(endpoints, LATER_CLICK), "end", "second open-route click sets end");
+  coordinateEqual(endpoints.start, MAP_CLICK, "second click preserves first-click start");
+  coordinateEqual(endpoints.end, LATER_CLICK, "second click stores end coordinate");
+}
+
+function scenarioPointToPointLaterClickPreservesEndpoints() {
+  const endpoints = endpointState("point_to_point", END);
+  equal(ordinaryMapClick(endpoints, LATER_CLICK), null, "complete open route ignores later click");
+  equal(endpoints.start, START, "later click retains existing start");
+  equal(endpoints.end, END, "later click retains existing end");
+}
+
+function scenarioExplicitEndpointModeCanReplaceEndpoint() {
+  const endpoints = endpointState("point_to_point", END);
+  equal(
+    ordinaryMapClick(endpoints, MAP_CLICK, { endpointSetMode: "start" }),
+    null,
+    "explicit endpoint mode suppresses implicit placement",
+  );
+  equal(
+    assignRouteEndpoint(endpoints, "start", { name: "Replacement", ...MAP_CLICK }),
+    true,
+    "explicit endpoint assignment remains available",
+  );
+  coordinateEqual(endpoints.start, MAP_CLICK, "explicit mode replaces existing start");
+}
+
+function scenarioExplicitWaypointAndPoiModesSuppressImplicitEndpoints() {
+  const waypointEndpoints = endpointState("point_to_point", null, null);
+  const waypointPoints = [];
+  equal(
+    ordinaryMapClick(waypointEndpoints, MAP_CLICK, { addPointMode: true }),
+    null,
+    "Waypoint add mode suppresses implicit placement",
+  );
+  waypointPoints.push({ name: "Required point", ...MAP_CLICK });
+  equal(waypointPoints.length, 1, "Waypoint add mode retains its intended point action");
+  equal(waypointEndpoints.start, null, "Waypoint add mode does not create start");
+  equal(waypointEndpoints.end, null, "Waypoint add mode does not create end");
+
+  const poiEndpoints = endpointState("point_to_point", null, null);
+  equal(
+    ordinaryMapClick(poiEndpoints, MAP_CLICK, {
+      settingRequestedApproachId: "requested-place",
+    }),
+    null,
+    "requested-place approach mode suppresses implicit placement",
+  );
+  equal(poiEndpoints.start, null, "requested-place mode does not create start");
+  equal(poiEndpoints.end, null, "requested-place mode does not create end");
+}
+
+function scenarioImplicitPlacementIsSharedByBothPlanningModes() {
+  for (const planningMode of ["auto_tour", "waypoint_route"]) {
+    const loop = planningModeEndpointState(planningMode, "loop");
+    equal(ordinaryMapClick(loop, MAP_CLICK), "start", `${planningMode} loop sets start`);
+    equal(loop.end, null, `${planningMode} loop retains no end`);
+
+    const open = planningModeEndpointState(planningMode, "point_to_point");
+    ordinaryMapClick(open, MAP_CLICK);
+    ordinaryMapClick(open, LATER_CLICK);
+    coordinateEqual(open.start, MAP_CLICK, `${planningMode} open route sets start`);
+    coordinateEqual(open.end, LATER_CLICK, `${planningMode} open route sets end`);
+  }
+}
+
+function planningModeEndpointState(planningMode, routeTopology) {
+  return planningMode === "auto_tour"
+    ? { start: null, end: null, routeTopology, hardPoints: [], requestedPlaces: [] }
+    : { start: null, end: null, routeTopology };
 }
 
 function scenarioAllValidCombinationsRemainAvailable() {
@@ -184,8 +302,17 @@ function scenarioAllValidCombinationsRemainAvailable() {
   }
 }
 
-function endpointState(routeTopology, end) {
-  return { start: START, end, routeTopology };
+function ordinaryMapClick(endpoints, coordinate, interactions = {}) {
+  return applyImplicitEndpointMapClick({
+    endpoints,
+    coordinate,
+    assignEndpoint: (kind, point) => assignRouteEndpoint(endpoints, kind, point),
+    ...interactions,
+  });
+}
+
+function endpointState(routeTopology, end, start = START) {
+  return { start, end, routeTopology };
 }
 
 function availability(overrides = {}) {
@@ -209,4 +336,10 @@ function equal(actual, expected, message) {
   if (actual !== expected) {
     throw new Error(`${message}: expected ${String(expected)}, received ${String(actual)}`);
   }
+}
+
+function coordinateEqual(actual, expected, message) {
+  assert(actual !== null, `${message}: coordinate is missing`);
+  equal(actual.lat, expected.lat, `${message}: latitude`);
+  equal(actual.lon, expected.lon, `${message}: longitude`);
 }

@@ -481,13 +481,13 @@ def test_frontend_exposes_topology_aware_endpoints_and_open_metrics() -> None:
     assert "assignRouteEndpoint" in app
     assert "renderEndpointTopologyControls" in app
     assert "generationAvailability" in app
+    assert "applyImplicitEndpointMapClick" in app
     assert "if (!latitudeValue || !longitudeValue) return null;" in app
     assert "End is the start for loop routes." in html
     assert 'id="hard-end-control" aria-hidden="true" hidden disabled' in html
     assert 'aria-describedby="request-status"' in html
-    assert '"Choose a start point for this loop."' in state_code
-    assert '"Choose a start point."' in state_code
-    assert '"Choose an end point."' in state_code
+    assert '"Click the map to choose your start point."' in state_code
+    assert '"Now click the map to choose your end point."' in state_code
     assert '"The selected routing profile is unavailable."' in state_code
     assert ".endpoint-control .button-row { display: grid;" in styles
     assert "topology: endpoints.routeTopology" in state_code
@@ -501,6 +501,17 @@ def test_frontend_exposes_topology_aware_endpoints_and_open_metrics() -> None:
     assert "Effective end" in app
     assert 'result.topology === "loop" ? loopGeometrySection' in app
 
+    map_click = app[app.index("onMapClick: (coordinate) => {") :]
+    assert map_click.index("if (state.settingRequestedApproachId)") < map_click.index(
+        "if (state.endpointSetMode)"
+    )
+    assert map_click.index("if (state.endpointSetMode)") < map_click.index(
+        "if (state.addPointMode)"
+    )
+    assert map_click.index("if (state.addPointMode)") < map_click.index(
+        "const implicitEndpointKind = applyImplicitEndpointMapClick("
+    )
+
 
 def test_planner_endpoint_browser_harness_covers_all_mode_topology_cases() -> None:
     harness = (
@@ -510,7 +521,7 @@ def test_planner_endpoint_browser_harness_covers_all_mode_topology_cases() -> No
         REPOSITORY_ROOT / "tests/browser/planner_endpoint_ux_harness.html"
     ).read_text(encoding="utf-8")
 
-    assert harness.count('scenarios.push("') == 8
+    assert harness.count('scenarios.push("') == 16
     for scenario in (
         "loop_cannot_set_distinct_hard_end",
         "point_to_point_to_loop_clears_end",
@@ -520,11 +531,20 @@ def test_planner_endpoint_browser_harness_covers_all_mode_topology_cases() -> No
         "waypoint_route_point_to_point_requires_start_and_end",
         "disabled_generate_reasons_are_actionable",
         "all_valid_mode_topology_combinations_remain_available",
+        "loop_ordinary_click_sets_missing_start",
+        "loop_ordinary_click_preserves_existing_start",
+        "point_to_point_first_click_sets_start",
+        "point_to_point_second_click_sets_end",
+        "point_to_point_later_click_preserves_endpoints",
+        "explicit_endpoint_mode_can_replace_endpoint",
+        "explicit_waypoint_and_poi_modes_suppress_implicit_endpoints",
+        "implicit_placement_is_shared_by_both_planning_modes",
     ):
         assert f'scenarios.push("{scenario}")' in harness
     assert "assignRouteEndpoint" in harness
     assert "setRouteTopology" in harness
     assert "generationAvailability" in harness
+    assert "applyImplicitEndpointMapClick" in harness
     assert "renderEndpointTopologyControls" in harness
     assert 'addEventListener("unhandledrejection"' in harness_html
     assert 'class="field-pair"' in harness_html

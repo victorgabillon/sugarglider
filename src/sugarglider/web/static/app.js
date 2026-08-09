@@ -41,7 +41,7 @@ import {
   renderPwaStatus,
 } from "./pwa_view.js";
 import { createSavedRoute, deleteSavedRoute, downloadSavedRouteGpx, getSavedRoute, savedRouteShareUrl, shareSavedRoute, sharedRouteSlug } from "./saved_routes.js";
-import { assignRouteEndpoint, currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, generationAvailability, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, renderEndpointTopologyControls, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, setRouteTopology, state, switchPlanningMode } from "./state.js";
+import { applyImplicitEndpointMapClick, assignRouteEndpoint, currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, generationAvailability, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, renderEndpointTopologyControls, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, setRouteTopology, state, switchPlanningMode } from "./state.js";
 
 const byId = (id) => document.getElementById(id);
 let elapsedTimer = null;
@@ -589,6 +589,7 @@ function renderRequestedPlacesList() {
       state.settingRequestedApproachId = id;
       state.selectedRequestedPlaceId = id;
       approach.textContent = "Click map once…";
+      renderStatus();
     });
     const clearApproach = document.createElement("button");
     clearApproach.type = "button";
@@ -679,9 +680,22 @@ function currentGenerationAvailability() {
 
 function setEditableRequestStatus(message) {
   const availability = currentGenerationAvailability();
-  byId("request-status").textContent = availability.enabled
-    ? message
-    : availability.reason;
+  const placementGuidance = pointValidation()
+    ? ""
+    : activeMapPlacementGuidance();
+  byId("request-status").textContent = placementGuidance
+    || (availability.enabled ? message : availability.reason);
+}
+
+function activeMapPlacementGuidance() {
+  if (state.settingRequestedApproachId) {
+    return "Click the map to set the requested-place approach.";
+  }
+  if (state.endpointSetMode) {
+    return `Click the map to set your ${state.endpointSetMode} point.`;
+  }
+  if (state.addPointMode) return "Click the map to add a required point.";
+  return "";
 }
 
 function invalidateAndRender() {
@@ -1624,8 +1638,15 @@ function renderStatus() {
   byId("route-form").closest(".panel.controls").inert = readOnly;
   byId("clear-results").disabled = readOnly;
   byId("request-status").classList.toggle("running", running);
-  if (!running && !readOnly && !availability.enabled) {
-    byId("request-status").textContent = availability.reason;
+  if (!running && !readOnly) {
+    const placementGuidance = pointValidation()
+      ? ""
+      : activeMapPlacementGuidance();
+    if (placementGuidance) {
+      byId("request-status").textContent = placementGuidance;
+    } else if (!availability.enabled) {
+      byId("request-status").textContent = availability.reason;
+    }
   }
 }
 
@@ -2476,6 +2497,7 @@ function bindEvents() {
       byId(`set-hard-${kind}`).textContent = state.endpointSetMode === kind
         ? `Click map for ${kind}`
         : "Set on map";
+      renderStatus();
     });
     byId(`clear-hard-${kind}`).addEventListener("click", () => {
       assignActiveEndpoint(kind, null);
@@ -2501,6 +2523,7 @@ function bindEvents() {
     state.addPointMode = !state.addPointMode;
     byId("add-point-mode").setAttribute("aria-pressed", String(state.addPointMode));
     byId("add-point-mode").lastChild.textContent = state.addPointMode ? " Click map once…" : " Add on map";
+    renderStatus();
   });
   byId("fit-points").addEventListener("click", () => {
     const requested = state.planningMode === "auto_tour"
@@ -2881,6 +2904,7 @@ async function start() {
           if (place) place.approachOverride = coordinate;
           state.settingRequestedApproachId = null;
           invalidateAndRender();
+          setEditableRequestStatus("Requested-place approach set from map.");
           return;
         }
         if (state.endpointSetMode) {
@@ -2895,39 +2919,62 @@ async function start() {
           state.endpointSetMode = null;
           byId(`set-hard-${kind}`).textContent = "Set on map";
           invalidateAndRender();
+          setEditableRequestStatus(
+            `${kind === "start" ? "Start" : "End"} point set from map.`,
+          );
           return;
         }
-        if (!state.addPointMode) return;
-        const maximum = state.planningMode === "auto_tour"
-          ? 6 + Number(Boolean(state.autoTour.start))
-          : state.config.max_required_points;
-        if (state.points.length >= maximum) {
-          showError(state.planningMode === "auto_tour"
-            ? "Auto Tour already has a start and the maximum six hard anchors."
-            : "The route already has the maximum 30 mandatory points.");
+        if (state.addPointMode) {
+          const maximum = state.planningMode === "auto_tour"
+            ? 6 + Number(Boolean(state.autoTour.start))
+            : state.config.max_required_points;
+          if (state.points.length >= maximum) {
+            showError(state.planningMode === "auto_tour"
+              ? "Auto Tour already has a start and the maximum six hard anchors."
+              : "The route already has the maximum 30 mandatory points.");
+            return;
+          }
+          const nextOriginalIndex = state.points.reduce(
+            (highest, point) => Math.max(highest, Number.isInteger(point.originalIndex) ? point.originalIndex : -1),
+            -1,
+          ) + 1;
+          const point = {
+            name: state.planningMode === "auto_tour"
+              ? (state.points.length ? `Hard anchor ${state.points.length}` : "Start")
+              : `Point ${state.points.length + 1}`,
+            ...coordinate,
+            originalIndex: nextOriginalIndex,
+          };
+          if (state.planningMode === "auto_tour" && !state.autoTour.start) {
+            assignActiveEndpoint("start", point);
+          } else {
+            state.points.push(point);
+          }
+          state.selectedPointIndex = state.points.length - 1;
+          state.addPointMode = false;
+          byId("add-point-mode").setAttribute("aria-pressed", "false");
+          byId("add-point-mode").lastChild.textContent = " Add on map";
+          invalidateAndRender();
+          setEditableRequestStatus("Required point set from map.");
           return;
         }
-        const nextOriginalIndex = state.points.reduce(
-          (highest, point) => Math.max(highest, Number.isInteger(point.originalIndex) ? point.originalIndex : -1),
-          -1,
-        ) + 1;
-        const point = {
-          name: state.planningMode === "auto_tour"
-            ? (state.points.length ? `Hard anchor ${state.points.length}` : "Start")
-            : `Point ${state.points.length + 1}`,
-          ...coordinate,
-          originalIndex: nextOriginalIndex,
-        };
-        if (state.planningMode === "auto_tour" && !state.autoTour.start) {
-          assignActiveEndpoint("start", point);
-        } else {
-          state.points.push(point);
+
+        const implicitEndpointKind = applyImplicitEndpointMapClick({
+          endpoints: activeEndpoints(),
+          coordinate,
+          assignEndpoint: assignActiveEndpoint,
+          settingRequestedApproachId: state.settingRequestedApproachId,
+          endpointSetMode: state.endpointSetMode,
+          addPointMode: state.addPointMode,
+        });
+        if (!implicitEndpointKind) return;
+        if (implicitEndpointKind === "start" && state.planningMode === "auto_tour") {
+          state.selectedPointIndex = 0;
         }
-        state.selectedPointIndex = state.points.length - 1;
-        state.addPointMode = false;
-        byId("add-point-mode").setAttribute("aria-pressed", "false");
-        byId("add-point-mode").lastChild.textContent = " Add on map";
         invalidateAndRender();
+        setEditableRequestStatus(
+          `${implicitEndpointKind === "start" ? "Start" : "End"} point set from map.`,
+        );
       },
     });
     render();
