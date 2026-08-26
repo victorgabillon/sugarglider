@@ -8,6 +8,7 @@ from sugarglider.analysis.open_route import analyze_open_route
 from sugarglider.analysis.projection import LocalMetricProjection
 from sugarglider.analysis.route import haversine_distance_m
 from sugarglider.domain.models import Coordinate, RouteResult
+from sugarglider.nature.scoring import available_nature_score
 from sugarglider.planning.auto_tour.candidate_models import (
     AutoTourCandidate,
 )
@@ -42,22 +43,27 @@ def _hard_waypoints_selected(draft: _Draft) -> bool:
     return all(visit.selected for visit in draft.hard_point_visits)
 
 
-def _control_key(draft: _Draft, request: AutoTourSearchRequest) -> tuple[object, ...]:
+def _control_key(
+    draft: _Draft,
+    request: AutoTourSearchRequest,
+    *,
+    include_nature: bool = True,
+) -> tuple[object, ...]:
     route = draft.route
     error = abs(route.summary.distance_m - request.target_distance_m)
     within = error <= request.tolerance_m
     geometry = route.analysis.loop_geometry
-    nature = route.analysis.nature
+    nature_score = available_nature_score(route.analysis.nature)
     common = (
         0 if _hard_waypoints_selected(draft) else 1,
         route.analysis.immediate_backtrack.share,
         route.analysis.repetition.repeated_distance.share,
         (0, geometry.penalty_breakdown.total) if geometry is not None else (1, 0.0),
         (
-            (0, -nature.nature_score)
-            if request.nature_preference == "prefer" and nature is not None
-            else (1, 0.0)
+            (0, -nature_score)
             if request.nature_preference == "prefer"
+            and include_nature
+            and nature_score is not None
             else (0, 0.0)
         ),
         score_route(route, request.target_distance_m).total,
@@ -94,6 +100,14 @@ def _control_key(draft: _Draft, request: AutoTourSearchRequest) -> tuple[object,
 def _retain_diverse_controls(
     controls: tuple[_Draft, ...], limit: int, request: AutoTourSearchRequest
 ) -> tuple[_Draft, ...]:
+    include_nature = all(
+        available_nature_score(value.route.analysis.nature) is not None
+        for value in controls
+    )
+
+    def key(value: _Draft) -> tuple[object, ...]:
+        return _control_key(value, request, include_nature=include_nature)
+
     retained: list[_Draft] = []
 
     def retain(candidate: _Draft | None) -> None:
@@ -104,7 +118,7 @@ def _retain_diverse_controls(
         ):
             retained.append(candidate)
 
-    retain(min(controls, key=lambda value: _control_key(value, request)))
+    retain(min(controls, key=key))
     sampled_controls = tuple(
         value
         for value in controls
@@ -113,7 +127,7 @@ def _retain_diverse_controls(
     retain(
         min(
             sampled_controls,
-            key=lambda value: _control_key(value, request),
+            key=key,
             default=None,
         )
     )
@@ -151,10 +165,8 @@ def _retain_diverse_controls(
     )
     for direction in ("clockwise", "counterclockwise"):
         matching = tuple(value for value in controls if value.direction == direction)
-        retain(
-            min(matching, key=lambda value: _control_key(value, request), default=None)
-        )
-    for candidate in sorted(controls, key=lambda value: _control_key(value, request)):
+        retain(min(matching, key=key, default=None))
+    for candidate in sorted(controls, key=key):
         retain(candidate)
     return tuple(retained)
 
@@ -162,6 +174,14 @@ def _retain_diverse_controls(
 def _prune_insertion_beam(
     states: tuple[_InsertionState, ...], width: int
 ) -> tuple[_InsertionState, ...]:
+    include_nature = all(
+        available_nature_score(value.candidate.route.analysis.nature) is not None
+        for value in states
+    )
+
+    def key(value: _InsertionState) -> tuple[object, ...]:
+        return auto_tour_ranking_key(value.candidate, include_nature=include_nature)
+
     retained: list[_InsertionState] = []
 
     def retain(value: _InsertionState | None) -> None:
@@ -173,7 +193,7 @@ def _prune_insertion_beam(
         ):
             retained.append(value)
 
-    retain(min(states, key=lambda value: auto_tour_ranking_key(value.candidate)))
+    retain(min(states, key=key))
     retain(
         max(
             states,
@@ -216,7 +236,7 @@ def _prune_insertion_beam(
             ),
         )
     )
-    for value in sorted(states, key=lambda item: auto_tour_ranking_key(item.candidate)):
+    for value in sorted(states, key=key):
         retain(value)
     return tuple(retained)
 

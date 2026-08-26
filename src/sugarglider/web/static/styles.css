@@ -150,6 +150,7 @@ input, select { width: 100%; min-height: var(--control-height); padding: .48rem 
 input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d; }
 .field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
 .endpoint-controls { display: grid; gap: .65rem; margin: .75rem 0; }
+.endpoint-explanation { margin: 0; padding: .58rem .68rem; border-left: 3px solid #7d9987; border-radius: 0 7px 7px 0; background: #edf3e9; }
 .endpoint-control { min-width: 0; padding: .7rem; border: 1px solid var(--border); border-radius: 12px; background: rgb(255 255 255 / 45%); }
 .endpoint-control legend { padding: 0 .25rem; font-weight: 800; }
 .endpoint-control legend label { display: inline-flex; flex-direction: row; align-items: center; gap: .4rem; margin: 0; }
@@ -426,6 +427,8 @@ footer { padding: .48rem 1rem; color: #d6e0da; background: var(--primary-action)
 @media (max-width: 390px) {
   .field-pair { grid-template-columns: 1fr; gap: 0; }
   .poi-fields { grid-template-columns: 1fr 1fr; }
+  .endpoint-control .button-row { display: grid; grid-template-columns: 1fr; }
+  .endpoint-control .button-row button { width: 100%; }
   .map-empty-state { width: calc(100% - 1rem); }
   .candidate-list { grid-template-columns: repeat(5, minmax(270px, 1fr)); }
   .outing-live-own-controls .button-row { display: grid; grid-template-columns: 1fr; }

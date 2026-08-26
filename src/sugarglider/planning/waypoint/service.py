@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 from sugarglider.analysis.route import RouteAnalyzer
+from sugarglider.nature.scoring import available_nature_score
 from sugarglider.planning.budget import SearchBudget, SearchPhase
 from sugarglider.planning.constraints.resolver import (
     ConstraintResolution,
@@ -39,7 +40,10 @@ from sugarglider.planning.waypoint.low_overlap import refine_low_overlap
 from sugarglider.planning.waypoint.models import WaypointSequenceProposal
 from sugarglider.planning.waypoint.ordering import ordering_proposals
 from sugarglider.planning.waypoint.routing import route_proposal
-from sugarglider.planning.waypoint.scoring import WaypointCandidateScorer
+from sugarglider.planning.waypoint.scoring import (
+    WaypointCandidateScorer,
+    waypoint_comparison_total,
+)
 from sugarglider.pois.index import PoiIndex
 from sugarglider.routing.backend import AutoTourRoutingBackend, RoutedPath
 from sugarglider.routing.errors import RoutingError
@@ -170,11 +174,17 @@ class WaypointPlanner:
             constraint_resolutions=constraint_resolutions,
         )
 
+        nature_comparable = all(
+            available_nature_score(candidate.route.analysis.nature) is not None
+            for candidate in candidates
+        )
         portfolio = evaluate_candidate_portfolio(
             request,
             tuple(candidates),
             limit=request.candidate_count,
-            ranking_key=lambda candidate: _waypoint_ranking_key(candidate, request),
+            ranking_key=lambda candidate: _waypoint_ranking_key(
+                candidate, request, include_nature=nature_comparable
+            ),
         )
         if not portfolio.candidates and exact_waypoint_failures:
             raise min(
@@ -675,7 +685,10 @@ def _optimized_waypoint_resolutions(
 
 
 def _waypoint_ranking_key(
-    candidate: PlanCandidate, request: WaypointPlanRequest
+    candidate: PlanCandidate,
+    request: WaypointPlanRequest,
+    *,
+    include_nature: bool = True,
 ) -> tuple[object, ...]:
     diagnostics = candidate.diagnostics
     return (
@@ -691,6 +704,9 @@ def _waypoint_ranking_key(
         diagnostics.target_error_m,
         diagnostics.immediate_backtracking_m,
         diagnostics.repeated_distance_m,
-        candidate.score.total,
+        waypoint_comparison_total(
+            candidate.score,
+            include_nature=include_nature,
+        ),
         candidate.id,
     )

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sugarglider</string>
+    <string name="notification_channel_name">Sugarglider live location</string>
+    <string name="notification_channel_description">Visible while Sugarglider shares your current location</string>
+    <string name="notification_title">Sugarglider is sharing location</string>
+    <string name="notification_open">Open app</string>
+    <string name="notification_stop">Stop sharing</string>
+    <string name="configure_title">Connect Sugarglider</string>
+    <string name="configure_description">Enter the origin of a running Sugarglider server. Credentials and URL paths are not accepted.</string>
+    <string name="configure_open">Open server</string>
+    <string name="configure_change">Change server</string>
+    <string name="outing_back_title">Leave this outing screen?</string>
+    <string name="outing_back_sharing_continues">Android background sharing will continue even if you leave this screen.</string>
+    <string name="outing_back_returns_to_previous">Back will return to the previous Sugarglider screen.</string>
+    <string name="outing_back_stay">Stay</string>
+    <string name="outing_back_leave">Leave screen</string>
+</resources>

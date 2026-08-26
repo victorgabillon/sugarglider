@@ -1,4 +1,4 @@
-.PHONY: install format lint typecheck test check brand-assets download-osm rebuild-graph nature-index poi-index benchmark-pois up down logs smoke report generate generate-all-pois generate-auto-tour
+.PHONY: install format lint typecheck test check android-check android-apk brand-assets download-osm rebuild-graph nature-index poi-index benchmark-pois up down logs smoke report generate generate-all-pois generate-auto-tour
 
 install:
 	uv sync
@@ -18,6 +18,12 @@ test:
 	uv run pytest -m "not integration"
 
 check: lint typecheck test
+
+android-check:
+	cd android && ./gradlew --no-daemon testDebugUnitTest lintDebug
+
+android-apk:
+	cd android && ./gradlew --no-daemon assembleDebug
 
 brand-assets:
 	uv run python scripts/sync_web_brand_assets.py

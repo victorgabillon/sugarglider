@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from sugarglider.nature.scoring import available_nature_score
 from sugarglider.planning.drafts import CandidateDraft
 from sugarglider.planning.models import PlanRequestBase, WaypointPlanRequest
 from sugarglider.planning.profile_quality import profile_quality_components
@@ -54,8 +55,9 @@ class WaypointCandidateScorer:
             **profile_components,
         }
         nature_reward = 0.0
-        if request.preferences.nature == "prefer" and analysis.nature is not None:
-            nature_reward = weights.nature * analysis.nature.nature_score / 100.0
+        nature_score = available_nature_score(analysis.nature)
+        if request.preferences.nature == "prefer" and nature_score is not None:
+            nature_reward = weights.nature * nature_score / 100.0
         components["nature_reward"] = nature_reward
         total = (
             weights.distance_error * distance_weight * error_ratio
@@ -65,3 +67,10 @@ class WaypointCandidateScorer:
             - nature_reward
         )
         return PlanScore(total=total, components=components)
+
+
+def waypoint_comparison_total(score: PlanScore, *, include_nature: bool) -> float:
+    """Remove measured reward when a compared candidate lacks nature data."""
+    if include_nature:
+        return score.total
+    return score.total + score.components.get("nature_reward", 0.0)

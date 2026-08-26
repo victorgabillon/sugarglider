@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from sugarglider.domain.analysis import (
+    NatureAnalysis,
     NatureScoreBreakdown,
     NatureWeightedComponent,
 )
@@ -22,6 +23,13 @@ class NatureScoringWeights:
 DEFAULT_NATURE_SCORING_WEIGHTS = NatureScoringWeights()
 NATURE_SCORE_BASE = 50.0
 NATURE_SCORE_SCALE = 50.0
+
+
+def available_nature_score(analysis: NatureAnalysis | None) -> float | None:
+    """Return only a score backed by complete route nature measurements."""
+    if analysis is None or not analysis.available:
+        return None
+    return analysis.nature_score
 
 
 def score_nature(

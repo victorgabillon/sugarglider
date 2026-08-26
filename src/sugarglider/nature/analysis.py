@@ -1,19 +1,25 @@
 """Fractional route attribution against the local projected nature index."""
 
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
+from math import isfinite
 from typing import Literal, cast
 
 from shapely import (
     STRtree,
     coverage_union_all,
     difference,
+    get_coordinates,
     get_parts,
     intersection,
+    is_valid,
     length,
+    make_valid,
+    normalize,
 )
 from shapely.errors import GEOSException
-from shapely.geometry import LineString
+from shapely.geometry import GeometryCollection, LineString, MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
@@ -38,6 +44,19 @@ type NatureVisualizationClass = Literal[
     "urban",
     "unknown",
 ]
+type PolygonalGeometry = Polygon | MultiPolygon
+
+NATURE_GEOMETRY_OVERLAY_WARNING = "nature_geometry_overlay_failed"
+
+logger = logging.getLogger(__name__)
+
+
+class _NatureGeometryOverlayError(RuntimeError):
+    """One expected GEOS overlay failure after bounded polygon repair."""
+
+    def __init__(self, operation: str) -> None:
+        super().__init__(f"nature geometry overlay failed during {operation}")
+        self.operation = operation
 
 
 @dataclass(frozen=True)
@@ -107,7 +126,22 @@ class NatureRouteAnalyzer:
         route_distance_m: float,
     ) -> NatureRouteEvaluation:
         """Attribute normalized authoritative edge distances by exact line fractions."""
-        measurement = self._measure_edges(edges)
+        try:
+            measurement = self._measure_edges(edges)
+        except _NatureGeometryOverlayError as exc:
+            return self._unavailable_evaluation(
+                edges,
+                route_distance_m,
+                operation=exc.operation,
+            )
+        except GEOSException:
+            # This final narrow boundary covers GEOS operations such as STRtree
+            # predicates and bounds checks which are not overlay helper calls.
+            return self._unavailable_evaluation(
+                edges,
+                route_distance_m,
+                operation="nature_measurement",
+            )
         distances: dict[PrimaryNatureClass, float] = {
             category: 0.0 for category in PRIMARY_CLASS_PRIORITY
         }
@@ -178,7 +212,13 @@ class NatureRouteAnalyzer:
         self, edges: tuple[ProjectedGeometryEdge, ...]
     ) -> tuple[NatureEdgeContext, ...]:
         """Classify display edges through the same server-side intersection path."""
-        return tuple(edge.context for edge in self._measure_edges(edges).edges)
+        try:
+            return tuple(edge.context for edge in self._measure_edges(edges).edges)
+        except _NatureGeometryOverlayError as exc:
+            self._log_overlay_failure(exc.operation)
+        except GEOSException:
+            self._log_overlay_failure("nature_visualization_measurement")
+        return tuple(_unknown_edge_context() for _edge in edges)
 
     def analyze_route(
         self,
@@ -187,6 +227,65 @@ class NatureRouteAnalyzer:
     ) -> NatureAnalysis:
         """Return the public enrichment expected by the shared route analyzer."""
         return self.analyze(edges, route_distance_m).analysis
+
+    def _unavailable_evaluation(
+        self,
+        edges: tuple[ProjectedGeometryEdge, ...],
+        route_distance_m: float,
+        *,
+        operation: str,
+    ) -> NatureRouteEvaluation:
+        self._log_overlay_failure(operation)
+
+        def metric(distance_m: float) -> DistanceMetric:
+            return DistanceMetric(
+                distance_m=distance_m,
+                share=_share(distance_m, route_distance_m),
+            )
+
+        zero = metric(0.0)
+        unknown = metric(route_distance_m)
+        # An unavailable analysis has no measured score components. The public
+        # score remains at its documented neutral base and planning gates on
+        # ``available`` rather than treating it as measured nature reward.
+        breakdown = score_nature(
+            woodland_share=0.0,
+            open_natural_share=0.0,
+            agriculture_share=0.0,
+            park_or_protected_share=0.0,
+            near_water_share=0.0,
+            urban_share=0.0,
+            unknown_share=unknown.share,
+            weights=self._weights,
+        )
+        analysis = NatureAnalysis(
+            available=False,
+            index_format_version=self._index.metadata.format_version,
+            index_feature_count=self._index.metadata.feature_count,
+            woodland=zero,
+            open_natural=zero,
+            agriculture=zero,
+            water_crossing=zero,
+            urban=zero,
+            unknown_landcover=unknown,
+            park_or_protected=zero,
+            near_water=zero,
+            nature_score=breakdown.final_score,
+            score_breakdown=breakdown,
+            warnings=(NATURE_GEOMETRY_OVERLAY_WARNING,),
+        )
+        return NatureRouteEvaluation(
+            analysis=analysis,
+            edge_contexts=tuple(_unknown_edge_context() for _edge in edges),
+        )
+
+    def _log_overlay_failure(self, operation: str) -> None:
+        logger.warning(
+            "Nature geometry overlay failed during %s for an index with %d features; "
+            "nature enrichment is unavailable for this route",
+            operation,
+            self._index.metadata.feature_count,
+        )
 
     def _measure_edges(
         self, edges: tuple[ProjectedGeometryEdge, ...]
@@ -212,11 +311,18 @@ class NatureRouteAnalyzer:
             if not polygons:
                 primary_lengths[category] = tuple(0.0 for _line in lines)
                 continue
-            merged = unary_union(polygons)
+            merged = _robust_polygonal_union(
+                polygons,
+                operation=f"{category}_union",
+            )
             available = (
                 merged
                 if higher_priority is None
-                else merged.difference(higher_priority)
+                else _robust_polygonal_difference(
+                    merged,
+                    higher_priority,
+                    operation=f"{category}_priority_difference",
+                )
             )
             primary_lengths[category] = _intersection_lengths(lines, available)
             higher_priority = (
@@ -324,45 +430,255 @@ def _near_water_geometry(
 ) -> BaseGeometry | None:
     if not water_geometries or not lines:
         return None
-    route_geometry = unary_union(lines)
-    raw: object = tree.query(
-        route_geometry,
-        predicate="dwithin",
-        distance=water_buffer_m,
+    indices = tuple(
+        sorted(
+            {
+                int(index)
+                for line in lines
+                for index in cast(
+                    Iterable[int],
+                    tree.query(
+                        line,
+                        predicate="dwithin",
+                        distance=water_buffer_m,
+                    ),
+                )
+            }
+        )
     )
-    indices = tuple(sorted(int(index) for index in cast(Iterable[int], raw)))
     candidates = tuple(water_geometries[index] for index in indices)
     if water_buffer_m > 0:
         candidates = _buffer_water_candidates(candidates, water_buffer_m)
-    return _merged_geometries(candidates)
+    return _merged_geometries(candidates, operation="near_water_union")
 
 
 def _buffer_water_candidates(
     geometries: tuple[BaseGeometry, ...], distance_m: float
 ) -> tuple[BaseGeometry, ...]:
-    return tuple(geometry.buffer(distance_m) for geometry in geometries)
+    buffered: list[BaseGeometry] = []
+    for geometry in geometries:
+        normalized = _normalize_polygonal(geometry, operation="water_buffer_input")
+        try:
+            result = normalized.buffer(distance_m)
+            buffered.append(
+                _normalize_polygonal(result, operation="water_buffer_result")
+            )
+        except (_NatureGeometryOverlayError, GEOSException):
+            repaired = _buffer_zero_polygonal(
+                normalized,
+                operation="water_buffer_repair",
+            )
+            try:
+                result = repaired.buffer(distance_m)
+                buffered.append(
+                    _normalize_polygonal(
+                        result,
+                        operation="water_buffer_retry_result",
+                    )
+                )
+            except (_NatureGeometryOverlayError, GEOSException) as exc:
+                raise _NatureGeometryOverlayError("water_buffer") from exc
+    return tuple(buffered)
 
 
 def _merged_feature_geometry(
     features: Iterable[IndexedNatureFeature],
 ) -> BaseGeometry | None:
-    return _merged_geometries(feature.metric_geometry for feature in features)
+    return _merged_geometries(
+        (feature.metric_geometry for feature in features),
+        operation="park_or_protected_union",
+    )
 
 
 def _merge_priority_coverage(
     higher_priority: BaseGeometry,
     available: BaseGeometry,
 ) -> BaseGeometry:
-    """Use the fast coverage union, falling back for numerical overlap slivers."""
+    """Accumulate priority coverage without assuming numerical disjointness."""
+    operands = (
+        _normalize_polygonal(
+            higher_priority,
+            operation="priority_coverage_higher_normalize",
+        ),
+        _normalize_polygonal(
+            available,
+            operation="priority_coverage_available_normalize",
+        ),
+    )
     try:
-        return coverage_union_all((higher_priority, available))
-    except GEOSException:
-        return unary_union((higher_priority, available))
+        result = coverage_union_all(operands)
+        return _normalize_polygonal(
+            result,
+            operation="priority_coverage_union_result",
+        )
+    except (_NatureGeometryOverlayError, GEOSException):
+        # Coverage union is valid only for non-overlapping coverages. Numerical
+        # slivers or genuinely overlapping valid inputs require a general union.
+        return _general_polygonal_union(
+            operands,
+            operation="priority_coverage_general_union",
+        )
 
 
-def _merged_geometries(geometries: Iterable[BaseGeometry]) -> BaseGeometry | None:
+def _merged_geometries(
+    geometries: Iterable[BaseGeometry],
+    *,
+    operation: str,
+) -> BaseGeometry | None:
     values = tuple(geometries)
-    return unary_union(values) if values else None
+    return _robust_polygonal_union(values, operation=operation) if values else None
+
+
+def _robust_polygonal_union(
+    geometries: Iterable[BaseGeometry],
+    *,
+    operation: str,
+) -> PolygonalGeometry:
+    operands = tuple(
+        _normalize_polygonal(geometry, operation=f"{operation}_input")
+        for geometry in geometries
+    )
+    nonempty = tuple(geometry for geometry in operands if not geometry.is_empty)
+    if not nonempty:
+        return Polygon()
+    if len(nonempty) == 1:
+        return nonempty[0]
+    return _general_polygonal_union(nonempty, operation=operation)
+
+
+def _general_polygonal_union(
+    geometries: tuple[PolygonalGeometry, ...],
+    *,
+    operation: str,
+) -> PolygonalGeometry:
+    try:
+        result = unary_union(geometries)
+        return _normalize_polygonal(result, operation=f"{operation}_result")
+    except (_NatureGeometryOverlayError, GEOSException):
+        pass
+
+    # ``buffer(0)`` is intentionally reserved for the exceptional retry after
+    # make_valid/general union failed. It is never applied to ordinary geometry.
+    try:
+        repaired = tuple(
+            _buffer_zero_polygonal(
+                geometry,
+                operation=f"{operation}_buffer_zero_input",
+            )
+            for geometry in geometries
+        )
+        result = unary_union(repaired)
+        return _normalize_polygonal(
+            result,
+            operation=f"{operation}_repaired_result",
+        )
+    except (_NatureGeometryOverlayError, GEOSException) as exc:
+        raise _NatureGeometryOverlayError(operation) from exc
+
+
+def _robust_polygonal_difference(
+    subject: BaseGeometry,
+    mask: BaseGeometry,
+    *,
+    operation: str,
+) -> PolygonalGeometry:
+    normalized_subject = _normalize_polygonal(
+        subject,
+        operation=f"{operation}_subject",
+    )
+    normalized_mask = _normalize_polygonal(mask, operation=f"{operation}_mask")
+    try:
+        result = difference(normalized_subject, normalized_mask)
+        return _normalize_polygonal(result, operation=f"{operation}_result")
+    except (_NatureGeometryOverlayError, GEOSException):
+        pass
+
+    try:
+        repaired_subject = _buffer_zero_polygonal(
+            normalized_subject,
+            operation=f"{operation}_subject_repair",
+        )
+        repaired_mask = _buffer_zero_polygonal(
+            normalized_mask,
+            operation=f"{operation}_mask_repair",
+        )
+        result = difference(repaired_subject, repaired_mask)
+        return _normalize_polygonal(
+            result,
+            operation=f"{operation}_repaired_result",
+        )
+    except (_NatureGeometryOverlayError, GEOSException) as exc:
+        raise _NatureGeometryOverlayError(operation) from exc
+
+
+def _normalize_polygonal(
+    geometry: BaseGeometry,
+    *,
+    operation: str,
+) -> PolygonalGeometry:
+    """Return only finite valid polygon components in canonical deterministic order."""
+    if not isinstance(geometry, (Polygon, MultiPolygon, GeometryCollection)):
+        raise _NatureGeometryOverlayError(operation)
+    try:
+        repaired = make_valid(geometry) if not bool(is_valid(geometry)) else geometry
+        polygons = tuple(
+            part
+            for part in _polygon_parts(repaired)
+            if not part.is_empty and part.area > 0
+        )
+        if not polygons:
+            return Polygon()
+        normalized_parts = tuple(normalize(part) for part in polygons)
+        ordered = tuple(sorted(normalized_parts, key=_polygon_sort_key))
+        result: PolygonalGeometry = (
+            ordered[0] if len(ordered) == 1 else MultiPolygon(ordered)
+        )
+        result = normalize(result)
+        if result.is_empty:
+            return Polygon()
+        if not bool(is_valid(result)) or not isfinite(float(result.area)):
+            raise _NatureGeometryOverlayError(operation)
+        coordinates_raw: object = get_coordinates(result)
+        coordinates = cast(Iterable[Iterable[float]], coordinates_raw)
+        if not all(
+            all(isfinite(float(ordinate)) for ordinate in coordinate)
+            for coordinate in coordinates
+        ):
+            raise _NatureGeometryOverlayError(operation)
+        if not all(isfinite(float(value)) for value in result.bounds):
+            raise _NatureGeometryOverlayError(operation)
+        return result
+    except _NatureGeometryOverlayError:
+        raise
+    except GEOSException as exc:
+        raise _NatureGeometryOverlayError(operation) from exc
+
+
+def _polygon_parts(geometry: BaseGeometry) -> Iterable[Polygon]:
+    if isinstance(geometry, Polygon):
+        yield geometry
+        return
+    if isinstance(geometry, (MultiPolygon, GeometryCollection)):
+        for part in geometry.geoms:
+            yield from _polygon_parts(part)
+
+
+def _polygon_sort_key(
+    polygon: Polygon,
+) -> tuple[float, float, float, float, float, str]:
+    west, south, east, north = polygon.bounds
+    return west, south, east, north, polygon.area, polygon.wkb_hex
+
+
+def _buffer_zero_polygonal(
+    geometry: BaseGeometry,
+    *,
+    operation: str,
+) -> PolygonalGeometry:
+    try:
+        return _normalize_polygonal(geometry.buffer(0), operation=operation)
+    except (_NatureGeometryOverlayError, GEOSException) as exc:
+        raise _NatureGeometryOverlayError(operation) from exc
 
 
 def _intersection_lengths(
@@ -370,6 +686,25 @@ def _intersection_lengths(
 ) -> tuple[float, ...]:
     if geometry is None or not lines:
         return tuple(0.0 for _line in lines)
+    normalized = _normalize_polygonal(geometry, operation="intersection_input")
+    try:
+        return _intersection_lengths_once(lines, normalized)
+    except GEOSException:
+        pass
+    try:
+        repaired = _buffer_zero_polygonal(
+            normalized,
+            operation="intersection_input_repair",
+        )
+        return _intersection_lengths_once(lines, repaired)
+    except (_NatureGeometryOverlayError, GEOSException) as exc:
+        raise _NatureGeometryOverlayError("line_polygon_intersection") from exc
+
+
+def _intersection_lengths_once(
+    lines: tuple[LineString, ...],
+    geometry: PolygonalGeometry,
+) -> tuple[float, ...]:
     parts_raw: object = get_parts(geometry)
     parts = tuple(cast(Iterable[BaseGeometry], parts_raw))
     if not parts:
@@ -394,7 +729,10 @@ def _intersection_lengths(
         cast(Iterable[float], values_raw),
         strict=True,
     ):
-        totals[line_index] += float(value)
+        measured = float(value)
+        if not isfinite(measured) or measured < 0:
+            raise _NatureGeometryOverlayError("line_polygon_intersection_length")
+        totals[line_index] += measured
     return tuple(totals)
 
 
@@ -403,8 +741,38 @@ def _difference_lengths(
 ) -> tuple[float, ...]:
     if not lines:
         return ()
+    normalized = _normalize_polygonal(geometry, operation="route_bounds_input")
+    try:
+        return _difference_lengths_once(lines, normalized)
+    except GEOSException:
+        pass
+    try:
+        repaired = _buffer_zero_polygonal(
+            normalized,
+            operation="route_bounds_repair",
+        )
+        return _difference_lengths_once(lines, repaired)
+    except (_NatureGeometryOverlayError, GEOSException) as exc:
+        raise _NatureGeometryOverlayError("route_bounds_difference") from exc
+
+
+def _difference_lengths_once(
+    lines: tuple[LineString, ...],
+    geometry: PolygonalGeometry,
+) -> tuple[float, ...]:
     values: object = length(difference(lines, geometry))
-    return tuple(float(value) for value in cast(Iterable[float], values))
+    measured = tuple(float(value) for value in cast(Iterable[float], values))
+    if any(not isfinite(value) or value < 0 for value in measured):
+        raise _NatureGeometryOverlayError("route_bounds_difference_length")
+    return measured
+
+
+def _unknown_edge_context() -> NatureEdgeContext:
+    return NatureEdgeContext(
+        nature_class="unknown",
+        park_or_protected=False,
+        near_water=False,
+    )
 
 
 def _fraction(distance: float, total: float) -> float:

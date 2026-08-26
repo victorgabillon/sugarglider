@@ -2,7 +2,9 @@
 
 from sugarglider.analysis.loop_geometry import LoopGeometryRouteAnalyzer
 from sugarglider.analysis.route import RouteAnalyzer, haversine_distance_m
+from sugarglider.domain.analysis import DistanceMetric, NatureAnalysis
 from sugarglider.domain.models import Coordinate, PathDetailSegment, RouteResult
+from sugarglider.nature.scoring import score_nature
 from sugarglider.planning.auto_tour.approaches import (
     approach_candidates_for_feature,
     resolve_requested_place,
@@ -253,6 +255,75 @@ def test_equal_route_quality_with_castle_and_water_wins() -> None:
     poi_candidate = _candidate(route, "poi", visits, comparison)
     assert poi_candidate.control_eligible
     assert min((control, poi_candidate), key=auto_tour_ranking_key) is poi_candidate
+
+
+def test_unavailable_nature_is_neutral_in_auto_tour_comparison() -> None:
+    route = _route(RING, (1, 2, 3, 4))
+    zero = DistanceMetric(distance_m=0, share=0)
+    measured_breakdown = score_nature(
+        woodland_share=1,
+        open_natural_share=0,
+        agriculture_share=0,
+        park_or_protected_share=0,
+        near_water_share=0,
+        urban_share=0,
+        unknown_share=0,
+    )
+    unavailable_breakdown = score_nature(
+        woodland_share=0,
+        open_natural_share=0,
+        agriculture_share=0,
+        park_or_protected_share=0,
+        near_water_share=0,
+        urban_share=0,
+        unknown_share=1,
+    )
+
+    def nature(available: bool) -> NatureAnalysis:
+        breakdown = measured_breakdown if available else unavailable_breakdown
+        return NatureAnalysis(
+            available=available,
+            index_format_version=2,
+            index_feature_count=1,
+            woodland=DistanceMetric(
+                distance_m=route.summary.distance_m if available else 0,
+                share=1 if available else 0,
+            ),
+            open_natural=zero,
+            agriculture=zero,
+            water_crossing=zero,
+            urban=zero,
+            unknown_landcover=DistanceMetric(
+                distance_m=0 if available else route.summary.distance_m,
+                share=0 if available else 1,
+            ),
+            park_or_protected=zero,
+            near_water=zero,
+            nature_score=breakdown.final_score,
+            score_breakdown=breakdown,
+            warnings=() if available else ("nature_geometry_overlay_failed",),
+        )
+
+    def with_nature(available: bool) -> RouteResult:
+        return route.model_copy(
+            update={
+                "analysis": route.analysis.model_copy(
+                    update={"nature": nature(available)}
+                )
+            }
+        )
+
+    measured = _candidate(
+        with_nature(True),
+        "same-signature",
+        (),
+        control_comparison(route, "control"),
+    )
+    unavailable = measured.model_copy(update={"route": with_nature(False)})
+
+    assert auto_tour_ranking_key(
+        measured, include_nature=False
+    ) == auto_tour_ranking_key(unavailable, include_nature=False)
 
 
 def _requested_visits(count: int) -> tuple[RequestedTourPlaceVisit, ...]:

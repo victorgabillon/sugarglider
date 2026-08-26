@@ -14,6 +14,7 @@ from sugarglider.analysis.route import (
     canonical_edge_traversals,
     project_geometry_edges,
 )
+from sugarglider.nature.scoring import available_nature_score
 from sugarglider.planning.optimization.models import (
     EdgeReuseComponents,
     EdgeUsage,
@@ -114,7 +115,7 @@ def objective_for_path(
         and profile_feasible
         and (source.distance_priority != "strict" or within_tolerance)
     )
-    nature = source.route.analysis.nature
+    nature_score = available_nature_score(source.route.analysis.nature)
     return (
         TourObjective(
             hard_feasible=hard_feasible,
@@ -131,7 +132,7 @@ def objective_for_path(
                 dict(option.path_detail_quality).get("profile_penalty", 0.0)
                 for option in options
             ),
-            nature_utility=nature.nature_score if nature is not None else 0.0,
+            nature_utility=nature_score,
             distance_m=path.distance_m,
             distance_error_m=distance_error,
         ),
@@ -141,10 +142,17 @@ def objective_for_path(
 
 def objective_improves(left: TourObjective, right: TourObjective) -> bool:
     """Return whether ``left`` is lexicographically better than ``right``."""
-    return left.lexicographic_key() < right.lexicographic_key()
+    include_nature = (
+        left.nature_utility is not None and right.nature_utility is not None
+    )
+    return left.lexicographic_key(
+        include_nature=include_nature
+    ) < right.lexicographic_key(include_nature=include_nature)
 
 
-def acceptance_energy(objective: TourObjective) -> float:
+def acceptance_energy(
+    objective: TourObjective, *, include_nature: bool = True
+) -> float:
     """Documented annealing energy used only to escape feasible local optima."""
     if not objective.hard_feasible:
         return float("inf")
@@ -154,21 +162,37 @@ def acceptance_energy(objective: TourObjective) -> float:
         + objective.total_repeated_distance_m * 1_000.0
         + objective.immediate_backtracking_m * 500.0
         + objective.profile_penalty * 100.0
-        - objective.nature_utility
+        - (
+            objective.nature_utility
+            if include_nature and objective.nature_utility is not None
+            else 0.0
+        )
         + objective.distance_error_m * 0.01
         + objective.distance_m * 0.001
     )
 
 
-def pareto_dominates(left: TourObjective, right: TourObjective) -> bool:
+def pareto_dominates(
+    left: TourObjective,
+    right: TourObjective,
+    *,
+    include_nature: bool | None = None,
+) -> bool:
     """Compare the bounded archive dimensions without construction similarity."""
+    nature_comparable = (
+        left.nature_utility is not None and right.nature_utility is not None
+        if include_nature is None
+        else include_nature
+    )
     left_values = (
         -left.priority_weighted_coverage,
         left.opposite_direction_reuse_m,
         left.total_repeated_distance_m,
         left.immediate_backtracking_m,
         left.profile_penalty,
-        -left.nature_utility,
+        -left.nature_utility
+        if nature_comparable and left.nature_utility is not None
+        else 0.0,
         left.distance_m,
     )
     right_values = (
@@ -177,7 +201,9 @@ def pareto_dominates(left: TourObjective, right: TourObjective) -> bool:
         right.total_repeated_distance_m,
         right.immediate_backtracking_m,
         right.profile_penalty,
-        -right.nature_utility,
+        -right.nature_utility
+        if nature_comparable and right.nature_utility is not None
+        else 0.0,
         right.distance_m,
     )
     return all(

@@ -32,7 +32,7 @@
         <button class="button secondary" id="save-route" type="button" disabled>Save route</button>
         <label class="button secondary" for="gpx-file" data-icon="gpx">Import GPX</label>
         <input class="visually-hidden" id="gpx-file" type="file" accept="application/gpx+xml,.gpx">
-        <button class="button primary" id="generate-top" type="button" data-icon="generate">Generate</button>
+        <button class="button primary" id="generate-top" type="button" data-icon="generate" aria-describedby="request-status" disabled>Generate</button>
         <details class="about-panel">
           <summary data-icon="info">About</summary>
           <div class="about-content">
@@ -152,7 +152,7 @@
             </div>
             <p id="outing-live-tracking-status" class="status" aria-live="polite">Position sharing stopped</p>
           </div>
-          <p class="context-note">Sharing starts only after pressing Start and uses foreground browser location. No historical activity track is retained. Press Stop for reliable removal. If this tab closes or is suspended first, the last position may remain visible until server expiry.</p>
+          <p id="outing-live-sharing-disclosure" class="context-note">Sharing starts only after pressing Start and uses foreground browser location. No historical activity track is retained. Press Stop for reliable removal. If this tab closes or is suspended first, the last position may remain visible until server expiry.</p>
         </section>
         <div id="outing-participant-cards" class="outing-participant-cards"></div>
         <form id="join-outing-form" class="outing-form hidden">
@@ -207,7 +207,7 @@
             </div>
             <p id="profile-description" class="field-help" role="status">Loading routing profiles…</p>
             <label>Route topology<select id="route-topology"><option value="loop">Loop</option><option value="point_to_point">Point to point</option></select></label>
-            <section class="endpoint-controls" aria-label="Optional hard endpoints">
+            <section class="endpoint-controls" aria-label="Route endpoints">
               <fieldset class="endpoint-control" id="hard-start-control">
                 <legend><label><input id="hard-start-enabled" type="checkbox"> Hard start</label></legend>
                 <label>Name<input id="hard-start-name" maxlength="200" placeholder="Hard start"></label>
@@ -217,7 +217,8 @@
                 </div>
                 <div class="button-row"><button id="set-hard-start" class="button secondary" type="button">Set on map</button><button id="clear-hard-start" class="text-button" type="button">Clear</button></div>
               </fieldset>
-              <fieldset class="endpoint-control" id="hard-end-control">
+              <p id="loop-end-explanation" class="field-help endpoint-explanation" role="status">End is the start for loop routes.</p>
+              <fieldset class="endpoint-control hidden" id="hard-end-control" aria-hidden="true" hidden disabled>
                 <legend><label><input id="hard-end-enabled" type="checkbox"> Hard end</label></legend>
                 <label>Name<input id="hard-end-name" maxlength="200" placeholder="Hard end"></label>
                 <div class="field-pair">
@@ -298,7 +299,7 @@
         </section>
 
         <div class="generate-actions">
-          <button id="generate" class="button primary wide" type="button" data-icon="generate" disabled>Generate Auto Tour</button>
+          <button id="generate" class="button primary wide" type="button" data-icon="generate" aria-describedby="request-status" disabled>Generate Auto Tour</button>
           <button id="cancel" class="button danger hidden" type="button" data-icon="cancel">Cancel</button>
           <button id="copy-request" class="text-button" type="button" data-icon="copy">Copy request JSON</button>
         </div>
@@ -307,7 +308,7 @@
           <img src="/static/brand/sugarglider-compact-icon.png" width="48" height="48" alt="">
           <div><h2 id="generation-title">Planning your loop…</h2><p>Checking the requested points and route alternatives. This may take a little while for low-overlap or nature-aware searches.</p></div>
         </section>
-        <p id="request-status" class="status" aria-live="polite">Choose an Auto Tour start point.</p>
+        <p id="request-status" class="status" aria-live="polite">Click the map to choose your start point.</p>
       </aside>
 
       <section class="map-panel" aria-labelledby="map-title">

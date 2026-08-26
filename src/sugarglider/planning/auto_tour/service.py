@@ -1,5 +1,6 @@
 """Canonical Auto Tour candidate production and publication."""
 
+from sugarglider.nature.scoring import available_nature_score
 from sugarglider.planning.alternative_legs import LowOverlapSettings
 from sugarglider.planning.auto_tour.candidate_models import (
     AutoTourCandidate,
@@ -328,7 +329,12 @@ class AutoTourPlanner:
             tuple(candidates),
             limit=request.candidate_count,
             ranking_key=lambda candidate: canonical_auto_tour_key(
-                candidate, request.distance_objective.priority
+                candidate,
+                request.distance_objective.priority,
+                include_nature=all(
+                    available_nature_score(value.route.analysis.nature) is not None
+                    for value in candidates
+                ),
             ),
         )
         optimization_diagnostics.published_candidates = sum(

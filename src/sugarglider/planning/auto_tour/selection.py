@@ -2,6 +2,7 @@
 
 # mypy: disable-error-code="attr-defined"
 
+from sugarglider.nature.scoring import available_nature_score
 from sugarglider.planning.auto_tour.candidate_models import (
     AutoTourCandidate,
 )
@@ -28,7 +29,10 @@ def _maximum_rejection_reason(
 
 
 def _open_tour_key(
-    candidate: AutoTourCandidate, request: AutoTourSearchRequest
+    candidate: AutoTourCandidate,
+    request: AutoTourSearchRequest,
+    *,
+    include_nature: bool = True,
 ) -> tuple[object, ...]:
     """Rank endpoint-valid open paths without applying loop-only shape gates."""
     severe_backtracking = (
@@ -47,7 +51,7 @@ def _open_tour_key(
             -candidate.selected_preferred_place_count,
             candidate.signature,
         )
-    nature = candidate.route.analysis.nature
+    nature_score = available_nature_score(candidate.route.analysis.nature)
     net_requested_value = (
         candidate.selected_must_visit_count * 5_000.0
         + candidate.selected_preferred_place_count * 1_500.0
@@ -71,7 +75,7 @@ def _open_tour_key(
         if candidate.near_parallel_corridor_share is not None
         else 1.0,
         -candidate.total_poi_reward,
-        (0, -nature.nature_score) if nature is not None else (1, 0.0),
+        -nature_score if include_nature and nature_score is not None else 0.0,
         candidate.soft_distance_penalty,
         candidate.signature,
     )
@@ -84,8 +88,17 @@ def _open_candidate_portfolio(
     control: AutoTourCandidate,
 ) -> tuple[AutoTourCandidate, ...]:
     """Reserve coverage, near-target, and direct-control open-route roles."""
+    include_nature = all(
+        available_nature_score(candidate.route.analysis.nature) is not None
+        for candidate in candidates
+    )
     ordered = tuple(
-        sorted(candidates, key=lambda value: _open_tour_key(value, request))
+        sorted(
+            candidates,
+            key=lambda value: _open_tour_key(
+                value, request, include_nature=include_nature
+            ),
+        )
     )
     if request.distance_priority != "flexible" or request.candidate_count == 1:
         return ordered[: request.candidate_count]
@@ -117,7 +130,7 @@ def _open_candidate_portfolio(
                 -candidate.selected_must_visit_count,
                 -candidate.selected_preferred_place_count,
                 candidate.target_error_m,
-                _open_tour_key(candidate, request),
+                _open_tour_key(candidate, request, include_nature=include_nature),
             ),
             default=None,
         )

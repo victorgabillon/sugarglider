@@ -395,11 +395,11 @@ class TourObjective:
     same_direction_reuse_m: float
     immediate_backtracking_m: float
     profile_penalty: float
-    nature_utility: float
+    nature_utility: float | None
     distance_m: float
     distance_error_m: float
 
-    def lexicographic_key(self) -> tuple[object, ...]:
+    def lexicographic_key(self, *, include_nature: bool = True) -> tuple[object, ...]:
         return (
             0 if self.hard_feasible else 1,
             -self.priority_weighted_coverage,
@@ -411,7 +411,9 @@ class TourObjective:
             self.same_direction_reuse_m,
             self.immediate_backtracking_m,
             self.profile_penalty,
-            -self.nature_utility,
+            -self.nature_utility
+            if include_nature and self.nature_utility is not None
+            else 0.0,
             self.distance_error_m,
             self.distance_m,
         )

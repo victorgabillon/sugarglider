@@ -32,6 +32,7 @@ from sugarglider.planning.optimization.objective import (
     acceptance_energy,
     edge_reuse_components,
     objective_improves,
+    pareto_dominates,
 )
 from sugarglider.planning.optimization.operators import (
     AlternateApproachOperator,
@@ -265,6 +266,7 @@ def _objective(
     distance_error_m: float = 0,
     hard_feasible: bool = True,
     reached: int = 1,
+    nature_utility: float | None = 0,
 ) -> TourObjective:
     return TourObjective(
         hard_feasible=hard_feasible,
@@ -278,7 +280,7 @@ def _objective(
         same_direction_reuse_m=0,
         immediate_backtracking_m=backtracking_m,
         profile_penalty=0,
-        nature_utility=0,
+        nature_utility=nature_utility,
         distance_m=distance_m,
         distance_error_m=distance_error_m,
     )
@@ -338,6 +340,19 @@ def test_last_analyzed_spur_total_is_not_a_cheap_alns_ranking_signal() -> None:
 
     assert objective.lexicographic_key() == stale_other_analysis.lexicographic_key()
     assert acceptance_energy(objective) == acceptance_energy(stale_other_analysis)
+
+
+def test_unavailable_nature_is_neutral_in_optimizer_comparisons() -> None:
+    measured = _objective(nature_utility=100)
+    unavailable = _objective(nature_utility=None)
+
+    assert measured.lexicographic_key(
+        include_nature=False
+    ) == unavailable.lexicographic_key(include_nature=False)
+    assert not objective_improves(measured, unavailable)
+    assert not objective_improves(unavailable, measured)
+    assert not pareto_dominates(measured, unavailable)
+    assert not pareto_dominates(unavailable, measured)
 
 
 def test_seeded_annealing_can_accept_a_temporary_feasible_regression() -> None:
