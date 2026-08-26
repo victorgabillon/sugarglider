@@ -7,7 +7,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.security.SecureRandom
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 
@@ -19,7 +18,6 @@ class SecureRecordTest {
         val envelope = AesGcmRecordCodec.encrypt(
             SecureRecordJson.encode(record),
             key,
-            SecureRandom(),
         )
         val decoded = SecureRecordJson.decode(
             AesGcmRecordCodec.decrypt(envelope, key),
@@ -33,7 +31,6 @@ class SecureRecordTest {
         val envelope = AesGcmRecordCodec.encrypt(
             SecureRecordJson.encode(SecureTrackingRecord(testSession(), null)),
             key(),
-            SecureRandom(),
         )
         assertThrows(IllegalArgumentException::class.java) {
             AesGcmRecordCodec.decrypt(envelope, key())
@@ -45,10 +42,87 @@ class SecureRecordTest {
         val encrypted = AesGcmRecordCodec.encrypt(
             SecureRecordJson.encode(SecureTrackingRecord(testSession(), null)),
             key(),
-            SecureRandom(),
         )
         assertThrows(IllegalArgumentException::class.java) {
             AesGcmRecordCodec.decrypt(encrypted.copyOf(10), key())
+        }
+    }
+
+    @Test
+    fun providerGeneratesDifferentIvAndCiphertextForSamePlaintext() {
+        val key = key()
+        val plaintext = SecureRecordJson.encode(SecureTrackingRecord(testSession(), null))
+
+        val first = AesGcmRecordCodec.encrypt(plaintext, key)
+        val second = AesGcmRecordCodec.encrypt(plaintext, key)
+
+        assertFalse(
+            first.copyOfRange(IV_START, CIPHERTEXT_START).contentEquals(
+                second.copyOfRange(IV_START, CIPHERTEXT_START),
+            ),
+        )
+        assertFalse(
+            first.copyOfRange(CIPHERTEXT_START, first.size).contentEquals(
+                second.copyOfRange(CIPHERTEXT_START, second.size),
+            ),
+        )
+    }
+
+    @Test
+    fun malformedEnvelopeIvLengthIsRejected() {
+        val key = key()
+        val envelope = AesGcmRecordCodec.encrypt(
+            SecureRecordJson.encode(SecureTrackingRecord(testSession(), null)),
+            key,
+        )
+        envelope[IV_LENGTH_OFFSET] = (IV_SIZE - 1).toByte()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            AesGcmRecordCodec.decrypt(envelope, key)
+        }
+    }
+
+    @Test
+    fun authenticatedIvAndCiphertextTamperingAreRejected() {
+        val key = key()
+        val envelope = AesGcmRecordCodec.encrypt(
+            SecureRecordJson.encode(SecureTrackingRecord(testSession(), null)),
+            key,
+        )
+        val tamperedIv = envelope.copyOf().also {
+            it[IV_START] = (it[IV_START].toInt() xor 1).toByte()
+        }
+        val tamperedCiphertext = envelope.copyOf().also {
+            it[it.lastIndex] = (it[it.lastIndex].toInt() xor 1).toByte()
+        }
+
+        assertThrows(IllegalArgumentException::class.java) {
+            AesGcmRecordCodec.decrypt(tamperedIv, key)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            AesGcmRecordCodec.decrypt(tamperedCiphertext, key)
+        }
+    }
+
+    @Test
+    fun authenticatedEnvelopeHeaderTamperingIsRejected() {
+        val key = key()
+        val envelope = AesGcmRecordCodec.encrypt(
+            SecureRecordJson.encode(SecureTrackingRecord(testSession(), null)),
+            key,
+        )
+        val tamperedMagic = envelope.copyOf().also {
+            it[0] = (it[0].toInt() xor 1).toByte()
+        }
+        val tamperedVersion = envelope.copyOf().also {
+            it[ENVELOPE_VERSION_OFFSET] = (it[ENVELOPE_VERSION_OFFSET] + 1).toByte()
+        }
+
+        assertThrows(IllegalArgumentException::class.java) {
+            AesGcmRecordCodec.decrypt(tamperedMagic, key)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            AesGcmRecordCodec.decrypt(tamperedVersion, key)
         }
     }
 
@@ -125,4 +199,12 @@ class SecureRecordTest {
     }
 
     private fun key(): SecretKey = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
+
+    companion object {
+        private const val ENVELOPE_VERSION_OFFSET = 4
+        private const val IV_LENGTH_OFFSET = 5
+        private const val IV_START = 6
+        private const val IV_SIZE = 12
+        private const val CIPHERTEXT_START = IV_START + IV_SIZE
+    }
 }

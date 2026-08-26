@@ -8,7 +8,6 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
 import java.security.KeyStore
-import java.security.SecureRandom
 import java.time.Instant
 import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
@@ -23,11 +22,15 @@ internal object AesGcmRecordCodec {
     private const val MAXIMUM_PLAINTEXT_BYTES = 32_768
     private const val MAXIMUM_ENVELOPE_BYTES = 65_536
 
-    fun encrypt(plaintext: ByteArray, key: SecretKey, random: SecureRandom): ByteArray {
+    fun encrypt(plaintext: ByteArray, key: SecretKey): ByteArray {
         require(plaintext.size in 1..MAXIMUM_PLAINTEXT_BYTES)
-        val iv = ByteArray(IV_SIZE).also(random::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
+        cipher.init(Cipher.ENCRYPT_MODE, key)
+        val iv = cipher.iv?.copyOf()
+            ?: throw IllegalStateException("Encryption provider returned no IV")
+        if (iv.size != IV_SIZE) {
+            throw IllegalStateException("Encryption provider returned an invalid IV")
+        }
         cipher.updateAAD(magic + byteArrayOf(ENVELOPE_VERSION))
         val ciphertext = cipher.doFinal(plaintext)
         return magic + byteArrayOf(ENVELOPE_VERSION, IV_SIZE.toByte()) + iv + ciphertext
@@ -197,7 +200,6 @@ internal object SecureRecordJson {
 internal class AndroidSecureStateStore(
     context: Context,
     private val now: () -> Instant = Instant::now,
-    private val random: SecureRandom = SecureRandom(),
 ) : SecureStateStore {
     private val atomicFile = AtomicFile(File(context.noBackupFilesDir, "pr27-native-session.enc"))
     private val key: SecretKey by lazy(::loadOrCreateKey)
@@ -332,7 +334,7 @@ internal class AndroidSecureStateStore(
     }
 
     private fun write(record: SecureTrackingRecord) {
-        val envelope = AesGcmRecordCodec.encrypt(SecureRecordJson.encode(record), key, random)
+        val envelope = AesGcmRecordCodec.encrypt(SecureRecordJson.encode(record), key)
         val output = atomicFile.startWrite()
         try {
             output.write(envelope)

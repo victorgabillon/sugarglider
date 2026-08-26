@@ -135,7 +135,12 @@ def test_secure_store_is_aes_gcm_keystore_atomic_and_latest_only() -> None:
     assert 'Cipher.getInstance("AES/GCM/NoPadding")' in store
     assert 'KeyStore.getInstance("AndroidKeyStore")' in store
     assert "AtomicFile" in store
-    assert "SecureRandom" in store
+    assert "SecureRandom" not in store
+    assert "cipher.init(Cipher.ENCRYPT_MODE, key)" in store
+    assert "val iv = cipher.iv" in store
+    assert "iv.size != IV_SIZE" in store
+    assert ".setRandomizedEncryptionRequired(true)" in store
+    assert store.count("cipher.updateAAD(magic + byteArrayOf(ENVELOPE_VERSION))") == 2
     assert "clearMatchingSample" in store
     assert "clearMatchingSession" in store
     fields = store[
