@@ -550,6 +550,42 @@ def test_planner_endpoint_browser_harness_covers_all_mode_topology_cases() -> No
     assert 'class="field-pair"' in harness_html
 
 
+def test_pr28_browser_harness_covers_responsive_application_states() -> None:
+    harness = (
+        REPOSITORY_ROOT / "tests/browser/pr28_responsive_layout_harness.js"
+    ).read_text(encoding="utf-8")
+    harness_html = (
+        REPOSITORY_ROOT / "tests/browser/pr28_responsive_layout_harness.html"
+    ).read_text(encoding="utf-8")
+    html = (STATIC_DIRECTORY / "index.html").read_text(encoding="utf-8")
+    styles = (STATIC_DIRECTORY / "styles.css").read_text(encoding="utf-8")
+
+    assert "[360, 390, 412, 600, 768, 1280, 1440]" in harness
+    assert "plannerScenario(frame, width)" in harness
+    assert "savedRouteScenario(frame, width)" in harness
+    assert "outingCreatedScenario(frame, width)" in harness
+    assert "publicOutingScenario(frame, width, false)" in harness
+    assert "publicOutingScenario(frame, width, true)" in harness
+    assert "document.documentElement.scrollWidth" in harness
+    assert "getComputedStyle(planner)" in harness
+    assert "Start Android background sharing" in harness
+    assert "runPr28ResponsiveLayoutHarness" in harness_html
+    assert 'addEventListener("unhandledrejection"' in harness_html
+
+    planner_start = html.index('<main id="planner" class="planner">')
+    planner_end = html.index("</main>", planner_start)
+    outing_panel = html.index('id="outing-view-panel"')
+    map_panel = html.index('class="map-panel"')
+    metrics_panel = html.index('class="panel metrics"')
+    assert planner_start < map_panel < outing_panel < metrics_panel < planner_end
+    assert html.count('id="outing-view-panel"') == 1
+    assert 'id="show-create-outing" class="button primary hidden"' in html
+    assert 'id="delete-saved-route" class="text-button danger hidden"' in html
+    assert 'grid-template-areas: "outing outing" "map metrics"' in styles
+    assert "grid-template-columns: minmax(0, 1fr);" in styles
+    assert ".notice-copy { min-width: 0; }" in styles
+
+
 def test_font_license_provenance_and_glyphs_are_in_wheel(tmp_path: Path) -> None:
     provenance = (FONT_DIRECTORY / "README.md").read_text(encoding="utf-8")
     license_text = (FONT_DIRECTORY / "LICENSE.txt").read_text(encoding="utf-8")

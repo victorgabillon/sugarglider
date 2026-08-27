@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PR28 responsive layout harness</title>
+  <pre id="result">running</pre>
+  <script>
+    window.pr28ResponsiveHarnessResult = document.getElementById("result");
+    window.pr28ResponsiveUnhandledRejection = null;
+    window.addEventListener("unhandledrejection", (event) => {
+      window.pr28ResponsiveUnhandledRejection = event.reason;
+      window.pr28ResponsiveHarnessResult.dataset.status = "failed";
+      window.pr28ResponsiveHarnessResult.textContent = String(event.reason);
+    });
+  </script>
+  <script type="module">
+    import { runPr28ResponsiveLayoutHarness } from "./pr28_responsive_layout_harness.js";
+
+    try {
+      const scenarios = await runPr28ResponsiveLayoutHarness();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      if (window.pr28ResponsiveUnhandledRejection) {
+        throw window.pr28ResponsiveUnhandledRejection;
+      }
+      window.pr28ResponsiveHarnessResult.dataset.status = "passed";
+      window.pr28ResponsiveHarnessResult.textContent = JSON.stringify(scenarios);
+      document.title = `PR28 responsive layout harness passed ${scenarios.length}`;
+    } catch (error) {
+      window.pr28ResponsiveHarnessResult.dataset.status = "failed";
+      window.pr28ResponsiveHarnessResult.textContent = error instanceof Error
+        ? error.stack
+        : String(error);
+      document.title = "PR28 responsive layout harness failed";
+    }
+  </script>
+</html>
