@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from sugarglider.outings.models import (
     OutingCreateRequest,
+    OutingJoinRequest,
     OutingParticipantJoined,
     OutingParticipantSnapshot,
     OutingSnapshot,
@@ -26,6 +27,41 @@ def test_create_request_trims_bounded_text() -> None:
     )
     assert request.title == "Forest and gravel day"
     assert request.participant_display_name == "Victor"
+    assert request.participant_avatar_key == "blue"
+
+
+def test_avatar_keys_are_strict_and_backward_compatible() -> None:
+    created = OutingCreateRequest(
+        title="Forest and gravel day",
+        participant_display_name="Victor",
+        participant_avatar_key="forest",
+        saved_route_slug=SLUG,
+    )
+    joined = OutingJoinRequest(
+        display_name="Élodie",
+        avatar_key="mask",
+        saved_route_slug=SLUG,
+    )
+    legacy_join = OutingJoinRequest(
+        display_name="Legacy",
+        saved_route_slug=SLUG,
+    )
+    assert created.participant_avatar_key == "forest"
+    assert joined.avatar_key == "mask"
+    assert legacy_join.avatar_key == "blue"
+    with pytest.raises(ValidationError):
+        OutingCreateRequest(
+            title="Outing",
+            participant_display_name="Victor",
+            participant_avatar_key="purple",  # type: ignore[arg-type]
+            saved_route_slug=SLUG,
+        )
+    with pytest.raises(ValidationError):
+        OutingJoinRequest(
+            display_name="Victor",
+            avatar_key="unknown",  # type: ignore[arg-type]
+            saved_route_slug=SLUG,
+        )
 
 
 @pytest.mark.parametrize(

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from sugarglider.outings.models import AvatarKey
 from sugarglider.outings.repository import (
     OutingCapacityReachedError,
     OutingParticipantRecord,
@@ -41,6 +42,7 @@ def _participant(
     order: int,
     *,
     display_name: str = "Élodie",
+    avatar_key: AvatarKey = "blue",
 ) -> OutingParticipantRecord:
     return OutingParticipantRecord(
         id=f"internal-{public_id}",
@@ -48,6 +50,7 @@ def _participant(
         public_id=public_id,
         participant_token_hash=b"p" * 32,
         display_name=display_name,
+        avatar_key=avatar_key,
         source_request_json='{"kind":"independent"}',
         candidate_json='{"route":"exact"}',
         joined_at_utc=NOW + timedelta(seconds=order),
@@ -124,6 +127,7 @@ def test_initialization_is_idempotent_and_has_exact_application_tables(
         "public_id",
         "participant_token_hash",
         "display_name",
+        "avatar_key",
         "source_request_json",
         "candidate_json",
         "joined_at_utc",
@@ -138,7 +142,7 @@ def test_initialization_is_idempotent_and_has_exact_application_tables(
         configured.execute("SELECT 1")
 
 
-def test_existing_pr23_two_table_database_is_migrated_without_row_changes(
+def test_existing_pr23_database_preserves_rows_and_defaults_avatar_to_blue(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "pr23.sqlite3"
@@ -229,7 +233,8 @@ def test_existing_pr23_two_table_database_is_migrated_without_row_changes(
         ).fetchone()
         cursor = connection.execute("SELECT live_event_cursor FROM outings").fetchone()
     assert before_outing == migrated_outing
-    assert before_participant == migrated_participant
+    assert before_participant == migrated_participant[:-1]
+    assert migrated_participant[-1] == "blue"
     assert "live_event_cursor" in columns
     assert cursor == (0,)
 
@@ -239,12 +244,18 @@ def test_create_round_trip_order_delete_and_cascade(tmp_path: Path) -> None:
     repository = SQLiteOutingRepository(path)
     repository.initialize()
     outing = _outing()
-    first = _participant(outing.id, "participant_public_01", 0)
+    first = _participant(
+        outing.id,
+        "participant_public_01",
+        0,
+        avatar_key="forest",
+    )
     second = _participant(
         outing.id,
         "participant_public_02",
         1,
         display_name="骑行者",
+        avatar_key="mask",
     )
     repository.create(outing, first)
     repository.add_participant(
@@ -262,6 +273,23 @@ def test_create_round_trip_order_delete_and_cascade(tmp_path: Path) -> None:
             "SELECT COUNT(*) FROM outing_participants"
         ).fetchone()[0]
     assert remaining == 0
+
+
+def test_malformed_persisted_avatar_fails_safely(tmp_path: Path) -> None:
+    path = tmp_path / "outings.sqlite3"
+    repository = SQLiteOutingRepository(path)
+    repository.initialize()
+    outing = _outing()
+    repository.create(
+        outing,
+        _participant(outing.id, "participant_public_01", 0),
+    )
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "UPDATE outing_participants SET avatar_key = 'unknown'",
+        )
+    with pytest.raises(OutingRepositoryError):
+        repository.get_by_slug(outing.public_slug)
 
 
 def test_duplicate_slug_is_typed_and_failed_initial_insert_rolls_back(

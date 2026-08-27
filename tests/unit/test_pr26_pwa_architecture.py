@@ -150,22 +150,22 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_pr29_html_and_css() -> None:
+def test_shared_shell_generation_tracks_pr30_html_and_css() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v6"
+    assert generation.group(1) == "v9"
     assert {
         name: _sha256(STATIC_DIRECTORY / name) for name in ("index.html", "styles.css")
     } == {
         "index.html": (
-            "4b96f72bf076eb5702ccd8b5672e33611d197f32d77a9ef56d3b35851cde5a19"
+            "edf060720dd43699a274ea3ad23523e0a5f9b7831d5a92987f607bf85ad48d97"
         ),
         "styles.css": (
-            "94027d1bfe66281cd1682c3c303f02aecaed7191e188bad0baa895347406577c"
+            "5407598d86d7fd2e7be727378c23e587f6a1107385373fd2bbd308cc294159b5"
         ),
     }
 
@@ -240,6 +240,7 @@ def test_browser_persistence_ownership_is_narrow() -> None:
         "offline_snapshots",
         "participant_sessions",
         "position_outbox",
+        "trail_profile",
     ):
         assert object_store in store
     durable = sources["outing_durable_session.js"]

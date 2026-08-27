@@ -75,3 +75,11 @@ def test_pr29_android_server_chrome_is_compact_and_keeps_change_guard() -> None:
         in open_server
     )
     assert "remove(PREFERENCE_SERVER_ORIGIN)" in open_server
+    assert "ViewCompat.setOnApplyWindowInsetsListener(serverChrome)" in open_server
+    assert "WindowInsetsCompat.Type.systemBars()" in open_server
+    assert "WindowInsetsCompat.Type.displayCutout()" in open_server
+    assert "val chromeTopPadding = dp(8)" in open_server
+    assert "val chromeEndPadding = dp(12)" in open_server
+    assert "systemBars.top + chromeTopPadding" in open_server
+    assert "systemBars.right + chromeEndPadding" in open_server
+    assert "ViewCompat.requestApplyInsets(serverChrome)" in open_server

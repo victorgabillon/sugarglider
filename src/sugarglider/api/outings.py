@@ -39,6 +39,7 @@ def create_outing(
             source_request=saved.source_request,
             candidate=saved.candidate,
         ),
+        participant_avatar_key=request.participant_avatar_key,
     )
     response.headers["Location"] = f"/v2/outings/{created.slug}"
     response.headers["Cache-Control"] = "no-store"
@@ -79,6 +80,7 @@ def join_outing(
             source_request=saved.source_request,
             candidate=saved.candidate,
         ),
+        avatar_key=request.avatar_key,
     )
     response.headers["Location"] = (
         f"/v2/outings/{slug}/participants/{joined.participant_id}"

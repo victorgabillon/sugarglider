@@ -1,4 +1,5 @@
 import { PWA_STORES } from "./pwa_store.js";
+import { DEFAULT_AVATAR_KEY, isAvatarKey } from "./avatar.js";
 
 const SNAPSHOT_SCHEMA_VERSION = 1;
 const MAXIMUM_SNAPSHOT_BYTES = 5_000_000;
@@ -316,12 +317,16 @@ function validateOuting(snapshot) {
   ) throw new Error("Invalid outing snapshot.");
   const participantIds = new Set();
   for (const participant of snapshot.participants) {
+    if (participant?.avatar_key === undefined) {
+      participant.avatar_key = DEFAULT_AVATAR_KEY;
+    }
     if (
       !plainObject(participant)
       || !validSlug(participant.participant_id)
       || participantIds.has(participant.participant_id)
       || typeof participant.display_name !== "string"
       || !participant.display_name.trim()
+      || !isAvatarKey(participant.avatar_key)
       || !validTimestamp(participant.joined_at)
       || !plainObject(participant.planned_route?.source_request)
     ) throw new Error("Invalid outing participant.");

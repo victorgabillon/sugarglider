@@ -36,6 +36,7 @@
             <label class="button secondary" for="request-file" data-icon="json">Import plan JSON</label>
             <input class="visually-hidden" id="request-file" type="file" accept="application/json,.json">
             <button class="button secondary" id="export-plan" type="button" data-icon="json">Export plan JSON</button>
+            <button class="button secondary" id="edit-trail-profile" type="button">My profile</button>
             <details class="about-panel">
               <summary data-icon="info">About Sugarglider</summary>
               <div class="about-content">
@@ -47,6 +48,33 @@
         </details>
       </nav>
     </header>
+
+    <dialog id="trail-profile-dialog" class="trail-profile-dialog" aria-labelledby="trail-profile-title">
+      <form id="trail-profile-form" class="trail-profile-form">
+        <div>
+          <p class="eyebrow">Local trail profile</p>
+          <h2 id="trail-profile-title">Welcome to Sugarglider</h2>
+          <p class="profile-privacy">This nickname and badge stay in this browser. There is no account. In an outing, both are visible to anyone with the public link.</p>
+        </div>
+        <label for="trail-profile-name">What should we call you?</label>
+        <input id="trail-profile-name" maxlength="80" autocomplete="nickname" required>
+        <fieldset class="profile-badge-picker">
+          <legend>Choose your trail badge</legend>
+          <div class="profile-badge-grid">
+            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="blue" aria-label="Lake trail badge" checked><img src="/static/brand/profile-badges/blue.png" width="512" height="512" alt="Lake Sugarglider trail badge"><span aria-hidden="true">Lake</span></label>
+            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="forest" aria-label="Forest trail badge"><img src="/static/brand/profile-badges/forest.png" width="512" height="512" alt="Forest Sugarglider trail badge"><span aria-hidden="true">Forest</span></label>
+            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="orange" aria-label="Vico trail badge"><img src="/static/brand/profile-badges/orange.png" width="512" height="512" alt="Vico Sugarglider trail badge"><span aria-hidden="true">Vico</span></label>
+            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="tomato" aria-label="Jime trail badge"><img src="/static/brand/profile-badges/tomato.png" width="512" height="512" alt="Jime Sugarglider trail badge"><span aria-hidden="true">Jime</span></label>
+            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="mask" aria-label="Lezca trail badge"><img src="/static/brand/profile-badges/mask.png" width="512" height="512" alt="Lezca Sugarglider trail badge"><span aria-hidden="true">Lezca</span></label>
+          </div>
+        </fieldset>
+        <p id="trail-profile-storage-status" class="status" role="status" aria-live="polite"></p>
+        <div class="button-row profile-dialog-actions">
+          <button id="cancel-trail-profile" class="button secondary" type="button">Cancel</button>
+          <button id="save-trail-profile" class="button primary" type="submit">Continue</button>
+        </div>
+      </form>
+    </dialog>
 
     <section id="error-banner" class="notice error hidden" role="alert" aria-live="assertive" aria-atomic="true" aria-labelledby="error-title">
       <div class="notice-mark" aria-hidden="true">!</div>
@@ -377,6 +405,11 @@
           <div id="outing-participant-cards" class="outing-participant-cards"></div>
           <form id="join-outing-form" class="outing-form hidden">
             <h2>Join with your independent route</h2>
+            <div id="outing-join-profile-summary" class="outing-join-profile-summary">
+              <img id="outing-join-profile-avatar" class="hidden" width="512" height="512" alt="">
+              <span><small>Joining as</small><strong id="outing-join-profile-name">No trail profile set</strong></span>
+              <button id="setup-join-profile" class="button secondary" type="button">Set up trail profile</button>
+            </div>
             <label>Display name<input id="outing-join-name" maxlength="80" required></label>
             <label>Saved-route link or slug<input id="outing-join-route" required></label>
             <p><a href="/" target="_blank" rel="noopener">Plan and save my route in a new tab</a></p>

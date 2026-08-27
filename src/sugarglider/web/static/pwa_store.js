@@ -1,11 +1,12 @@
 const DATABASE_NAME = "sugarglider-pwa";
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 
 export const PWA_STORES = Object.freeze({
   publicRuntime: "public_runtime",
   offlineSnapshots: "offline_snapshots",
   participantSessions: "participant_sessions",
   positionOutbox: "position_outbox",
+  trailProfile: "trail_profile",
 });
 
 const STORE_NAMES = Object.freeze(Object.values(PWA_STORES));

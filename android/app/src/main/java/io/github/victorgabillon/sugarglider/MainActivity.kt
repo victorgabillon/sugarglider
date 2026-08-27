@@ -31,6 +31,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.JavaScriptReplyProxy
 import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewCompat
@@ -206,11 +208,33 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(getColor(R.color.brand_cream))
         }
+        val chromeStartPadding = dp(4)
+        val chromeTopPadding = dp(8)
+        val chromeEndPadding = dp(12)
+        val chromeBottomPadding = dp(2)
         val serverChrome = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.END
-            setPadding(dp(4), dp(2), dp(6), dp(2))
+            setPadding(
+                chromeStartPadding,
+                chromeTopPadding,
+                chromeEndPadding,
+                chromeBottomPadding,
+            )
             setBackgroundColor(getColor(R.color.brand_green))
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(serverChrome) { view, insets ->
+            val systemBars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or
+                    WindowInsetsCompat.Type.displayCutout(),
+            )
+            view.setPadding(
+                chromeStartPadding,
+                systemBars.top + chromeTopPadding,
+                systemBars.right + chromeEndPadding,
+                chromeBottomPadding,
+            )
+            insets
         }
         serverChrome.addView(Button(this).apply {
             setText(R.string.configure_server)
@@ -248,6 +272,7 @@ class MainActivity : Activity() {
             ),
         )
         setContentView(root)
+        ViewCompat.requestApplyInsets(serverChrome)
         loadConfiguredPage()
     }
 

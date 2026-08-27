@@ -6,7 +6,7 @@ import {
 } from "/static/service_worker_policy.js";
 
 const SHELL_CACHE_PREFIX = "sugarglider-shell-";
-const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v6`;
+const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v9`;
 const ROOT_SHELL = "/";
 const shellCache = createCurrentCacheAccess(caches, SHELL_CACHE);
 
@@ -16,6 +16,7 @@ const CORE_ASSETS = Object.freeze([
   "/static/vendor/maplibre-gl-4.7.1/maplibre-gl.css",
   "/static/vendor/maplibre-gl-4.7.1/maplibre-gl.js",
   "/static/app.js",
+  "/static/avatar.js",
   "/static/api.js",
   "/static/format.js",
   "/static/gpx.js",
@@ -39,9 +40,15 @@ const CORE_ASSETS = Object.freeze([
   "/static/service_worker_policy.js",
   "/static/offline_snapshots.js",
   "/static/outing_durable_session.js",
+  "/static/trail_profile.js",
   "/static/brand/sugarglider-compact-icon.png",
   "/static/brand/sugarglider-map-pin.png",
   "/static/brand/sugarglider-water-pin.png",
+  "/static/brand/profile-badges/blue.png",
+  "/static/brand/profile-badges/forest.png",
+  "/static/brand/profile-badges/orange.png",
+  "/static/brand/profile-badges/tomato.png",
+  "/static/brand/profile-badges/mask.png",
   "/static/pwa/icon-192.png",
   "/static/pwa/icon-512.png",
 ]);

@@ -42,6 +42,7 @@ import {
 } from "./pwa_view.js";
 import { createSavedRoute, deleteSavedRoute, downloadSavedRouteGpx, getSavedRoute, savedRouteShareUrl, shareSavedRoute, sharedRouteSlug } from "./saved_routes.js";
 import { applyImplicitEndpointMapClick, assignRouteEndpoint, currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, generationAvailability, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, renderEndpointTopologyControls, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, setRouteTopology, state, switchPlanningMode } from "./state.js";
+import { initializeTrailProfile } from "./trail_profile.js";
 
 const byId = (id) => document.getElementById(id);
 let elapsedTimer = null;
@@ -2835,6 +2836,10 @@ async function start() {
       ownsOutboxPresence: outingOutboxPresenceIsCurrent,
     });
     const currentOutingSlug = outingSlug();
+    const currentSharedRouteSlug = sharedRouteSlug();
+    await initializeTrailProfile({
+      requireSetup: !currentOutingSlug && !currentSharedRouteSlug,
+    });
     if (currentOutingSlug) {
       await startOutingPage(currentOutingSlug, {
         handleError,
@@ -2851,7 +2856,7 @@ async function start() {
       return;
     }
     bindEvents();
-    const sharedSlug = sharedRouteSlug();
+    const sharedSlug = currentSharedRouteSlug;
     let sharedSnapshot = null;
     if (sharedSlug) {
       sharedSnapshot = await loadSavedRoutePage(sharedSlug);

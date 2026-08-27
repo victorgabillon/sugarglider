@@ -44,7 +44,12 @@ export function parseSavedRouteReference(value, origin = window.location.origin)
   return match?.[1] ?? null;
 }
 
-export async function createOuting(title, displayName, savedRouteSlug) {
+export async function createOuting(
+  title,
+  displayName,
+  savedRouteSlug,
+  avatarKey = "blue",
+) {
   const response = await fetch("/v2/outings", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -52,6 +57,7 @@ export async function createOuting(title, displayName, savedRouteSlug) {
       schema_version: 1,
       title,
       participant_display_name: displayName,
+      participant_avatar_key: avatarKey,
       saved_route_slug: savedRouteSlug,
     }),
   });
@@ -67,7 +73,13 @@ export async function getOuting(slug) {
   return response.json();
 }
 
-export async function joinOuting(slug, token, displayName, savedRouteSlug) {
+export async function joinOuting(
+  slug,
+  token,
+  displayName,
+  savedRouteSlug,
+  avatarKey = "blue",
+) {
   const response = await fetch(
     `/v2/outings/${encodeURIComponent(slug)}/participants`,
     {
@@ -80,6 +92,7 @@ export async function joinOuting(slug, token, displayName, savedRouteSlug) {
       body: JSON.stringify({
         schema_version: 1,
         display_name: displayName,
+        avatar_key: avatarKey,
         saved_route_slug: savedRouteSlug,
       }),
     },

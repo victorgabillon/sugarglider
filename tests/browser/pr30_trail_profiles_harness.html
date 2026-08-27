@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>PR30 trail profiles harness</title>
+  <pre id="result">running</pre>
+  <script>
+    window.pr30HarnessResult = document.getElementById("result");
+    window.pr30UnhandledRejection = null;
+    window.addEventListener("error", (event) => {
+      window.pr30HarnessResult.dataset.status = "failed";
+      window.pr30HarnessResult.textContent = event.error?.stack ?? event.message;
+      document.title = "PR30 trail profiles harness failed";
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      window.pr30UnhandledRejection = event.reason;
+      window.pr30HarnessResult.dataset.status = "failed";
+      window.pr30HarnessResult.textContent = (
+        event.reason instanceof Error
+          ? event.reason.stack
+          : String(event.reason)
+      );
+      document.title = "PR30 trail profiles harness failed";
+    });
+  </script>
+  <script type="module">
+    import { runPr30TrailProfilesHarness } from "./pr30_trail_profiles_harness.js";
+
+    const result = window.pr30HarnessResult;
+    try {
+      const scenarios = await runPr30TrailProfilesHarness();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      if (window.pr30UnhandledRejection !== null) {
+        throw window.pr30UnhandledRejection;
+      }
+      if (result.dataset.status === "failed") throw new Error(result.textContent);
+      result.dataset.status = "passed";
+      result.textContent = JSON.stringify(scenarios);
+      document.title = `PR30 trail profiles harness passed ${scenarios.length}`;
+    } catch (error) {
+      result.dataset.status = "failed";
+      result.textContent = error instanceof Error ? error.stack : String(error);
+      document.title = "PR30 trail profiles harness failed";
+    }
+  </script>
+</html>

@@ -6,6 +6,7 @@ from typing import Annotated, Literal, Self
 from pydantic import (
     AwareDatetime,
     Field,
+    TypeAdapter,
     field_validator,
     model_validator,
 )
@@ -19,6 +20,15 @@ CapabilityToken = Annotated[str, Field(min_length=32, max_length=128)]
 OutingTitle = Annotated[str, Field(min_length=1, max_length=120)]
 ParticipantDisplayName = Annotated[str, Field(min_length=1, max_length=80)]
 SavedRouteSlugReference = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{20,64}$")]
+AvatarKey = Literal["blue", "forest", "orange", "tomato", "mask"]
+AVATAR_KEYS: tuple[AvatarKey, ...] = (
+    "blue",
+    "forest",
+    "orange",
+    "tomato",
+    "mask",
+)
+AVATAR_KEY_ADAPTER: TypeAdapter[AvatarKey] = TypeAdapter(AvatarKey)
 
 
 class OutingPlannedRoute(CanonicalModel):
@@ -33,6 +43,7 @@ class OutingParticipantSnapshot(CanonicalModel):
 
     participant_id: PublicParticipantId
     display_name: ParticipantDisplayName
+    avatar_key: AvatarKey = "blue"
     joined_at: AwareDatetime
     planned_route: OutingPlannedRoute
 
@@ -76,6 +87,7 @@ class OutingCreateRequest(CanonicalModel):
     schema_version: Literal[1] = 1
     title: OutingTitle
     participant_display_name: ParticipantDisplayName
+    participant_avatar_key: AvatarKey = "blue"
     saved_route_slug: SavedRouteSlugReference
 
     @field_validator("title", "participant_display_name", mode="before")
@@ -87,6 +99,7 @@ class OutingCreateRequest(CanonicalModel):
 class OutingJoinRequest(CanonicalModel):
     schema_version: Literal[1] = 1
     display_name: ParticipantDisplayName
+    avatar_key: AvatarKey = "blue"
     saved_route_slug: SavedRouteSlugReference
 
     @field_validator("display_name", mode="before")

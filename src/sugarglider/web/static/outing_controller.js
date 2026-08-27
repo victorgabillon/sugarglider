@@ -98,6 +98,7 @@ import {
   transportFailure,
 } from "./pwa_runtime.js";
 import { selectedCandidate, state } from "./state.js";
+import { trailProfileAvatarKey } from "./trail_profile.js";
 
 let callbacks = null;
 let outingMutationPending = false;
@@ -837,7 +838,12 @@ async function createOutingFromSavedRoute(title, displayName) {
   try {
     const savedSlug = savedRouteSlugForOuting(state);
     if (!savedSlug) return;
-    const created = await createOuting(title, displayName, savedSlug);
+    const created = await createOuting(
+      title,
+      displayName,
+      savedSlug,
+      trailProfileAvatarKey(),
+    );
     state.outingOwnerReceipt = {
       slug: created.slug,
       owner_token: created.owner_token,
@@ -953,6 +959,7 @@ async function joinCurrentOuting(displayName, savedRouteReference) {
       state.outingInviteToken,
       displayName,
       savedSlug,
+      trailProfileAvatarKey(),
     );
     outingMembershipRefresh.invalidate();
     state.outingSnapshot = joined.outing;
