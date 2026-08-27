@@ -9,6 +9,9 @@
     <string name="configure_title">Connect Sugarglider</string>
     <string name="configure_description">Enter the origin of a running Sugarglider server. Credentials and URL paths are not accepted.</string>
     <string name="configure_open">Open server</string>
+    <string name="configure_server">Server</string>
+    <string name="configure_server_title">Sugarglider server</string>
+    <string name="configure_server_description">View or change the current Sugarglider server</string>
     <string name="configure_change">Change server</string>
     <string name="outing_back_title">Leave this outing screen?</string>
     <string name="outing_back_sharing_continues">Android background sharing will continue even if you leave this screen.</string>

@@ -26,18 +26,23 @@
         </span>
       </a>
       <nav aria-label="File and generation actions">
-        <label class="button secondary header-action-utility" for="request-file" data-icon="json">Import JSON</label>
-        <input class="visually-hidden" id="request-file" type="file" accept="application/json,.json">
-        <button class="button secondary header-action-utility" id="export-plan" type="button" data-icon="json">Export plan JSON</button>
         <button class="button secondary header-action-important" id="save-route" type="button" disabled>Save route</button>
         <label class="button secondary header-action-important" for="gpx-file" data-icon="gpx">Import GPX</label>
         <input class="visually-hidden" id="gpx-file" type="file" accept="application/gpx+xml,.gpx">
         <button class="button primary header-action-primary" id="generate-top" type="button" data-icon="generate" aria-describedby="request-status" disabled>Generate</button>
-        <details class="about-panel header-action-utility">
-          <summary data-icon="info">About</summary>
-          <div class="about-content">
-            <img src="/static/brand/sugarglider-banner.png" width="1800" height="498" loading="lazy" alt="Sugarglider trail-planning mascot">
-            <p>Plan graph-valid hiking loops through every point you choose, compare trail and nature context, then export the selected result as a clean GPX track.</p>
+        <details class="header-tools header-action-utility">
+          <summary>Tools</summary>
+          <div class="header-tools-menu">
+            <label class="button secondary" for="request-file" data-icon="json">Import plan JSON</label>
+            <input class="visually-hidden" id="request-file" type="file" accept="application/json,.json">
+            <button class="button secondary" id="export-plan" type="button" data-icon="json">Export plan JSON</button>
+            <details class="about-panel">
+              <summary data-icon="info">About Sugarglider</summary>
+              <div class="about-content">
+                <img src="/static/brand/sugarglider-banner.png" width="1800" height="498" loading="lazy" alt="Sugarglider trail-planning mascot">
+                <p>Plan graph-valid hiking loops through every point you choose, compare trail and nature context, then export the selected result as a clean GPX track.</p>
+              </div>
+            </details>
           </div>
         </details>
       </nav>
@@ -81,50 +86,74 @@
     <section id="saved-route-panel" class="notice saved-route hidden" role="status" aria-labelledby="saved-route-title">
       <div class="notice-mark" aria-hidden="true">↗</div>
       <div class="notice-copy">
-        <h2 id="saved-route-title">Immutable saved route</h2>
-        <p id="saved-route-message">This unlisted link displays the stored request and selected candidate exactly as saved.</p>
+        <h2 id="saved-route-title">Route saved</h2>
+        <p id="saved-route-message">Your selected route is stored at this unlisted link.</p>
         <div class="saved-route-link-row">
-          <label for="saved-route-link">Share link</label>
+          <label for="saved-route-link">Your route link</label>
           <input id="saved-route-link" readonly>
           <button id="copy-saved-route-link" class="button secondary" type="button">Copy link</button>
-          <button id="share-saved-route" class="button secondary" type="button">Share</button>
-          <button id="use-saved-route" class="button secondary hidden" type="button">Use as a new plan</button>
-          <button id="delete-saved-route" class="text-button danger hidden" type="button">Delete saved route</button>
-          <button id="dismiss-saved-route" class="text-button hidden" type="button">Dismiss</button>
+        </div>
+        <div class="saved-route-next-step">
+          <h3>Ready to go together?</h3>
+          <p>Create an outing so each participant can bring an independent route.</p>
           <button id="show-create-outing" class="button primary hidden" type="button">Create outing</button>
-          <button id="save-saved-route-offline" class="button secondary hidden" type="button">Save for offline use</button>
-          <button id="remove-saved-route-offline" class="text-button hidden" type="button">Remove offline copy</button>
-          <p class="help">This browser keeps at most eight explicit offline copies. Saving another copy may replace the oldest one, and the browser may still evict stored data.</p>
         </div>
         <form id="create-outing-form" class="outing-form hidden">
           <label>Outing title<input id="outing-title" maxlength="120" required></label>
           <label>Your display name<input id="outing-creator-name" maxlength="80" required></label>
           <button id="create-outing" class="button primary" type="submit">Create outing</button>
         </form>
+        <details class="action-disclosure">
+          <summary>More actions</summary>
+          <div class="button-row">
+            <button id="share-saved-route" class="button secondary" type="button">Share route</button>
+            <button id="use-saved-route" class="button secondary hidden" type="button">Use as a new plan</button>
+            <button id="save-saved-route-offline" class="button secondary hidden" type="button">Save for offline use</button>
+            <button id="remove-saved-route-offline" class="text-button hidden" type="button">Remove offline copy</button>
+            <button id="delete-saved-route" class="text-button danger hidden" type="button">Delete saved route</button>
+            <button id="dismiss-saved-route" class="text-button hidden" type="button">Dismiss</button>
+          </div>
+          <details class="storage-details">
+            <summary>How offline storage works</summary>
+            <p class="help">This browser keeps at most eight explicit offline copies. Saving another copy may replace the oldest one, and the browser may still evict stored data.</p>
+          </details>
+        </details>
       </div>
     </section>
     <section id="outing-receipt-panel" class="notice saved-route hidden" role="status" aria-labelledby="outing-receipt-title">
       <div class="notice-mark" aria-hidden="true">◎</div>
       <div class="notice-copy">
         <h2 id="outing-receipt-title">Outing created</h2>
-        <p>Public outing link: view-only unlisted link.</p>
+        <p>Invite participants to bring their own saved routes.</p>
         <div class="saved-route-link-row">
-          <input id="outing-public-link" aria-label="Public outing link" readonly>
-          <button id="open-outing" class="button secondary" type="button">Open public view</button>
-          <button id="copy-outing-public-link" class="button secondary" type="button">Copy public link</button>
+          <label for="outing-invite-link">Invitation link</label>
+          <input id="outing-invite-link" aria-label="Outing invitation link" readonly>
+          <button id="copy-outing-invite-link" class="button secondary" type="button">Copy invitation</button>
         </div>
         <div class="button-row">
-          <button id="open-outing-live-here" class="button primary hidden" type="button">Open live outing in this tab</button>
+          <button id="open-outing-live-here" class="button primary hidden" type="button">Open live outing</button>
         </div>
-        <p class="context-note">Opening here keeps your participant capability only in this tab's memory so you can explicitly start foreground sharing. Reloading intentionally returns to viewer-only mode.</p>
-        <p>Invitation link: permits joining until the outing expires or is full.</p>
-        <div class="saved-route-link-row">
-          <input id="outing-invite-link" aria-label="Outing invitation link" readonly>
-          <button id="copy-outing-invite-link" class="button secondary" type="button">Copy invitation link</button>
-          <button id="share-outing-invite" class="button secondary" type="button">Share invitation</button>
-          <button id="delete-outing" class="text-button danger" type="button">Delete outing</button>
-          <button id="dismiss-outing" class="text-button" type="button">Dismiss</button>
-        </div>
+        <p class="receipt-privacy">Invitation recipients can join; the public link is view-only.</p>
+        <details class="action-disclosure">
+          <summary>More sharing options</summary>
+          <div class="button-row">
+            <button id="share-outing-invite" class="button secondary" type="button">Share invitation</button>
+          </div>
+          <div class="saved-route-link-row">
+            <label for="outing-public-link">View-only public link</label>
+            <input id="outing-public-link" aria-label="Public outing link" readonly>
+            <button id="open-outing" class="button secondary" type="button">Open public view</button>
+            <button id="copy-outing-public-link" class="button secondary" type="button">Copy public link</button>
+          </div>
+          <div class="button-row">
+            <button id="delete-outing" class="text-button danger" type="button">Delete outing</button>
+            <button id="dismiss-outing" class="text-button" type="button">Dismiss</button>
+          </div>
+          <details class="privacy-details">
+            <summary>Privacy details</summary>
+            <p class="context-note">Opening here keeps your participant capability only in this tab's memory so you can explicitly start sharing. Reloading intentionally returns to viewer-only mode. The invitation permits joining until the outing expires or is full.</p>
+          </details>
+        </details>
       </div>
     </section>
     <main id="planner" class="planner">
@@ -191,17 +220,20 @@
                 <label>Verified drinking water<select id="water-preference"><option value="prefer">Prefer</option><option value="off">Off</option></select></label>
               </div>
             </section>
-            <label id="waypoint-order-field">Waypoint order<select id="point-order-mode"><option value="fixed">Fixed input order</option><option value="optimize" data-optimized="true">Optimize loop waypoints</option></select></label>
-            <label>Path selection<select id="path-selection-mode"><option value="shortest">Natural shortest paths</option><option value="low_overlap">Low-overlap alternatives</option></select></label>
-            <label>Loop shape<select id="loop-geometry-preference"><option value="off">Off</option><option value="prefer">Prefer balanced loops</option></select></label>
-            <p class="field-help">Prefers compact, directionally balanced loops with fewer close parallel corridors. Distance, backtracking and repetition remain more important.</p>
-            <label>Nature preference<select id="nature-preference"><option value="off">Off</option><option value="prefer">Prefer mapped nature</option></select></label>
-            <p id="nature-availability" class="field-help" role="status"></p>
+            <details class="places-advanced route-advanced">
+              <summary>Advanced route preferences</summary>
+              <label id="waypoint-order-field">Waypoint order<select id="point-order-mode"><option value="fixed">Fixed input order</option><option value="optimize" data-optimized="true">Optimize loop waypoints</option></select></label>
+              <label>Path selection<select id="path-selection-mode"><option value="shortest">Natural shortest paths</option><option value="low_overlap">Low-overlap alternatives</option></select></label>
+              <label>Loop shape<select id="loop-geometry-preference"><option value="off">Off</option><option value="prefer">Prefer balanced loops</option></select></label>
+              <p class="field-help">Prefers compact, directionally balanced loops with fewer close parallel corridors. Distance, backtracking and repetition remain more important.</p>
+              <label>Nature preference<select id="nature-preference"><option value="off">Off</option><option value="prefer">Prefer mapped nature</option></select></label>
+              <p id="nature-availability" class="field-help" role="status"></p>
+            </details>
             <input id="seed" type="hidden" value="0">
           </form>
         </details>
 
-        <details class="control-section places-controls" open>
+        <details class="control-section places-controls">
           <summary><span>Places</span><span id="places-count"></span></summary>
           <p id="places-status" class="field-help places-status" role="status" aria-live="polite">Checking the local places index…</p>
           <form id="places-filters">
@@ -263,14 +295,17 @@
         <div id="map" role="application" aria-label="Interactive trail route map"></div>
         <section id="planner-empty" class="map-empty-state" aria-labelledby="empty-title">
           <img src="/static/brand/sugarglider-flying-map.png" width="1024" height="1024" loading="lazy" alt="">
-          <div><h2 id="empty-title">Choose the paths that matter</h2><p>Click the map to set an Auto Tour start, import a waypoint request, or inspect a GPX.</p></div>
+          <div><h2 id="empty-title">Start on the map</h2><p>Tap or click the map to choose your starting point.</p></div>
         </section>
-        <div class="map-tools" aria-label="Map display controls">
-          <label data-icon="alternatives"><input id="show-all" type="checkbox" checked> Show alternatives</label>
-          <label data-icon="nature"><input id="show-nature" type="checkbox"> Show nature</label>
-          <label data-icon="direction"><input id="show-direction" type="checkbox" checked> Show direction arrows</label>
-          <label id="show-dropped-requested-radii-control" class="advanced-map-control" title="Advanced requested-stop display"><input id="show-dropped-requested-radii" type="checkbox"> Dropped access-search areas</label>
-        </div>
+        <details class="map-tools" aria-label="Map display controls">
+          <summary>Layers</summary>
+          <div class="map-tool-options">
+            <label data-icon="alternatives"><input id="show-all" type="checkbox" checked> Show alternatives</label>
+            <label data-icon="nature"><input id="show-nature" type="checkbox"> Show nature</label>
+            <label data-icon="direction"><input id="show-direction" type="checkbox" checked> Show direction arrows</label>
+            <label id="show-dropped-requested-radii-control" class="advanced-map-control" title="Advanced requested-stop display"><input id="show-dropped-requested-radii" type="checkbox"> Dropped access-search areas</label>
+          </div>
+        </details>
         <details class="legend">
           <summary>Map legend</summary>
           <div class="legend-items">
@@ -307,15 +342,18 @@
 
       <section id="outing-view-panel" class="notice outing-view hidden" aria-labelledby="outing-view-title">
         <div class="notice-copy">
-          <p class="eyebrow">Shared outing</p>
           <h1 id="outing-view-title"></h1>
+          <p class="eyebrow">Shared outing</p>
           <p id="outing-view-summary"></p>
-          <p class="context-note">This outing is unlisted, not access-controlled. Anyone with the public link can see participant display names, planned routes, and currently shared positions. Use a nickname when appropriate.</p>
-          <div class="button-row">
-            <button id="save-outing-offline" class="button secondary hidden" type="button">Save for offline use</button>
-            <button id="remove-outing-offline" class="text-button hidden" type="button">Remove offline copy</button>
+          <details class="outing-secondary-actions">
+            <summary>Outing and offline details</summary>
+            <div class="button-row">
+              <button id="save-outing-offline" class="button secondary hidden" type="button">Save for offline use</button>
+              <button id="remove-outing-offline" class="text-button hidden" type="button">Remove offline copy</button>
+            </div>
             <p class="help">This browser keeps at most eight explicit offline copies. Saving another copy may replace the oldest one, and the browser may still evict stored data.</p>
-          </div>
+            <p class="context-note">This outing is unlisted, not access-controlled. Anyone with the public link can see participant display names, planned routes, and currently shared positions. Use a nickname when appropriate.</p>
+          </details>
           <p id="offline-map-status" class="context-note hidden">The basemap is unavailable offline. Stored route geometry is shown on a neutral background.</p>
           <section id="outing-live-panel" class="outing-live-panel hidden" aria-labelledby="outing-live-title">
             <div class="section-heading">
@@ -324,13 +362,17 @@
             </div>
             <p id="outing-live-summary">No current positions.</p>
             <div id="outing-live-own-controls" class="outing-live-own-controls hidden">
+              <h3>Your location</h3>
+              <p id="outing-live-tracking-status" class="status" aria-live="polite">Not currently sharing</p>
               <div class="button-row">
                 <button id="start-outing-live-sharing" class="button primary" type="button">Start sharing</button>
-                <button id="stop-outing-live-sharing" class="button secondary hidden" type="button">Stop sharing</button>
+                <button id="stop-outing-live-sharing" class="button danger hidden" type="button">Stop sharing</button>
               </div>
-              <p id="outing-live-tracking-status" class="status" aria-live="polite">Position sharing stopped</p>
             </div>
-            <p id="outing-live-sharing-disclosure" class="context-note">Sharing starts only after pressing Start and uses foreground browser location. No historical activity track is retained. Press Stop for reliable removal. If this tab closes or is suspended first, the last position may remain visible until server expiry.</p>
+            <details class="sharing-details">
+              <summary>How location sharing works</summary>
+              <p id="outing-live-sharing-disclosure" class="context-note">Sharing starts only after pressing Start and uses foreground browser location. No historical activity track is retained. Press Stop for reliable removal. If this tab closes or is suspended first, the last position may remain visible until server expiry.</p>
+            </details>
           </section>
           <div id="outing-participant-cards" class="outing-participant-cards"></div>
           <form id="join-outing-form" class="outing-form hidden">
@@ -361,7 +403,10 @@
       <aside class="panel metrics" aria-labelledby="metrics-title">
         <div class="panel-heading"><div><p class="eyebrow">Inspect</p><h2 id="metrics-title">Candidate details</h2></div></div>
         <div id="metrics-empty" class="metrics-empty"><p>Select a generated candidate to inspect exact route, trail, repetition, and mapped-nature metrics.</p></div>
-        <div id="metrics-content" class="hidden"></div>
+        <details class="metrics-disclosure">
+          <summary>Technical route metrics</summary>
+          <div id="metrics-content" class="hidden"></div>
+        </details>
         <div class="export-actions">
           <button id="reverse-route" class="button secondary wide" type="button" disabled>Reverse direction</button>
           <button id="save-route-selected" class="button secondary wide" type="button" disabled>Save selected route</button>

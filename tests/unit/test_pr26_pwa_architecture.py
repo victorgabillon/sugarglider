@@ -150,22 +150,22 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_pr28_html_and_css() -> None:
+def test_shared_shell_generation_tracks_pr29_html_and_css() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v5"
+    assert generation.group(1) == "v6"
     assert {
         name: _sha256(STATIC_DIRECTORY / name) for name in ("index.html", "styles.css")
     } == {
         "index.html": (
-            "cc6bbe9f45f8269c838dee6d13576bb6e6e0b16b53369c21e25b6ef0e47df593"
+            "4b96f72bf076eb5702ccd8b5672e33611d197f32d77a9ef56d3b35851cde5a19"
         ),
         "styles.css": (
-            "6564a0f6c8c68155272e75a22a9e177ff2fe4b1fb41815df6c09644822bdd6e0"
+            "94027d1bfe66281cd1682c3c303f02aecaed7191e188bad0baa895347406577c"
         ),
     }
 

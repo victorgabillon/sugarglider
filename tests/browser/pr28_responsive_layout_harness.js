@@ -131,6 +131,7 @@ function plannerScenario(frame, width) {
     equal(style.flexDirection, "column", `planner stack is vertical at ${width}px`);
   }
   if (width <= PHONE_MAX) {
+    document.querySelector(".header-tools").open = true;
     const generate = byId(document, "generate-top").getBoundingClientRect();
     const importGpx = document.querySelector("label[for='gpx-file']").getBoundingClientRect();
     const save = byId(document, "save-route").getBoundingClientRect();
@@ -148,6 +149,7 @@ function savedRouteScenario(frame, width) {
   const document = fixtureDocument(frame);
   resetState(document);
   reveal(document, "saved-route-panel");
+  byId(document, "saved-route-panel").querySelector(".action-disclosure").open = true;
   for (const id of [
     "use-saved-route",
     "delete-saved-route",
@@ -170,6 +172,7 @@ function outingCreatedScenario(frame, width) {
   const document = fixtureDocument(frame);
   resetState(document);
   reveal(document, "outing-receipt-panel");
+  byId(document, "outing-receipt-panel").querySelector(".action-disclosure").open = true;
   reveal(document, "open-outing-live-here");
 
   assertNoPageOverflow(frame, `outing created ${width}px`);
@@ -190,11 +193,12 @@ function publicOutingScenario(frame, width, native) {
   reveal(document, "outing-view-panel");
   reveal(document, "outing-live-panel");
   reveal(document, "save-outing-offline");
+  document.querySelector(".outing-secondary-actions").open = true;
   reveal(document, "outing-remember-actions");
   if (native) {
     reveal(document, "outing-live-own-controls");
     const start = byId(document, "start-outing-live-sharing");
-    start.textContent = "Start Android background sharing";
+    start.textContent = "Start background sharing";
     start.disabled = false;
   }
 

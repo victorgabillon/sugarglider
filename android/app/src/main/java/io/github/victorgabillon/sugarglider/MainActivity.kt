@@ -206,34 +206,25 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(getColor(R.color.brand_cream))
         }
-        val toolbar = LinearLayout(this).apply {
+        val serverChrome = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(6), dp(8), dp(6))
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            setPadding(dp(4), dp(2), dp(6), dp(2))
             setBackgroundColor(getColor(R.color.brand_green))
         }
-        toolbar.addView(TextView(this).apply {
-            text = origin
+        serverChrome.addView(Button(this).apply {
+            setText(R.string.configure_server)
+            contentDescription = getString(R.string.configure_server_description)
             setTextColor(Color.WHITE)
-            maxLines = 1
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        toolbar.addView(Button(this).apply {
-            setText(R.string.configure_change)
-            setOnClickListener {
-                if (!ServerChangePolicy.allowed(application.statusRepository.current())) {
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle("Stop sharing first")
-                        .setMessage(
-                            "Stop Android background sharing before changing server. Participant authority is never transferred to another origin.",
-                        ).setPositiveButton("OK", null)
-                        .show()
-                } else {
-                    getPreferences(MODE_PRIVATE).edit { remove(PREFERENCE_SERVER_ORIGIN) }
-                    showServerConfiguration()
-                }
-            }
+            textSize = 13f
+            isAllCaps = false
+            minWidth = 0
+            minHeight = dp(40)
+            setPadding(dp(12), 0, dp(12), 0)
+            setBackgroundColor(Color.TRANSPARENT)
+            setOnClickListener { showServerMenu(origin) }
         })
-        root.addView(toolbar, fullWidthWrap())
+        root.addView(serverChrome, fullWidthWrap())
         val created = WebView(this)
         webView = created
         created.settings.apply {
@@ -258,6 +249,29 @@ class MainActivity : Activity() {
         )
         setContentView(root)
         loadConfiguredPage()
+    }
+
+    private fun showServerMenu(origin: String) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.configure_server_title)
+            .setMessage(origin)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.configure_change) { _, _ -> requestServerChange() }
+            .show()
+    }
+
+    private fun requestServerChange() {
+        if (!ServerChangePolicy.allowed(application.statusRepository.current())) {
+            AlertDialog.Builder(this)
+                .setTitle("Stop sharing first")
+                .setMessage(
+                    "Stop Android background sharing before changing server. Participant authority is never transferred to another origin.",
+                ).setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        getPreferences(MODE_PRIVATE).edit { remove(PREFERENCE_SERVER_ORIGIN) }
+        showServerConfiguration()
     }
 
     private fun loadConfiguredPage() {
