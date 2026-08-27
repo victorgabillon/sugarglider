@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from sugarglider.outings.models import AVATAR_KEYS, AvatarKey
+
 
 class OutingRepositoryError(Exception):
     """A persistence operation failed without exposing adapter details."""
@@ -62,6 +64,7 @@ class OutingParticipantRecord:
     candidate_json: str
     joined_at_utc: datetime
     join_order: int
+    avatar_key: AvatarKey = "blue"
 
     def __post_init__(self) -> None:
         if (
@@ -70,6 +73,7 @@ class OutingParticipantRecord:
             or not self.public_id
             or len(self.participant_token_hash) != 32
             or not self.display_name
+            or self.avatar_key not in AVATAR_KEYS
             or not self.source_request_json
             or not self.candidate_json
             or self.joined_at_utc.tzinfo is None

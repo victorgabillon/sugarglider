@@ -43,6 +43,13 @@ BRAND_ASSET_FILENAMES = (
     "sugarglider-map-pin.png",
     "sugarglider-water-pin.png",
 )
+PROFILE_BADGE_FILENAMES = (
+    "blue.png",
+    "forest.png",
+    "orange.png",
+    "tomato.png",
+    "mask.png",
+)
 FONT_GLYPH_HASHES: dict[str, str] = {
     "0-255.pbf": "64da7011e07531351a249a3d26aad76e2f22e4e321e50833f742697b453e8365",
     "256-511.pbf": "78298bbd8198c117ccdffe66bf9bbf646fdc1210b7e1bf222f5a9b29b366d7a5",
@@ -170,6 +177,7 @@ def test_brand_asset_sync_is_independent_of_current_working_directory(
         text=True,
     )
     assert all(filename in result.stdout for filename in BRAND_ASSET_FILENAMES)
+    assert all(filename in result.stdout for filename in PROFILE_BADGE_FILENAMES)
 
 
 @pytest.mark.asyncio
@@ -241,6 +249,14 @@ async def test_every_runtime_brand_asset_is_served_as_png(
         assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
     missing = await client.get("/static/brand/not-a-brand-asset.png")
     assert missing.status_code == 404
+    for filename in PROFILE_BADGE_FILENAMES:
+        response = await client.get(f"/static/brand/profile-badges/{filename}")
+        assert response.status_code == 200, filename
+        assert response.headers["content-type"] == "image/png"
+        assert (
+            response.content
+            == (CANONICAL_BRAND_DIRECTORY / "profile-badges" / filename).read_bytes()
+        )
 
     for filename, expected_hash in FONT_GLYPH_HASHES.items():
         glyphs = await client.get(f"/static/fonts/Open%20Sans%20Semibold/{filename}")

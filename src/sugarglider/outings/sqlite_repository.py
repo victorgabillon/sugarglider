@@ -9,6 +9,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+from sugarglider.outings.models import AVATAR_KEY_ADAPTER
 from sugarglider.outings.repository import (
     OutingAggregateRecord,
     OutingCapacityReachedError,
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS outing_participants (
     public_id TEXT NOT NULL,
     participant_token_hash BLOB NOT NULL,
     display_name TEXT NOT NULL,
+    avatar_key TEXT NOT NULL DEFAULT 'blue',
     source_request_json TEXT NOT NULL,
     candidate_json TEXT NOT NULL,
     joined_at_utc TEXT NOT NULL,
@@ -110,11 +112,11 @@ class SQLiteOutingRepository:
                 connection.isolation_level = None
                 connection.execute("BEGIN IMMEDIATE")
                 try:
-                    columns = {
+                    outing_columns = {
                         str(row["name"])
                         for row in connection.execute("PRAGMA table_info(outings)")
                     }
-                    if "live_event_cursor" not in columns:
+                    if "live_event_cursor" not in outing_columns:
                         connection.execute(
                             """
                             ALTER TABLE outings
@@ -132,6 +134,19 @@ class SQLiteOutingRepository:
                                 ),
                                 0
                             )
+                            """
+                        )
+                    participant_columns = {
+                        str(row["name"])
+                        for row in connection.execute(
+                            "PRAGMA table_info(outing_participants)"
+                        )
+                    }
+                    if "avatar_key" not in participant_columns:
+                        connection.execute(
+                            """
+                            ALTER TABLE outing_participants
+                            ADD COLUMN avatar_key TEXT NOT NULL DEFAULT 'blue'
                             """
                         )
                     connection.commit()
@@ -182,7 +197,8 @@ class SQLiteOutingRepository:
                 participant_rows = connection.execute(
                     """
                     SELECT id, outing_id, public_id, participant_token_hash,
-                           display_name, source_request_json, candidate_json,
+                           display_name, avatar_key, source_request_json,
+                           candidate_json,
                            joined_at_utc, join_order
                     FROM outing_participants
                     WHERE outing_id = ?
@@ -342,9 +358,9 @@ class SQLiteOutingRepository:
             """
             INSERT INTO outing_participants (
                 id, outing_id, public_id, participant_token_hash,
-                display_name, source_request_json, candidate_json,
-                joined_at_utc, join_order
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                display_name, avatar_key, source_request_json,
+                candidate_json, joined_at_utc, join_order
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 participant.id,
@@ -352,6 +368,7 @@ class SQLiteOutingRepository:
                 participant.public_id,
                 participant.participant_token_hash,
                 participant.display_name,
+                participant.avatar_key,
                 participant.source_request_json,
                 participant.candidate_json,
                 _format_timestamp(participant.joined_at_utc),
@@ -399,6 +416,7 @@ def _participant_record(row: sqlite3.Row) -> OutingParticipantRecord:
             public_id=str(row["public_id"]),
             participant_token_hash=bytes(row["participant_token_hash"]),
             display_name=str(row["display_name"]),
+            avatar_key=AVATAR_KEY_ADAPTER.validate_python(row["avatar_key"]),
             source_request_json=str(row["source_request_json"]),
             candidate_json=str(row["candidate_json"]),
             joined_at_utc=_parse_timestamp(str(row["joined_at_utc"])),

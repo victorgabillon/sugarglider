@@ -11,6 +11,13 @@ BRAND_ASSET_FILENAMES: tuple[str, ...] = (
     "sugarglider-map-pin.png",
     "sugarglider-water-pin.png",
 )
+PROFILE_BADGE_FILENAMES: tuple[str, ...] = (
+    "blue.png",
+    "forest.png",
+    "orange.png",
+    "tomato.png",
+    "mask.png",
+)
 
 
 def repository_root() -> Path:
@@ -58,6 +65,36 @@ def sync_brand_assets() -> tuple[Path, ...]:
     for filename in BRAND_ASSET_FILENAMES:
         source = canonical_directory / filename
         destination = runtime_directory / filename
+        copyfile(source, destination)
+        copied.append(destination)
+        print(f"Copied {source.relative_to(root)} -> {destination.relative_to(root)}")
+    canonical_badges = canonical_directory / "profile-badges"
+    runtime_badges = runtime_directory / "profile-badges"
+    permitted_badges = set(PROFILE_BADGE_FILENAMES)
+    missing_badges = tuple(
+        name
+        for name in PROFILE_BADGE_FILENAMES
+        if not (canonical_badges / name).is_file()
+    )
+    if missing_badges:
+        raise FileNotFoundError(
+            "Missing canonical profile badge(s): " + ", ".join(missing_badges)
+        )
+    unexpected_badges = sorted(_png_names(canonical_badges) - permitted_badges)
+    if unexpected_badges:
+        raise ValueError(
+            "Unexpected canonical profile badge(s): " + ", ".join(unexpected_badges)
+        )
+    runtime_badges.mkdir(parents=True, exist_ok=True)
+    unexpected_runtime_badges = sorted(_png_names(runtime_badges) - permitted_badges)
+    if unexpected_runtime_badges:
+        raise ValueError(
+            "Unexpected runtime profile badge(s): "
+            + ", ".join(unexpected_runtime_badges)
+        )
+    for filename in PROFILE_BADGE_FILENAMES:
+        source = canonical_badges / filename
+        destination = runtime_badges / filename
         copyfile(source, destination)
         copied.append(destination)
         print(f"Copied {source.relative_to(root)} -> {destination.relative_to(root)}")

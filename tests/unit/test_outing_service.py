@@ -216,9 +216,11 @@ def test_create_hashes_all_capabilities_and_round_trips_exact_route(
         "  Forest day  ",
         "  Victor  ",
         _route(saved_route_source_request, saved_route_candidate),
+        participant_avatar_key="forest",
     )
     assert created.title == "Forest day"
     assert created.participants[0].display_name == "Victor"
+    assert created.participants[0].avatar_key == "forest"
     assert created.participants[0].planned_route.source_request == (
         saved_route_source_request
     )
@@ -251,7 +253,7 @@ def test_two_participants_keep_independent_profiles_geometry_and_distance(
         _route(saved_route_source_request, saved_route_candidate),
     )
     cycling = _cycling_route(saved_route_source_request, saved_route_candidate)
-    joined = service.join(SLUG, JOIN, "Cyclist", cycling)
+    joined = service.join(SLUG, JOIN, "Cyclist", cycling, avatar_key="mask")
     first, second = joined.outing.participants
     assert first.planned_route.candidate.routing_profile == "hike"
     assert second.planned_route.candidate.routing_profile == "city_bike"
@@ -262,6 +264,8 @@ def test_two_participants_keep_independent_profiles_geometry_and_distance(
         second.planned_route.candidate.route.summary.distance_m
     )
     assert created.participants[0].planned_route == first.planned_route
+    assert first.avatar_key == "blue"
+    assert second.avatar_key == "mask"
     assert service.participant_route(SLUG, second.participant_id) == cycling
 
 

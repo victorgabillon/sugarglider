@@ -227,6 +227,7 @@ async def test_create_get_gpx_copy_survives_source_deletion_without_planning(
             "schema_version": 1,
             "title": "Independent routes",
             "participant_display_name": "Runner",
+            "participant_avatar_key": "forest",
             "saved_route_slug": saved["slug"],
         },
     )
@@ -248,6 +249,7 @@ async def test_create_get_gpx_copy_survives_source_deletion_without_planning(
         "source_request": saved["source_request"],
         "candidate": saved["candidate"],
     }
+    assert fetched.json()["participants"][0]["avatar_key"] == "forest"
     public_body = fetched.text
     for field in ("owner_token", "join_token", "participant_token"):
         assert field not in public_body
@@ -305,12 +307,16 @@ async def test_join_leave_and_delete_capabilities_are_safe(
         headers={"X-Sugarglider-Outing-Join-Token": created["join_token"]},
         json={
             "display_name": "Second",
+            "avatar_key": "mask",
             "saved_route_slug": saved["slug"],
         },
     )
     assert joined_response.status_code == 201
     joined = joined_response.json()
     assert len(joined["outing"]["participants"]) == 2
+    assert [
+        participant["avatar_key"] for participant in joined["outing"]["participants"]
+    ] == ["blue", "mask"]
     participant_id = joined["participant_id"]
     wrong_leave = await client.delete(
         f"/v2/outings/{created['slug']}/participants/{participant_id}",
@@ -338,6 +344,49 @@ async def test_join_leave_and_delete_capabilities_are_safe(
     assert deleted.status_code == 204
     assert deleted.headers["cache-control"] == "no-store"
     assert (await client.get(f"/v2/outings/{created['slug']}")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_outing_avatar_keys_reject_unknown_values(
+    outing_client: tuple[httpx.AsyncClient, NoRouteService, NoPlanService],
+    saved_route_source_request: PlanRequest,
+    saved_route_candidate: PlanCandidate,
+) -> None:
+    client, _, _ = outing_client
+    saved = await _saved(client, saved_route_source_request, saved_route_candidate)
+    invalid_create = await client.post(
+        "/v2/outings",
+        json={
+            "title": "Outing",
+            "participant_display_name": "First",
+            "participant_avatar_key": "unknown",
+            "saved_route_slug": saved["slug"],
+        },
+    )
+    assert invalid_create.status_code == 422
+
+    created = (
+        await client.post(
+            "/v2/outings",
+            json={
+                "title": "Outing",
+                "participant_display_name": "First",
+                "saved_route_slug": saved["slug"],
+            },
+        )
+    ).json()
+    invalid_join = await client.post(
+        f"/v2/outings/{created['slug']}/participants",
+        headers={
+            "X-Sugarglider-Outing-Join-Token": created["join_token"],
+        },
+        json={
+            "display_name": "Second",
+            "avatar_key": "purple",
+            "saved_route_slug": saved["slug"],
+        },
+    )
+    assert invalid_join.status_code == 422
 
 
 @pytest.mark.asyncio

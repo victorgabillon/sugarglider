@@ -28,6 +28,7 @@ from sugarglider.outings.live_repository import (
     OutingParticipantAuthorizationRecord,
 )
 from sugarglider.outings.models import (
+    AvatarKey,
     OutingCreated,
     OutingParticipantJoined,
     OutingParticipantSnapshot,
@@ -64,6 +65,7 @@ class OutingOperations(Protocol):
         title: str,
         participant_display_name: str,
         planned_route: OutingPlannedRoute,
+        participant_avatar_key: AvatarKey = "blue",
     ) -> OutingCreated: ...
 
     def get(self, slug: str) -> OutingSnapshot: ...
@@ -76,6 +78,7 @@ class OutingOperations(Protocol):
         join_token: str | None,
         display_name: str,
         planned_route: OutingPlannedRoute,
+        avatar_key: AvatarKey = "blue",
     ) -> OutingParticipantJoined: ...
 
     def participant_route(
@@ -157,6 +160,7 @@ class OutingService:
         title: str,
         participant_display_name: str,
         planned_route: OutingPlannedRoute,
+        participant_avatar_key: AvatarKey = "blue",
     ) -> OutingCreated:
         source_json, candidate_json = self._validated_route_json(planned_route)
         title = _text(title, maximum=120)
@@ -190,6 +194,7 @@ class OutingService:
                 public_id=public_id,
                 participant_token_hash=participant_hash,
                 display_name=participant_display_name,
+                avatar_key=participant_avatar_key,
                 source_request_json=source_json,
                 candidate_json=candidate_json,
                 joined_at_utc=created_at,
@@ -231,6 +236,7 @@ class OutingService:
         join_token: str | None,
         display_name: str,
         planned_route: OutingPlannedRoute,
+        avatar_key: AvatarKey = "blue",
     ) -> OutingParticipantJoined:
         aggregate = self._aggregate(slug)
         if not _authorized(aggregate.outing.join_token_hash, join_token):
@@ -249,6 +255,7 @@ class OutingService:
                 public_id=public_id,
                 participant_token_hash=_hash(participant_token),
                 display_name=display_name,
+                avatar_key=avatar_key,
                 source_request_json=source_json,
                 candidate_json=candidate_json,
                 joined_at_utc=joined_at,
@@ -369,6 +376,7 @@ class OutingService:
                 OutingParticipantSnapshot(
                     participant_id=participant.public_id,
                     display_name=participant.display_name,
+                    avatar_key=participant.avatar_key,
                     joined_at=participant.joined_at_utc,
                     planned_route=self._planned_route(participant),
                 )
@@ -452,8 +460,9 @@ class UnavailableOutingService:
         title: str,
         participant_display_name: str,
         planned_route: OutingPlannedRoute,
+        participant_avatar_key: AvatarKey = "blue",
     ) -> OutingCreated:
-        del title, participant_display_name, planned_route
+        del title, participant_display_name, planned_route, participant_avatar_key
         raise OutingStorageError
 
     def get(self, slug: str) -> OutingSnapshot:
@@ -470,8 +479,9 @@ class UnavailableOutingService:
         join_token: str | None,
         display_name: str,
         planned_route: OutingPlannedRoute,
+        avatar_key: AvatarKey = "blue",
     ) -> OutingParticipantJoined:
-        del slug, join_token, display_name, planned_route
+        del slug, join_token, display_name, planned_route, avatar_key
         raise OutingStorageError
 
     def participant_route(self, slug: str, participant_id: str) -> OutingPlannedRoute:

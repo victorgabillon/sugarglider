@@ -1,4 +1,11 @@
 import { gpxFeatureCollection } from "./gpx.js";
+import {
+  AVATAR_KEYS,
+  DEFAULT_AVATAR_KEY,
+  avatarImageUrl,
+  normalizeAvatarKey,
+  outingAvatarImageId,
+} from "./avatar.js";
 import { liveFreshness } from "./outing_live_state.js";
 import { requestedPlaceIdentifier } from "./state.js";
 
@@ -164,6 +171,10 @@ export function initializeMap(config, handlers) {
       installDirectionArrowImage();
     } catch {
       handlers.onError("Local direction arrows could not be prepared. Route controls remain available.");
+    }
+    const avatarImagesAvailable = await installOutingAvatarImages();
+    if (!avatarImagesAvailable) {
+      handlers.onError("One or more local outing badges could not be prepared. Participant-colored fallback markers remain available.");
     }
     ready = true;
     handlers.onReady();
@@ -434,6 +445,22 @@ async function installPoiImages() {
       map.addImage(name, await loadSvgImage(body), { pixelRatio: 2 });
     }
   }
+}
+
+async function installOutingAvatarImages() {
+  let allAvailable = true;
+  for (const avatarKey of AVATAR_KEYS) {
+    const imageId = outingAvatarImageId(avatarKey);
+    if (map.hasImage(imageId)) continue;
+    try {
+      map.addImage(imageId, await loadRasterImage(avatarImageUrl(avatarKey)), {
+        pixelRatio: 8,
+      });
+    } catch {
+      allAvailable = false;
+    }
+  }
+  return allAvailable;
 }
 
 function firstRouteLayerId() {
@@ -1413,6 +1440,7 @@ export function renderOutingLivePositions(
     const properties = {
       participant_id: position.participant_id,
       display_name: participant.display_name,
+      ...outingLiveAvatarProperties(participant.avatar_key),
       join_order: joinOrder,
       color,
       opacity,
@@ -1512,21 +1540,25 @@ function ensureOutingLiveLayers() {
     type: "circle",
     source: OUTING_LIVE_POSITION_SOURCE,
     paint: {
-      "circle-radius": 10,
-      "circle-color": "#fffdf7",
+      "circle-radius": 12,
+      "circle-color": ["get", "color"],
       "circle-opacity": ["get", "opacity"],
+      "circle-stroke-color": "#fffdf7",
+      "circle-stroke-width": 3,
     },
   });
   addOutingLiveLayer({
     id: OUTING_LIVE_POSITION_MARKER_LAYER,
-    type: "circle",
+    type: "symbol",
     source: OUTING_LIVE_POSITION_SOURCE,
+    layout: {
+      "icon-image": ["get", "avatar_image"],
+      "icon-size": 0.58,
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
+    },
     paint: {
-      "circle-radius": 7,
-      "circle-color": ["get", "color"],
-      "circle-opacity": ["get", "opacity"],
-      "circle-stroke-color": "#1e2b25",
-      "circle-stroke-width": 1,
+      "icon-opacity": ["get", "opacity"],
     },
   });
   addOutingLiveLayer({
@@ -1535,7 +1567,7 @@ function ensureOutingLiveLayers() {
     source: OUTING_LIVE_POSITION_SOURCE,
     filter: ["==", ["get", "selected"], true],
     paint: {
-      "circle-radius": 14,
+      "circle-radius": 22,
       "circle-color": "rgba(255,255,255,0)",
       "circle-stroke-color": "#f4b942",
       "circle-stroke-width": 4,
@@ -1549,7 +1581,7 @@ function ensureOutingLiveLayers() {
       "text-field": ["get", "live_label"],
       "text-font": ["Open Sans Semibold"],
       "text-size": 11,
-      "text-offset": [0, 1.6],
+      "text-offset": [0, 2.1],
       "text-anchor": "top",
       "text-allow-overlap": false,
     },
@@ -1560,6 +1592,26 @@ function ensureOutingLiveLayers() {
       "text-halo-width": 2,
     },
   });
+}
+
+export function outingAvatarRegistrationIds() {
+  return AVATAR_KEYS.map(outingAvatarImageId);
+}
+
+export function outingLiveAvatarProperties(
+  value,
+  hasImage = (imageId) => Boolean(map?.hasImage(imageId)),
+) {
+  const avatarKey = normalizeAvatarKey(value);
+  const requested = outingAvatarImageId(avatarKey);
+  if (hasImage(requested)) {
+    return { avatar_key: avatarKey, avatar_image: requested };
+  }
+  const fallback = outingAvatarImageId(DEFAULT_AVATAR_KEY);
+  return {
+    avatar_key: avatarKey,
+    avatar_image: hasImage(fallback) ? fallback : "",
+  };
 }
 
 function addOutingLiveLayer(layer) {

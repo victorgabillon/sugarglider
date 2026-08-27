@@ -1,4 +1,5 @@
 import { formatDistance, friendlyLabel } from "./format.js";
+import { avatarImageUrl } from "./avatar.js";
 import { outingParticipantColor } from "./map.js";
 import {
   estimatedServerNow,
@@ -307,12 +308,21 @@ function renderParticipantCardsStructure(state, onSelect) {
     }
     const heading = document.createElement("span");
     heading.className = "outing-participant-heading";
+    const avatar = document.createElement("img");
+    avatar.className = "outing-participant-avatar";
+    avatar.src = avatarImageUrl(participant.avatar_key);
+    avatar.alt = "";
+    avatar.width = 512;
+    avatar.height = 512;
+    avatar.addEventListener("error", () => {
+      avatar.src = avatarImageUrl("blue");
+    }, { once: true });
     const swatch = document.createElement("i");
     swatch.className = "outing-participant-swatch";
     swatch.style.backgroundColor = outingParticipantColor(index);
     const name = document.createElement("strong");
     name.textContent = participant.display_name;
-    heading.append(swatch, name);
+    heading.append(avatar, swatch, name);
     const order = document.createElement("span");
     order.className = "outing-participant-position";
     order.textContent = `Participant ${index + 1}`;
