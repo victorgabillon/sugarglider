@@ -1045,6 +1045,19 @@ function autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare
   return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate)}</div><p class="candidate-construction">${escapeHtml(friendlyLabel(candidate.diagnostics.details.construction ?? result.kind))}</p><div class="candidate-key-metrics">${metrics}</div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${metricBar("Outbound/return proximity", analysis.loop_geometry?.outbound_return_proximity.share ?? null, "backtrack", analysis.loop_geometry ? formatPercent(analysis.loop_geometry.outbound_return_proximity.share) : "not evaluated")}${metricBar("Mapped nature", analysis.nature ? analysis.nature.nature_score / 100 : null, "nature", analysis.nature ? `${analysis.nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(analysis.loop_geometry)}`;
 }
 
+function candidateChoiceSummary(candidate, analysis, selected) {
+  const quality = primaryQualityMetric(analysis);
+  const nature = analysis.nature;
+  const repeated = analysis.repetition.repeated_distance.share;
+  const metric = (label, value) => `<span><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong></span>`;
+  const badges = [
+    `<span class="badge">${escapeHtml(profileDisplayName(candidate.routing_profile))}</span>`,
+    candidate.rank === 1 ? '<span class="badge recommended">Recommended</span>' : "",
+    `<span class="badge ${candidate.diagnostics.within_tolerance ? "good" : "warn"}">${candidate.diagnostics.within_tolerance ? "Within tolerance" : "Outside tolerance"}</span>`,
+  ].join("");
+  return `<div class="candidate-choice-heading"><h3>${selected ? "Your route" : `Route ${candidate.rank}`}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${badges}</div><div class="candidate-choice-metrics">${metric("Nature", nature ? `${nature.nature_score.toFixed(0)} / 100` : "Unknown")}${metric(quality?.[0] ?? "Route quality", quality?.[1] == null ? "Unknown" : formatPercent(quality[1]))}${metric("Repeated", repeated == null ? "Unknown" : formatPercent(repeated))}</div><span class="candidate-choice-action">${selected ? "Selected route" : "Use this route"}</span>`;
+}
+
 function metricBar(label, share, className, displayValue) {
   if (share === null || share === undefined) {
     return `<div class="bar-metric ${className} not-evaluated"><div class="bar-heading"><span>${escapeHtml(label)}</span><strong>not evaluated</strong></div><div class="metric-track" aria-hidden="true"></div></div>`;
@@ -1259,12 +1272,22 @@ function renderCandidatesPanel() {
     selector.className = "candidate-select";
     selector.setAttribute("aria-pressed", String(selected));
     selector.setAttribute("aria-label", `Select candidate ${candidate.rank}, ${formatDistance(candidate.route.summary.distance_m)}`);
-    selector.innerHTML = state.planningMode === "auto_tour"
-      ? autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare) + structuralAlternativeSummary(candidate) + spurCardSummary(analysis.spurs)
-      : (() => { const quality = primaryQualityMetric(analysis); return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.diagnostics.details.construction ?? "route"))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.diagnostics.target_error_m)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Major road</span><strong>${formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${quality ? metricBar(quality[0], quality[1], "trail", quality[1] == null ? "not evaluated" : formatPercent(quality[1])) : ""}${metricBar("Paved", analysis.paved.share, "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}${structuralAlternativeSummary(candidate)}${spurCardSummary(analysis.spurs)}`; })();
+    selector.innerHTML = candidateChoiceSummary(candidate, analysis, selected);
     selector.addEventListener("click", () => selectCandidate(candidate.id));
     card.append(selector);
-    card.append(loopGeometryCardDetails(loopGeometry));
+
+    const detailMarkup = state.planningMode === "auto_tour"
+      ? autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare) + structuralAlternativeSummary(candidate) + spurCardSummary(analysis.spurs)
+      : (() => { const quality = primaryQualityMetric(analysis); return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.diagnostics.details.construction ?? "route"))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.diagnostics.target_error_m)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Major road</span><strong>${formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${quality ? metricBar(quality[0], quality[1], "trail", quality[1] == null ? "not evaluated" : formatPercent(quality[1])) : ""}${metricBar("Paved", analysis.paved.share, "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}${structuralAlternativeSummary(candidate)}${spurCardSummary(analysis.spurs)}`; })();
+    const routeDetails = document.createElement("details");
+    routeDetails.className = "candidate-route-details";
+    const routeDetailsSummary = document.createElement("summary");
+    routeDetailsSummary.textContent = "Route details";
+    const routeDetailsContent = document.createElement("div");
+    routeDetailsContent.className = "candidate-detail-content";
+    routeDetailsContent.innerHTML = detailMarkup;
+    routeDetailsContent.append(loopGeometryCardDetails(loopGeometry));
+    routeDetails.append(routeDetailsSummary, routeDetailsContent);
 
     const warningCodes = [...new Set([
       ...(diagnostics?.warnings ?? []),
@@ -1290,6 +1313,7 @@ function renderCandidatesPanel() {
       details.append(summary, code);
       card.append(details);
     }
+    card.append(routeDetails);
     container.append(card);
   });
 }
@@ -1468,6 +1492,7 @@ function renderMetrics() {
     || serverFeaturesUnavailable();
   byId("reverse-route").disabled = readOnly || !candidate || busy || Boolean(state.importedGpx && !state.generationResult);
   byId("save-route").disabled = savingUnavailable || readOnly || !candidate || busy;
+  byId("save-route").classList.toggle("hidden", savingUnavailable || readOnly || !candidate);
   byId("save-route-selected").disabled = savingUnavailable || readOnly || !candidate || busy;
   byId("reverse-route").textContent = result?.topology === "loop"
     ? "Reverse loop direction"
@@ -2248,11 +2273,11 @@ function renderSavedRoutePanel() {
   byId("saved-route-link").value = url;
   byId("saved-route-message").textContent = isSavedRouteSnapshotDisplay()
     ? state.offlineSnapshotKind === "saved_route"
-      ? "Showing the exact explicit offline copy. The server snapshot is not being claimed available; mutations and GPX are disabled."
-      : "Read-only immutable snapshot. No generation, rerouting, or reranking occurs when this link opens."
+      ? "Showing your saved offline route. Reconnect to use online actions."
+      : "This read-only route opens exactly as saved, without planning it again."
     : state.savedRouteReceipt
-      ? "Route saved. The exact source request and selected candidate are stored behind this unlisted link."
-      : "The original immutable snapshot remains available at this link.";
+      ? "Your selected route is stored at this unlisted link."
+      : "Your saved route remains available at this unlisted link.";
   byId("share-saved-route").classList.toggle(
     "hidden",
     typeof navigator.share !== "function",

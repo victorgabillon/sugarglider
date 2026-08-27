@@ -240,7 +240,7 @@ export function renderOutingLiveView(state) {
       || state.outingTrackingTransitionPending,
   );
   start.textContent = state.nativeTrackingAvailable
-    ? "Start Android background sharing"
+    ? "Start background sharing"
     : state.durableOutboxPresent
       ? "Resume sharing"
       : "Start sharing";
@@ -265,15 +265,14 @@ export function renderOutingLiveView(state) {
   );
   stop.classList.toggle("hidden", !canStop);
   stop.disabled = state.outingTrackingTransitionPending;
-  byId("outing-live-tracking-status").textContent = ownsParticipant
-    ? (
-      state.nativeTrackingOtherActive && !nativeOwnsParticipant
-        ? "Another Android participant is currently sharing. Stop it from its outing or persistent notification before starting this participant."
-        : offline && !state.outingTrackingActive
-        ? "Offline — Start can retain only the latest fix for explicit foreground resume."
-        : state.outingTrackingMessage
-    )
-    : "Viewer mode — position sharing controls require an in-memory participant receipt.";
+  byId("outing-live-tracking-status").textContent = sharingStatusMessage({
+    state,
+    ownsParticipant,
+    nativeOwnsParticipant,
+    offline,
+    ownPosition,
+    serverNow,
+  });
   byId("outing-live-sharing-disclosure").textContent = (
     state.outingTrackingBackend === "native"
       || state.nativeTrackingAvailable
@@ -315,10 +314,13 @@ function renderParticipantCardsStructure(state, onSelect) {
     name.textContent = participant.display_name;
     heading.append(swatch, name);
     const order = document.createElement("span");
+    order.className = "outing-participant-position";
     order.textContent = `Participant ${index + 1}`;
     const route = document.createElement("span");
+    route.className = "outing-participant-route";
     route.textContent = candidate.route.name;
     const facts = document.createElement("span");
+    facts.className = "outing-participant-route-facts";
     facts.textContent = [
       friendlyLabel(candidate.routing_profile),
       friendlyLabel(request.topology),
@@ -337,7 +339,7 @@ function renderParticipantCardsStructure(state, onSelect) {
     const liveFacts = document.createElement("span");
     liveFacts.className = "outing-participant-live-facts";
     liveFacts.textContent = live.details;
-    card.append(heading, order, route, facts, liveStatus, liveFacts);
+    card.append(heading, liveStatus, liveFacts, route, facts, order);
     cards.append(card);
   });
 }
@@ -362,6 +364,45 @@ function updateParticipantCards(state) {
         live.details
       );
     });
+}
+
+function sharingStatusMessage({
+  state,
+  ownsParticipant,
+  nativeOwnsParticipant,
+  offline,
+  ownPosition,
+  serverNow,
+}) {
+  if (!ownsParticipant) {
+    return "Viewer mode — join this outing to share your location.";
+  }
+  if (state.nativeTrackingOtherActive && !nativeOwnsParticipant) {
+    return "Another participant is sharing from this Android app. Stop that share before starting this one.";
+  }
+  if (offline) {
+    return state.outingTrackingActive
+      ? "Offline — Sugarglider will send only the latest position when the connection returns."
+      : "Offline — sharing is paused. Resume in the foreground to send the latest location.";
+  }
+  if (state.outingTrackingTransitionPending || state.outingTrackingClearFailed) {
+    return state.outingTrackingMessage;
+  }
+  if (state.outingTrackingActive) {
+    const mode = state.outingTrackingBackend === "native"
+      ? "Sharing your location · continues while the screen is locked"
+      : "Sharing your location · keep Sugarglider open in the foreground";
+    return ownPosition
+      ? `${mode} · updated ${relativeAge(ownPosition.received_at, serverNow)}`
+      : `${mode} · waiting for a current position`;
+  }
+  if (
+    state.outingTrackingMessage
+    && !["Position sharing stopped", "Android background sharing stopped"].includes(
+      state.outingTrackingMessage,
+    )
+  ) return state.outingTrackingMessage;
+  return "Not currently sharing";
 }
 
 function participantLiveDescription(position, serverNow) {

@@ -568,7 +568,7 @@ def test_pr28_browser_harness_covers_responsive_application_states() -> None:
     assert "publicOutingScenario(frame, width, true)" in harness
     assert "document.documentElement.scrollWidth" in harness
     assert "getComputedStyle(planner)" in harness
-    assert "Start Android background sharing" in harness
+    assert "Start background sharing" in harness
     assert "runPr28ResponsiveLayoutHarness" in harness_html
     assert 'addEventListener("unhandledrejection"' in harness_html
 
