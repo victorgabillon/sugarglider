@@ -4,6 +4,12 @@ import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
 import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
 import {
+  centerPlannerCurrentLocation,
+  clearPlannerCurrentLocation,
+  positionPlannerLocationLayers,
+  renderPlannerCurrentLocation,
+} from "./map.js";
+import {
   bindOutingController,
   forgetCurrentOutingParticipant,
   outingOutboxPresenceIsCurrent,
@@ -20,6 +26,7 @@ import {
   settleOptionalPersistence,
 } from "./pwa_network.js";
 import { outingSlug } from "./outings.js";
+import { createPlannerLocationController } from "./planner_location.js";
 import { renderOutingCreationAction, renderOutingReceipt } from "./outing_view.js";
 import {
   applyOfflineCopyRefresh,
@@ -42,7 +49,11 @@ import {
 } from "./pwa_view.js";
 import { createSavedRoute, deleteSavedRoute, downloadSavedRouteGpx, getSavedRoute, savedRouteShareUrl, shareSavedRoute, sharedRouteSlug } from "./saved_routes.js";
 import { applyImplicitEndpointMapClick, assignRouteEndpoint, currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, generationAvailability, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, renderEndpointTopologyControls, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, setRouteTopology, state, switchPlanningMode } from "./state.js";
-import { initializeTrailProfile } from "./trail_profile.js";
+import {
+  initializeTrailProfile,
+  subscribeTrailProfile,
+  trailProfileAvatarKey,
+} from "./trail_profile.js";
 
 const byId = (id) => document.getElementById(id);
 let elapsedTimer = null;
@@ -51,6 +62,7 @@ let poiDebounceTimer = null;
 let pendingPoiBounds = null;
 let savedRoutePageEpoch = 0;
 let savedRouteReconnectOperation = null;
+let plannerLocation = null;
 
 const PRIMARY_SCENIC_CATEGORIES = [
   "viewpoint",
@@ -994,6 +1006,7 @@ function renderMapData() {
     requestedPopupId,
   );
   positionDirectionLayer();
+  positionPlannerLocationLayers();
 }
 
 function candidateBadges(candidate) {
@@ -2917,13 +2930,24 @@ async function start() {
     byId("places-status").textContent = poiAvailable
       ? `Local OSM places index ready · ${formatCount(state.poiIndexStatus.feature_count)} regional features.`
       : "POI index unavailable. Place discovery is disabled; routing still works.";
-    initializeMap(state.config, {
+    if (!sharedSlug) {
+      plannerLocation = createPlannerLocationController({
+        renderFix: renderPlannerCurrentLocation,
+        clearFix: clearPlannerCurrentLocation,
+        centerFix: centerPlannerCurrentLocation,
+        avatarKey: trailProfileAvatarKey,
+        subscribeAvatar: subscribeTrailProfile,
+      });
+    }
+    const mapInitialized = initializeMap(state.config, {
       onReady: () => {
         mapReady = true;
         renderMapData();
+        plannerLocation?.mapReady();
       },
       onError: showMapError,
       onViewportChange: schedulePoiRefresh,
+      onUserMapInteraction: () => plannerLocation?.manualMapInteraction(),
       onMapClick: (coordinate) => {
         if (isSavedRouteSnapshotDisplay()) return;
         if (state.settingRequestedApproachId) {
@@ -3007,6 +3031,7 @@ async function start() {
         );
       },
     });
+    if (mapInitialized) void plannerLocation?.initialize();
     render();
     if (sharedSnapshot) {
       fitCoordinates(sharedSnapshot.candidate.route.geometry);

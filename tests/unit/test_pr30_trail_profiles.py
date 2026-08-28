@@ -148,7 +148,7 @@ def test_pr30_shell_cache_and_framework_free_harness_cover_new_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     harness = (ROOT / "tests/browser/pr30_trail_profiles_harness.js").read_text()
     html = (ROOT / "tests/browser/pr30_trail_profiles_harness.html").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v9`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v12`" in worker
     for name in BADGE_HASHES:
         assert f'"/static/brand/profile-badges/{name}"' in worker
     assert '"/static/avatar.js"' in worker

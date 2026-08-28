@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>PR31 private planner location harness</title>
+  <pre id="result">running</pre>
+  <script>
+    window.pr31HarnessResult = document.getElementById("result");
+    window.pr31UnhandledRejection = null;
+    window.addEventListener("error", (event) => {
+      window.pr31HarnessResult.dataset.status = "failed";
+      window.pr31HarnessResult.textContent = event.error?.stack ?? event.message;
+      document.title = "PR31 private planner location harness failed";
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      window.pr31UnhandledRejection = event.reason;
+      window.pr31HarnessResult.dataset.status = "failed";
+      window.pr31HarnessResult.textContent = event.reason instanceof Error
+        ? event.reason.stack
+        : String(event.reason);
+      document.title = "PR31 private planner location harness failed";
+    });
+  </script>
+  <script type="module">
+    import { runPr31PrivatePlannerLocationHarness } from "./pr31_private_planner_location_harness.js";
+
+    const result = window.pr31HarnessResult;
+    try {
+      const scenarios = await runPr31PrivatePlannerLocationHarness();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      if (window.pr31UnhandledRejection !== null) throw window.pr31UnhandledRejection;
+      if (result.dataset.status === "failed") throw new Error(result.textContent);
+      result.dataset.status = "passed";
+      result.textContent = JSON.stringify(scenarios);
+      document.title = `PR31 private planner location harness passed ${scenarios.length}`;
+    } catch (error) {
+      result.dataset.status = "failed";
+      result.textContent = error instanceof Error ? error.stack : String(error);
+      document.title = "PR31 private planner location harness failed";
+    }
+  </script>
+</html>

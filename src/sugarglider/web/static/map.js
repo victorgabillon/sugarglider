@@ -59,6 +59,18 @@ const OUTING_LIVE_LAYERS = [
   OUTING_LIVE_POSITION_SELECTED_LAYER,
   OUTING_LIVE_POSITION_LABEL_LAYER,
 ];
+const PLANNER_LOCATION_POSITION_SOURCE = "planner-current-location-current";
+const PLANNER_LOCATION_ACCURACY_SOURCE = "planner-current-location-accuracy-current";
+const PLANNER_LOCATION_ACCURACY_FILL_LAYER = "planner-current-location-accuracy-fill";
+const PLANNER_LOCATION_ACCURACY_OUTLINE_LAYER = "planner-current-location-accuracy-outline";
+const PLANNER_LOCATION_CASING_LAYER = "planner-current-location-casing";
+const PLANNER_LOCATION_AVATAR_LAYER = "planner-current-location-avatar";
+const PLANNER_LOCATION_LAYERS = [
+  PLANNER_LOCATION_ACCURACY_FILL_LAYER,
+  PLANNER_LOCATION_ACCURACY_OUTLINE_LAYER,
+  PLANNER_LOCATION_CASING_LAYER,
+  PLANNER_LOCATION_AVATAR_LAYER,
+];
 const SPUR_SOURCE = "selected-route-spurs";
 const SPUR_HIGHLIGHT_LAYER = "selected-route-spur-highlights";
 const SPUR_BRANCH_LAYER = "selected-route-spur-branches";
@@ -120,6 +132,8 @@ let spurCandidateId = null;
 let spurById = new Map();
 let spurPopup = null;
 let outingLiveParticipantSelectHandler = null;
+let plannerLocationPositionCount = 0;
+let plannerLocationAccuracyCount = 0;
 
 export function initializeMap(config, handlers) {
   resetMapInstance();
@@ -183,6 +197,11 @@ export function initializeMap(config, handlers) {
   map.on("moveend", () => {
     if (ready) handlers.onViewportChange?.(currentViewportBounds());
   });
+  for (const eventName of ["dragstart", "zoomstart", "rotatestart", "pitchstart"]) {
+    map.on(eventName, (event) => {
+      if (event?.originalEvent) handlers.onUserMapInteraction?.();
+    });
+  }
   map.on("click", (event) => {
     const liveLayers = [
       OUTING_LIVE_POSITION_SELECTED_LAYER,
@@ -308,6 +327,8 @@ function resetMapInstance() {
   endpointMarkers = [];
   optionalMarkers = [];
   waypointMarkers = [];
+  plannerLocationPositionCount = 0;
+  plannerLocationAccuracyCount = 0;
   poiPopup?.remove();
   requestedPlacePopup?.remove();
   spurPopup?.remove();
@@ -1407,6 +1428,129 @@ export function fitOutingRoutes(participants) {
       (participant) => participant.planned_route.candidate.route.geometry,
     ),
   );
+}
+
+export function renderPlannerCurrentLocation(fix, avatarKey) {
+  if (!ready || !map) return;
+  const avatar = outingLiveAvatarProperties(avatarKey);
+  const properties = {
+    ...avatar,
+    color: "#3c8ee8",
+    accuracy_m: fix.accuracy_m,
+  };
+  sourceData(PLANNER_LOCATION_POSITION_SOURCE, {
+    type: "FeatureCollection",
+    features: [{
+      type: "Feature",
+      properties,
+      geometry: {
+        type: "Point",
+        coordinates: [fix.coordinate.lon, fix.coordinate.lat],
+      },
+    }],
+  });
+  sourceData(PLANNER_LOCATION_ACCURACY_SOURCE, {
+    type: "FeatureCollection",
+    features: [{
+      type: "Feature",
+      properties,
+      geometry: accuracyPolygon(
+        fix.coordinate.lon,
+        fix.coordinate.lat,
+        fix.accuracy_m,
+      ),
+    }],
+  });
+  plannerLocationPositionCount = 1;
+  plannerLocationAccuracyCount = 1;
+  ensurePlannerLocationLayers();
+  positionPlannerLocationLayers();
+}
+
+export function clearPlannerCurrentLocation() {
+  clearByPrefix("planner-current-location-");
+  plannerLocationPositionCount = 0;
+  plannerLocationAccuracyCount = 0;
+}
+
+export function centerPlannerCurrentLocation(fix) {
+  if (!ready || !map) return;
+  const currentZoom = map.getZoom();
+  map.easeTo({
+    center: [fix.coordinate.lon, fix.coordinate.lat],
+    zoom: Math.min(Math.max(currentZoom, 15), 18),
+    duration: 600,
+  });
+}
+
+export function plannerCurrentLocationDiagnostics() {
+  const layerIds = (map?.getStyle()?.layers ?? [])
+    .map((layer) => layer.id)
+    .filter((id) => PLANNER_LOCATION_LAYERS.includes(id));
+  return {
+    positionSourceExists: Boolean(map?.getSource(PLANNER_LOCATION_POSITION_SOURCE)),
+    accuracySourceExists: Boolean(map?.getSource(PLANNER_LOCATION_ACCURACY_SOURCE)),
+    expectedLayerCount: PLANNER_LOCATION_LAYERS.length,
+    layerCount: layerIds.length,
+    renderedCurrentPositionCount: plannerLocationPositionCount,
+    renderedAccuracyPolygonCount: plannerLocationAccuracyCount,
+    duplicateLayerCount: layerIds.length - new Set(layerIds).size,
+  };
+}
+
+function ensurePlannerLocationLayers() {
+  addPlannerLocationLayer({
+    id: PLANNER_LOCATION_ACCURACY_FILL_LAYER,
+    type: "fill",
+    source: PLANNER_LOCATION_ACCURACY_SOURCE,
+    paint: {
+      "fill-color": ["get", "color"],
+      "fill-opacity": 0.13,
+    },
+  });
+  addPlannerLocationLayer({
+    id: PLANNER_LOCATION_ACCURACY_OUTLINE_LAYER,
+    type: "line",
+    source: PLANNER_LOCATION_ACCURACY_SOURCE,
+    paint: {
+      "line-color": ["get", "color"],
+      "line-opacity": 0.52,
+      "line-width": 1.5,
+    },
+  });
+  addPlannerLocationLayer({
+    id: PLANNER_LOCATION_CASING_LAYER,
+    type: "circle",
+    source: PLANNER_LOCATION_POSITION_SOURCE,
+    paint: {
+      "circle-radius": 13,
+      "circle-color": ["get", "color"],
+      "circle-stroke-color": "#fffdf7",
+      "circle-stroke-width": 3,
+    },
+  });
+  addPlannerLocationLayer({
+    id: PLANNER_LOCATION_AVATAR_LAYER,
+    type: "symbol",
+    source: PLANNER_LOCATION_POSITION_SOURCE,
+    layout: {
+      "icon-image": ["get", "avatar_image"],
+      "icon-size": 0.62,
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
+    },
+  });
+}
+
+function addPlannerLocationLayer(layer) {
+  if (!map.getLayer(layer.id)) map.addLayer(layer);
+}
+
+export function positionPlannerLocationLayers() {
+  if (!map) return;
+  for (const layerId of PLANNER_LOCATION_LAYERS) {
+    if (map.getLayer(layerId)) map.moveLayer(layerId);
+  }
 }
 
 export function renderOutingLivePositions(

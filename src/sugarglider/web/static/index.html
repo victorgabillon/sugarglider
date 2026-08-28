@@ -321,6 +321,10 @@
       <section class="map-panel" aria-labelledby="map-title">
         <h2 id="map-title" class="visually-hidden">Interactive route map</h2>
         <div id="map" role="application" aria-label="Interactive trail route map"></div>
+        <button id="planner-location-control" class="planner-location-control hidden" type="button" aria-label="Show my location" aria-pressed="false" aria-busy="false" aria-describedby="planner-location-status" title="Show my location">
+          <img src="/static/brand/gps-recenter-default.png" width="40" height="40" alt="">
+        </button>
+        <p id="planner-location-status" class="visually-hidden" role="status" aria-live="polite"></p>
         <section id="planner-empty" class="map-empty-state" aria-labelledby="empty-title">
           <img src="/static/brand/sugarglider-flying-map.png" width="1024" height="1024" loading="lazy" alt="">
           <div><h2 id="empty-title">Start on the map</h2><p>Tap or click the map to choose your starting point.</p></div>

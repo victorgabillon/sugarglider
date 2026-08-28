@@ -50,6 +50,10 @@ PROFILE_BADGE_FILENAMES = (
     "tomato.png",
     "mask.png",
 )
+GPS_CONTROL_FILENAMES = (
+    "gps-recenter-default.png",
+    "gps-recenter-active.png",
+)
 FONT_GLYPH_HASHES: dict[str, str] = {
     "0-255.pbf": "64da7011e07531351a249a3d26aad76e2f22e4e321e50833f742697b453e8365",
     "256-511.pbf": "78298bbd8198c117ccdffe66bf9bbf646fdc1210b7e1bf222f5a9b29b366d7a5",
@@ -144,7 +148,7 @@ def _png_dimensions(path: Path) -> tuple[int, int]:
 
 
 def test_brand_asset_manifest_is_exact_and_byte_identical() -> None:
-    expected = set(BRAND_ASSET_FILENAMES)
+    expected = set(BRAND_ASSET_FILENAMES) | set(GPS_CONTROL_FILENAMES)
     canonical = {
         path.name for path in CANONICAL_BRAND_DIRECTORY.glob("*.png") if path.is_file()
     }
@@ -152,7 +156,7 @@ def test_brand_asset_manifest_is_exact_and_byte_identical() -> None:
         path.name for path in RUNTIME_BRAND_DIRECTORY.glob("*.png") if path.is_file()
     }
     assert canonical == runtime == expected
-    for filename in BRAND_ASSET_FILENAMES:
+    for filename in expected:
         assert _sha256(CANONICAL_BRAND_DIRECTORY / filename) == _sha256(
             RUNTIME_BRAND_DIRECTORY / filename
         )
@@ -178,6 +182,7 @@ def test_brand_asset_sync_is_independent_of_current_working_directory(
     )
     assert all(filename in result.stdout for filename in BRAND_ASSET_FILENAMES)
     assert all(filename in result.stdout for filename in PROFILE_BADGE_FILENAMES)
+    assert all(filename in result.stdout for filename in GPS_CONTROL_FILENAMES)
 
 
 @pytest.mark.asyncio
@@ -257,6 +262,12 @@ async def test_every_runtime_brand_asset_is_served_as_png(
             response.content
             == (CANONICAL_BRAND_DIRECTORY / "profile-badges" / filename).read_bytes()
         )
+    for filename in GPS_CONTROL_FILENAMES:
+        response = await client.get(f"/static/brand/{filename}")
+        assert response.status_code == 200, filename
+        assert response.headers["content-type"] == "image/png"
+        assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+        assert response.content == (CANONICAL_BRAND_DIRECTORY / filename).read_bytes()
 
     for filename, expected_hash in FONT_GLYPH_HASHES.items():
         glyphs = await client.get(f"/static/fonts/Open%20Sans%20Semibold/{filename}")

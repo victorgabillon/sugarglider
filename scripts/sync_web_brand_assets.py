@@ -18,6 +18,10 @@ PROFILE_BADGE_FILENAMES: tuple[str, ...] = (
     "tomato.png",
     "mask.png",
 )
+GPS_CONTROL_FILENAMES: tuple[str, ...] = (
+    "gps-recenter-default.png",
+    "gps-recenter-active.png",
+)
 
 
 def repository_root() -> Path:
@@ -36,7 +40,7 @@ def sync_brand_assets() -> tuple[Path, ...]:
     root = repository_root()
     canonical_directory = root / "assets" / "brand"
     runtime_directory = root / "src" / "sugarglider" / "web" / "static" / "brand"
-    permitted = set(BRAND_ASSET_FILENAMES)
+    permitted = set(BRAND_ASSET_FILENAMES) | set(GPS_CONTROL_FILENAMES)
 
     missing = tuple(
         name
@@ -64,6 +68,14 @@ def sync_brand_assets() -> tuple[Path, ...]:
     copied: list[Path] = []
     for filename in BRAND_ASSET_FILENAMES:
         source = canonical_directory / filename
+        destination = runtime_directory / filename
+        copyfile(source, destination)
+        copied.append(destination)
+        print(f"Copied {source.relative_to(root)} -> {destination.relative_to(root)}")
+    for filename in GPS_CONTROL_FILENAMES:
+        source = canonical_directory / filename
+        if not source.is_file():
+            raise FileNotFoundError(f"Missing canonical GPS control asset: {filename}")
         destination = runtime_directory / filename
         copyfile(source, destination)
         copied.append(destination)

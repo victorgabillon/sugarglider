@@ -1,6 +1,7 @@
 package io.github.victorgabillon.sugarglider
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -16,6 +17,43 @@ class ServerOriginTest {
             "http://10.0.2.2:8000",
             ServerOrigin.parse("http://10.0.2.2:8000/", allowDevelopmentHttp = true)?.normalized,
         )
+    }
+
+    @Test
+    fun equivalentWebViewLocalhostOriginIsCanonicalized() {
+        assertEquals(
+            "http://localhost:8000",
+            ServerOrigin.parse(
+                "http://LOCALHOST:8000/",
+                allowDevelopmentHttp = true,
+            )?.normalized,
+        )
+    }
+
+    @Test
+    fun differentWebOriginsRemainDistinctAfterCanonicalization() {
+        val configured = ServerOrigin.parse("http://localhost:8000", true)?.normalized
+
+        for (requested in listOf(
+            "http://127.0.0.1:8000",
+            "http://localhost:8001",
+            "https://localhost:8000",
+        )) {
+            val normalized = ServerOrigin.parse(requested, true)?.normalized
+            assertNotEquals(requested, configured, normalized)
+        }
+    }
+
+    @Test
+    fun malformedWebViewOriginsAreRejected() {
+        for (requested in listOf(
+            "not an origin",
+            "javascript:alert(1)",
+            "http://user:secret@localhost:8000",
+            "http://localhost:8000/hostile",
+        )) {
+            assertNull(ServerOrigin.parse(requested, allowDevelopmentHttp = true))
+        }
     }
 
     @Test
