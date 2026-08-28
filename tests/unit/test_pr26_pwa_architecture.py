@@ -150,22 +150,26 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_pr30_html_and_css() -> None:
+def test_shared_shell_generation_tracks_pr31_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v9"
+    assert generation.group(1) == "v12"
     assert {
-        name: _sha256(STATIC_DIRECTORY / name) for name in ("index.html", "styles.css")
+        name: _sha256(STATIC_DIRECTORY / name)
+        for name in ("index.html", "styles.css", "planner_location.js")
     } == {
         "index.html": (
-            "edf060720dd43699a274ea3ad23523e0a5f9b7831d5a92987f607bf85ad48d97"
+            "f892b599151f690bd6572b7341300ebea695b193895d9176fd41e00cdaf00e7f"
         ),
         "styles.css": (
-            "5407598d86d7fd2e7be727378c23e587f6a1107385373fd2bbd308cc294159b5"
+            "8fb571cba5249148b4ae1aef7b20a42ddced4e1fd1d10184bbdb2570e27ace72"
+        ),
+        "planner_location.js": (
+            "ce28891c92263c084e33dd5ae9ad906a31e527253aeb321539599711e4500b9c"
         ),
     }
 

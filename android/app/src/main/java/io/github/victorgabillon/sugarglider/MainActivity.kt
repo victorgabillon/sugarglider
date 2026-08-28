@@ -20,8 +20,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
+import android.webkit.GeolocationPermissions
 import android.webkit.HttpAuthHandler
 import android.webkit.SslErrorHandler
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -52,6 +54,7 @@ class MainActivity : Activity() {
     private var backInvokedCallback: OnBackInvokedCallback? = null
     private var outingLeaveDialog: AlertDialog? = null
     private val bridgeLedger = BridgeRequestLedger()
+    private val webGeolocationPermissions = WebGeolocationPermissionCoordinator()
     private val statusObserver = NativeStatusRepository.Observer { status, terminalFailure ->
         runOnUiThread {
             broadcastStatus(status)
@@ -107,6 +110,18 @@ class MainActivity : Activity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_WEB_GEOLOCATION_PERMISSION) {
+            val current = webView
+            webGeolocationPermissions.complete(
+                preciseLocationGranted = checkSelfPermission(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                ) == PackageManager.PERMISSION_GRANTED,
+                configuredOrigin = configuredOrigin,
+                navigationEpoch = bridgeNavigationEpoch,
+                currentWebViewIdentity = current?.let(System::identityHashCode),
+            )
+            return
+        }
         if (requestCode != REQUEST_TRACKING_PERMISSIONS) return
         val operation = pendingStart ?: return
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) !=
@@ -256,11 +271,13 @@ class MainActivity : Activity() {
             domStorageEnabled = true
             allowFileAccess = false
             allowContentAccess = false
+            setGeolocationEnabled(true)
             mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
             setSupportMultipleWindows(false)
         }
         created.setBackgroundColor(getColor(R.color.brand_cream))
         created.webViewClient = originIsolatingClient(origin)
+        created.webChromeClient = foregroundGeolocationClient(created)
         android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(created, false)
         installBridge(created, origin)
         root.addView(
@@ -294,6 +311,10 @@ class MainActivity : Activity() {
                 ).setPositiveButton("OK", null)
                 .show()
             return
+        }
+        if (configuredOrigin != null) {
+            webGeolocationPermissions.invalidate()
+            GeolocationPermissions.getInstance().clearAll()
         }
         getPreferences(MODE_PRIVATE).edit { remove(PREFERENCE_SERVER_ORIGIN) }
         showServerConfiguration()
@@ -340,6 +361,45 @@ class MainActivity : Activity() {
             realm: String,
         ) {
             handler.cancel()
+        }
+    }
+
+    private fun foregroundGeolocationClient(created: WebView): WebChromeClient = object :
+        WebChromeClient() {
+        override fun onGeolocationPermissionsShowPrompt(
+            requestedOrigin: String,
+            callback: GeolocationPermissions.Callback,
+        ) {
+            val normalizedRequestedOrigin = ServerOrigin.parse(
+                requestedOrigin,
+                BuildConfig.ALLOW_HTTP,
+            )?.normalized
+            if (normalizedRequestedOrigin == null) {
+                callback.invoke(requestedOrigin, false, false)
+                return
+            }
+            val current = webView
+            val action = webGeolocationPermissions.begin(
+                requestedOrigin = normalizedRequestedOrigin,
+                configuredOrigin = configuredOrigin,
+                navigationEpoch = bridgeNavigationEpoch,
+                sourceWebViewIdentity = System.identityHashCode(created),
+                currentWebViewIdentity = current?.let(System::identityHashCode),
+                activityVisible = activityVisible,
+                preciseLocationGranted = checkSelfPermission(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                ) == PackageManager.PERMISSION_GRANTED,
+                resolve = { allow -> callback.invoke(requestedOrigin, allow, allow) },
+            )
+            if (action == WebGeolocationPermissionAction.REQUEST_FOREGROUND_LOCATION) {
+                requestPermissions(
+                    arrayOf(
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                    ),
+                    REQUEST_WEB_GEOLOCATION_PERMISSION,
+                )
+            }
         }
     }
 
@@ -774,6 +834,7 @@ class MainActivity : Activity() {
     }
 
     private fun invalidateBridgePage() {
+        webGeolocationPermissions.invalidate()
         bridgeNavigationEpoch += 1
         activeBridgeChannel = null
         pendingStart = null
@@ -788,6 +849,7 @@ class MainActivity : Activity() {
         }
         old.stopLoading()
         old.webViewClient = WebViewClient()
+        old.webChromeClient = WebChromeClient()
         old.removeAllViews()
         old.destroy()
     }
@@ -896,6 +958,7 @@ class MainActivity : Activity() {
     companion object {
         private const val PREFERENCE_SERVER_ORIGIN = "server_origin"
         private const val REQUEST_TRACKING_PERMISSIONS = 27
+        private const val REQUEST_WEB_GEOLOCATION_PERMISSION = 31
         private const val DEBUG_DEFAULT_ORIGIN = "http://10.0.2.2:8000"
         private const val DISCLOSURE =
             "Sugarglider will continuously access precise location during this active sharing session, including while the app is minimized or the screen is locked. Anyone holding the unlisted outing link can see the current position. Only the latest current position is retained, not a historical track. A persistent notification is displayed, and you can stop at any time from the app or notification. If server clearing is uncertain, the last position may remain visible until expiry."

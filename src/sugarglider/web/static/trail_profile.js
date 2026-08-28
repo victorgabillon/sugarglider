@@ -16,6 +16,7 @@ let initialized = false;
 let controlsBound = false;
 let setupRequired = false;
 let activeStore = null;
+const profileSubscribers = new Set();
 
 const byId = (id) => document.getElementById(id);
 
@@ -36,6 +37,11 @@ export async function initializeTrailProfile({
 
 export function trailProfileAvatarKey() {
   return currentProfile?.avatar_key ?? DEFAULT_AVATAR_KEY;
+}
+
+export function subscribeTrailProfile(listener) {
+  profileSubscribers.add(listener);
+  return () => profileSubscribers.delete(listener);
 }
 
 export function normalizeTrailProfile(value) {
@@ -105,6 +111,13 @@ async function saveTrailProfile(profile) {
     // The validated in-memory profile remains usable for this tab.
   }
   syncProfileUi();
+  for (const subscriber of profileSubscribers) {
+    try {
+      subscriber(currentProfile);
+    } catch {
+      // Profile persistence remains authoritative if optional map rendering fails.
+    }
+  }
   return persisted;
 }
 

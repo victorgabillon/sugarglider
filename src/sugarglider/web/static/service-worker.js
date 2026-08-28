@@ -6,7 +6,7 @@ import {
 } from "/static/service_worker_policy.js";
 
 const SHELL_CACHE_PREFIX = "sugarglider-shell-";
-const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v9`;
+const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v12`;
 const ROOT_SHELL = "/";
 const shellCache = createCurrentCacheAccess(caches, SHELL_CACHE);
 
@@ -31,6 +31,7 @@ const CORE_ASSETS = Object.freeze([
   "/static/outing_live_state.js",
   "/static/outing_native_bridge.js",
   "/static/outing_tracking.js",
+  "/static/planner_location.js",
   "/static/outing_view.js",
   "/static/pwa_controller.js",
   "/static/pwa_store.js",
@@ -44,6 +45,8 @@ const CORE_ASSETS = Object.freeze([
   "/static/brand/sugarglider-compact-icon.png",
   "/static/brand/sugarglider-map-pin.png",
   "/static/brand/sugarglider-water-pin.png",
+  "/static/brand/gps-recenter-default.png",
+  "/static/brand/gps-recenter-active.png",
   "/static/brand/profile-badges/blue.png",
   "/static/brand/profile-badges/forest.png",
   "/static/brand/profile-badges/orange.png",

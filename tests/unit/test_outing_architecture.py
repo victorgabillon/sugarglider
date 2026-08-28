@@ -93,7 +93,8 @@ def test_outing_http_geolocation_and_eventsource_are_scoped_to_focused_modules()
     for term in ("navigator.geolocation", "watchPosition", "clearWatch"):
         assert term in tracking
         assert {name for name, source in sources.items() if term in source} == {
-            "outing_tracking.js"
+            "outing_tracking.js",
+            "planner_location.js",
         }
     assert {name for name, source in sources.items() if "EventSource" in source} == {
         "outing_live.js"
