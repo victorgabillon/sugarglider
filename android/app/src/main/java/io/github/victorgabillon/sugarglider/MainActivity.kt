@@ -40,9 +40,11 @@ import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.time.Instant
+import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
     private lateinit var application: SugargliderApplication
+    private lateinit var nativeRouteEngine: NativeRouteEngine
     private var configuredOrigin: String? = null
     private var webView: WebView? = null
     private var activeBridgeChannel: BridgeChannel? = null
@@ -50,10 +52,13 @@ class MainActivity : Activity() {
     private var bridgeStatusCounter = 0L
     private var activityVisible = false
     private var pendingStart: PendingStart? = null
+    private var pendingLocalRoute: PendingLocalRoute? = null
+    private var localRouteWorkerBusy = false
     private var pendingDeepLinkSlug: String? = null
     private var backInvokedCallback: OnBackInvokedCallback? = null
     private var outingLeaveDialog: AlertDialog? = null
     private val bridgeLedger = BridgeRequestLedger()
+    private val localRouteExecutor = Executors.newSingleThreadExecutor()
     private val webGeolocationPermissions = WebGeolocationPermissionCoordinator()
     private val statusObserver = NativeStatusRepository.Observer { status, terminalFailure ->
         runOnUiThread {
@@ -65,6 +70,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         application = getApplication() as SugargliderApplication
+        nativeRouteEngine = NativeRouteEngineFactory.create(applicationContext)
         application.statusRepository.addObserver(statusObserver)
         registerPredictiveBackCallback()
         pendingDeepLinkSlug = deepLinkSlug(intent)
@@ -96,6 +102,8 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         pendingStart = null
+        pendingLocalRoute = null
+        localRouteExecutor.shutdownNow()
         dismissOutingLeaveDialog()
         unregisterPredictiveBackCallback()
         application.statusRepository.removeObserver(statusObserver)
@@ -423,10 +431,14 @@ class MainActivity : Activity() {
             isMainFrame: Boolean,
             replyProxy: JavaScriptReplyProxy ->
             val current = webView
+            val canonicalSourceOrigin = ServerOrigin.parse(
+                sourceOrigin.toString(),
+                BuildConfig.ALLOW_HTTP,
+            )?.normalized ?: return@addWebMessageListener
             if (
                 current == null ||
                 !BridgeGate.accepts(
-                    sourceOrigin.toString(),
+                    canonicalSourceOrigin,
                     origin,
                     isMainFrame,
                     System.identityHashCode(current),
@@ -461,6 +473,24 @@ class MainActivity : Activity() {
                         broadcastTerminalFailure(channel, it)
                     }
                 }
+                is BridgeRequest.GetLocalRouteCapabilities -> {
+                    val reply = BridgeProtocol.localRouteCapabilitiesReply(
+                        request.requestId,
+                        nativeRouteEngine.capabilities(),
+                    )
+                    completeBridgePayload(request, payload, channel, reply)
+                }
+                is BridgeRequest.LocalRoute -> beginLocalRoute(
+                    request,
+                    payload,
+                    channel,
+                )
+                is BridgeRequest.RejectedLocalRoute -> completeBridgePayload(
+                    request,
+                    payload,
+                    channel,
+                    BridgeProtocol.localRouteFailure(request.requestId, request.code),
+                )
                 is BridgeRequest.StartTracking -> beginExplicitStart(
                     request,
                     payload,
@@ -520,6 +550,68 @@ class MainActivity : Activity() {
                 }
             }
         }
+    }
+
+    private fun beginLocalRoute(
+        request: BridgeRequest.LocalRoute,
+        payload: String,
+        channel: BridgeChannel,
+    ) {
+        if (pendingLocalRoute != null || localRouteWorkerBusy) {
+            completeLocalRouteFailure(
+                request,
+                payload,
+                channel,
+                NativeRouteFailureCode.ROUTING_BUSY,
+            )
+            return
+        }
+        val operation = PendingLocalRoute(request, payload, channel)
+        pendingLocalRoute = operation
+        localRouteWorkerBusy = true
+        localRouteExecutor.execute {
+            val result = nativeRouteEngine.route(request.routeRequest)
+            runOnUiThread {
+                localRouteWorkerBusy = false
+                if (pendingLocalRoute !== operation) return@runOnUiThread
+                pendingLocalRoute = null
+                when (result) {
+                    is NativeRouteResult.Success -> {
+                        val reply = BridgeProtocol.localRouteReply(request.requestId, result)
+                        if (reply == null) {
+                            completeLocalRouteFailure(
+                                request,
+                                payload,
+                                channel,
+                                NativeRouteFailureCode.ROUTE_TOO_LARGE,
+                            )
+                        } else {
+                            completeBridgePayload(request, payload, channel, reply)
+                        }
+                    }
+                    is NativeRouteResult.Failure -> completeLocalRouteFailure(
+                        request,
+                        payload,
+                        channel,
+                        result.code,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun completeLocalRouteFailure(
+        request: BridgeRequest.LocalRoute,
+        payload: String,
+        channel: BridgeChannel,
+        code: NativeRouteFailureCode,
+    ) {
+        completeBridgePayload(
+            request,
+            payload,
+            channel,
+            BridgeProtocol.localRouteFailure(request.requestId, code),
+        )
     }
 
     private fun beginExplicitStart(
@@ -746,6 +838,16 @@ class MainActivity : Activity() {
         postToBridge(channel, reply)
     }
 
+    private fun completeBridgePayload(
+        request: BridgeRequest,
+        payload: String,
+        channel: BridgeChannel,
+        reply: String,
+    ) {
+        bridgeLedger.complete(request, payload, reply)
+        postToBridge(channel, reply)
+    }
+
     private fun completeFailure(
         request: BridgeRequest,
         payload: String,
@@ -838,6 +940,7 @@ class MainActivity : Activity() {
         bridgeNavigationEpoch += 1
         activeBridgeChannel = null
         pendingStart = null
+        pendingLocalRoute = null
     }
 
     private fun destroyWebView() {
@@ -944,6 +1047,12 @@ class MainActivity : Activity() {
 
     private data class PendingStart(
         val request: BridgeRequest.StartTracking,
+        val payload: String,
+        val channel: BridgeChannel,
+    )
+
+    private data class PendingLocalRoute(
+        val request: BridgeRequest.LocalRoute,
         val payload: String,
         val channel: BridgeChannel,
     )

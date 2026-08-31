@@ -1,0 +1,343 @@
+import {
+  nativeBridgeTransport,
+} from "./native_bridge_transport.js";
+
+const SCHEMA_VERSION = 1;
+const MAX_ROUTE_VERTICES = 20_000;
+const ROUTE_TIMEOUT_MS = 90_000;
+const CAPABILITY_FIELDS = new Set([
+  "schema_version", "request_id", "type", "enabled", "engine",
+  "engine_version", "pack_installed", "pack_id",
+]);
+const ROUTE_FIELDS = new Set([
+  "schema_version", "request_id", "type", "profile", "engine",
+  "engine_version", "distance_m", "duration_s", "geometry",
+  "snapped_origin", "snapped_destination", "measurements",
+]);
+const FAILURE_FIELDS = new Set([
+  "schema_version", "request_id", "type", "code",
+]);
+const COORDINATE_FIELDS = new Set(["lat", "lon"]);
+const MEASUREMENT_FIELDS = new Set([
+  "cold_start", "engine_initialization_ms", "route_ms",
+  "memory_before_initialization_bytes", "memory_after_initialization_bytes",
+  "memory_after_route_bytes",
+]);
+const FAILURE_CODES = new Set([
+  "invalid_request", "unsupported_profile", "routing_pack_unavailable",
+  "no_route", "route_too_large", "routing_busy", "routing_failure",
+]);
+export const MARLY_OFFLINE_SMOKE_TEST = Object.freeze({
+  origin: Object.freeze({ lat: 48.8715, lon: 2.0965 }),
+  destination: Object.freeze({ lat: 48.8983, lon: 2.0969 }),
+  profile: "hike",
+});
+
+export function createLocalRoutingBridge({
+  transport = nativeBridgeTransport,
+} = {}) {
+  const nativeAvailable = transport.nativeAvailable;
+  let trusted = false;
+  let operationCounter = 0;
+  let currentOperation = 0;
+  let initialization = null;
+  const requestOwner = Object.freeze({ client: "local-routing" });
+
+  async function initialize() {
+    if (initialization) return initialization;
+    initialization = transport.initialize().then((payload) => {
+      const reply = parseLocalRoutingReply(payload);
+      trusted = reply?.type === "hello_result";
+      return trusted;
+    }).catch(() => false);
+    return initialization;
+  }
+
+  async function capabilities() {
+    if (!await initialize()) return null;
+    const reply = await request(
+      "get_local_route_capabilities", {}, 5_000, null,
+    );
+    return reply?.type === "local_route_capabilities_result" ? reply : null;
+  }
+
+  async function route({ origin, destination, profile = "hike" }) {
+    if (!await initialize()) return null;
+    const operation = ++operationCounter;
+    currentOperation = operation;
+    const reply = await request("local_route", {
+      profile,
+      origin: { lat: origin.lat, lon: origin.lon },
+      destination: { lat: destination.lat, lon: destination.lon },
+    }, ROUTE_TIMEOUT_MS, operation);
+    return operation === currentOperation ? reply : null;
+  }
+
+  function invalidate() {
+    currentOperation = ++operationCounter;
+    transport.cancelOwner(requestOwner);
+  }
+
+  async function request(type, fields, timeoutMs, operation) {
+    const reply = await transport.request(type, fields, {
+      owner: requestOwner,
+      parseReply: parseLocalRoutingReply,
+      timeoutMs,
+    });
+    return operation !== null && operation !== currentOperation ? null : reply;
+  }
+
+  return Object.freeze({
+    nativeAvailable,
+    initialize,
+    capabilities,
+    route,
+    invalidate,
+  });
+}
+
+export function createLocalRoutingExperiment({
+  bridge = createLocalRoutingBridge(),
+  getPoints = () => [],
+  renderRoute,
+  clearRoute,
+  elements,
+} = {}) {
+  let currentRequest = 0;
+  let packInstalled = false;
+
+  async function initialize() {
+    const capabilities = await bridge.capabilities();
+    if (!capabilities) {
+      if (bridge.nativeAvailable) {
+        elements.container.classList.remove("hidden");
+        elements.status.textContent = "Native routing handshake unavailable.";
+        setBusy(false);
+      }
+      return false;
+    }
+    if (!capabilities.enabled) return false;
+    packInstalled = capabilities.pack_installed;
+    elements.container.classList.remove("hidden");
+    elements.status.textContent = packInstalled
+      ? `Development pack ${capabilities.pack_id} is ready.`
+      : `Development pack ${capabilities.pack_id} is not installed.`;
+    setBusy(false);
+    return true;
+  }
+
+  async function requestRoute() {
+    const points = getPoints();
+    if (!Array.isArray(points) || points.length < 2) {
+      elements.status.textContent = "Choose at least two planner points for local A→B routing.";
+      return null;
+    }
+    return runRoute({
+      origin: points[0],
+      destination: points[1],
+      profile: "hike",
+    });
+  }
+
+  function requestSmokeTest() {
+    return runRoute(MARLY_OFFLINE_SMOKE_TEST);
+  }
+
+  async function runRoute(input) {
+    const request = ++currentRequest;
+    setBusy(true);
+    elements.status.textContent = "Calculating with the local Valhalla experiment…";
+    const reply = await bridge.route(input);
+    if (request !== currentRequest) return null;
+    setBusy(false);
+    if (reply?.type === "local_route_result") {
+      renderRoute(reply.geometry);
+      const duration = reply.duration_s === null
+        ? "duration unavailable"
+        : `${Math.round(reply.duration_s / 60)} min`;
+      const measurements = reply.measurements;
+      const pss = [
+        measurements.memory_before_initialization_bytes,
+        measurements.memory_after_initialization_bytes,
+        measurements.memory_after_route_bytes,
+      ].map((value) => (value / 1_048_576).toFixed(1));
+      elements.status.textContent = (
+        `${measurements.cold_start ? "Cold" : "Warm"} local Valhalla experiment · `
+        + `${(reply.distance_m / 1_000).toFixed(2)} km · ${duration} · `
+        + `${reply.geometry.length} vertices · engine ${reply.engine} `
+        + `${reply.engine_version} · initialization `
+        + `${measurements.engine_initialization_ms} ms · route `
+        + `${measurements.route_ms} ms · PSS before initialization ${pss[0]} MiB / `
+        + `after initialization ${pss[1]} MiB / after routing ${pss[2]} MiB`
+      );
+      return reply;
+    }
+    clearRoute();
+    elements.status.textContent = failureMessage(reply?.code);
+    return reply;
+  }
+
+  function bind() {
+    elements.button.addEventListener("click", requestRoute);
+    elements.smokeButton.addEventListener("click", requestSmokeTest);
+    return initialize();
+  }
+
+  function setBusy(busy) {
+    for (const button of [elements.button, elements.smokeButton]) {
+      button.disabled = busy || !packInstalled;
+      button.setAttribute("aria-busy", String(busy));
+    }
+  }
+
+  function invalidate() {
+    currentRequest += 1;
+    bridge.invalidate();
+    clearRoute();
+  }
+
+  return Object.freeze({
+    bind,
+    initialize,
+    requestRoute,
+    requestSmokeTest,
+    invalidate,
+  });
+}
+
+export function parseLocalRoutingReply(payload) {
+  let value;
+  try {
+    value = JSON.parse(payload);
+  } catch {
+    return null;
+  }
+  if (!baseReply(value)) return null;
+  if (value.type === "hello_result") return validHello(value) ? value : null;
+  if (value.type === "local_route_capabilities_result") {
+    return exactFields(value, CAPABILITY_FIELDS)
+      && typeof value.enabled === "boolean"
+      && typeof value.pack_installed === "boolean"
+      && safeIdentifier(value.engine)
+      && safeVersion(value.engine_version)
+      && safeIdentifier(value.pack_id)
+      ? value
+      : null;
+  }
+  if (value.type === "local_route_failure") {
+    return exactFields(value, FAILURE_FIELDS) && FAILURE_CODES.has(value.code)
+      ? value
+      : null;
+  }
+  if (value.type !== "local_route_result" || !exactFields(value, ROUTE_FIELDS)) {
+    return null;
+  }
+  if (
+    value.profile !== "hike"
+    || !safeIdentifier(value.engine)
+    || !safeVersion(value.engine_version)
+    || !positiveFinite(value.distance_m)
+    || !(value.duration_s === null || nonNegativeFinite(value.duration_s))
+    || !validGeometry(value.geometry)
+    || !validCoordinateObject(value.snapped_origin)
+    || !validCoordinateObject(value.snapped_destination)
+    || !validMeasurements(value.measurements)
+  ) return null;
+  const first = value.geometry[0];
+  const last = value.geometry[value.geometry.length - 1];
+  if (
+    first[0] !== value.snapped_origin.lon
+    || first[1] !== value.snapped_origin.lat
+    || last[0] !== value.snapped_destination.lon
+    || last[1] !== value.snapped_destination.lat
+  ) return null;
+  return value;
+}
+
+function validHello(value) {
+  const fields = new Set([
+    "schema_version", "request_id", "type", "outing_slug", "participant_id",
+    "active", "state", "last_published_at", "pending_sample", "stop_warning",
+  ]);
+  return exactFields(value, fields)
+    && typeof value.active === "boolean"
+    && typeof value.state === "string"
+    && typeof value.pending_sample === "boolean";
+}
+
+function baseReply(value) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    && value.schema_version === SCHEMA_VERSION
+    && /^[A-Za-z0-9_-]{1,64}$/.test(value.request_id ?? "");
+}
+
+function validGeometry(value) {
+  return Array.isArray(value)
+    && value.length >= 2
+    && value.length <= MAX_ROUTE_VERTICES
+    && value.every((coordinate) => (
+      Array.isArray(coordinate)
+      && coordinate.length === 2
+      && coordinate.every(Number.isFinite)
+      && coordinate[0] >= -180 && coordinate[0] <= 180
+      && coordinate[1] >= -90 && coordinate[1] <= 90
+    ));
+}
+
+function validCoordinateObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    && exactFields(value, COORDINATE_FIELDS)
+    && Number.isFinite(value.lat) && value.lat >= -90 && value.lat <= 90
+    && Number.isFinite(value.lon) && value.lon >= -180 && value.lon <= 180;
+}
+
+function validMeasurements(value) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    && exactFields(value, MEASUREMENT_FIELDS)
+    && typeof value.cold_start === "boolean"
+    && [
+      value.engine_initialization_ms,
+      value.route_ms,
+      value.memory_before_initialization_bytes,
+      value.memory_after_initialization_bytes,
+      value.memory_after_route_bytes,
+    ].every((item) => Number.isSafeInteger(item) && item >= 0);
+}
+
+function failureMessage(code) {
+  const description = {
+    routing_pack_unavailable: "The local development routing pack is unavailable.",
+    no_route: "Valhalla found no graph route between these points.",
+    invalid_request: "The local route request was rejected.",
+    unsupported_profile: "Only the experimental hike profile is supported.",
+    route_too_large: "The local route exceeded the bounded result size.",
+    routing_busy: "A local route is already being calculated.",
+    routing_failure: "The local routing engine failed explicitly; no fallback was used.",
+  }[code];
+  const explicitCode = FAILURE_CODES.has(code) ? code : "invalid_native_reply";
+  return `Local Valhalla experiment failed (${explicitCode}): ${
+    description ?? "No valid native reply was received."
+  }`;
+}
+
+function exactFields(value, expected) {
+  const fields = Object.keys(value);
+  return fields.length === expected.size
+    && fields.every((field) => expected.has(field));
+}
+
+function safeIdentifier(value) {
+  return typeof value === "string" && /^[A-Za-z0-9._/-]{1,64}$/.test(value);
+}
+
+function safeVersion(value) {
+  return typeof value === "string" && /^[A-Za-z0-9._/-]{1,96}$/.test(value);
+}
+
+function positiveFinite(value) {
+  return Number.isFinite(value) && value > 0;
+}
+
+function nonNegativeFinite(value) {
+  return Number.isFinite(value) && value >= 0;
+}

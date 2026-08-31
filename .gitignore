@@ -21,6 +21,7 @@ data/osm/*
 data/graph-cache/*
 !data/graph-cache/.gitkeep
 data/graph-cache-backups/
+data/valhalla/
 data/nature/*
 !data/nature/.gitkeep
 data/nature/*.json

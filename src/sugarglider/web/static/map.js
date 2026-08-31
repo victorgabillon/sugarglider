@@ -43,6 +43,9 @@ const REQUESTED_RADIUS_SEGMENTS = 48;
 const DIRECTION_SOURCE = "selected-route-direction";
 const DIRECTION_LAYER = "selected-route-direction-arrows";
 const DIRECTION_IMAGE = "route-direction-arrow";
+const LOCAL_ROUTE_SOURCE = "local-routing-experiment";
+const LOCAL_ROUTE_CASING_LAYER = "local-routing-experiment-casing";
+const LOCAL_ROUTE_LAYER = "local-routing-experiment-line";
 const OUTING_LIVE_POSITION_SOURCE = "outing-live-position-current";
 const OUTING_LIVE_ACCURACY_SOURCE = "outing-live-accuracy-current";
 const OUTING_LIVE_ACCURACY_FILL_LAYER = "outing-live-accuracy-fill";
@@ -2074,6 +2077,44 @@ export function clearRoutes() {
   clearSpurLayers();
   removeSource("selected-sections");
   clearMarkers(optionalMarkers);
+  clearLocalExperimentalRoute();
+}
+
+export function renderLocalExperimentalRoute(geometry) {
+  if (!ready || !map) return;
+  clearLocalExperimentalRoute();
+  if (!Array.isArray(geometry) || geometry.length < 2) return;
+  map.addSource(LOCAL_ROUTE_SOURCE, {
+    type: "geojson",
+    data: {
+      type: "Feature",
+      properties: { kind: "local-routing-experiment" },
+      geometry: { type: "LineString", coordinates: geometry },
+    },
+  });
+  map.addLayer({
+    id: LOCAL_ROUTE_CASING_LAYER,
+    type: "line",
+    source: LOCAL_ROUTE_SOURCE,
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-color": "#fffdf7", "line-width": 10, "line-opacity": .9 },
+  });
+  map.addLayer({
+    id: LOCAL_ROUTE_LAYER,
+    type: "line",
+    source: LOCAL_ROUTE_SOURCE,
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-color": "#2468a2", "line-width": 6, "line-opacity": .96 },
+  });
+  moveRequiredLabelsToTop();
+  positionPlannerLocationLayers();
+}
+
+export function clearLocalExperimentalRoute() {
+  if (!map) return;
+  removeLayer(LOCAL_ROUTE_LAYER);
+  removeLayer(LOCAL_ROUTE_CASING_LAYER);
+  removeSource(LOCAL_ROUTE_SOURCE);
 }
 
 function clearMarkers(markers) {

@@ -133,7 +133,7 @@ def test_control_accessibility_pwa_and_browser_harness_are_explicit() -> None:
     assert "width: 40px; height: 40px" in styles
     assert 'data-state="acquiring"' in styles
     assert "prefers-reduced-motion: reduce" in styles
-    assert "`${SHELL_CACHE_PREFIX}v12`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v16`" in worker
     assert '"/static/planner_location.js"' in worker
     for filename in GPS_ASSETS:
         assert f'"/static/brand/{filename}"' in worker
@@ -163,6 +163,9 @@ def test_android_webview_geolocation_is_exact_origin_foreground_only() -> None:
     assert "onGeolocationPermissionsShowPrompt" in activity
     assert "ServerOrigin.parse(" in activity
     assert "requestedOrigin = normalizedRequestedOrigin" in activity
+    assert "val canonicalSourceOrigin = ServerOrigin.parse(" in activity
+    assert "sourceOrigin.toString()," in activity
+    assert "canonicalSourceOrigin," in activity
     assert "callback.invoke(requestedOrigin, allow, allow)" in activity
     assert "configuredOrigin = configuredOrigin" in activity
     assert "Manifest.permission.ACCESS_COARSE_LOCATION" in activity
