@@ -21,6 +21,23 @@ internal sealed interface BridgeRequest {
         override val pageNonce: String,
     ) : BridgeRequest
 
+    data class GetLocalRouteCapabilities(
+        override val requestId: String,
+        override val pageNonce: String,
+    ) : BridgeRequest
+
+    data class LocalRoute(
+        override val requestId: String,
+        override val pageNonce: String,
+        val routeRequest: NativeRouteRequest,
+    ) : BridgeRequest
+
+    data class RejectedLocalRoute(
+        override val requestId: String,
+        override val pageNonce: String,
+        val code: NativeRouteFailureCode,
+    ) : BridgeRequest
+
     data class StopTracking(
         override val requestId: String,
         override val pageNonce: String,
@@ -61,6 +78,12 @@ internal object BridgeProtocol {
         "outing_expires_at",
         "current_sequence",
     )
+    private val localRouteFields = baseFields + setOf(
+        "profile",
+        "origin",
+        "destination",
+    )
+    private val coordinateFields = setOf("lat", "lon")
 
     fun parse(payload: String): BridgeRequest? {
         if (payload.length !in 2..8_192) return null
@@ -84,6 +107,13 @@ internal object BridgeProtocol {
                 } else {
                     null
                 }
+            "get_local_route_capabilities" ->
+                if (hasExactly(value, baseFields)) {
+                    BridgeRequest.GetLocalRouteCapabilities(requestId, pageNonce)
+                } else {
+                    null
+                }
+            "local_route" -> parseLocalRoute(value, requestId, pageNonce)
             "stop_tracking" ->
                 parseStop(value, requestId, pageNonce)
             "ack_terminal_failure" ->
@@ -126,6 +156,76 @@ internal object BridgeProtocol {
         .put("participant_id", participantId ?: JSONObject.NULL)
         .toString()
 
+    fun localRouteCapabilitiesReply(
+        requestId: String,
+        capabilities: NativeRouteCapabilities,
+    ): String = JSONObject()
+        .put("schema_version", SCHEMA_VERSION)
+        .put("request_id", requestId)
+        .put("type", "local_route_capabilities_result")
+        .put("enabled", capabilities.enabled)
+        .put("engine", capabilities.engine)
+        .put("engine_version", capabilities.engineVersion)
+        .put("pack_installed", capabilities.packInstalled)
+        .put("pack_id", capabilities.packId)
+        .toString()
+
+    fun localRouteReply(requestId: String, result: NativeRouteResult.Success): String? {
+        if (!result.isValid()) return null
+        val geometry = org.json.JSONArray()
+        result.geometry.forEach { coordinate ->
+            geometry.put(
+                org.json.JSONArray()
+                    .put(coordinate.longitude)
+                    .put(coordinate.latitude),
+            )
+        }
+        val first = result.geometry.first()
+        val last = result.geometry.last()
+        val reply = JSONObject()
+            .put("schema_version", SCHEMA_VERSION)
+            .put("request_id", requestId)
+            .put("type", "local_route_result")
+            .put("profile", result.profile.wireValue)
+            .put("engine", result.engine)
+            .put("engine_version", result.engineVersion)
+            .put("distance_m", result.distanceMeters)
+            .put("duration_s", result.durationSeconds ?: JSONObject.NULL)
+            .put("geometry", geometry)
+            .put("snapped_origin", coordinateJson(first))
+            .put("snapped_destination", coordinateJson(last))
+            .put(
+                "measurements",
+                JSONObject()
+                    .put("cold_start", result.measurements.coldStart)
+                    .put(
+                        "engine_initialization_ms",
+                        result.measurements.engineInitializationMs,
+                    ).put("route_ms", result.measurements.routeMs)
+                    .put(
+                        "memory_before_initialization_bytes",
+                        result.measurements.memoryBeforeInitializationBytes,
+                    ).put(
+                        "memory_after_initialization_bytes",
+                        result.measurements.memoryAfterInitializationBytes,
+                    ).put(
+                        "memory_after_route_bytes",
+                        result.measurements.memoryAfterRouteBytes,
+                    ),
+            ).toString()
+        return reply.takeIf {
+            it.toByteArray(StandardCharsets.UTF_8).size <= MAX_LOCAL_ROUTE_REPLY_BYTES
+        }
+    }
+
+    fun localRouteFailure(requestId: String, code: NativeRouteFailureCode): String =
+        JSONObject()
+            .put("schema_version", SCHEMA_VERSION)
+            .put("request_id", requestId)
+            .put("type", "local_route_failure")
+            .put("code", code.wireValue)
+            .toString()
+
     private fun parseStart(
         value: JSONObject,
         requestId: String,
@@ -159,6 +259,47 @@ internal object BridgeProtocol {
             outingExpiresAt = expiresAt,
             currentSequence = sequence,
         )
+    }
+
+    private fun parseLocalRoute(
+        value: JSONObject,
+        requestId: String,
+        pageNonce: String,
+    ): BridgeRequest? {
+        if (!hasExactly(value, localRouteFields)) return null
+        val profileValue = value.optString("profile", "")
+        val profile = LocalRouteProfile.parse(profileValue) ?: return BridgeRequest.RejectedLocalRoute(
+            requestId,
+            pageNonce,
+            NativeRouteFailureCode.UNSUPPORTED_PROFILE,
+        )
+        val origin = parseCoordinate(value.optJSONObject("origin"))
+            ?: return BridgeRequest.RejectedLocalRoute(
+                requestId,
+                pageNonce,
+                NativeRouteFailureCode.INVALID_REQUEST,
+            )
+        val destination = parseCoordinate(value.optJSONObject("destination"))
+            ?: return BridgeRequest.RejectedLocalRoute(
+                requestId,
+                pageNonce,
+                NativeRouteFailureCode.INVALID_REQUEST,
+            )
+        val routeRequest = NativeRouteRequest(
+            version = LOCAL_ROUTE_REQUEST_VERSION,
+            requestId = requestId,
+            origin = origin,
+            destination = destination,
+            profile = profile,
+        )
+        if (!routeRequest.isValid()) {
+            return BridgeRequest.RejectedLocalRoute(
+                requestId,
+                pageNonce,
+                NativeRouteFailureCode.INVALID_REQUEST,
+            )
+        }
+        return BridgeRequest.LocalRoute(requestId, pageNonce, routeRequest)
     }
 
     private fun parseStop(
@@ -223,17 +364,38 @@ internal object BridgeProtocol {
             else -> null
         }
     }
+
+    private fun parseCoordinate(value: JSONObject?): LocalRouteCoordinate? {
+        if (value == null || !hasExactly(value, coordinateFields)) return null
+        val latitude = strictDouble(value, "lat") ?: return null
+        val longitude = strictDouble(value, "lon") ?: return null
+        return LocalRouteCoordinate(latitude, longitude).takeIf(LocalRouteCoordinate::isValid)
+    }
+
+    private fun strictDouble(value: JSONObject, key: String): Double? {
+        val raw = try {
+            value.get(key)
+        } catch (_: JSONException) {
+            return null
+        }
+        if (raw !is Number) return null
+        return raw.toDouble().takeIf(Double::isFinite)
+    }
+
+    private fun coordinateJson(coordinate: LocalRouteCoordinate): JSONObject = JSONObject()
+        .put("lat", coordinate.latitude)
+        .put("lon", coordinate.longitude)
 }
 
 internal object BridgeGate {
     fun accepts(
-        sourceOrigin: String,
+        canonicalSourceOrigin: String,
         configuredOrigin: String,
         isMainFrame: Boolean,
         currentWebViewIdentity: Int,
         sourceWebViewIdentity: Int,
     ): Boolean = isMainFrame &&
-        sourceOrigin == configuredOrigin &&
+        canonicalSourceOrigin == configuredOrigin &&
         currentWebViewIdentity == sourceWebViewIdentity
 }
 

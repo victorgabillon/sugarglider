@@ -336,6 +336,13 @@
             <label data-icon="nature"><input id="show-nature" type="checkbox"> Show nature</label>
             <label data-icon="direction"><input id="show-direction" type="checkbox" checked> Show direction arrows</label>
             <label id="show-dropped-requested-radii-control" class="advanced-map-control" title="Advanced requested-stop display"><input id="show-dropped-requested-radii" type="checkbox"> Dropped access-search areas</label>
+            <section id="local-routing-experiment" class="local-routing-experiment advanced-map-control hidden" aria-labelledby="local-routing-title">
+              <strong id="local-routing-title">Local routing experiment</strong>
+              <p>Debug Android only. Uses local Valhalla pedestrian costing; this is not the production hike profile.</p>
+              <button id="local-routing-smoke-button" class="button secondary" type="button" aria-busy="false" disabled>Run Marly offline smoke test</button>
+              <button id="local-routing-button" class="button secondary" type="button" aria-busy="false" disabled>Route A→B locally</button>
+              <p id="local-routing-status" role="status" aria-live="polite"></p>
+            </section>
           </div>
         </details>
         <details class="legend">

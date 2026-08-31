@@ -6,6 +6,9 @@ import {
   nativeStatusBusy,
   projectNativeStatusForCurrentOuting,
 } from "../../src/sugarglider/web/static/outing_native_bridge.js";
+import {
+  createNativeBridgeTransport,
+} from "../../src/sugarglider/web/static/native_bridge_transport.js";
 
 const ORIGIN = "https://example.test";
 const SLUG = "native_outing_slug_12345";
@@ -54,7 +57,7 @@ export async function runPr27NativeBridgeHarness() {
 }
 
 async function scenarioOrdinaryBrowserHasNoBridge() {
-  const bridge = createNativeTrackingBridge({ port: null, origin: ORIGIN });
+  const bridge = bridgeFor(null, PAGE_A);
   equal(await bridge.initialize(), false, "ordinary browser remains non-native");
   equal(bridge.available(), false, "ordinary browser fallback stays available");
 }
@@ -524,7 +527,12 @@ function automaticPort({ active = false, hold = null, malformedHello = false } =
 }
 
 function bridgeFor(port, pageNonce) {
-  return createNativeTrackingBridge({ port, origin: ORIGIN, pageNonce });
+  const transport = createNativeBridgeTransport({
+    port,
+    pageNonce,
+    lifecycleTarget: null,
+  });
+  return createNativeTrackingBridge({ transport, origin: ORIGIN });
 }
 
 function nativeLedger() {

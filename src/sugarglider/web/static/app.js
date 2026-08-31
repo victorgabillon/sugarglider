@@ -2,7 +2,8 @@ import { ApiError, exportPlanCandidate, generatePlan, getConfig, getPoiStatus, g
 import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
-import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
+import { clearLocalExperimentalRoute, clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderLocalExperimentalRoute, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
+import { createLocalRoutingExperiment } from "./local_routing.js";
 import {
   centerPlannerCurrentLocation,
   clearPlannerCurrentLocation,
@@ -2870,6 +2871,23 @@ async function start() {
     }
     bindEvents();
     const sharedSlug = currentSharedRouteSlug;
+    if (!sharedSlug) {
+      const localRoutingExperiment = createLocalRoutingExperiment({
+        getPoints: () => state.points.map(({ lat, lon }) => ({ lat, lon })),
+        renderRoute: (geometry) => {
+          renderLocalExperimentalRoute(geometry);
+          fitCoordinates(geometry);
+        },
+        clearRoute: clearLocalExperimentalRoute,
+        elements: {
+          container: byId("local-routing-experiment"),
+          button: byId("local-routing-button"),
+          smokeButton: byId("local-routing-smoke-button"),
+          status: byId("local-routing-status"),
+        },
+      });
+      void localRoutingExperiment.bind();
+    }
     let sharedSnapshot = null;
     if (sharedSlug) {
       sharedSnapshot = await loadSavedRoutePage(sharedSlug);

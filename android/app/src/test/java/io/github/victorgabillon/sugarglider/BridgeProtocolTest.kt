@@ -15,6 +15,40 @@ class BridgeProtocolTest {
     }
 
     @Test
+    fun equivalentWebViewOriginSpellingAcceptedAfterCanonicalization() {
+        val configured = "http://localhost:8000"
+        val source = ServerOrigin.parse("http://localhost:8000/", true)?.normalized
+        assertEquals(configured, source)
+        assertTrue(BridgeGate.accepts(requireNotNull(source), configured, true, 7, 7))
+    }
+
+    @Test
+    fun differentCanonicalWebViewOriginsRemainRejected() {
+        val configured = "http://localhost:8000"
+        for (rawSource in listOf(
+            "http://127.0.0.1:8000",
+            "http://localhost:8001",
+            "https://localhost:8000",
+        )) {
+            val source = ServerOrigin.parse(rawSource, true)?.normalized
+            assertNotNull(source)
+            assertFalse(BridgeGate.accepts(requireNotNull(source), configured, true, 7, 7))
+        }
+    }
+
+    @Test
+    fun malformedWebViewOriginsFailClosedBeforeBridgeGate() {
+        for (rawSource in listOf(
+            "not an origin",
+            "javascript:alert(1)",
+            "http://user:secret@localhost:8000",
+            "http://localhost:8000/hostile",
+        )) {
+            assertNull(ServerOrigin.parse(rawSource, true)?.normalized)
+        }
+    }
+
+    @Test
     fun wrongOriginRejected() {
         assertFalse(BridgeGate.accepts("https://evil.test", TEST_ORIGIN, true, 7, 7))
     }

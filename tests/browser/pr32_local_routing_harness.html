@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>PR32 local routing harness</title>
+  <pre id="result">running</pre>
+  <script>
+    window.pr32HarnessResult = document.getElementById("result");
+    window.pr32UnhandledRejection = null;
+    window.addEventListener("error", (event) => {
+      window.pr32HarnessResult.dataset.status = "failed";
+      window.pr32HarnessResult.textContent = event.error?.stack ?? event.message;
+      document.title = "PR32 local routing harness failed";
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      window.pr32UnhandledRejection = event.reason;
+      window.pr32HarnessResult.dataset.status = "failed";
+      window.pr32HarnessResult.textContent = event.reason instanceof Error
+        ? event.reason.stack
+        : String(event.reason);
+      document.title = "PR32 local routing harness failed";
+    });
+  </script>
+  <script type="module">
+    import { runPr32LocalRoutingHarness } from "./pr32_local_routing_harness.js";
+
+    const result = window.pr32HarnessResult;
+    try {
+      const scenarios = await runPr32LocalRoutingHarness();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      if (window.pr32UnhandledRejection !== null) throw window.pr32UnhandledRejection;
+      if (result.dataset.status === "failed") throw new Error(result.textContent);
+      result.dataset.status = "passed";
+      result.textContent = JSON.stringify(scenarios);
+      document.title = `PR32 local routing harness passed ${scenarios.length}`;
+    } catch (error) {
+      result.dataset.status = "failed";
+      result.textContent = error instanceof Error ? error.stack : String(error);
+      document.title = "PR32 local routing harness failed";
+    }
+  </script>
+</html>

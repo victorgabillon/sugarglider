@@ -1,3 +1,7 @@
+import {
+  nativeBridgeTransport,
+} from "./native_bridge_transport.js";
+
 const SCHEMA_VERSION = 1;
 const REQUEST_TIMEOUT_MS = 15_000;
 const STATUS_FIELDS = new Set([
@@ -46,38 +50,27 @@ const NATIVE_BUSY_STATES = new Set([
 const IDENTITY_PATTERN = /^[A-Za-z0-9_-]{20,64}$/;
 
 export function createNativeTrackingBridge({
-  port = globalThis.sugargliderNative ?? null,
+  transport = nativeBridgeTransport,
   origin = globalThis.location?.origin ?? null,
-  schedule = (callback, delay) => globalThis.setTimeout(callback, delay),
-  cancelScheduled = (timer) => globalThis.clearTimeout(timer),
-  pageNonce = cryptographicPageNonce(globalThis.crypto),
 } = {}) {
-  let initialized = false;
   let trusted = false;
-  let requestCounter = 0;
   let operationCounter = 0;
   let currentOperation = 0;
   let currentStatus = null;
   let initialization = null;
-  const pending = new Map();
   const subscribers = new Set();
+  const requestOwner = Object.freeze({ client: "outing" });
+  transport.subscribeUnsolicited(receiveUnsolicited);
 
   async function initialize() {
     if (initialization) return initialization;
-    if (
-      !validPort(port)
-      || typeof origin !== "string"
-      || !/^[a-f0-9]{32}$/.test(pageNonce ?? "")
-    ) return false;
-    initialized = true;
-    port.onmessage = receive;
-    initialization = request("hello", {}, { operation: null, timeoutMs: 2_000 })
-      .then((reply) => {
-        trusted = reply?.type === "hello_result";
-        if (trusted) applyStatus(reply);
-        return trusted;
-      })
-      .catch(() => false);
+    if (typeof origin !== "string") return false;
+    initialization = transport.initialize().then((payload) => {
+      const reply = parseReply(payload);
+      trusted = reply?.type === "hello_result";
+      if (trusted) applyStatus(reply);
+      return trusted;
+    }).catch(() => false);
     return initialization;
   }
 
@@ -148,60 +141,31 @@ export function createNativeTrackingBridge({
   }
 
   function available() {
-    return trusted;
+    return trusted && transport.available();
   }
 
   function status() {
     return currentStatus;
   }
 
-  function receive(event) {
-    const reply = parseReply(event?.data);
+  function receiveUnsolicited(payload) {
+    const reply = parseReply(payload);
     if (!reply) return;
-    const requestState = pending.get(reply.request_id);
-    if (requestState) {
-      pending.delete(reply.request_id);
-      cancelScheduled(requestState.timer);
-      if (
-        requestState.operation !== null
-        && !owns(requestState.operation)
-      ) {
-        requestState.resolve(null);
-        return;
-      }
-      requestState.resolve(reply);
-      return;
-    }
     if (reply.type === "tracking_status") applyStatus(reply);
     else if (reply.type === "permanent_failure") notifyFailure(reply);
   }
 
-  function request(type, fields, { operation, timeoutMs = REQUEST_TIMEOUT_MS }) {
-    if (!initialized || !validPort(port)) return Promise.resolve(null);
-    requestCounter += 1;
-    const requestId = `web-${pageNonce}-${requestCounter}`;
-    const payload = JSON.stringify({
-      schema_version: SCHEMA_VERSION,
-      request_id: requestId,
-      type,
-      ...fields,
+  async function request(
+    type,
+    fields,
+    { operation, timeoutMs = REQUEST_TIMEOUT_MS },
+  ) {
+    const reply = await transport.request(type, fields, {
+      owner: requestOwner,
+      parseReply,
+      timeoutMs,
     });
-    return new Promise((resolve) => {
-      const timer = schedule(() => {
-        const requestState = pending.get(requestId);
-        if (!requestState) return;
-        pending.delete(requestId);
-        requestState.resolve(null);
-      }, timeoutMs);
-      pending.set(requestId, { operation, resolve, timer });
-      try {
-        port.postMessage(payload);
-      } catch {
-        pending.delete(requestId);
-        cancelScheduled(timer);
-        resolve(null);
-      }
-    });
+    return operation !== null && !owns(operation) ? null : reply;
   }
 
   function ownOperation() {
@@ -492,16 +456,4 @@ function exactFields(value, expected) {
   const fields = Object.keys(value);
   return fields.length === expected.size
     && fields.every((field) => expected.has(field));
-}
-
-function validPort(value) {
-  return value && typeof value.postMessage === "function";
-}
-
-function cryptographicPageNonce(cryptoObject) {
-  if (typeof cryptoObject?.getRandomValues !== "function") return null;
-  const bytes = new Uint8Array(16);
-  cryptoObject.getRandomValues(bytes);
-  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0"))
-    .join("");
 }

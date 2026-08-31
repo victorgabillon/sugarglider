@@ -154,9 +154,11 @@ def test_secure_store_is_aes_gcm_keystore_atomic_and_latest_only() -> None:
 
 def test_browser_native_module_preserves_default_browser_boundary() -> None:
     bridge = (STATIC / "outing_native_bridge.js").read_text()
+    transport = (STATIC / "native_bridge_transport.js").read_text()
     tracker = (STATIC / "outing_tracking.js").read_text()
     controller = (STATIC / "outing_controller.js").read_text()
-    assert "globalThis.sugargliderNative ?? null" in bridge
+    assert "globalThis.sugargliderNative ?? null" in transport
+    assert "transport = nativeBridgeTransport" in bridge
     assert "if (!await initialize()) return null" in bridge
     assert "navigator.geolocation" not in bridge
     assert "EventSource" not in bridge
@@ -218,11 +220,13 @@ def test_legacy_and_predictive_back_share_outing_confirmation_policy() -> None:
 
 def test_bridge_requests_are_page_scoped_and_terminal_cleanup_is_exact() -> None:
     bridge = (STATIC / "outing_native_bridge.js").read_text()
+    transport = (STATIC / "native_bridge_transport.js").read_text()
     protocol = (KOTLIN / "BridgeProtocol.kt").read_text()
     activity = (KOTLIN / "MainActivity.kt").read_text()
     controller = (STATIC / "outing_controller.js").read_text()
-    assert "cryptoObject.getRandomValues(bytes)" in bridge
-    assert "`web-${pageNonce}-${requestCounter}`" in bridge
+    assert "cryptoObject.getRandomValues(bytes)" in transport
+    assert "`web-${pageNonce}-${requestCounter}`" in transport
+    assert 'addEventListener("pagehide", invalidate, { once: true })' in transport
     assert "data class Key(val pageNonce: String, val requestId: String)" in protocol
     assert "override fun onPageStarted" in activity
     assert "invalidateBridgePage()" in activity

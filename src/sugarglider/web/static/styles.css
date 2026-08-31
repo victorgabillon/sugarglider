@@ -280,6 +280,10 @@ input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d;
 .map-tools input { width: auto; min-height: auto; margin: 0; }
 .map-tools .action-icon { width: .9rem; height: .9rem; }
 .map-tools .advanced-map-control { padding-top: .3rem; border-top: 1px solid #d7d4c8; }
+.local-routing-experiment { max-width: 17rem; display: grid; gap: .35rem; color: #445048; font-size: .68rem; }
+.local-routing-experiment p { margin: 0; line-height: 1.35; }
+.local-routing-experiment .button { min-height: 2rem; padding: .35rem .55rem; font-size: .7rem; }
+.local-routing-experiment.hidden { display: none; }
 .planner-location-control { position: absolute; z-index: 5; right: .65rem; bottom: 3.75rem; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; display: grid; place-items: center; }
 .planner-location-control img { width: 40px; height: 40px; display: block; object-fit: contain; pointer-events: none; }
 .planner-location-control:hover { filter: brightness(.98); }

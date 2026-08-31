@@ -150,26 +150,38 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_pr31_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v16_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v12"
+    assert generation.group(1) == "v16"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
-        for name in ("index.html", "styles.css", "planner_location.js")
+        for name in (
+            "index.html",
+            "styles.css",
+            "planner_location.js",
+            "local_routing.js",
+            "native_bridge_transport.js",
+        )
     } == {
         "index.html": (
-            "f892b599151f690bd6572b7341300ebea695b193895d9176fd41e00cdaf00e7f"
+            "f88439132bd83e940b8166626506179b23842c8296816f5c8495575e5da51831"
         ),
         "styles.css": (
-            "8fb571cba5249148b4ae1aef7b20a42ddced4e1fd1d10184bbdb2570e27ace72"
+            "aefabae06a260917b7d6a50b1a782849fddedf84ecb99d5b5af66834bf825be6"
         ),
         "planner_location.js": (
             "ce28891c92263c084e33dd5ae9ad906a31e527253aeb321539599711e4500b9c"
+        ),
+        "local_routing.js": (
+            "a8d985db1639640565eedc0088a84106b642d16b6d291ffe4c8e79c1973fb952"
+        ),
+        "native_bridge_transport.js": (
+            "f601ec9b54b063ce3687fd6f51404818157fa731e860dd87ea6c84656d1528b4"
         ),
     }
 
