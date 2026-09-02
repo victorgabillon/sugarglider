@@ -1,6 +1,7 @@
 package io.github.victorgabillon.sugarglider
 
 import org.json.JSONException
+import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -159,16 +160,21 @@ internal object BridgeProtocol {
     fun localRouteCapabilitiesReply(
         requestId: String,
         capabilities: NativeRouteCapabilities,
-    ): String = JSONObject()
-        .put("schema_version", SCHEMA_VERSION)
-        .put("request_id", requestId)
-        .put("type", "local_route_capabilities_result")
-        .put("enabled", capabilities.enabled)
-        .put("engine", capabilities.engine)
-        .put("engine_version", capabilities.engineVersion)
-        .put("pack_installed", capabilities.packInstalled)
-        .put("pack_id", capabilities.packId)
-        .toString()
+    ): String {
+        val installedPackIds = capabilities.installedPackIds.takeIf {
+            capabilities.isValid()
+        } ?: emptyList()
+        return JSONObject()
+            .put("schema_version", SCHEMA_VERSION)
+            .put("request_id", requestId)
+            .put("type", "local_route_capabilities_result")
+            .put("enabled", capabilities.enabled)
+            .put("engine", capabilities.engine)
+            .put("engine_version", capabilities.engineVersion)
+            .put("installed_pack_count", installedPackIds.size)
+            .put("installed_pack_ids", JSONArray(installedPackIds))
+            .toString()
+    }
 
     fun localRouteReply(requestId: String, result: NativeRouteResult.Success): String? {
         if (!result.isValid()) return null
@@ -189,6 +195,7 @@ internal object BridgeProtocol {
             .put("profile", result.profile.wireValue)
             .put("engine", result.engine)
             .put("engine_version", result.engineVersion)
+            .put("pack_id", result.packId)
             .put("distance_m", result.distanceMeters)
             .put("duration_s", result.durationSeconds ?: JSONObject.NULL)
             .put("geometry", geometry)

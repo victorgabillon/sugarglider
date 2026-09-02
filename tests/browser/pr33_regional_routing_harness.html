@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>PR33 regional routing harness</title>
+  <pre id="result">running</pre>
+  <script>
+    window.pr33HarnessResult = document.getElementById("result");
+    window.pr33UnhandledRejection = null;
+    window.addEventListener("error", (event) => {
+      window.pr33HarnessResult.dataset.status = "failed";
+      window.pr33HarnessResult.textContent = event.error?.stack ?? event.message;
+      document.title = "PR33 regional routing harness failed";
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      window.pr33UnhandledRejection = event.reason;
+      window.pr33HarnessResult.dataset.status = "failed";
+      window.pr33HarnessResult.textContent = event.reason instanceof Error
+        ? event.reason.stack
+        : String(event.reason);
+      document.title = "PR33 regional routing harness failed";
+    });
+  </script>
+  <script type="module">
+    import { runPr33RegionalRoutingHarness } from "./pr33_regional_routing_harness.js";
+
+    const result = window.pr33HarnessResult;
+    try {
+      const scenarios = await runPr33RegionalRoutingHarness();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      if (window.pr33UnhandledRejection !== null) throw window.pr33UnhandledRejection;
+      if (result.dataset.status === "failed") throw new Error(result.textContent);
+      result.dataset.status = "passed";
+      result.textContent = JSON.stringify(scenarios);
+      document.title = `PR33 regional routing harness passed ${scenarios.length}`;
+    } catch (error) {
+      result.dataset.status = "failed";
+      result.textContent = error instanceof Error ? error.stack : String(error);
+      document.title = "PR33 regional routing harness failed";
+    }
+  </script>
+</html>

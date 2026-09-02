@@ -41,14 +41,18 @@ internal data class NativeRouteCapabilities(
     val enabled: Boolean,
     val engine: String,
     val engineVersion: String,
-    val packInstalled: Boolean,
-    val packId: String,
-)
+    val installedPackIds: List<String>,
+) {
+    fun isValid(): Boolean = installedPackIds.size <= 64 &&
+        installedPackIds == installedPackIds.distinct().sorted() &&
+        installedPackIds.all(::isRoutingPackId)
+}
 
 internal enum class NativeRouteFailureCode(val wireValue: String) {
     INVALID_REQUEST("invalid_request"),
     UNSUPPORTED_PROFILE("unsupported_profile"),
     ROUTING_PACK_UNAVAILABLE("routing_pack_unavailable"),
+    NO_COVERING_ROUTING_PACK("no_covering_routing_pack"),
     NO_ROUTE("no_route"),
     ROUTE_TOO_LARGE("route_too_large"),
     ROUTING_BUSY("routing_busy"),
@@ -69,12 +73,14 @@ internal sealed interface NativeRouteResult {
         val profile: LocalRouteProfile,
         val engine: String,
         val engineVersion: String,
+        val packId: String,
         val distanceMeters: Double,
         val durationSeconds: Double?,
         val geometry: List<LocalRouteCoordinate>,
         val measurements: NativeRouteMeasurements,
     ) : NativeRouteResult {
-        fun isValid(): Boolean = distanceMeters.isFinite() &&
+        fun isValid(): Boolean = isRoutingPackId(packId) &&
+            distanceMeters.isFinite() &&
             distanceMeters > 0.0 &&
             (durationSeconds == null || (durationSeconds.isFinite() && durationSeconds >= 0.0)) &&
             geometry.size in 2..MAX_LOCAL_ROUTE_VERTICES &&

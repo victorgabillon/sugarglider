@@ -56,14 +56,27 @@ class LocalRouteProtocolTest {
                     enabled = true,
                     engine = "valhalla-mobile",
                     engineVersion = "0.5.1/valhalla-3.6.3",
-                    packInstalled = false,
-                    packId = "marly-dev-v1",
+                    installedPackIds = listOf("marly-dev-v1", "paris-dev-v1"),
                 ),
             ),
         )
         assertEquals("local_route_capabilities_result", capabilities.getString("type"))
+        assertEquals(2, capabilities.getInt("installed_pack_count"))
+        assertEquals("marly-dev-v1", capabilities.getJSONArray("installed_pack_ids").getString(0))
         assertFalse(capabilities.toString().contains("participant"))
         assertFalse(capabilities.toString().contains("coordinate"))
+        val invalidCapabilities = JSONObject(
+            BridgeProtocol.localRouteCapabilitiesReply(
+                requestId(),
+                NativeRouteCapabilities(
+                    enabled = true,
+                    engine = "valhalla-mobile",
+                    engineVersion = "0.5.1/valhalla-3.6.3",
+                    installedPackIds = listOf("paris-dev-v1", "marly-dev-v1"),
+                ),
+            ),
+        )
+        assertEquals(0, invalidCapabilities.getInt("installed_pack_count"))
 
         for (code in NativeRouteFailureCode.entries) {
             val failure = JSONObject(BridgeProtocol.localRouteFailure(requestId(), code))
@@ -78,6 +91,7 @@ class LocalRouteProtocolTest {
         val reply = requireNotNull(BridgeProtocol.localRouteReply(requestId(), success()))
         val value = JSONObject(reply)
         assertEquals("local_route_result", value.getString("type"))
+        assertEquals("marly-dev-v1", value.getString("pack_id"))
         assertEquals(3, value.getJSONArray("geometry").length())
         assertEquals(2.0966, value.getJSONObject("snapped_origin").getDouble("lon"), 0.0)
         assertEquals(12L, value.getJSONObject("measurements").getLong("route_ms"))
@@ -138,6 +152,7 @@ class LocalRouteProtocolTest {
         profile = LocalRouteProfile.HIKE,
         engine = "valhalla-mobile",
         engineVersion = "0.5.1/valhalla-3.6.3",
+        packId = "marly-dev-v1",
         distanceMeters = 3_450.5,
         durationSeconds = 2_600.0,
         geometry = listOf(

@@ -110,7 +110,7 @@ async function sharedTransportScenario(clientOrder) {
   port.reply(capabilityReply(localMessage.request_id, true, true));
   const [status, capabilities] = await Promise.all([outingRequest, localRequest]);
   equal(status.state, "stopped", `${clientOrder} outing receives its own reply`);
-  assert(capabilities.pack_installed, `${clientOrder} local receives its own reply`);
+  equal(capabilities.installed_pack_count, 1, `${clientOrder} local receives its own reply`);
   const requestIds = port.requests.map((value) => value.request_id);
   equal(
     new Set(requestIds).size,
@@ -246,6 +246,25 @@ async function handshakeDiagnosticScenario() {
   await releaseRig.experiment.bind();
   assert(releaseRig.fixture.classList.contains("hidden"), "disabled release stays hidden");
   releaseRig.fixture.remove();
+
+  const noPackRig = experimentRig({
+    nativeAvailable: true,
+    capabilities: async () => ({
+      enabled: true,
+      installed_pack_count: 0,
+      installed_pack_ids: [],
+    }),
+    invalidate() {},
+  });
+  await noPackRig.experiment.bind();
+  assert(!noPackRig.fixture.classList.contains("hidden"), "empty registry is visible");
+  equal(
+    noPackRig.status,
+    "No valid regional routing packs are installed.",
+    "empty registry diagnostic is explicit",
+  );
+  assert(noPackRig.buttons.every((button) => button.disabled), "empty registry disables actions");
+  noPackRig.fixture.remove();
 }
 
 async function validRouteScenario() {
@@ -259,7 +278,7 @@ async function validRouteScenario() {
   });
   const bridge = localBridgeFor(port);
   const capabilities = await bridge.capabilities();
-  assert(capabilities.enabled && capabilities.pack_installed, "debug pack ready");
+  assert(capabilities.enabled && capabilities.installed_pack_count === 1, "debug pack ready");
 
   const originalFetch = globalThis.fetch;
   let backendFetches = 0;
@@ -296,8 +315,8 @@ async function noRouteScenario() {
   const rig = experimentRig({
     capabilities: async () => ({
       enabled: true,
-      pack_installed: true,
-      pack_id: "marly-dev-v1",
+      installed_pack_count: 1,
+      installed_pack_ids: ["marly-dev-v1"],
     }),
     route: async () => reply,
     invalidate() {},
@@ -344,8 +363,8 @@ async function currentRequestRenderingScenario() {
   const bridge = {
     capabilities: async () => ({
       enabled: true,
-      pack_installed: true,
-      pack_id: "marly-dev-v1",
+      installed_pack_count: 1,
+      installed_pack_ids: ["marly-dev-v1"],
     }),
     route: () => new Promise((resolve) => pending.push(resolve)),
     invalidate() {},
@@ -375,6 +394,8 @@ function experimentRig(bridge, getPoints = () => [
   fixture.innerHTML = `
     <button type="button" disabled aria-busy="false">Route</button>
     <button class="smoke" type="button" disabled aria-busy="false">Smoke</button>
+    <button class="paris" type="button" disabled aria-busy="false">Paris</button>
+    <button class="cross" type="button" disabled aria-busy="false">Cross</button>
     <p></p>
   `;
   document.body.append(fixture);
@@ -389,6 +410,8 @@ function experimentRig(bridge, getPoints = () => [
       container: fixture,
       button: fixture.querySelector("button:not(.smoke)"),
       smokeButton: fixture.querySelector("button.smoke"),
+      parisSmokeButton: fixture.querySelector("button.paris"),
+      crossPackButton: fixture.querySelector("button.cross"),
       status: fixture.querySelector("p"),
     },
   });
@@ -478,6 +501,7 @@ function helloReply(requestId) {
 }
 
 function capabilityReply(requestId, enabled, installed) {
+  const installedPackIds = installed ? ["marly-dev-v1"] : [];
   return {
     schema_version: 1,
     request_id: requestId,
@@ -485,8 +509,8 @@ function capabilityReply(requestId, enabled, installed) {
     enabled,
     engine: "valhalla-mobile",
     engine_version: "0.5.1/valhalla-3.6.3",
-    pack_installed: installed,
-    pack_id: "marly-dev-v1",
+    installed_pack_count: installedPackIds.length,
+    installed_pack_ids: installedPackIds,
   };
 }
 
@@ -531,6 +555,7 @@ function routeReply(requestId, coldStart = true) {
     profile: "hike",
     engine: "valhalla-mobile",
     engine_version: "0.5.1/valhalla-3.6.3",
+    pack_id: "marly-dev-v1",
     distance_m: 3450.5,
     duration_s: 2600,
     geometry,
