@@ -150,14 +150,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v16_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v17_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v16"
+    assert generation.group(1) == "v17"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -169,7 +169,7 @@ def test_shared_shell_generation_tracks_v16_cached_assets() -> None:
         )
     } == {
         "index.html": (
-            "f88439132bd83e940b8166626506179b23842c8296816f5c8495575e5da51831"
+            "6a90999c2932882fb77909d63504d2c7f3051ee061702890dc9e803ac0a1f95b"
         ),
         "styles.css": (
             "aefabae06a260917b7d6a50b1a782849fddedf84ecb99d5b5af66834bf825be6"
@@ -178,7 +178,7 @@ def test_shared_shell_generation_tracks_v16_cached_assets() -> None:
             "ce28891c92263c084e33dd5ae9ad906a31e527253aeb321539599711e4500b9c"
         ),
         "local_routing.js": (
-            "a8d985db1639640565eedc0088a84106b642d16b6d291ffe4c8e79c1973fb952"
+            "72e12d820e6c6b082bbaf8eedcef5ad611c342db69a790537dbcf7946f1a7ac8"
         ),
         "native_bridge_transport.js": (
             "f601ec9b54b063ce3687fd6f51404818157fa731e860dd87ea6c84656d1528b4"

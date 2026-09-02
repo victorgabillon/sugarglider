@@ -7,11 +7,11 @@ const MAX_ROUTE_VERTICES = 20_000;
 const ROUTE_TIMEOUT_MS = 90_000;
 const CAPABILITY_FIELDS = new Set([
   "schema_version", "request_id", "type", "enabled", "engine",
-  "engine_version", "pack_installed", "pack_id",
+  "engine_version", "installed_pack_count", "installed_pack_ids",
 ]);
 const ROUTE_FIELDS = new Set([
   "schema_version", "request_id", "type", "profile", "engine",
-  "engine_version", "distance_m", "duration_s", "geometry",
+  "engine_version", "pack_id", "distance_m", "duration_s", "geometry",
   "snapped_origin", "snapped_destination", "measurements",
 ]);
 const FAILURE_FIELDS = new Set([
@@ -25,11 +25,22 @@ const MEASUREMENT_FIELDS = new Set([
 ]);
 const FAILURE_CODES = new Set([
   "invalid_request", "unsupported_profile", "routing_pack_unavailable",
-  "no_route", "route_too_large", "routing_busy", "routing_failure",
+  "no_covering_routing_pack", "no_route", "route_too_large",
+  "routing_busy", "routing_failure",
 ]);
 export const MARLY_OFFLINE_SMOKE_TEST = Object.freeze({
   origin: Object.freeze({ lat: 48.8715, lon: 2.0965 }),
   destination: Object.freeze({ lat: 48.8983, lon: 2.0969 }),
+  profile: "hike",
+});
+export const PARIS_OFFLINE_SMOKE_TEST = Object.freeze({
+  origin: Object.freeze({ lat: 48.8584, lon: 2.2945 }),
+  destination: Object.freeze({ lat: 48.8606, lon: 2.3376 }),
+  profile: "hike",
+});
+export const CROSS_PACK_FAILURE_TEST = Object.freeze({
+  origin: MARLY_OFFLINE_SMOKE_TEST.origin,
+  destination: PARIS_OFFLINE_SMOKE_TEST.destination,
   profile: "hike",
 });
 
@@ -104,7 +115,7 @@ export function createLocalRoutingExperiment({
   elements,
 } = {}) {
   let currentRequest = 0;
-  let packInstalled = false;
+  let packAvailable = false;
 
   async function initialize() {
     const capabilities = await bridge.capabilities();
@@ -117,11 +128,13 @@ export function createLocalRoutingExperiment({
       return false;
     }
     if (!capabilities.enabled) return false;
-    packInstalled = capabilities.pack_installed;
+    packAvailable = capabilities.installed_pack_count > 0;
     elements.container.classList.remove("hidden");
-    elements.status.textContent = packInstalled
-      ? `Development pack ${capabilities.pack_id} is ready.`
-      : `Development pack ${capabilities.pack_id} is not installed.`;
+    elements.status.textContent = packAvailable
+      ? `Installed regional packs (${capabilities.installed_pack_count}): ${
+        capabilities.installed_pack_ids.join(", ")
+      }.`
+      : "No valid regional routing packs are installed.";
     setBusy(false);
     return true;
   }
@@ -141,6 +154,14 @@ export function createLocalRoutingExperiment({
 
   function requestSmokeTest() {
     return runRoute(MARLY_OFFLINE_SMOKE_TEST);
+  }
+
+  function requestParisSmokeTest() {
+    return runRoute(PARIS_OFFLINE_SMOKE_TEST);
+  }
+
+  function requestCrossPackTest() {
+    return runRoute(CROSS_PACK_FAILURE_TEST);
   }
 
   async function runRoute(input) {
@@ -164,7 +185,8 @@ export function createLocalRoutingExperiment({
       elements.status.textContent = (
         `${measurements.cold_start ? "Cold" : "Warm"} local Valhalla experiment · `
         + `${(reply.distance_m / 1_000).toFixed(2)} km · ${duration} · `
-        + `${reply.geometry.length} vertices · engine ${reply.engine} `
+        + `${reply.geometry.length} vertices · pack ${reply.pack_id} · `
+        + `engine ${reply.engine} `
         + `${reply.engine_version} · initialization `
         + `${measurements.engine_initialization_ms} ms · route `
         + `${measurements.route_ms} ms · PSS before initialization ${pss[0]} MiB / `
@@ -180,12 +202,19 @@ export function createLocalRoutingExperiment({
   function bind() {
     elements.button.addEventListener("click", requestRoute);
     elements.smokeButton.addEventListener("click", requestSmokeTest);
+    elements.parisSmokeButton.addEventListener("click", requestParisSmokeTest);
+    elements.crossPackButton.addEventListener("click", requestCrossPackTest);
     return initialize();
   }
 
   function setBusy(busy) {
-    for (const button of [elements.button, elements.smokeButton]) {
-      button.disabled = busy || !packInstalled;
+    for (const button of [
+      elements.button,
+      elements.smokeButton,
+      elements.parisSmokeButton,
+      elements.crossPackButton,
+    ]) {
+      button.disabled = busy || !packAvailable;
       button.setAttribute("aria-busy", String(busy));
     }
   }
@@ -201,6 +230,8 @@ export function createLocalRoutingExperiment({
     initialize,
     requestRoute,
     requestSmokeTest,
+    requestParisSmokeTest,
+    requestCrossPackTest,
     invalidate,
   });
 }
@@ -217,10 +248,12 @@ export function parseLocalRoutingReply(payload) {
   if (value.type === "local_route_capabilities_result") {
     return exactFields(value, CAPABILITY_FIELDS)
       && typeof value.enabled === "boolean"
-      && typeof value.pack_installed === "boolean"
+      && Number.isSafeInteger(value.installed_pack_count)
+      && value.installed_pack_count >= 0
+      && value.installed_pack_count <= 64
+      && validPackIds(value.installed_pack_ids, value.installed_pack_count)
       && safeIdentifier(value.engine)
       && safeVersion(value.engine_version)
-      && safeIdentifier(value.pack_id)
       ? value
       : null;
   }
@@ -236,6 +269,7 @@ export function parseLocalRoutingReply(payload) {
     value.profile !== "hike"
     || !safeIdentifier(value.engine)
     || !safeVersion(value.engine_version)
+    || !safePackId(value.pack_id)
     || !positiveFinite(value.distance_m)
     || !(value.duration_s === null || nonNegativeFinite(value.duration_s))
     || !validGeometry(value.geometry)
@@ -307,6 +341,7 @@ function validMeasurements(value) {
 function failureMessage(code) {
   const description = {
     routing_pack_unavailable: "The local development routing pack is unavailable.",
+    no_covering_routing_pack: "No single installed regional pack covers both endpoints.",
     no_route: "Valhalla found no graph route between these points.",
     invalid_request: "The local route request was rejected.",
     unsupported_profile: "Only the experimental hike profile is supported.",
@@ -332,6 +367,18 @@ function safeIdentifier(value) {
 
 function safeVersion(value) {
   return typeof value === "string" && /^[A-Za-z0-9._/-]{1,96}$/.test(value);
+}
+
+function safePackId(value) {
+  return typeof value === "string" && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(value);
+}
+
+function validPackIds(value, expectedCount) {
+  return Array.isArray(value)
+    && value.length === expectedCount
+    && value.every(safePackId)
+    && new Set(value).size === value.length
+    && value.every((packId, index) => index === 0 || value[index - 1] < packId);
 }
 
 function positiveFinite(value) {

@@ -39,13 +39,16 @@ def test_valhalla_is_pinned_debug_arm64_only_and_release_is_disabled() -> None:
         / "src/release/java/io/github/victorgabillon/sugarglider"
         / "NativeRouteEngineFactory.kt"
     ).read_text()
+    registry = (KOTLIN / "RoutingPackRegistry.kt").read_text()
     assert 'debugImplementation("io.github.rallista:valhalla-mobile:0.5.1")' in build
     assert 'ndk.abiFilters += "arm64-v8a"' in build
     assert 'buildConfigField("boolean", "LOCAL_ROUTING_EXPERIMENT", "true")' in build
     assert 'buildConfigField("boolean", "LOCAL_ROUTING_EXPERIMENT", "false")' in build
     assert "CostingModel.pedestrian" in debug
     assert 'ENGINE_VERSION = "0.5.1/valhalla-3.6.3"' in debug
-    assert "routing-packs/$PACK_ID/valhalla_tiles.tar" in debug
+    assert '"routing-packs"' in debug
+    assert ".withTileExtract(pack.tileArchive.absolutePath)" in debug
+    assert 'ROUTING_PACK_ENGINE_VERSION = "3.6.3"' in registry
     assert "enabled = false" in release
     assert "com.valhalla" not in release
 
@@ -62,6 +65,7 @@ def test_native_boundary_is_bounded_explicit_and_has_no_fallback() -> None:
         "invalid_request",
         "unsupported_profile",
         "routing_pack_unavailable",
+        "no_covering_routing_pack",
         "no_route",
         "route_too_large",
         "routing_busy",
@@ -139,18 +143,22 @@ def test_page_has_one_shared_native_transport_for_both_clients() -> None:
 def test_pack_is_reproducible_ignored_and_not_embedded() -> None:
     ignore = (ROOT / ".gitignore").read_text()
     builder = (ROOT / "scripts/build_pr32_marly_valhalla_pack.sh").read_text()
-    extractor = (ROOT / "scripts/extract_pr32_marly_pbf.py").read_text()
+    regional_builder = (ROOT / "scripts/build_pr33_valhalla_pack.sh").read_text()
+    extractor = (ROOT / "scripts/extract_pr33_regional_pbf.py").read_text()
     normalizer = (ROOT / "scripts/normalize_pr32_valhalla_tar.py").read_text()
     docs = (ROOT / "docs/pr32-on-device-routing-spike.md").read_text()
     assert "data/valhalla/" in ignore
-    assert "ghcr.io/valhalla/valhalla:3.6.3" in builder
-    assert "valhalla_build_tiles" in builder
-    assert "valhalla_build_extract" in builder
-    assert "normalize_pr32_valhalla_tar.py" in builder
+    assert "build_pr33_valhalla_pack.sh" in builder
+    assert "marly-dev-v1 2.00 48.80 2.16 48.94" in builder
+    assert "ghcr.io/valhalla/valhalla:3.6.3" in regional_builder
+    assert "valhalla_build_tiles" in regional_builder
+    assert "valhalla_build_extract" in regional_builder
+    assert "normalize_pr32_valhalla_tar.py" in regional_builder
+    assert "write_pr33_routing_pack_manifest.py" in regional_builder
     assert 'header[148:156] = b"        "' in normalizer
-    assert "sha256sum" in builder and "stat -c" in builder
-    for bound in ("WEST = 2.00", "SOUTH = 48.80", "EAST = 2.16", "NORTH = 48.94"):
-        assert bound in extractor
+    assert "sha256sum" in regional_builder and "stat -c" in regional_builder
+    assert "class Bounds" in extractor
+    assert "bounds.west <= node.location.lon <= bounds.east" in extractor
     assert "No routing pack is embedded in the APK" in docs
     assert not list(ANDROID.rglob("valhalla_tiles.tar"))
 
@@ -186,6 +194,6 @@ def test_pr32_browser_harness_covers_required_failure_and_ownership_cases() -> N
 
 def test_pr32_shell_generation_precaches_local_bridge() -> None:
     worker = (STATIC / "service-worker.js").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v16`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v17`" in worker
     assert '"/static/native_bridge_transport.js"' in worker
     assert '"/static/local_routing.js"' in worker

@@ -2883,6 +2883,8 @@ async function start() {
           container: byId("local-routing-experiment"),
           button: byId("local-routing-button"),
           smokeButton: byId("local-routing-smoke-button"),
+          parisSmokeButton: byId("local-routing-paris-smoke-button"),
+          crossPackButton: byId("local-routing-cross-pack-button"),
           status: byId("local-routing-status"),
         },
       });

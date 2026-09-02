@@ -19,20 +19,26 @@ internal object NativeRouteEngineFactory {
 
 private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
     private val applicationContext = context.applicationContext
-    private val packFile = File(
-        applicationContext.filesDir,
-        "routing-packs/$PACK_ID/valhalla_tiles.tar",
+    private val registry = RoutingPackRegistry(
+        File(
+            applicationContext.filesDir,
+            "routing-packs",
+        ),
     )
-    private var actor: Valhalla? = null
-    private var initializationMeasurement: InitializationMeasurement? = null
+    private val actorHolder = SingleCurrentRoutingPackActor(
+        ::initializeActor,
+    )
 
-    override fun capabilities(): NativeRouteCapabilities = NativeRouteCapabilities(
-        enabled = BuildConfig.LOCAL_ROUTING_EXPERIMENT,
-        engine = ENGINE_ID,
-        engineVersion = ENGINE_VERSION,
-        packInstalled = validPackFile(),
-        packId = PACK_ID,
-    )
+    override fun capabilities(): NativeRouteCapabilities {
+        val installedPackIds = registry.installedPacks()
+            .map(RoutingPack::packId)
+        return NativeRouteCapabilities(
+            enabled = BuildConfig.LOCAL_ROUTING_EXPERIMENT,
+            engine = ENGINE_ID,
+            engineVersion = ENGINE_VERSION,
+            installedPackIds = installedPackIds,
+        )
+    }
 
     @Synchronized
     override fun route(request: NativeRouteRequest): NativeRouteResult {
@@ -42,18 +48,18 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
         if (request.profile != LocalRouteProfile.HIKE) {
             return NativeRouteResult.Failure(NativeRouteFailureCode.UNSUPPORTED_PROFILE)
         }
-        if (!validPackFile()) {
-            return NativeRouteResult.Failure(NativeRouteFailureCode.ROUTING_PACK_UNAVAILABLE)
-        }
-        val coldStart = actor == null
-        val initialization = try {
-            actor ?: initializeActor().also { actor = it }
+        val selectedPack = registry.select(request.origin, request.destination)
+            ?: return NativeRouteResult.Failure(
+                NativeRouteFailureCode.NO_COVERING_ROUTING_PACK,
+            )
+        val selectedActor = try {
+            actorHolder.actorFor(selectedPack)
         } catch (_: Exception) {
             return NativeRouteResult.Failure(NativeRouteFailureCode.ROUTING_PACK_UNAVAILABLE)
         }
         val started = SystemClock.elapsedRealtime()
         val response = try {
-            initialization.route(
+            selectedActor.actor.valhalla.route(
                 RouteRequest(
                     locations = listOf(
                         RoutingWaypoint(
@@ -99,17 +105,22 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
         if (geometry.size !in 2..MAX_LOCAL_ROUTE_VERTICES) {
             return NativeRouteResult.Failure(NativeRouteFailureCode.ROUTE_TOO_LARGE)
         }
-        val measurement = checkNotNull(initializationMeasurement)
+        val measurement = selectedActor.actor.measurement
         return NativeRouteResult.Success(
             profile = request.profile,
             engine = ENGINE_ID,
             engineVersion = ENGINE_VERSION,
+            packId = selectedPack.packId,
             distanceMeters = trip.summary.length * 1_000.0,
             durationSeconds = trip.summary.time,
             geometry = geometry,
             measurements = NativeRouteMeasurements(
-                coldStart = coldStart,
-                engineInitializationMs = if (coldStart) measurement.elapsedMs else 0,
+                coldStart = selectedActor.coldStart,
+                engineInitializationMs = if (selectedActor.coldStart) {
+                    measurement.elapsedMs
+                } else {
+                    0
+                },
                 routeMs = routeMs,
                 memoryBeforeInitializationBytes = measurement.memoryBeforeBytes,
                 memoryAfterInitializationBytes = measurement.memoryAfterBytes,
@@ -119,24 +130,29 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
             ?: NativeRouteResult.Failure(NativeRouteFailureCode.ROUTING_FAILURE)
     }
 
-    private fun initializeActor(): Valhalla {
+    private fun initializeActor(pack: RoutingPack): ValhallaActor {
         val before = processPssBytes()
         val started = SystemClock.elapsedRealtime()
         val config = ValhallaConfigBuilder()
-            .withTileExtract(packFile.absolutePath)
+            .withTileExtract(pack.tileArchive.absolutePath)
             .build()
         val created = Valhalla(applicationContext, config)
-        initializationMeasurement = InitializationMeasurement(
-            elapsedMs = SystemClock.elapsedRealtime() - started,
-            memoryBeforeBytes = before,
-            memoryAfterBytes = processPssBytes(),
+        return ValhallaActor(
+            valhalla = created,
+            measurement = InitializationMeasurement(
+                elapsedMs = SystemClock.elapsedRealtime() - started,
+                memoryBeforeBytes = before,
+                memoryAfterBytes = processPssBytes(),
+            ),
         )
-        return created
     }
 
-    private fun validPackFile(): Boolean = packFile.isFile && packFile.length() > 0L
-
     private fun processPssBytes(): Long = Debug.getPss() * 1_024L
+
+    private data class ValhallaActor(
+        val valhalla: Valhalla,
+        val measurement: InitializationMeasurement,
+    )
 
     private data class InitializationMeasurement(
         val elapsedMs: Long,
@@ -147,7 +163,6 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
     companion object {
         private const val ENGINE_ID = "valhalla-mobile"
         private const val ENGINE_VERSION = "0.5.1/valhalla-3.6.3"
-        private const val PACK_ID = "marly-dev-v1"
     }
 }
 

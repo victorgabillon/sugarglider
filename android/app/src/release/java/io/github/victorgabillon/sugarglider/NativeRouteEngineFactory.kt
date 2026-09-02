@@ -12,8 +12,7 @@ private object DisabledNativeRouteEngine : NativeRouteEngine {
         enabled = false,
         engine = "none",
         engineVersion = "none",
-        packInstalled = false,
-        packId = "none",
+        installedPackIds = emptyList(),
     )
 
     override fun route(request: NativeRouteRequest): NativeRouteResult =
