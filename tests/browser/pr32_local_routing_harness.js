@@ -202,12 +202,8 @@ async function marlySmokeTestScenario() {
     const requests = port.requests.filter((value) => value.type === "local_route");
     equal(requests.length, 2, "same smoke action can run twice");
     for (const request of requests) {
-      equal(request.origin, MARLY_OFFLINE_SMOKE_TEST.origin, "fixed Marly origin");
-      equal(
-        request.destination,
-        MARLY_OFFLINE_SMOKE_TEST.destination,
-        "fixed Saint-Germain destination",
-      );
+      equal(request.route_version, 2, "strict local route wire version");
+      equal(request.points, MARLY_OFFLINE_SMOKE_TEST.points, "fixed Marly points");
       equal(request.profile, "hike", "fixed public profile");
     }
     equal(rig.rendered.length, 2, "cold and warm graph geometry rendered");
@@ -253,6 +249,8 @@ async function handshakeDiagnosticScenario() {
       enabled: true,
       installed_pack_count: 0,
       installed_pack_ids: [],
+      supported_profile_ids: [],
+      pack_capabilities: [],
     }),
     invalidate() {},
   });
@@ -288,15 +286,17 @@ async function validRouteScenario() {
   };
   try {
     const reply = await bridge.route({
-      origin: { lat: 48.8715, lon: 2.0965 },
-      destination: { lat: 48.8983, lon: 2.0969 },
+      points: [
+        { lat: 48.8715, lon: 2.0965 },
+        { lat: 48.8983, lon: 2.0969 },
+      ],
       profile: "hike",
     });
     equal(reply.geometry.length, 4, "graph geometry preserved");
     equal(backendFetches, 0, "bridge route makes no fetch");
     const request = port.requests.find((value) => value.type === "local_route");
     equal(Object.keys(request).sort(), [
-      "destination", "origin", "profile", "request_id", "schema_version", "type",
+      "points", "profile", "request_id", "route_version", "schema_version", "type",
     ], "local request has strict non-secret fields");
     assert(!JSON.stringify(request).includes("participant"), "no outing authority");
   } finally {
@@ -317,6 +317,8 @@ async function noRouteScenario() {
       enabled: true,
       installed_pack_count: 1,
       installed_pack_ids: ["marly-dev-v1"],
+      supported_profile_ids: ["trail_run", "hike"],
+      pack_capabilities: [{ pack_id: "marly-dev-v1", access_modes: ["foot"] }],
     }),
     route: async () => reply,
     invalidate() {},
@@ -365,6 +367,8 @@ async function currentRequestRenderingScenario() {
       enabled: true,
       installed_pack_count: 1,
       installed_pack_ids: ["marly-dev-v1"],
+      supported_profile_ids: ["trail_run", "hike"],
+      pack_capabilities: [{ pack_id: "marly-dev-v1", access_modes: ["foot"] }],
     }),
     route: () => new Promise((resolve) => pending.push(resolve)),
     invalidate() {},
@@ -392,9 +396,11 @@ function experimentRig(bridge, getPoints = () => [
   const fixture = document.createElement("section");
   fixture.className = "hidden";
   fixture.innerHTML = `
-    <button type="button" disabled aria-busy="false">Route</button>
+    <select><option value="trail_run">Trail</option><option value="hike" selected>Hike</option><option value="city_bike">City</option><option value="gravel_bike">Gravel</option><option value="mountain_bike">MTB</option><option value="road_bike">Road</option></select>
+    <button class="route" type="button" disabled aria-busy="false">Route</button>
     <button class="smoke" type="button" disabled aria-busy="false">Smoke</button>
     <button class="paris" type="button" disabled aria-busy="false">Paris</button>
+    <button class="via" type="button" disabled aria-busy="false">Via</button>
     <button class="cross" type="button" disabled aria-busy="false">Cross</button>
     <p></p>
   `;
@@ -408,10 +414,12 @@ function experimentRig(bridge, getPoints = () => [
     clearRoute: () => { clears += 1; },
     elements: {
       container: fixture,
-      button: fixture.querySelector("button:not(.smoke)"),
+      button: fixture.querySelector("button.route"),
       smokeButton: fixture.querySelector("button.smoke"),
       parisSmokeButton: fixture.querySelector("button.paris"),
+      viaSmokeButton: fixture.querySelector("button.via"),
       crossPackButton: fixture.querySelector("button.cross"),
+      profileSelect: fixture.querySelector("select"),
       status: fixture.querySelector("p"),
     },
   });
@@ -511,6 +519,10 @@ function capabilityReply(requestId, enabled, installed) {
     engine_version: "0.5.1/valhalla-3.6.3",
     installed_pack_count: installedPackIds.length,
     installed_pack_ids: installedPackIds,
+    supported_profile_ids: installed ? ["trail_run", "hike"] : [],
+    pack_capabilities: installed
+      ? [{ pack_id: "marly-dev-v1", access_modes: ["foot"] }]
+      : [],
   };
 }
 
@@ -559,8 +571,10 @@ function routeReply(requestId, coldStart = true) {
     distance_m: 3450.5,
     duration_s: 2600,
     geometry,
-    snapped_origin: { lat: geometry[0][1], lon: geometry[0][0] },
-    snapped_destination: { lat: geometry.at(-1)[1], lon: geometry.at(-1)[0] },
+    snapped_points: [
+      { lat: geometry[0][1], lon: geometry[0][0] },
+      { lat: geometry.at(-1)[1], lon: geometry.at(-1)[0] },
+    ],
     measurements: {
       cold_start: coldStart,
       engine_initialization_ms: 80,
@@ -574,8 +588,10 @@ function routeReply(requestId, coldStart = true) {
 
 function routeInput() {
   return {
-    origin: { lat: 48.8715, lon: 2.0965 },
-    destination: { lat: 48.8983, lon: 2.0969 },
+    points: [
+      { lat: 48.8715, lon: 2.0965 },
+      { lat: 48.8983, lon: 2.0969 },
+    ],
     profile: "hike",
   };
 }

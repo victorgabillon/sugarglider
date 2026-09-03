@@ -48,7 +48,7 @@ docker run --rm \
             --mjolnir-tile-extract /work/valhalla_tiles.tar \\
             --mjolnir-concurrency 1 \\
             --mjolnir-include-driving false \\
-            --mjolnir-include-bicycle false \\
+            --mjolnir-include-bicycle true \\
             --mjolnir-include-pedestrian true \\
             --mjolnir-data-processing-use-admin-db false \\
             --additional-data-elevation \"\" \\

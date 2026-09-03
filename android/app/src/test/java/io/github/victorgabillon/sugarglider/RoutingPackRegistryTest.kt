@@ -1,5 +1,6 @@
 package io.github.victorgabillon.sugarglider
 
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -25,13 +26,28 @@ class RoutingPackRegistryTest {
     }
 
     @Test
-    fun validManifestIsStrictVersionedAndDirectoryBound() {
+    fun v1AndV2ManifestsAreStrictVersionedAndDirectoryBound() {
         val payload = manifest("marly-dev-v1", MARLY)
         val parsed = requireNotNull(RoutingPackManifest.parse(payload, "marly-dev-v1"))
         assertEquals(ROUTING_PACK_MANIFEST_SCHEMA_VERSION, parsed.schemaVersion)
         assertEquals(ROUTING_PACK_ENGINE, parsed.engine)
         assertEquals(ROUTING_PACK_ENGINE_VERSION, parsed.engineVersion)
         assertEquals(MARLY, parsed.bounds)
+        assertEquals(
+            listOf(LocalRouteAccessMode.FOOT, LocalRouteAccessMode.BICYCLE),
+            parsed.accessModes,
+        )
+        val v1 = requireNotNull(
+            RoutingPackManifest.parse(
+                manifest(
+                    "marly-dev-v1",
+                    MARLY,
+                    schemaVersion = ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1,
+                ),
+                "marly-dev-v1",
+            ),
+        )
+        assertEquals(listOf(LocalRouteAccessMode.FOOT), v1.accessModes)
 
         assertNull(RoutingPackManifest.parse("not-json", "marly-dev-v1"))
         assertNull(
@@ -42,7 +58,7 @@ class RoutingPackRegistryTest {
         )
         assertNull(
             RoutingPackManifest.parse(
-                JSONObject(payload).put("schema_version", 2).toString(),
+                JSONObject(payload).put("schema_version", 3).toString(),
                 "marly-dev-v1",
             ),
         )
@@ -53,6 +69,32 @@ class RoutingPackRegistryTest {
                 "../outside",
             ),
         )
+    }
+
+    @Test
+    fun v2AccessModesAreBoundedCanonicalAndKnown() {
+        val payload = JSONObject(manifest("marly-dev-v1", MARLY))
+        for (invalid in listOf(
+            JSONArray(),
+            JSONArray(listOf("bicycle", "foot")),
+            JSONArray(listOf("foot", "foot")),
+            JSONArray(listOf("foot", "motor_vehicle")),
+        )) {
+            assertNull(
+                RoutingPackManifest.parse(
+                    JSONObject(payload.toString()).put("access_modes", invalid).toString(),
+                    "marly-dev-v1",
+                ),
+            )
+        }
+        val v1WithModes = JSONObject(
+            manifest(
+                "marly-dev-v1",
+                MARLY,
+                schemaVersion = ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1,
+            ),
+        ).put("access_modes", JSONArray(listOf("foot")))
+        assertNull(RoutingPackManifest.parse(v1WithModes.toString(), "marly-dev-v1"))
     }
 
     @Test
@@ -119,24 +161,67 @@ class RoutingPackRegistryTest {
     }
 
     @Test
-    fun selectionRequiresOnePackToContainBothEndpoints() {
+    fun selectionRequiresOnePackToContainEveryOrderedPoint() {
         installPack("marly-dev-v1", MARLY)
         installPack("paris-dev-v1", PARIS)
         val registry = registry()
         assertEquals(
             "marly-dev-v1",
-            registry.select(MARLY_ORIGIN, MARLY_DESTINATION)?.packId,
+            selectedPackId(
+                registry.select(
+                    listOf(MARLY_ORIGIN, MARLY_VIA, MARLY_DESTINATION),
+                    LocalRouteAccessMode.FOOT,
+                ),
+            ),
         )
         assertEquals(
             "paris-dev-v1",
-            registry.select(PARIS_ORIGIN, PARIS_DESTINATION)?.packId,
-        )
-        assertNull(registry.select(MARLY_ORIGIN, PARIS_DESTINATION))
-        assertNull(
-            registry.select(
-                LocalRouteCoordinate(47.0, 1.0),
-                LocalRouteCoordinate(47.1, 1.1),
+            selectedPackId(
+                registry.select(
+                    listOf(PARIS_ORIGIN, PARIS_DESTINATION),
+                    LocalRouteAccessMode.BICYCLE,
+                ),
             ),
+        )
+        assertTrue(
+            registry.select(
+                listOf(MARLY_ORIGIN, PARIS_DESTINATION),
+                LocalRouteAccessMode.FOOT,
+            ) is RoutingPackSelection.NoGeographicCoverage,
+        )
+        assertTrue(
+            registry.select(
+                listOf(
+                    LocalRouteCoordinate(47.0, 1.0),
+                    LocalRouteCoordinate(47.1, 1.1),
+                ),
+                LocalRouteAccessMode.FOOT,
+            ) is RoutingPackSelection.NoGeographicCoverage,
+        )
+    }
+
+    @Test
+    fun v1PackIsFootOnlyAndV2PackCanSupportBicycle() {
+        installPack(
+            "foot-only-dev-v1",
+            MARLY,
+            schemaVersion = ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1,
+        )
+        val registry = registry()
+        val points = listOf(MARLY_ORIGIN, MARLY_DESTINATION)
+        assertEquals(
+            "foot-only-dev-v1",
+            selectedPackId(registry.select(points, LocalRouteAccessMode.FOOT)),
+        )
+        assertTrue(
+            registry.select(points, LocalRouteAccessMode.BICYCLE) is
+                RoutingPackSelection.NoCompatibleAccessMode,
+        )
+
+        installPack("foot-bike-dev-v2", MARLY)
+        assertEquals(
+            "foot-bike-dev-v2",
+            selectedPackId(registry.select(points, LocalRouteAccessMode.BICYCLE)),
         )
     }
 
@@ -150,7 +235,12 @@ class RoutingPackRegistryTest {
 
         assertEquals(
             "a-specific-dev-v1",
-            registry().select(MARLY_ORIGIN, MARLY_DESTINATION)?.packId,
+            selectedPackId(
+                registry().select(
+                    listOf(MARLY_ORIGIN, MARLY_DESTINATION),
+                    LocalRouteAccessMode.FOOT,
+                ),
+            ),
         )
     }
 
@@ -209,19 +299,39 @@ class RoutingPackRegistryTest {
         packBounds: RoutingPackBounds,
         tilePayload: ByteArray = validTileArchive(),
         createArchive: Boolean = true,
+        schemaVersion: Int = ROUTING_PACK_MANIFEST_SCHEMA_VERSION,
+        accessModes: List<LocalRouteAccessMode> = LocalRouteAccessMode.entries,
     ) {
         val directory = File(root, packId).apply { mkdirs() }
-        File(directory, "manifest.json").writeText(manifest(packId, packBounds))
+        File(directory, "manifest.json").writeText(
+            manifest(packId, packBounds, schemaVersion, accessModes),
+        )
         if (createArchive) File(directory, "valhalla_tiles.tar").writeBytes(tilePayload)
     }
 
-    private fun manifest(packId: String, packBounds: RoutingPackBounds): String = JSONObject()
-        .put("schema_version", ROUTING_PACK_MANIFEST_SCHEMA_VERSION)
-        .put("pack_id", packId)
-        .put("engine", ROUTING_PACK_ENGINE)
-        .put("engine_version", ROUTING_PACK_ENGINE_VERSION)
-        .put("bounds", bounds(packBounds))
-        .toString()
+    private fun manifest(
+        packId: String,
+        packBounds: RoutingPackBounds,
+        schemaVersion: Int = ROUTING_PACK_MANIFEST_SCHEMA_VERSION,
+        accessModes: List<LocalRouteAccessMode> = LocalRouteAccessMode.entries,
+    ): String {
+        val value = JSONObject()
+            .put("schema_version", schemaVersion)
+            .put("pack_id", packId)
+            .put("engine", ROUTING_PACK_ENGINE)
+            .put("engine_version", ROUTING_PACK_ENGINE_VERSION)
+            .put("bounds", bounds(packBounds))
+        if (schemaVersion == ROUTING_PACK_MANIFEST_SCHEMA_VERSION) {
+            value.put(
+                "access_modes",
+                JSONArray(accessModes.map(LocalRouteAccessMode::wireValue)),
+            )
+        }
+        return value.toString()
+    }
+
+    private fun selectedPackId(selection: RoutingPackSelection): String? =
+        (selection as? RoutingPackSelection.Selected)?.pack?.packId
 
     private fun bounds(value: RoutingPackBounds): JSONObject = JSONObject()
         .put("west", value.west)
@@ -238,6 +348,7 @@ class RoutingPackRegistryTest {
         val MARLY = RoutingPackBounds(2.00, 48.80, 2.16, 48.94)
         val PARIS = RoutingPackBounds(2.25, 48.80, 2.42, 48.92)
         val MARLY_ORIGIN = LocalRouteCoordinate(48.8715, 2.0965)
+        val MARLY_VIA = LocalRouteCoordinate(48.8840, 2.0830)
         val MARLY_DESTINATION = LocalRouteCoordinate(48.8983, 2.0969)
         val PARIS_ORIGIN = LocalRouteCoordinate(48.8584, 2.2945)
         val PARIS_DESTINATION = LocalRouteCoordinate(48.8606, 2.3376)

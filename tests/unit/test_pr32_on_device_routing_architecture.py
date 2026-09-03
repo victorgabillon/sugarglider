@@ -44,7 +44,12 @@ def test_valhalla_is_pinned_debug_arm64_only_and_release_is_disabled() -> None:
     assert 'ndk.abiFilters += "arm64-v8a"' in build
     assert 'buildConfigField("boolean", "LOCAL_ROUTING_EXPERIMENT", "true")' in build
     assert 'buildConfigField("boolean", "LOCAL_ROUTING_EXPERIMENT", "false")' in build
-    assert "CostingModel.pedestrian" in debug
+    policy = (
+        ANDROID
+        / "src/debug/java/io/github/victorgabillon/sugarglider"
+        / "ValhallaProfilePolicy.kt"
+    ).read_text()
+    assert "CostingModel.pedestrian" in policy
     assert 'ENGINE_VERSION = "0.5.1/valhalla-3.6.3"' in debug
     assert '"routing-packs"' in debug
     assert ".withTileExtract(pack.tileArchive.absolutePath)" in debug
@@ -58,7 +63,7 @@ def test_native_boundary_is_bounded_explicit_and_has_no_fallback() -> None:
     protocol = (KOTLIN / "BridgeProtocol.kt").read_text()
     activity = (KOTLIN / "MainActivity.kt").read_text()
     assert "interface NativeRouteEngine" in boundary
-    assert 'HIKE("hike")' in boundary
+    assert 'HIKE("hike", LocalRouteAccessMode.FOOT)' in boundary
     assert "MAX_LOCAL_ROUTE_VERTICES = 20_000" in boundary
     assert "MAX_LOCAL_ROUTE_REPLY_BYTES = 512 * 1_024" in boundary
     for code in (
@@ -66,6 +71,7 @@ def test_native_boundary_is_bounded_explicit_and_has_no_fallback() -> None:
         "unsupported_profile",
         "routing_pack_unavailable",
         "no_covering_routing_pack",
+        "no_compatible_routing_pack",
         "no_route",
         "route_too_large",
         "routing_busy",
@@ -105,8 +111,10 @@ def test_experiment_is_isolated_private_and_never_replaces_generate() -> None:
     assert "MAX_ROUTE_VERTICES = 20_000" in module
     assert "globalThis.fetch" not in module
     assert "MARLY_OFFLINE_SMOKE_TEST" in module
-    assert "origin: Object.freeze({ lat: 48.8715, lon: 2.0965 })" in module
-    assert "destination: Object.freeze({ lat: 48.8983, lon: 2.0969 })" in module
+    assert "Object.freeze({ lat: 48.8715, lon: 2.0965 })" in module
+    assert "Object.freeze({ lat: 48.8983, lon: 2.0969 })" in module
+    assert "route_version: LOCAL_ROUTE_VERSION" in module
+    assert "points: points.map" in module
     assert "requestSmokeTest" in module
     assert "Native routing handshake unavailable." in module
     assert "if (bridge.nativeAvailable)" in module
@@ -194,6 +202,6 @@ def test_pr32_browser_harness_covers_required_failure_and_ownership_cases() -> N
 
 def test_pr32_shell_generation_precaches_local_bridge() -> None:
     worker = (STATIC / "service-worker.js").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v17`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v18`" in worker
     assert '"/static/native_bridge_transport.js"' in worker
     assert '"/static/local_routing.js"' in worker

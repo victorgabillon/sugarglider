@@ -52,7 +52,7 @@ async function regionalPackSwitchSequenceScenario() {
     nativeAvailable: true,
     capabilities: async () => capabilityReply(),
     async route(input) {
-      const packId = input.destination.lon < 2.2
+      const packId = input.points.at(-1).lon < 2.2
         ? "marly-dev-v1"
         : "paris-dev-v1";
       const coldStart = currentPack !== packId;
@@ -64,7 +64,8 @@ async function regionalPackSwitchSequenceScenario() {
   });
   await rig.experiment.bind();
   assert(rig.status.includes("Installed regional packs (2)"), "pack count is visible");
-  assert(rig.status.includes("marly-dev-v1, paris-dev-v1"), "pack IDs are visible");
+  assert(rig.status.includes("marly-dev-v1 [foot+bicycle]"), "Marly modes are visible");
+  assert(rig.status.includes("paris-dev-v1 [foot+bicycle]"), "Paris modes are visible");
   assert(rig.buttons.every((button) => !button.disabled), "regional actions enabled");
 
   await rig.experiment.requestSmokeTest();
@@ -117,9 +118,11 @@ function experimentRig(bridge) {
   const fixture = document.createElement("section");
   fixture.className = "hidden";
   fixture.innerHTML = `
+    <select><option value="trail_run">Trail</option><option value="hike" selected>Hike</option><option value="city_bike">City</option><option value="gravel_bike">Gravel</option><option value="mountain_bike">MTB</option><option value="road_bike">Road</option></select>
     <button class="route" type="button" disabled aria-busy="false">Route</button>
     <button class="marly" type="button" disabled aria-busy="false">Marly</button>
     <button class="paris" type="button" disabled aria-busy="false">Paris</button>
+    <button class="via" type="button" disabled aria-busy="false">Via</button>
     <button class="cross" type="button" disabled aria-busy="false">Cross</button>
     <p></p>
   `;
@@ -138,7 +141,9 @@ function experimentRig(bridge) {
       button: fixture.querySelector("button.route"),
       smokeButton: fixture.querySelector("button.marly"),
       parisSmokeButton: fixture.querySelector("button.paris"),
+      viaSmokeButton: fixture.querySelector("button.via"),
       crossPackButton: fixture.querySelector("button.cross"),
+      profileSelect: fixture.querySelector("select"),
       status: fixture.querySelector("p"),
     },
   });
@@ -162,17 +167,26 @@ function capabilityReply() {
     engine_version: "0.5.1/valhalla-3.6.3",
     installed_pack_count: 2,
     installed_pack_ids: ["marly-dev-v1", "paris-dev-v1"],
+    supported_profile_ids: [
+      "trail_run", "hike", "city_bike", "gravel_bike", "mountain_bike", "road_bike",
+    ],
+    pack_capabilities: [
+      { pack_id: "marly-dev-v1", access_modes: ["foot", "bicycle"] },
+      { pack_id: "paris-dev-v1", access_modes: ["foot", "bicycle"] },
+    ],
   };
 }
 
 function routeReply(input, packId, coldStart) {
+  const origin = input.points[0];
+  const destination = input.points.at(-1);
   const geometry = [
-    [input.origin.lon, input.origin.lat],
+    [origin.lon, origin.lat],
     [
-      (input.origin.lon + input.destination.lon) / 2,
-      (input.origin.lat + input.destination.lat) / 2,
+      (origin.lon + destination.lon) / 2,
+      (origin.lat + destination.lat) / 2,
     ],
-    [input.destination.lon, input.destination.lat],
+    [destination.lon, destination.lat],
   ];
   return {
     schema_version: 1,
@@ -185,8 +199,10 @@ function routeReply(input, packId, coldStart) {
     distance_m: 3_980,
     duration_s: 2_820,
     geometry,
-    snapped_origin: { lat: geometry[0][1], lon: geometry[0][0] },
-    snapped_destination: { lat: geometry.at(-1)[1], lon: geometry.at(-1)[0] },
+    snapped_points: [
+      { lat: geometry[0][1], lon: geometry[0][0] },
+      { lat: geometry.at(-1)[1], lon: geometry.at(-1)[0] },
+    ],
     measurements: {
       cold_start: coldStart,
       engine_initialization_ms: coldStart ? 1_000 : 0,

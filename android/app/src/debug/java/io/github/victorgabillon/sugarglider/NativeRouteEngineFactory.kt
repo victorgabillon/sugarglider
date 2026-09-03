@@ -3,7 +3,6 @@ package io.github.victorgabillon.sugarglider
 import android.content.Context
 import android.os.Debug
 import android.os.SystemClock
-import com.valhalla.api.models.CostingModel
 import com.valhalla.api.models.DirectionsOptions
 import com.valhalla.api.models.RouteRequest
 import com.valhalla.api.models.RoutingWaypoint
@@ -30,13 +29,20 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
     )
 
     override fun capabilities(): NativeRouteCapabilities {
-        val installedPackIds = registry.installedPacks()
-            .map(RoutingPack::packId)
+        val installedPacks = registry.installedPacks()
         return NativeRouteCapabilities(
             enabled = BuildConfig.LOCAL_ROUTING_EXPERIMENT,
             engine = ENGINE_ID,
             engineVersion = ENGINE_VERSION,
-            installedPackIds = installedPackIds,
+            packs = installedPacks.map { pack ->
+                NativeRoutingPackCapability(
+                    packId = pack.packId,
+                    accessModes = pack.manifest.accessModes,
+                )
+            },
+            supportedProfiles = LocalRouteProfile.entries.filter { profile ->
+                installedPacks.any { it.supports(profile.accessMode) }
+            },
         )
     }
 
@@ -45,13 +51,22 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
         if (!request.isValid()) {
             return NativeRouteResult.Failure(NativeRouteFailureCode.INVALID_REQUEST)
         }
-        if (request.profile != LocalRouteProfile.HIKE) {
-            return NativeRouteResult.Failure(NativeRouteFailureCode.UNSUPPORTED_PROFILE)
+        val policy = ValhallaProfilePolicies.forProfile(request.profile)
+        val selectedPack = when (
+            val selection = registry.select(request.points, request.profile.accessMode)
+        ) {
+            is RoutingPackSelection.Selected -> selection.pack
+            RoutingPackSelection.NoGeographicCoverage -> {
+                return NativeRouteResult.Failure(
+                    NativeRouteFailureCode.NO_COVERING_ROUTING_PACK,
+                )
+            }
+            RoutingPackSelection.NoCompatibleAccessMode -> {
+                return NativeRouteResult.Failure(
+                    NativeRouteFailureCode.NO_COMPATIBLE_ROUTING_PACK,
+                )
+            }
         }
-        val selectedPack = registry.select(request.origin, request.destination)
-            ?: return NativeRouteResult.Failure(
-                NativeRouteFailureCode.NO_COVERING_ROUTING_PACK,
-            )
         val selectedActor = try {
             actorHolder.actorFor(selectedPack)
         } catch (_: Exception) {
@@ -61,17 +76,15 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
         val response = try {
             selectedActor.actor.valhalla.route(
                 RouteRequest(
-                    locations = listOf(
+                    locations = request.points.map { point ->
                         RoutingWaypoint(
-                            lat = request.origin.latitude,
-                            lon = request.origin.longitude,
-                        ),
-                        RoutingWaypoint(
-                            lat = request.destination.latitude,
-                            lon = request.destination.longitude,
-                        ),
-                    ),
-                    costing = CostingModel.pedestrian,
+                            lat = point.latitude,
+                            lon = point.longitude,
+                            type = RoutingWaypoint.Type.`break`,
+                        )
+                    },
+                    costing = policy.costingModel,
+                    costingOptions = policy.costingOptions,
                     id = request.requestId,
                     directionsOptions = DirectionsOptions(
                         directionsType = DirectionsOptions.DirectionsType.none,
@@ -90,20 +103,20 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
             return NativeRouteResult.Failure(NativeRouteFailureCode.ROUTING_FAILURE)
         }
         val trip = response.jsonResponse.trip
-        if (trip.status != 0 || trip.legs.isEmpty()) {
+        if (trip.status != 0) {
             return NativeRouteResult.Failure(NativeRouteFailureCode.NO_ROUTE)
         }
-        val geometry = try {
-            trip.legs.flatMapIndexed { index, leg ->
-                decodePolyline6(leg.shape).let { points ->
-                    if (index == 0) points else points.drop(1)
-                }
-            }
-        } catch (_: IllegalArgumentException) {
+        if (trip.legs.size != request.points.size - 1) {
             return NativeRouteResult.Failure(NativeRouteFailureCode.ROUTING_FAILURE)
         }
-        if (geometry.size !in 2..MAX_LOCAL_ROUTE_VERTICES) {
+        val joinedGeometry = try {
+            joinLocalRouteLegGeometries(
+                trip.legs.map { leg -> decodePolyline6(leg.shape) },
+            )
+        } catch (_: LocalRouteTooLargeException) {
             return NativeRouteResult.Failure(NativeRouteFailureCode.ROUTE_TOO_LARGE)
+        } catch (_: IllegalArgumentException) {
+            return NativeRouteResult.Failure(NativeRouteFailureCode.ROUTING_FAILURE)
         }
         val measurement = selectedActor.actor.measurement
         return NativeRouteResult.Success(
@@ -113,7 +126,8 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
             packId = selectedPack.packId,
             distanceMeters = trip.summary.length * 1_000.0,
             durationSeconds = trip.summary.time,
-            geometry = geometry,
+            geometry = joinedGeometry.geometry,
+            snappedPoints = joinedGeometry.snappedPoints,
             measurements = NativeRouteMeasurements(
                 coldStart = selectedActor.coldStart,
                 engineInitializationMs = if (selectedActor.coldStart) {
@@ -196,11 +210,45 @@ internal fun decodePolyline6(shape: String): List<LocalRouteCoordinate> {
         if (!coordinate.isValid()) throw IllegalArgumentException("invalid polyline coordinate")
         coordinates += coordinate
         if (coordinates.size > MAX_LOCAL_ROUTE_VERTICES) {
-            throw IllegalArgumentException("polyline exceeds vertex limit")
+            throw LocalRouteTooLargeException()
         }
     }
     return coordinates
 }
+
+internal data class JoinedLocalRouteGeometry(
+    val geometry: List<LocalRouteCoordinate>,
+    val snappedPoints: List<LocalRouteCoordinate>,
+)
+
+internal fun joinLocalRouteLegGeometries(
+    legs: List<List<LocalRouteCoordinate>>,
+): JoinedLocalRouteGeometry {
+    if (legs.isEmpty()) throw IllegalArgumentException("route has no legs")
+    val geometry = mutableListOf<LocalRouteCoordinate>()
+    val snappedPoints = mutableListOf<LocalRouteCoordinate>()
+    legs.forEachIndexed { index, leg ->
+        if (leg.size < 2 || !leg.all(LocalRouteCoordinate::isValid)) {
+            throw IllegalArgumentException("invalid route leg")
+        }
+        if (index == 0) {
+            geometry += leg
+            snappedPoints += leg.first()
+        } else {
+            if (geometry.last() != leg.first()) {
+                throw IllegalArgumentException("disconnected route legs")
+            }
+            geometry += leg.drop(1)
+        }
+        snappedPoints += leg.last()
+        if (geometry.size > MAX_LOCAL_ROUTE_VERTICES) {
+            throw LocalRouteTooLargeException()
+        }
+    }
+    return JoinedLocalRouteGeometry(geometry, snappedPoints)
+}
+
+private class LocalRouteTooLargeException : IllegalArgumentException("route exceeds vertex limit")
 
 private data class DecodedPolylineValue(val value: Int, val nextIndex: Int)
 
