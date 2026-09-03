@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>PR34 local routing profiles harness</title>
+  <pre id="result">running</pre>
+  <script>
+    window.pr34HarnessResult = document.getElementById("result");
+    window.pr34UnhandledRejection = null;
+    window.addEventListener("error", (event) => {
+      window.pr34HarnessResult.dataset.status = "failed";
+      window.pr34HarnessResult.textContent = event.error?.stack ?? event.message;
+      document.title = "PR34 local routing profiles harness failed";
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      window.pr34UnhandledRejection = event.reason;
+      window.pr34HarnessResult.dataset.status = "failed";
+      window.pr34HarnessResult.textContent = event.reason instanceof Error
+        ? event.reason.stack
+        : String(event.reason);
+      document.title = "PR34 local routing profiles harness failed";
+    });
+  </script>
+  <script type="module">
+    import { runPr34LocalRoutingProfilesHarness } from "./pr34_local_routing_profiles_harness.js";
+
+    const result = window.pr34HarnessResult;
+    try {
+      const scenarios = await runPr34LocalRoutingProfilesHarness();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      if (window.pr34UnhandledRejection !== null) throw window.pr34UnhandledRejection;
+      if (result.dataset.status === "failed") throw new Error(result.textContent);
+      result.dataset.status = "passed";
+      result.textContent = JSON.stringify(scenarios);
+      document.title = `PR34 local routing profiles harness passed ${scenarios.length}`;
+    } catch (error) {
+      result.dataset.status = "failed";
+      result.textContent = error instanceof Error ? error.stack : String(error);
+      document.title = "PR34 local routing profiles harness failed";
+    }
+  </script>
+</html>

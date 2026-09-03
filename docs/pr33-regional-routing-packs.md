@@ -37,6 +37,10 @@ Manifest schema v1 is intentionally small:
 }
 ```
 
+This section records the historical PR33 foot-only format. PR34 keeps strict
+v1 reading as foot-only and upgrades the current development builder to schema
+v2 with explicit foot/bicycle capabilities.
+
 Parsing rejects extra or missing fields, unsupported schema/engine versions,
 invalid or non-finite bounds, unsafe IDs, and a `pack_id` that differs from its
 directory. Paths are never read from the manifest. Both the bounded manifest

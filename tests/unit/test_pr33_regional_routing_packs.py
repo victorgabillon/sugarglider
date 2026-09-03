@@ -24,7 +24,9 @@ def test_manifest_registry_is_strict_confined_and_deterministic() -> None:
         '"north"',
     ):
         assert field in registry
-    assert "ROUTING_PACK_MANIFEST_SCHEMA_VERSION = 1" in registry
+    assert "ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1 = 1" in registry
+    assert "ROUTING_PACK_MANIFEST_SCHEMA_VERSION = 2" in registry
+    assert '"access_modes"' in registry
     assert 'ROUTING_PACK_ENGINE = "valhalla"' in registry
     assert 'ROUTING_PACK_ENGINE_VERSION = "3.6.3"' in registry
     assert 'ROUTING_PACK_MANIFEST_NAME = "manifest.json"' in registry
@@ -37,7 +39,8 @@ def test_manifest_registry_is_strict_confined_and_deterministic() -> None:
     assert 'TAR_MAGIC = "ustar"' in registry
     assert "coordinate.longitude in west..east" in registry
     assert "coordinate.latitude in south..north" in registry
-    assert ".filter { it.covers(origin, destination) }" in registry
+    assert "points.all(manifest.bounds::contains)" in registry
+    assert ".filter { it.covers(points) }" in registry
     assert "it.manifest.bounds.area()" in registry
     assert ".thenBy(RoutingPack::packId)" in registry
     assert (
@@ -51,14 +54,15 @@ def test_manifest_registry_is_strict_confined_and_deterministic() -> None:
 def test_debug_engine_selects_one_pack_and_keeps_one_current_actor() -> None:
     engine = (DEBUG_KOTLIN / "NativeRouteEngineFactory.kt").read_text()
     registry = (KOTLIN / "RoutingPackRegistry.kt").read_text()
-    assert "registry.select(request.origin, request.destination)" in engine
+    assert "registry.select(request.points, request.profile.accessMode)" in engine
     assert "NativeRouteFailureCode.NO_COVERING_ROUTING_PACK" in engine
+    assert "NativeRouteFailureCode.NO_COMPATIBLE_ROUTING_PACK" in engine
     assert "SingleCurrentRoutingPackActor" in engine
     assert "private var current: CurrentActor<T>? = null" in registry
     assert "current = CurrentActor(key, created)" in registry
     assert "MutableMap" not in registry
     assert ".withTileExtract(pack.tileArchive.absolutePath)" in engine
-    assert "CostingModel.pedestrian" in engine
+    assert "ValhallaProfilePolicies.forProfile(request.profile)" in engine
     assert "Executors" not in engine
 
 
@@ -69,14 +73,17 @@ def test_public_bridge_reports_pack_ids_without_paths_and_release_stays_disabled
     protocol = (KOTLIN / "BridgeProtocol.kt").read_text()
     release = (RELEASE_KOTLIN / "NativeRouteEngineFactory.kt").read_text()
     assert 'NO_COVERING_ROUTING_PACK("no_covering_routing_pack")' in boundary
-    assert "installedPackIds: List<String>" in boundary
+    assert "val installedPackIds: List<String>" in boundary
     assert "val packId: String" in boundary
     assert '"installed_pack_count"' in protocol
     assert '"installed_pack_ids"' in protocol
+    assert '"supported_profile_ids"' in protocol
+    assert '"pack_capabilities"' in protocol
     assert '"pack_id", result.packId' in protocol
     assert "absolutePath" not in protocol
     assert "enabled = false" in release
-    assert "installedPackIds = emptyList()" in release
+    assert "packs = emptyList()" in release
+    assert "supportedProfiles = emptyList()" in release
     assert "NativeRouteFailureCode.ROUTING_PACK_UNAVAILABLE" in release
     assert "com.valhalla" not in release
 
@@ -121,7 +128,9 @@ def test_tooling_builds_two_ignored_manifest_backed_packs() -> None:
     assert "write_pr33_routing_pack_manifest.py" in generic
     assert "marly-dev-v1 2.00 48.80 2.16 48.94" in both
     assert "paris-dev-v1 2.25 48.80 2.42 48.92" in both
-    assert '"schema_version": 1' in writer
+    assert '"schema_version": 2' in writer
+    assert '"access_modes": ["foot", "bicycle"]' in writer
+    assert "mjolnir-include-bicycle true" in generic
     assert '"engine": "valhalla"' in writer
     assert '"engine_version": "3.6.3"' in writer
     assert "class RegionalExtractHandler" in extractor

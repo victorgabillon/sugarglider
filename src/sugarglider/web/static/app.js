@@ -2884,7 +2884,9 @@ async function start() {
           button: byId("local-routing-button"),
           smokeButton: byId("local-routing-smoke-button"),
           parisSmokeButton: byId("local-routing-paris-smoke-button"),
+          viaSmokeButton: byId("local-routing-via-smoke-button"),
           crossPackButton: byId("local-routing-cross-pack-button"),
+          profileSelect: byId("local-routing-profile"),
           status: byId("local-routing-status"),
         },
       });

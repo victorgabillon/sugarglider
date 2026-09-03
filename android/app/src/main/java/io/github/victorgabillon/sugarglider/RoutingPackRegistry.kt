@@ -1,11 +1,13 @@
 package io.github.victorgabillon.sugarglider
 
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.charset.StandardCharsets
 
-internal const val ROUTING_PACK_MANIFEST_SCHEMA_VERSION = 1
+internal const val ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1 = 1
+internal const val ROUTING_PACK_MANIFEST_SCHEMA_VERSION = 2
 internal const val ROUTING_PACK_ENGINE = "valhalla"
 internal const val ROUTING_PACK_ENGINE_VERSION = "3.6.3"
 
@@ -46,23 +48,38 @@ internal data class RoutingPackManifest(
     val engine: String,
     val engineVersion: String,
     val bounds: RoutingPackBounds,
+    val accessModes: List<LocalRouteAccessMode>,
 ) {
     fun isSupported(directoryPackId: String): Boolean =
-        schemaVersion == ROUTING_PACK_MANIFEST_SCHEMA_VERSION &&
+        schemaVersion in setOf(
+            ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1,
+            ROUTING_PACK_MANIFEST_SCHEMA_VERSION,
+        ) &&
             packId == directoryPackId &&
             isRoutingPackId(packId) &&
             engine == ROUTING_PACK_ENGINE &&
             engineVersion == ROUTING_PACK_ENGINE_VERSION &&
-            bounds.isValid()
+            bounds.isValid() &&
+            accessModes.isNotEmpty() &&
+            accessModes == LocalRouteAccessMode.entries.filter(accessModes::contains) &&
+            (
+                schemaVersion != ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1 ||
+                    accessModes == listOf(LocalRouteAccessMode.FOOT)
+                )
 
     companion object {
         fun parse(payload: String, directoryPackId: String): RoutingPackManifest? {
             return try {
                 val value = JSONObject(payload)
-                if (!value.hasExactly(MANIFEST_FIELDS)) return null
+                val schemaVersion = value.strictInteger("schema_version") ?: return null
+                val manifestFields = when (schemaVersion) {
+                    ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1 -> MANIFEST_V1_FIELDS
+                    ROUTING_PACK_MANIFEST_SCHEMA_VERSION -> MANIFEST_V2_FIELDS
+                    else -> return null
+                }
+                if (!value.hasExactly(manifestFields)) return null
                 val boundsValue = value.optJSONObject("bounds") ?: return null
                 if (!boundsValue.hasExactly(BOUNDS_FIELDS)) return null
-                val schemaVersion = value.strictInteger("schema_version") ?: return null
                 val manifest = RoutingPackManifest(
                     schemaVersion = schemaVersion,
                     packId = value.strictString("pack_id") ?: return null,
@@ -74,6 +91,13 @@ internal data class RoutingPackManifest(
                         east = boundsValue.strictDouble("east") ?: return null,
                         north = boundsValue.strictDouble("north") ?: return null,
                     ),
+                    accessModes = if (
+                        schemaVersion == ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1
+                    ) {
+                        listOf(LocalRouteAccessMode.FOOT)
+                    } else {
+                        value.strictAccessModes("access_modes") ?: return null
+                    },
                 )
                 manifest.takeIf { it.isSupported(directoryPackId) }
             } catch (_: Exception) {
@@ -81,13 +105,14 @@ internal data class RoutingPackManifest(
             }
         }
 
-        private val MANIFEST_FIELDS = setOf(
+        private val MANIFEST_V1_FIELDS = setOf(
             "schema_version",
             "pack_id",
             "engine",
             "engine_version",
             "bounds",
         )
+        private val MANIFEST_V2_FIELDS = MANIFEST_V1_FIELDS + "access_modes"
         private val BOUNDS_FIELDS = setOf("west", "south", "east", "north")
     }
 }
@@ -101,8 +126,10 @@ internal data class RoutingPack(
     val packId: String
         get() = manifest.packId
 
-    fun covers(origin: LocalRouteCoordinate, destination: LocalRouteCoordinate): Boolean =
-        manifest.bounds.contains(origin) && manifest.bounds.contains(destination)
+    fun covers(points: List<LocalRouteCoordinate>): Boolean = points.isNotEmpty() &&
+        points.all(manifest.bounds::contains)
+
+    fun supports(accessMode: LocalRouteAccessMode): Boolean = accessMode in manifest.accessModes
 
     internal fun actorKey(): RoutingPackActorKey = RoutingPackActorKey(
         packId = packId,
@@ -128,15 +155,23 @@ internal class RoutingPackRegistry(private val rootDirectory: File) {
     }
 
     fun select(
-        origin: LocalRouteCoordinate,
-        destination: LocalRouteCoordinate,
-    ): RoutingPack? = installedPacks()
-        .asSequence()
-        .filter { it.covers(origin, destination) }
-        .minWithOrNull(
-            compareBy<RoutingPack> { it.manifest.bounds.area() }
-                .thenBy(RoutingPack::packId),
-        )
+        points: List<LocalRouteCoordinate>,
+        accessMode: LocalRouteAccessMode,
+    ): RoutingPackSelection {
+        val geographicallyEligible = installedPacks()
+            .filter { it.covers(points) }
+        if (geographicallyEligible.isEmpty()) {
+            return RoutingPackSelection.NoGeographicCoverage
+        }
+        val selected = geographicallyEligible
+            .asSequence()
+            .filter { it.supports(accessMode) }
+            .minWithOrNull(
+                compareBy<RoutingPack> { it.manifest.bounds.area() }
+                    .thenBy(RoutingPack::packId),
+            ) ?: return RoutingPackSelection.NoCompatibleAccessMode
+        return RoutingPackSelection.Selected(selected)
+    }
 
     private fun loadPack(canonicalRoot: File, directoryEntry: File): RoutingPack? {
         val directory = directoryEntry.canonicalFileOrNull() ?: return null
@@ -207,6 +242,14 @@ internal class RoutingPackRegistry(private val rootDirectory: File) {
     }
 }
 
+internal sealed interface RoutingPackSelection {
+    data class Selected(val pack: RoutingPack) : RoutingPackSelection
+
+    data object NoGeographicCoverage : RoutingPackSelection
+
+    data object NoCompatibleAccessMode : RoutingPackSelection
+}
+
 internal data class RoutingPackActorSelection<T : Any>(
     val actor: T,
     val coldStart: Boolean,
@@ -266,3 +309,17 @@ private fun JSONObject.strictString(name: String): String? = opt(name) as? Strin
 private fun JSONObject.strictDouble(name: String): Double? = (opt(name) as? Number)
     ?.toDouble()
     ?.takeIf(Double::isFinite)
+
+private fun JSONObject.strictAccessModes(name: String): List<LocalRouteAccessMode>? {
+    val values = opt(name) as? JSONArray ?: return null
+    if (values.length() !in 1..LocalRouteAccessMode.entries.size) return null
+    val parsed = buildList {
+        repeat(values.length()) { index ->
+            val value = values.opt(index) as? String ?: return null
+            add(LocalRouteAccessMode.parse(value) ?: return null)
+        }
+    }
+    return parsed.takeIf {
+        it == LocalRouteAccessMode.entries.filter(it::contains)
+    }
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write the minimal deterministic PR33 routing-pack manifest."""
+"""Write the minimal deterministic current routing-pack manifest."""
 
 from __future__ import annotations
 
@@ -35,10 +35,11 @@ def main() -> None:
     ):
         raise SystemExit("Invalid routing-pack bounds")
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "pack_id": args.pack_id,
         "engine": "valhalla",
         "engine_version": "3.6.3",
+        "access_modes": ["foot", "bicycle"],
         "bounds": {
             "west": args.west,
             "south": args.south,

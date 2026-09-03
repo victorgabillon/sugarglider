@@ -80,9 +80,9 @@ internal object BridgeProtocol {
         "current_sequence",
     )
     private val localRouteFields = baseFields + setOf(
+        "route_version",
         "profile",
-        "origin",
-        "destination",
+        "points",
     )
     private val coordinateFields = setOf("lat", "lon")
 
@@ -161,9 +161,21 @@ internal object BridgeProtocol {
         requestId: String,
         capabilities: NativeRouteCapabilities,
     ): String {
-        val installedPackIds = capabilities.installedPackIds.takeIf {
-            capabilities.isValid()
-        } ?: emptyList()
+        val validCapabilities = capabilities.takeIf(NativeRouteCapabilities::isValid)
+        val packs = validCapabilities?.packs ?: emptyList()
+        val installedPackIds = packs.map(NativeRoutingPackCapability::packId)
+        val supportedProfiles = validCapabilities?.supportedProfiles ?: emptyList()
+        val packCapabilities = JSONArray()
+        packs.forEach { pack ->
+            packCapabilities.put(
+                JSONObject()
+                    .put("pack_id", pack.packId)
+                    .put(
+                        "access_modes",
+                        JSONArray(pack.accessModes.map(LocalRouteAccessMode::wireValue)),
+                    ),
+            )
+        }
         return JSONObject()
             .put("schema_version", SCHEMA_VERSION)
             .put("request_id", requestId)
@@ -173,6 +185,10 @@ internal object BridgeProtocol {
             .put("engine_version", capabilities.engineVersion)
             .put("installed_pack_count", installedPackIds.size)
             .put("installed_pack_ids", JSONArray(installedPackIds))
+            .put(
+                "supported_profile_ids",
+                JSONArray(supportedProfiles.map(LocalRouteProfile::wireValue)),
+            ).put("pack_capabilities", packCapabilities)
             .toString()
     }
 
@@ -186,8 +202,10 @@ internal object BridgeProtocol {
                     .put(coordinate.latitude),
             )
         }
-        val first = result.geometry.first()
-        val last = result.geometry.last()
+        val snappedPoints = JSONArray()
+        result.snappedPoints.forEach { coordinate ->
+            snappedPoints.put(coordinateJson(coordinate))
+        }
         val reply = JSONObject()
             .put("schema_version", SCHEMA_VERSION)
             .put("request_id", requestId)
@@ -199,8 +217,7 @@ internal object BridgeProtocol {
             .put("distance_m", result.distanceMeters)
             .put("duration_s", result.durationSeconds ?: JSONObject.NULL)
             .put("geometry", geometry)
-            .put("snapped_origin", coordinateJson(first))
-            .put("snapped_destination", coordinateJson(last))
+            .put("snapped_points", snappedPoints)
             .put(
                 "measurements",
                 JSONObject()
@@ -274,29 +291,48 @@ internal object BridgeProtocol {
         pageNonce: String,
     ): BridgeRequest? {
         if (!hasExactly(value, localRouteFields)) return null
+        val routeVersion = strictLong(value, "route_version")
+            ?.takeIf { it == LOCAL_ROUTE_REQUEST_VERSION.toLong() }
+            ?.toInt()
+            ?: return BridgeRequest.RejectedLocalRoute(
+                requestId,
+                pageNonce,
+                NativeRouteFailureCode.INVALID_REQUEST,
+            )
         val profileValue = value.optString("profile", "")
         val profile = LocalRouteProfile.parse(profileValue) ?: return BridgeRequest.RejectedLocalRoute(
             requestId,
             pageNonce,
             NativeRouteFailureCode.UNSUPPORTED_PROFILE,
         )
-        val origin = parseCoordinate(value.optJSONObject("origin"))
+        val pointValues = value.optJSONArray("points")
             ?: return BridgeRequest.RejectedLocalRoute(
                 requestId,
                 pageNonce,
                 NativeRouteFailureCode.INVALID_REQUEST,
             )
-        val destination = parseCoordinate(value.optJSONObject("destination"))
-            ?: return BridgeRequest.RejectedLocalRoute(
+        if (pointValues.length() !in MIN_LOCAL_ROUTE_POINTS..MAX_LOCAL_ROUTE_POINTS) {
+            return BridgeRequest.RejectedLocalRoute(
                 requestId,
                 pageNonce,
                 NativeRouteFailureCode.INVALID_REQUEST,
             )
+        }
+        val points = buildList {
+            repeat(pointValues.length()) { index ->
+                val point = parseCoordinate(pointValues.optJSONObject(index))
+                    ?: return BridgeRequest.RejectedLocalRoute(
+                        requestId,
+                        pageNonce,
+                        NativeRouteFailureCode.INVALID_REQUEST,
+                    )
+                add(point)
+            }
+        }
         val routeRequest = NativeRouteRequest(
-            version = LOCAL_ROUTE_REQUEST_VERSION,
+            version = routeVersion,
             requestId = requestId,
-            origin = origin,
-            destination = destination,
+            points = points,
             profile = profile,
         )
         if (!routeRequest.isValid()) {
