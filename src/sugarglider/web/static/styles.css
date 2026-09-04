@@ -284,6 +284,8 @@ input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d;
 .local-routing-experiment p { margin: 0; line-height: 1.35; }
 .local-routing-experiment .button { min-height: 2rem; padding: .35rem .55rem; font-size: .7rem; }
 .local-routing-experiment.hidden { display: none; }
+.local-auto-tour-results { margin: 0; padding-left: 1.2rem; display: grid; gap: .25rem; }
+.local-auto-tour-results .recommended { color: #174f79; font-weight: 700; }
 .planner-location-control { position: absolute; z-index: 5; right: .65rem; bottom: 3.75rem; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; display: grid; place-items: center; }
 .planner-location-control img { width: 40px; height: 40px; display: block; object-fit: contain; pointer-events: none; }
 .planner-location-control:hover { filter: brightness(.98); }

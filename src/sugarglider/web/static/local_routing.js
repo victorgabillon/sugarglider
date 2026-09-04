@@ -1,6 +1,7 @@
 import {
   nativeBridgeTransport,
 } from "./native_bridge_transport.js";
+import { createLocalAutoTourExperiment } from "./local_auto_tour.js";
 
 const SCHEMA_VERSION = 1;
 const LOCAL_ROUTE_VERSION = 2;
@@ -143,11 +144,23 @@ export function createLocalRoutingExperiment({
   getPoints = () => [],
   renderRoute,
   clearRoute,
+  renderAutoTourCandidates = () => {},
   elements,
 } = {}) {
   let currentRequest = 0;
   let packAvailable = false;
   let supportedProfiles = new Set();
+  const autoTour = elements.autoTour
+    ? createLocalAutoTourExperiment({
+      bridge,
+      getStart: () => getPoints()[0] ?? null,
+      getProfile: selectedProfile,
+      renderCandidates: renderAutoTourCandidates,
+      clearCandidates: clearRoute,
+      onBusy: setBusy,
+      elements: elements.autoTour,
+    })
+    : null;
 
   async function initialize() {
     const capabilities = await bridge.capabilities();
@@ -261,6 +274,7 @@ export function createLocalRoutingExperiment({
     elements.viaSmokeButton.addEventListener("click", requestViaSmokeTest);
     elements.crossPackButton.addEventListener("click", requestCrossPackTest);
     elements.profileSelect.addEventListener("change", () => setBusy(false));
+    autoTour?.bind();
     return initialize();
   }
 
@@ -271,15 +285,32 @@ export function createLocalRoutingExperiment({
       elements.parisSmokeButton,
       elements.viaSmokeButton,
       elements.crossPackButton,
+      autoTourElement("button"),
+      autoTourElement("smokeButton"),
     ]) {
+      if (!button) continue;
       button.disabled = busy || !packAvailable || !supportedProfiles.has(selectedProfile());
       button.setAttribute("aria-busy", String(busy));
     }
     elements.profileSelect.disabled = busy || !packAvailable;
+    for (const control of [
+      autoTourElement("targetDistanceInput"),
+      autoTourElement("toleranceInput"),
+      autoTourElement("candidateCountSelect"),
+      autoTourElement("seedInput"),
+      autoTourElement("directionSelect"),
+    ]) {
+      if (control) control.disabled = busy || !packAvailable;
+    }
+  }
+
+  function autoTourElement(name) {
+    return elements.autoTour?.[name] ?? null;
   }
 
   function invalidate() {
     currentRequest += 1;
+    autoTour?.invalidate();
     bridge.invalidate();
     clearRoute();
   }
@@ -292,6 +323,10 @@ export function createLocalRoutingExperiment({
     requestParisSmokeTest,
     requestViaSmokeTest,
     requestCrossPackTest,
+    requestLocalAutoTour: () => autoTour?.requestFromPlanner() ?? Promise.resolve(null),
+    requestLocalAutoTourSmokeTest: () => (
+      autoTour?.requestMarlySmokeTest() ?? Promise.resolve(null)
+    ),
     invalidate,
   });
 }
