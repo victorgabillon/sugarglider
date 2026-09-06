@@ -150,14 +150,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v18_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v19_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v18"
+    assert generation.group(1) == "v19"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -165,20 +165,24 @@ def test_shared_shell_generation_tracks_v18_cached_assets() -> None:
             "styles.css",
             "planner_location.js",
             "local_routing.js",
+            "local_auto_tour.js",
             "native_bridge_transport.js",
         )
     } == {
         "index.html": (
-            "315c7ff76fe710718384326d3f3dcffbcbcedfe29fcfca6e5dd53112e2e4c580"
+            "efd1766442ae78156bcaa9a0e50d0bfa02f04f1f4b611c71e386d731a65ae1c0"
         ),
         "styles.css": (
-            "aefabae06a260917b7d6a50b1a782849fddedf84ecb99d5b5af66834bf825be6"
+            "1a6e6354e336435976624fd5469d9ad0af2db8ca5f15872db82b45400af2eb86"
         ),
         "planner_location.js": (
             "ce28891c92263c084e33dd5ae9ad906a31e527253aeb321539599711e4500b9c"
         ),
         "local_routing.js": (
-            "e3137e3f9b74223c0bb2da63eb37a32eca0fecc6785cdbabbcd8f2eb33132725"
+            "021b424d941e8cbad0c55efc730117763138dfff3a71a57c1b8bf8257eab1328"
+        ),
+        "local_auto_tour.js": (
+            "0a0eb98ed923157e61aa6f3372012e7caac2bd8cf2bf110acf63a2a2c22b584e"
         ),
         "native_bridge_transport.js": (
             "f601ec9b54b063ce3687fd6f51404818157fa731e860dd87ea6c84656d1528b4"

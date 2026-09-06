@@ -46,6 +46,7 @@ const DIRECTION_IMAGE = "route-direction-arrow";
 const LOCAL_ROUTE_SOURCE = "local-routing-experiment";
 const LOCAL_ROUTE_CASING_LAYER = "local-routing-experiment-casing";
 const LOCAL_ROUTE_LAYER = "local-routing-experiment-line";
+const LOCAL_AUTO_TOUR_PREFIX = "local-auto-tour-experiment-";
 const OUTING_LIVE_POSITION_SOURCE = "outing-live-position-current";
 const OUTING_LIVE_ACCURACY_SOURCE = "outing-live-accuracy-current";
 const OUTING_LIVE_ACCURACY_FILL_LAYER = "outing-live-accuracy-fill";
@@ -2110,8 +2111,58 @@ export function renderLocalExperimentalRoute(geometry) {
   positionPlannerLocationLayers();
 }
 
+export function renderLocalAutoTourCandidates(candidates, recommendedCandidateId) {
+  if (!ready || !map) return;
+  clearLocalExperimentalRoute();
+  const ordered = [...candidates].reverse();
+  for (const candidate of ordered) {
+    if (!Array.isArray(candidate.geometry) || candidate.geometry.length < 2) continue;
+    const index = candidate.rank;
+    const source = `${LOCAL_AUTO_TOUR_PREFIX}${index}`;
+    const recommended = candidate.candidate_id === recommendedCandidateId;
+    map.addSource(source, {
+      type: "geojson",
+      data: {
+        type: "Feature",
+        properties: {
+          kind: "local-auto-tour-experiment",
+          candidate_id: candidate.candidate_id,
+          recommended,
+        },
+        geometry: { type: "LineString", coordinates: candidate.geometry },
+      },
+    });
+    map.addLayer({
+      id: `${source}-casing`,
+      type: "line",
+      source,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": "#fffdf7",
+        "line-width": recommended ? 10 : 7,
+        "line-opacity": recommended ? .9 : .65,
+      },
+    });
+    map.addLayer({
+      id: `${source}-line`,
+      type: "line",
+      source,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": recommended ? "#2468a2" : "#7599b4",
+        "line-width": recommended ? 6 : 4,
+        "line-opacity": recommended ? .98 : .7,
+        ...(recommended ? {} : { "line-dasharray": [2, 1.5] }),
+      },
+    });
+  }
+  moveRequiredLabelsToTop();
+  positionPlannerLocationLayers();
+}
+
 export function clearLocalExperimentalRoute() {
   if (!map) return;
+  clearByPrefix(LOCAL_AUTO_TOUR_PREFIX);
   removeLayer(LOCAL_ROUTE_LAYER);
   removeLayer(LOCAL_ROUTE_CASING_LAYER);
   removeSource(LOCAL_ROUTE_SOURCE);

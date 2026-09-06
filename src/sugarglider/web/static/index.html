@@ -354,6 +354,30 @@
               <button id="local-routing-cross-pack-button" class="button secondary" type="button" aria-busy="false" disabled>Test no common regional pack</button>
               <button id="local-routing-button" class="button secondary" type="button" aria-busy="false" disabled>Route ordered planner points locally</button>
               <p id="local-routing-status" role="status" aria-live="polite"></p>
+              <strong id="local-auto-tour-title">Local Auto Tour experiment</strong>
+              <p>Loop-only, bounded and geometry-only. No POI, nature, exact edge-repetition, or GraphHopper parity claim.</p>
+              <label for="local-auto-tour-target-km">Target distance (km)</label>
+              <input id="local-auto-tour-target-km" type="number" min="2" max="60" step="0.5" value="12" disabled>
+              <label for="local-auto-tour-tolerance-km">Tolerance (km)</label>
+              <input id="local-auto-tour-tolerance-km" type="number" min="0.1" max="15" step="0.1" value="2.5" disabled>
+              <label for="local-auto-tour-candidate-count">Candidate count</label>
+              <select id="local-auto-tour-candidate-count" disabled>
+                <option value="1">1</option>
+                <option value="2" selected>2</option>
+                <option value="3">3</option>
+              </select>
+              <label for="local-auto-tour-seed">Deterministic seed</label>
+              <input id="local-auto-tour-seed" type="number" min="0" max="4294967295" step="1" value="35" disabled>
+              <label for="local-auto-tour-direction">Direction preference</label>
+              <select id="local-auto-tour-direction" disabled>
+                <option value="any" selected>Any</option>
+                <option value="clockwise">Clockwise</option>
+                <option value="counterclockwise">Counterclockwise</option>
+              </select>
+              <button id="local-auto-tour-smoke-button" class="button secondary" type="button" aria-busy="false" disabled>Run fixed Marly local Auto Tour</button>
+              <button id="local-auto-tour-button" class="button secondary" type="button" aria-busy="false" disabled>Generate local Auto Tour from first planner point</button>
+              <p id="local-auto-tour-status" role="status" aria-live="polite"></p>
+              <ol id="local-auto-tour-results" class="local-auto-tour-results"></ol>
             </section>
           </div>
         </details>

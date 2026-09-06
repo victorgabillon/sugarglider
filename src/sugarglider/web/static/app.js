@@ -2,7 +2,7 @@ import { ApiError, exportPlanCandidate, generatePlan, getConfig, getPoiStatus, g
 import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
-import { clearLocalExperimentalRoute, clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderLocalExperimentalRoute, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
+import { clearLocalExperimentalRoute, clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderLocalAutoTourCandidates, renderLocalExperimentalRoute, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
 import { createLocalRoutingExperiment } from "./local_routing.js";
 import {
   centerPlannerCurrentLocation,
@@ -2879,6 +2879,10 @@ async function start() {
           fitCoordinates(geometry);
         },
         clearRoute: clearLocalExperimentalRoute,
+        renderAutoTourCandidates: (candidates, recommendedCandidateId) => {
+          renderLocalAutoTourCandidates(candidates, recommendedCandidateId);
+          fitCoordinates(candidates.flatMap((candidate) => candidate.geometry));
+        },
         elements: {
           container: byId("local-routing-experiment"),
           button: byId("local-routing-button"),
@@ -2888,6 +2892,17 @@ async function start() {
           crossPackButton: byId("local-routing-cross-pack-button"),
           profileSelect: byId("local-routing-profile"),
           status: byId("local-routing-status"),
+          autoTour: {
+            button: byId("local-auto-tour-button"),
+            smokeButton: byId("local-auto-tour-smoke-button"),
+            targetDistanceInput: byId("local-auto-tour-target-km"),
+            toleranceInput: byId("local-auto-tour-tolerance-km"),
+            candidateCountSelect: byId("local-auto-tour-candidate-count"),
+            seedInput: byId("local-auto-tour-seed"),
+            directionSelect: byId("local-auto-tour-direction"),
+            status: byId("local-auto-tour-status"),
+            results: byId("local-auto-tour-results"),
+          },
         },
       });
       void localRoutingExperiment.bind();
