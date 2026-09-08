@@ -236,8 +236,9 @@ unreliable until SSE or expiry resolves it; page closure is only best effort. Se
 
 The browser is also an installable PWA. Its service worker caches only the local
 application shell and never APIs, unlisted route/outing responses, live data, GPX,
-capabilities, or map tiles. Public routes and outings become available offline only
-after **Save for offline use**. Participant capability persistence is separately
+capabilities, third-party map tiles, or regional PMTiles archives. Public routes and
+outings become available offline only after **Save for offline use**. Participant
+capability persistence is separately
 opt-in through **Remember this participant on this device**; restore never starts
 geolocation or publication. A remembered active participant may retain only one
 latest resume-required position sample, which only a visible foreground page can
@@ -245,6 +246,15 @@ send after explicit Start/Resume. Snapshot limits and latest-sample replacement 
 transactional, and optional browser-storage failures never override validated
 network snapshots. See
 [`docs/pr26-pwa-offline-resilience.md`](docs/pr26-pwa-offline-resilience.md).
+
+PR36 adds a shared **Offline maps** panel for explicitly installed regional PMTiles
+v3 vector packs. Packs live in browser-private OPFS, use the same MapLibre/JavaScript
+implementation on desktop and Android WebView, retain manifest attribution, and are
+selected deterministically from the current map center. Without local coverage,
+offline mode still reports and uses the neutral background; it never silently loads
+remote tiles. Build the ignored Marly or Paris development output from an explicit
+local OSM PBF with `make map-pack REGION=marly PBF_INPUT=/path/to/source.osm.pbf`.
+See [`docs/pr36-offline-maps.md`](docs/pr36-offline-maps.md).
 
 PR24 adds participant-authorized current positions to the same outing database.
 `PUT` and `DELETE` on
@@ -369,9 +379,10 @@ data/pois/ile-de-france-poi-index.json.gz
 ```
 
 They are loaded once during application startup. Missing or invalid indexes disable the
-associated preference and remain explicit in status and diagnostics. The map continues
-to use configured raster tiles with visible attribution; Sugarglider does not prefetch,
-bulk-download, cache, or offer offline tiles.
+associated preference and remain explicit in status and diagnostics. Online fallback
+continues to use configured raster tiles with visible attribution; Sugarglider never
+prefetches, bulk-downloads, or persists those third-party raster tiles. Offline maps
+come only from explicit, versioned regional vector packs as documented for PR36.
 
 ## Route direction and reversal
 

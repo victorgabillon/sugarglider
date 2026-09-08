@@ -8,6 +8,11 @@ import {
 } from "./avatar.js";
 import { liveFreshness } from "./outing_live_state.js";
 import { requestedPlaceIdentifier } from "./state.js";
+import {
+  attachOfflineBasemap,
+  detachOfflineBasemap,
+  offlineMapBootstrapForConfig,
+} from "./offline_map.js";
 
 const REQUIRED_LABEL_SOURCE = "required-point-labels";
 const REQUIRED_LABEL_LAYER = "required-point-labels-ordinary";
@@ -139,39 +144,45 @@ let outingLiveParticipantSelectHandler = null;
 let plannerLocationPositionCount = 0;
 let plannerLocationAccuracyCount = 0;
 
+export function initialMapStyle(config, bootstrap = offlineMapBootstrapForConfig(config)) {
+  const offline = Boolean(config.offline_mode);
+  const startWithOnlineRaster = !offline && !bootstrap.covering_local_pack;
+  return {
+    version: 8,
+    glyphs: `${window.location.origin}/static/fonts/{fontstack}/{range}.pbf`,
+    sources: startWithOnlineRaster
+      ? {
+        osm: {
+          type: "raster",
+          tiles: [config.tile_url_template],
+          tileSize: 256,
+          attribution: config.tile_attribution,
+        },
+      }
+      : {},
+    layers: [
+      {
+        id: "offline-background",
+        type: "background",
+        paint: { "background-color": "#e8e2d5" },
+      },
+      ...(startWithOnlineRaster ? [{ id: "osm", type: "raster", source: "osm" }] : []),
+    ],
+  };
+}
+
 export function initializeMap(config, handlers) {
   resetMapInstance();
   if (!window.maplibregl) {
     handlers.onError("The packaged MapLibre runtime could not load.");
     return false;
   }
-  const offline = Boolean(config.offline_mode);
   try {
     map = new window.maplibregl.Map({
       container: "map",
       center: config.initial_center,
       zoom: config.initial_zoom,
-      style: {
-        version: 8,
-        glyphs: `${window.location.origin}/static/fonts/{fontstack}/{range}.pbf`,
-        sources: offline
-          ? {}
-          : {
-            osm: {
-              type: "raster",
-              tiles: [config.tile_url_template],
-              tileSize: 256,
-              attribution: config.tile_attribution,
-            },
-          },
-        layers: offline
-          ? [{
-            id: "offline-background",
-            type: "background",
-            paint: { "background-color": "#e8e2d5" },
-          }]
-          : [{ id: "osm", type: "raster", source: "osm" }],
-      },
+      style: initialMapStyle(config),
       attributionControl: true,
     });
   } catch {
@@ -180,6 +191,13 @@ export function initializeMap(config, handlers) {
   }
   map.addControl(new window.maplibregl.NavigationControl(), "top-left");
   map.on("load", async () => {
+    const loadedMap = map;
+    try {
+      await attachOfflineBasemap(loadedMap, config);
+    } catch {
+      handlers.onError("Offline map packs could not be opened. The neutral or online basemap remains available.");
+    }
+    if (map !== loadedMap) return;
     try {
       await installPoiImages();
     } catch {
@@ -339,7 +357,10 @@ function resetMapInstance() {
   poiPopup = null;
   requestedPlacePopup = null;
   spurPopup = null;
-  if (map) map.remove();
+  if (map) {
+    detachOfflineBasemap(map);
+    map.remove();
+  }
   map = null;
 }
 

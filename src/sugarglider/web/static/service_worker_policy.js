@@ -9,6 +9,7 @@ export function excludedShellPath(pathname) {
     || pathname === "/manifest.webmanifest"
     || pathname === "/service-worker.js"
     || pathname.endsWith(".gpx")
+    || pathname.endsWith(".pmtiles")
     || pathname.endsWith("/events")
     || pathname.includes("/events/")
     || pathname.endsWith("/live")
@@ -17,6 +18,7 @@ export function excludedShellPath(pathname) {
 
 export function classifyShellRequest(request, origin) {
   if (request.method !== "GET") return "ignore";
+  if (request.cache === "no-store") return "ignore";
   if (hasSensitiveHeaders(request.headers)) return "ignore";
   const url = new URL(request.url);
   if (url.origin !== origin || excludedShellPath(url.pathname)) {

@@ -1,4 +1,4 @@
-.PHONY: install format lint typecheck test check android-check android-apk brand-assets download-osm rebuild-graph nature-index poi-index benchmark-pois up down logs smoke report generate generate-all-pois generate-auto-tour
+.PHONY: install format lint typecheck test check android-check android-apk brand-assets download-osm rebuild-graph map-pack nature-index poi-index benchmark-pois up down logs smoke report generate generate-all-pois generate-auto-tour
 
 install:
 	uv sync
@@ -33,6 +33,9 @@ download-osm:
 
 rebuild-graph:
 	./scripts/rebuild_graph_cache.sh
+
+map-pack:
+	./scripts/build_pr36_map_pack.sh "$(REGION)" "$(PBF_INPUT)"
 
 nature-index:
 	./scripts/build_nature_index.sh

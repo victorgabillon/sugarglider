@@ -4,6 +4,7 @@ import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
 import { clearLocalExperimentalRoute, clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderLocalAutoTourCandidates, renderLocalExperimentalRoute, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
 import { createLocalRoutingExperiment } from "./local_routing.js";
+import { initializeOfflineMaps } from "./offline_map.js";
 import {
   centerPlannerCurrentLocation,
   clearPlannerCurrentLocation,
@@ -2854,6 +2855,28 @@ async function start() {
     await initializeTrailProfile({
       requireSetup: !currentOutingSlug && !currentSharedRouteSlug,
     });
+    try {
+      await initializeOfflineMaps({
+        elements: {
+          container: byId("offline-maps"),
+          support: byId("offline-map-storage-support"),
+          status: byId("offline-map-pack-status"),
+          active: byId("offline-map-active"),
+          list: byId("offline-map-pack-list"),
+          form: byId("offline-map-install-form"),
+          urlInput: byId("offline-map-manifest-url"),
+          installButton: byId("offline-map-install"),
+          cancelButton: byId("offline-map-cancel-install"),
+        },
+      });
+    } catch {
+      byId("offline-map-storage-support").textContent = (
+        "OPFS random-access storage unavailable."
+      );
+      const mapPackStatus = byId("offline-map-pack-status");
+      mapPackStatus.dataset.state = "map_pack_storage_unavailable";
+      mapPackStatus.textContent = "Offline map storage is unavailable in this browser.";
+    }
     if (currentOutingSlug) {
       await startOutingPage(currentOutingSlug, {
         handleError,

@@ -41,8 +41,14 @@
   invent straight connections between separate segments.
 - Selected-candidate GPX export must serialize the already returned `RouteResult`;
   it must not rerun generation or routing.
-- Map attribution must remain visible. Do not bulk-download, prefetch, or cache map
-  tiles, and do not add offline map behavior.
+- Map attribution must remain visible. Never bulk-download, prefetch, or persist
+  third-party raster map tiles. Offline maps may come only from explicit,
+  versioned regional packs built from appropriately licensed source data; pack
+  attribution must remain visible.
+- Offline map packs are separate from routing packs, live only in OPFS, and must
+  use bounded random reads through one shared web implementation. Installation,
+  replacement, removal, invalid data, missing coverage, and unavailable storage
+  remain explicit; never stitch regions or add a hidden network/native fallback.
 - Nature data must remain local and derived from the configured OSM PBF; never add a
   runtime Overpass or other hosted GIS dependency.
 - Nature analysis must reuse normalized routed geometry edges and must never invent

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>PR36 offline maps harness</title>
+  <pre id="result">running</pre>
+  <script src="../../src/sugarglider/web/static/vendor/pmtiles-4.5.0/pmtiles.js"></script>
+  <script>
+    window.pr36HarnessResult = document.getElementById("result");
+    window.pr36UnhandledRejection = null;
+    window.addEventListener("error", (event) => {
+      window.pr36HarnessResult.dataset.status = "failed";
+      window.pr36HarnessResult.textContent = event.error?.stack ?? event.message;
+      document.title = "PR36 offline maps harness failed";
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      window.pr36UnhandledRejection = event.reason;
+      window.pr36HarnessResult.dataset.status = "failed";
+      window.pr36HarnessResult.textContent = event.reason instanceof Error
+        ? event.reason.stack
+        : String(event.reason);
+      document.title = "PR36 offline maps harness failed";
+    });
+  </script>
+  <script type="module">
+    import { runPr36OfflineMapsHarness } from "./pr36_offline_maps_harness.js";
+
+    const result = window.pr36HarnessResult;
+    try {
+      const scenarios = await runPr36OfflineMapsHarness();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      if (window.pr36UnhandledRejection !== null) throw window.pr36UnhandledRejection;
+      if (result.dataset.status === "failed") throw new Error(result.textContent);
+      result.dataset.status = "passed";
+      result.textContent = JSON.stringify(scenarios);
+      document.title = `PR36 offline maps harness passed ${scenarios.length}`;
+    } catch (error) {
+      result.dataset.status = "failed";
+      result.textContent = error instanceof Error ? error.stack : String(error);
+      document.title = "PR36 offline maps harness failed";
+    }
+  </script>
+</html>
