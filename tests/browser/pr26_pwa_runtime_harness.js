@@ -335,6 +335,7 @@ function scenarioCacheExclusions() {
     "/v2/outings/example",
     "/v2/outings/example/events",
     "/v2/saved-routes/example/gpx",
+    "/static/map-packs/marly/basemap.pmtiles",
   ];
   for (const pathname of ignored) {
     equal(
@@ -350,6 +351,14 @@ function scenarioCacheExclusions() {
     ),
     "ignore",
     "cross-origin tile excluded",
+  );
+  equal(
+    classifyShellRequest(
+      { ...request("https://app.test/static/map-pack-manifest.json"), cache: "no-store" },
+      "https://app.test",
+    ),
+    "ignore",
+    "explicit map-pack download bypasses shell cache",
   );
 }
 

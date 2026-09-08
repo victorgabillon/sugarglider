@@ -22,6 +22,7 @@ data/graph-cache/*
 !data/graph-cache/.gitkeep
 data/graph-cache-backups/
 data/valhalla/
+data/map-packs/
 data/nature/*
 !data/nature/.gitkeep
 data/nature/*.json

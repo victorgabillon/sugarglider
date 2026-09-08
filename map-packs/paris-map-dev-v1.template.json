@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "pack_id": "paris-map-dev-v1",
+  "display_name": "Paris development offline map",
+  "bounds": [
+    2.25,
+    48.8,
+    2.42,
+    48.92
+  ],
+  "min_zoom": 0,
+  "max_zoom": 15,
+  "format": "pmtiles-v3",
+  "tile_type": "mvt",
+  "archive_filename": "basemap.pmtiles",
+  "byte_size": 1,
+  "attribution": "© OpenStreetMap contributors (ODbL) · ESA WorldCover (CC BY 4.0) · Natural Earth · Protomaps basemap",
+  "data_source": "Regional OpenStreetMap PBF rendered with Protomaps Basemaps 4.14.1",
+  "build_id": "generated-by-build-pr36-map-pack"
+}

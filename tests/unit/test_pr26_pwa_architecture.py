@@ -150,14 +150,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v19_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v21_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v19"
+    assert generation.group(1) == "v21"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -170,10 +170,10 @@ def test_shared_shell_generation_tracks_v19_cached_assets() -> None:
         )
     } == {
         "index.html": (
-            "efd1766442ae78156bcaa9a0e50d0bfa02f04f1f4b611c71e386d731a65ae1c0"
+            "6adb43e568e2497593b027eb8b17a5df7c37a344f35aa5eb5efcbcbceef9a5b1"
         ),
         "styles.css": (
-            "1a6e6354e336435976624fd5469d9ad0af2db8ca5f15872db82b45400af2eb86"
+            "ae7274097a2d77be36f587156edf07c4f69dd4a158da63e177ecd64fcb0c7ca5"
         ),
         "planner_location.js": (
             "ce28891c92263c084e33dd5ae9ad906a31e527253aeb321539599711e4500b9c"
@@ -233,7 +233,7 @@ def test_precache_covers_index_and_static_module_graph() -> None:
         "/static/pwa/icon-512.png",
     } <= core
     assert not any(path.startswith(("/v1/", "/v2/", "/o/", "/r/")) for path in core)
-    assert not any("tile" in path or path.endswith(".pbf") for path in core)
+    assert not any(path.endswith((".pmtiles", ".pbf")) for path in core)
 
 
 def test_browser_persistence_ownership_is_narrow() -> None:
@@ -250,7 +250,7 @@ def test_browser_persistence_ownership_is_narrow() -> None:
     } == {"pwa_controller.js"}
     assert {
         name for name, source in sources.items() if "storageManager?.persist" in source
-    } == {"pwa_controller.js"}
+    } == {"map_pack_store.js", "pwa_controller.js"}
     combined = "\n".join(sources.values())
     for forbidden in ("localStorage", "sessionStorage", "document.cookie"):
         assert forbidden not in combined

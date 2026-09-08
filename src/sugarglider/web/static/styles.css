@@ -280,6 +280,16 @@ input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d;
 .map-tools input { width: auto; min-height: auto; margin: 0; }
 .map-tools .action-icon { width: .9rem; height: .9rem; }
 .map-tools .advanced-map-control { padding-top: .3rem; border-top: 1px solid #d7d4c8; }
+.offline-maps { max-width: 18rem; padding-top: .3rem; border-top: 1px solid #d7d4c8; color: #445048; font-size: .68rem; }
+.offline-maps > summary { cursor: pointer; }
+.offline-maps-body, .offline-map-install-form, .offline-map-pack-list, .offline-map-pack-list li { display: grid; gap: .35rem; }
+.offline-maps-body { padding-top: .4rem; }
+.offline-maps-body p, .offline-map-pack-list { margin: 0; }
+.offline-map-install-form input { width: 100%; min-height: 2rem; padding: .35rem .45rem; }
+.offline-map-install-form .button { min-height: 2rem; padding: .35rem .55rem; font-size: .7rem; }
+.offline-map-pack-list { max-height: 12rem; padding: 0; overflow: auto; list-style: none; }
+.offline-map-pack-list li { padding: .4rem; border: 1px solid #d7d4c8; border-radius: 5px; background: #fffdf7; }
+.offline-map-pack-list span, .offline-map-pack-list small { overflow-wrap: anywhere; }
 .local-routing-experiment { max-width: 17rem; display: grid; gap: .35rem; color: #445048; font-size: .68rem; }
 .local-routing-experiment p { margin: 0; line-height: 1.35; }
 .local-routing-experiment .button { min-height: 2rem; padding: .35rem .55rem; font-size: .7rem; }
