@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>PR37 Paris multipack harness</title>
+  <pre id="result">running</pre>
+  <script>
+    const result = document.getElementById("result");
+    function fail(error) {
+      result.dataset.status = "failed";
+      result.textContent = error instanceof Error ? error.stack : String(error);
+      document.title = "PR37 Paris multipack harness failed";
+    }
+    window.addEventListener("error", (event) => fail(event.error ?? event.message));
+    window.addEventListener("unhandledrejection", (event) => fail(event.reason));
+  </script>
+  <script src="../../src/sugarglider/web/static/vendor/pmtiles-4.5.0/pmtiles.js"></script>
+  <script type="module">
+    import { runPr37ParisMultipackHarness } from "./pr37_paris_multipack_harness.js";
+
+    try {
+      const scenarios = await runPr37ParisMultipackHarness();
+      if (result.dataset.status === "failed") throw new Error(result.textContent);
+      result.dataset.status = "passed";
+      result.textContent = JSON.stringify(scenarios);
+      document.title = `PR37 Paris multipack harness passed ${scenarios.length}`;
+    } catch (error) {
+      fail(error);
+    }
+  </script>
+</html>
