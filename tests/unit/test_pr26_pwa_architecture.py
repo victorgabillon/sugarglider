@@ -150,28 +150,37 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v21_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v22_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v21"
+    assert generation.group(1) == "v22"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
             "index.html",
+            "app.js",
+            "state.js",
+            "map.js",
             "styles.css",
             "planner_location.js",
             "local_routing.js",
             "local_auto_tour.js",
+            "local_waypoint_route.js",
             "native_bridge_transport.js",
         )
     } == {
         "index.html": (
-            "6adb43e568e2497593b027eb8b17a5df7c37a344f35aa5eb5efcbcbceef9a5b1"
+            "99e1e7f5ca0e944cfd0df37a2f0e501cc4c4e19e4df2e295d04fe6d85b2c541e"
         ),
+        "app.js": ("925fe42907eef4e8d83c0c5101269f6c3b136f970422c6ad57608eea3a4f4abb"),
+        "state.js": (
+            "de724c096dd193347bdbdb9a424e873902ead40b30d48a339925da4d9aa58abd"
+        ),
+        "map.js": ("b4d91e4264b1ab0373b84aff6ebce61b36fa01127936533da005752b79545c84"),
         "styles.css": (
             "ae7274097a2d77be36f587156edf07c4f69dd4a158da63e177ecd64fcb0c7ca5"
         ),
@@ -179,10 +188,13 @@ def test_shared_shell_generation_tracks_v21_cached_assets() -> None:
             "ce28891c92263c084e33dd5ae9ad906a31e527253aeb321539599711e4500b9c"
         ),
         "local_routing.js": (
-            "021b424d941e8cbad0c55efc730117763138dfff3a71a57c1b8bf8257eab1328"
+            "ad7fc590f7ca66c18e8ea561b24c89f815c86dca84761b50d6d678d293a0174a"
         ),
         "local_auto_tour.js": (
             "0a0eb98ed923157e61aa6f3372012e7caac2bd8cf2bf110acf63a2a2c22b584e"
+        ),
+        "local_waypoint_route.js": (
+            "5ba767ccd5578579129f117dcef7408cb5e3e79901b008ce6416a775816952f4"
         ),
         "native_bridge_transport.js": (
             "f601ec9b54b063ce3687fd6f51404818157fa731e860dd87ea6c84656d1528b4"
