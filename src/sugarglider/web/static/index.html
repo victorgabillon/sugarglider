@@ -373,6 +373,12 @@
               <button id="local-routing-cross-pack-button" class="button secondary" type="button" aria-busy="false" disabled>Test no common regional pack</button>
               <button id="local-routing-button" class="button secondary" type="button" aria-busy="false" disabled>Route ordered planner points locally</button>
               <p id="local-routing-status" role="status" aria-live="polite"></p>
+              <strong id="local-waypoint-route-title">Local Waypoint Route experiment</strong>
+              <p>Uses a read-only snapshot of the ordinary Waypoint Route planner's topology, endpoints, profile, exact waypoints, order, seed and distance controls. At most 14 interior waypoints and 16 local-route calls. Hard endpoint snaps and graph-derived loop closure must be within 25 m; exact interior waypoint snaps within 300 m, not exact GPS coincidence.</p>
+              <p>Set nature and loop geometry off, and path selection to shortest. Approach/best-effort points and overrides are rejected. No POI/nature scoring, globally shortest path or GraphHopper parity claim; normal Generate remains server-backed.</p>
+              <button id="local-waypoint-route-button" class="button secondary" type="button" aria-busy="false" disabled>Generate experimental Local Waypoint Route from planner</button>
+              <p id="local-waypoint-route-status" role="status" aria-live="polite"></p>
+              <ol id="local-waypoint-route-results" class="local-auto-tour-results"></ol>
               <strong id="local-auto-tour-title">Local Auto Tour experiment</strong>
               <p>Loop-only, bounded and geometry-only. No POI, nature, exact edge-repetition, or GraphHopper parity claim.</p>
               <label for="local-auto-tour-target-km">Target distance (km)</label>

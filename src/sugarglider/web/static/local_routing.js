@@ -2,11 +2,12 @@ import {
   nativeBridgeTransport,
 } from "./native_bridge_transport.js";
 import { createLocalAutoTourExperiment } from "./local_auto_tour.js";
+import { createLocalWaypointRouteExperiment } from "./local_waypoint_route.js";
 
 const SCHEMA_VERSION = 1;
 const LOCAL_ROUTE_VERSION = 2;
 const MIN_ROUTE_POINTS = 2;
-const MAX_ROUTE_POINTS = 16;
+export const MAX_ROUTE_POINTS = 16;
 const MAX_ROUTE_VERTICES = 20_000;
 const ROUTE_TIMEOUT_MS = 90_000;
 export const PUBLIC_LOCAL_ROUTE_PROFILES = Object.freeze([
@@ -145,11 +146,28 @@ export function createLocalRoutingExperiment({
   renderRoute,
   clearRoute,
   renderAutoTourCandidates = () => {},
+  getWaypointRequest = () => null,
+  renderWaypointCandidates = () => {},
+  clearWaypointCandidates = () => {},
+  onCapabilities = () => {},
   elements,
 } = {}) {
   let currentRequest = 0;
   let packAvailable = false;
   let supportedProfiles = new Set();
+  let localBusy = false;
+  const waypointRoute = elements.waypointRoute
+    ? createLocalWaypointRouteExperiment({
+      bridge,
+      getRequest: getWaypointRequest,
+      renderCandidates: renderWaypointCandidates,
+      clearCandidates: clearWaypointCandidates,
+      onBusy: setBusy,
+      isBusy: () => localBusy,
+      isEnabled: () => packAvailable,
+      elements: elements.waypointRoute,
+    })
+    : null;
   const autoTour = elements.autoTour
     ? createLocalAutoTourExperiment({
       bridge,
@@ -175,6 +193,7 @@ export function createLocalRoutingExperiment({
     if (!capabilities.enabled) return false;
     packAvailable = capabilities.installed_pack_count > 0;
     supportedProfiles = new Set(capabilities.supported_profile_ids);
+    onCapabilities(capabilities);
     for (const option of elements.profileSelect.options) {
       option.disabled = !supportedProfiles.has(option.value);
     }
@@ -275,10 +294,12 @@ export function createLocalRoutingExperiment({
     elements.crossPackButton.addEventListener("click", requestCrossPackTest);
     elements.profileSelect.addEventListener("change", () => setBusy(false));
     autoTour?.bind();
+    waypointRoute?.bind();
     return initialize();
   }
 
   function setBusy(busy) {
+    localBusy = busy;
     for (const button of [
       elements.button,
       elements.smokeButton,
@@ -293,6 +314,11 @@ export function createLocalRoutingExperiment({
       button.setAttribute("aria-busy", String(busy));
     }
     elements.profileSelect.disabled = busy || !packAvailable;
+    if (elements.waypointRoute?.button) {
+      // PR38 uses the canonical planner profile, not this panel's raw-route selector.
+      elements.waypointRoute.button.disabled = busy || !packAvailable;
+      elements.waypointRoute.button.setAttribute("aria-busy", String(busy));
+    }
     for (const control of [
       autoTourElement("targetDistanceInput"),
       autoTourElement("toleranceInput"),
@@ -311,6 +337,7 @@ export function createLocalRoutingExperiment({
   function invalidate() {
     currentRequest += 1;
     autoTour?.invalidate();
+    waypointRoute?.invalidate();
     bridge.invalidate();
     clearRoute();
   }
@@ -327,6 +354,8 @@ export function createLocalRoutingExperiment({
     requestLocalAutoTourSmokeTest: () => (
       autoTour?.requestMarlySmokeTest() ?? Promise.resolve(null)
     ),
+    requestLocalWaypointRoute: () => waypointRoute?.requestFromPlanner() ?? Promise.resolve(null),
+    invalidateLocalWaypointRoute: () => waypointRoute?.invalidate(),
     invalidate,
   });
 }

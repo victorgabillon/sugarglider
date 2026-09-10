@@ -409,46 +409,102 @@ export function pointDisplayName(point, index) {
   return name || `Point ${index + 1}`;
 }
 
-function commonPlanState(endpoints) {
-  setRouteTopology(endpoints, endpoints.routeTopology);
-  const priority = state.options.distancePriority ?? state.autoTour.distancePriority;
+export function readPlannerOptionsFromControls(byId) {
   return {
-    name: state.options.name,
+    name: byId("route-name").value.trim() || "Sugarglider route",
+    targetDistanceKm: Number(byId("target-distance").value),
+    toleranceKm: Number(byId("tolerance").value),
+    maximumDistanceKm: byId("maximum-distance").value.trim()
+      ? Number(byId("maximum-distance").value)
+      : null,
+    distancePriority: byId("distance-priority").value,
+    candidateCount: Number(byId("candidate-count").value),
+    seed: Number(byId("seed").value),
+    waypointOrder: byId("point-order-mode").value,
+    pathSelectionMode: byId("path-selection-mode").value,
+    naturePreference: byId("nature-preference").value,
+    loopGeometryPreference: byId("loop-geometry-preference").value,
+    freePoiSpurRepeatedM: Number(byId("free-poi-spur").value),
+  };
+}
+
+function commonPlanState(endpoints, planner = state) {
+  requireRouteTopology(endpoints.routeTopology);
+  const priority = planner.options.distancePriority ?? planner.autoTour.distancePriority;
+  return {
+    name: planner.options.name,
     topology: endpoints.routeTopology,
     start: coordinatePayload(endpoints.start, "Start"),
     end: endpoints.routeTopology === "point_to_point"
       ? coordinatePayload(endpoints.end, "End")
       : null,
-    routing_profile: state.routingProfile,
-    candidate_count: state.options.candidateCount,
-    seed: state.options.seed,
+    routing_profile: planner.routingProfile,
+    candidate_count: planner.options.candidateCount,
+    seed: planner.options.seed,
     distance_objective: {
-      target_m: state.options.targetDistanceKm * 1000,
-      tolerance_m: state.options.toleranceKm * 1000,
-      maximum_m: state.options.maximumDistanceKm == null
+      target_m: planner.options.targetDistanceKm * 1000,
+      tolerance_m: planner.options.toleranceKm * 1000,
+      maximum_m: planner.options.maximumDistanceKm == null
         ? null
-        : state.options.maximumDistanceKm * 1000,
+        : planner.options.maximumDistanceKm * 1000,
       priority,
     },
-    preferences: state.planningMode === "auto_tour" ? {
-      nature: state.options.naturePreference,
-      path_selection: state.options.pathSelectionMode,
-      scenic: state.autoTour.scenicPreference,
-      drinking_water: state.autoTour.drinkingWaterPreference,
+    preferences: planner.planningMode === "auto_tour" ? {
+      nature: planner.options.naturePreference,
+      path_selection: planner.options.pathSelectionMode,
+      scenic: planner.autoTour.scenicPreference,
+      drinking_water: planner.autoTour.drinkingWaterPreference,
       loop_geometry: endpoints.routeTopology === "loop"
-        ? state.options.loopGeometryPreference
+        ? planner.options.loopGeometryPreference
         : "off",
       direction: endpoints.routeTopology === "loop"
-        ? state.autoTour.directionPreference
+        ? planner.autoTour.directionPreference
         : "any",
     } : {
-      nature: state.options.naturePreference,
-      path_selection: state.options.pathSelectionMode,
+      nature: planner.options.naturePreference,
+      path_selection: planner.options.pathSelectionMode,
       loop_geometry: endpoints.routeTopology === "loop"
-        ? state.options.loopGeometryPreference
+        ? planner.options.loopGeometryPreference
         : "off",
     },
   };
+}
+
+function waypointPlanState(points, options) {
+  return {
+    waypoints: points.map((point, index) => ({
+      id: point.id ?? `route-waypoint-${index + 1}`,
+      name: pointDisplayName(point, index),
+      coordinate: coordinatePayload(point, pointDisplayName(point, index)),
+      constraint_strength: point.constraintStrength ?? "exact",
+      access_search_radius_m: point.accessSearchRadiusM ?? 500,
+      maximum_best_effort_distance_m: point.constraintStrength === "best_effort"
+        ? point.maximumBestEffortDistanceM ?? point.accessSearchRadiusM ?? 500
+        : null,
+      approach_override: point.approachOverride
+        ? coordinatePayload(point.approachOverride, "Approach override")
+        : null,
+    })),
+    waypoint_order: options.waypointOrder,
+  };
+}
+
+export function waypointPlanRequestSnapshot(planner) {
+  const endpoints = planner.waypointEndpoints;
+  const common = commonPlanState(endpoints, planner);
+  const modeState = waypointPlanState(planner.points, planner.options);
+  // Preserve unsupported intent for local validation, rather than canonicalizing
+  // away an explicit loop end, an open-route shape preference, or an exact bound.
+  common.end = endpoints.end == null ? null : coordinatePayload(endpoints.end, "End");
+  common.preferences.loop_geometry = planner.options.loopGeometryPreference;
+  modeState.waypoints.forEach((waypoint, index) => {
+    const point = planner.points[index];
+    if (point.constraintStrength !== undefined) waypoint.constraint_strength = point.constraintStrength;
+    if (point.maximumBestEffortDistanceM != null) {
+      waypoint.maximum_best_effort_distance_m = point.maximumBestEffortDistanceM;
+    }
+  });
+  return { schema_version: 1, kind: "waypoint_route", ...common, ...modeState };
 }
 
 export function currentPlanRequest() {
@@ -456,6 +512,7 @@ export function currentPlanRequest() {
   const endpoints = state.planningMode === "auto_tour"
     ? state.autoTour
     : state.waypointEndpoints;
+  setRouteTopology(endpoints, endpoints.routeTopology);
   const common = commonPlanState(endpoints);
   const modeState = state.planningMode === "auto_tour"
     ? {
@@ -485,22 +542,7 @@ export function currentPlanRequest() {
       preferred_discovered_poi_ids: [...state.autoTour.preferredPoiIds],
       free_poi_spur_physical_m: state.options.freePoiSpurRepeatedM ?? 200,
     }
-    : {
-      waypoints: state.points.map((point, index) => ({
-        id: point.id ?? `route-waypoint-${index + 1}`,
-        name: pointDisplayName(point, index),
-        coordinate: coordinatePayload(point, pointDisplayName(point, index)),
-        constraint_strength: point.constraintStrength ?? "exact",
-        access_search_radius_m: point.accessSearchRadiusM ?? 500,
-        maximum_best_effort_distance_m: point.constraintStrength === "best_effort"
-          ? point.maximumBestEffortDistanceM ?? point.accessSearchRadiusM ?? 500
-          : null,
-        approach_override: point.approachOverride
-          ? coordinatePayload(point.approachOverride, "Approach override")
-          : null,
-      })),
-      waypoint_order: state.options.waypointOrder,
-    };
+    : waypointPlanState(state.points, state.options);
   state.plan = {
     schema_version: 1,
     kind: state.planningMode,

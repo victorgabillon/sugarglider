@@ -52,6 +52,7 @@ const LOCAL_ROUTE_SOURCE = "local-routing-experiment";
 const LOCAL_ROUTE_CASING_LAYER = "local-routing-experiment-casing";
 const LOCAL_ROUTE_LAYER = "local-routing-experiment-line";
 const LOCAL_AUTO_TOUR_PREFIX = "local-auto-tour-experiment-";
+const LOCAL_WAYPOINT_ROUTE_PREFIX = "local-waypoint-route-experiment-";
 const OUTING_LIVE_POSITION_SOURCE = "outing-live-position-current";
 const OUTING_LIVE_ACCURACY_SOURCE = "outing-live-accuracy-current";
 const OUTING_LIVE_ACCURACY_FILL_LAYER = "outing-live-accuracy-fill";
@@ -2100,6 +2101,7 @@ export function clearRoutes() {
   removeSource("selected-sections");
   clearMarkers(optionalMarkers);
   clearLocalExperimentalRoute();
+  clearLocalWaypointRouteCandidates();
 }
 
 export function renderLocalExperimentalRoute(geometry) {
@@ -2135,18 +2137,32 @@ export function renderLocalExperimentalRoute(geometry) {
 export function renderLocalAutoTourCandidates(candidates, recommendedCandidateId) {
   if (!ready || !map) return;
   clearLocalExperimentalRoute();
+  renderLocalCandidateLayers(candidates, recommendedCandidateId, LOCAL_AUTO_TOUR_PREFIX, "local-auto-tour-experiment");
+}
+
+export function renderLocalWaypointRouteCandidates(candidates, recommendedCandidateId) {
+  if (!ready || !map) return;
+  clearLocalWaypointRouteCandidates();
+  renderLocalCandidateLayers(candidates, recommendedCandidateId, LOCAL_WAYPOINT_ROUTE_PREFIX, "local-waypoint-route-experiment");
+}
+
+export function clearLocalWaypointRouteCandidates() {
+  if (map) clearByPrefix(LOCAL_WAYPOINT_ROUTE_PREFIX);
+}
+
+function renderLocalCandidateLayers(candidates, recommendedCandidateId, prefix, kind) {
   const ordered = [...candidates].reverse();
   for (const candidate of ordered) {
     if (!Array.isArray(candidate.geometry) || candidate.geometry.length < 2) continue;
     const index = candidate.rank;
-    const source = `${LOCAL_AUTO_TOUR_PREFIX}${index}`;
+    const source = `${prefix}${index}`;
     const recommended = candidate.candidate_id === recommendedCandidateId;
     map.addSource(source, {
       type: "geojson",
       data: {
         type: "Feature",
         properties: {
-          kind: "local-auto-tour-experiment",
+          kind,
           candidate_id: candidate.candidate_id,
           recommended,
         },

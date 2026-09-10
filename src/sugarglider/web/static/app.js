@@ -4,6 +4,8 @@ import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
 import { clearLocalExperimentalRoute, clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderLocalAutoTourCandidates, renderLocalExperimentalRoute, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
 import { createLocalRoutingExperiment } from "./local_routing.js";
+import { clearLocalWaypointRouteCandidates, renderLocalWaypointRouteCandidates } from "./map.js";
+import { addLocalWaypointProfileOptions, readLocalWaypointRouteRequest } from "./local_waypoint_route.js";
 import { initializeOfflineMaps } from "./offline_map.js";
 import {
   centerPlannerCurrentLocation,
@@ -50,7 +52,7 @@ import {
   renderPwaStatus,
 } from "./pwa_view.js";
 import { createSavedRoute, deleteSavedRoute, downloadSavedRouteGpx, getSavedRoute, savedRouteShareUrl, shareSavedRoute, sharedRouteSlug } from "./saved_routes.js";
-import { applyImplicitEndpointMapClick, assignRouteEndpoint, currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, generationAvailability, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, renderEndpointTopologyControls, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, setRouteTopology, state, switchPlanningMode } from "./state.js";
+import { applyImplicitEndpointMapClick, assignRouteEndpoint, currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, generationAvailability, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, readPlannerOptionsFromControls, renderEndpointTopologyControls, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, setRouteTopology, state, switchPlanningMode } from "./state.js";
 import {
   initializeTrailProfile,
   subscribeTrailProfile,
@@ -77,6 +79,8 @@ const HYDRATION_CATEGORIES = ["drinking_water", "fountain", "water_tap"];
 
 const GENERATION_SUGGESTION = "Use Auto Tour for approximate places, or remove or move the exact waypoint.";
 let lastExactFailure = null;
+let invalidateLocalWaypointRoute = () => {};
+let localRouteCapabilities = null;
 
 function showError(message, details = "", code = "", context = "", suggestion = "") {
   const codeElement = byId("error-code");
@@ -283,22 +287,7 @@ function schedulePoiRefresh(bounds = currentViewportBounds()) {
 
 function updateOptionsFromControls() {
   state.routingProfile = byId("profile").value;
-  state.options = {
-    name: byId("route-name").value.trim() || "Sugarglider route",
-    targetDistanceKm: Number(byId("target-distance").value),
-    toleranceKm: Number(byId("tolerance").value),
-    maximumDistanceKm: byId("maximum-distance").value.trim()
-      ? Number(byId("maximum-distance").value)
-      : null,
-    distancePriority: byId("distance-priority").value,
-    candidateCount: Number(byId("candidate-count").value),
-    seed: Number(byId("seed").value),
-    waypointOrder: byId("point-order-mode").value,
-    pathSelectionMode: byId("path-selection-mode").value,
-    naturePreference: byId("nature-preference").value,
-    loopGeometryPreference: byId("loop-geometry-preference").value,
-    freePoiSpurRepeatedM: Number(byId("free-poi-spur").value),
-  };
+  state.options = readPlannerOptionsFromControls(byId);
   state.autoTour.directionPreference = byId("direction-preference").value;
   state.autoTour.distancePriority = state.options.distancePriority;
   state.autoTour.maximumDistanceKm = state.options.maximumDistanceKm;
@@ -360,8 +349,9 @@ function renderRoutingProfiles({ preserveUnavailableSelection = false } = {}) {
     });
     select.append(group);
   }
+  const localProfiles = addLocalWaypointProfileOptions(select, localRouteCapabilities);
   const selected = selectedProfileStatus();
-  if (!selected?.available && !preserveUnavailableSelection) {
+  if (!selected?.available && !preserveUnavailableSelection && !localProfiles.includes(state.routingProfile)) {
     state.routingProfile = state.routingProfileCatalog.profiles.find(
       (status) => status.available,
     )?.profile.id ?? null;
@@ -398,6 +388,11 @@ function updateProfileDescription() {
     return;
   }
   const status = selectedProfileStatus(byId("profile").value);
+  if (!status?.available && localRouteCapabilities?.enabled
+      && localRouteCapabilities.supported_profile_ids.includes(byId("profile").value)) {
+    byId("profile-description").textContent = "Experimental local Valhalla profile only. Server Generate remains unavailable; no GraphHopper profile parity is claimed.";
+    return;
+  }
   byId("profile-description").textContent = status
     ? `${status.profile.short_description} Elevation-aware routing: ${status.profile.capabilities.elevation_aware ? "yes" : "no"}.${status.available ? "" : " This profile is unavailable in the routing backend."}`
     : "Select a routing profile.";
@@ -714,6 +709,7 @@ function activeMapPlacementGuidance() {
 }
 
 function invalidateAndRender() {
+  invalidateLocalWaypointRoute();
   saveActivePoints();
   if (state.request.status === "running") {
     state.abortController?.abort();
@@ -2896,12 +2892,24 @@ async function start() {
     const sharedSlug = currentSharedRouteSlug;
     if (!sharedSlug) {
       const localRoutingExperiment = createLocalRoutingExperiment({
+        onCapabilities: (capabilities) => {
+          localRouteCapabilities = capabilities;
+          if (state.routingProfileCatalog && !isImmutableSnapshotDisplay()) {
+            renderRoutingProfiles({ preserveUnavailableSelection: true });
+          }
+        },
         getPoints: () => state.points.map(({ lat, lon }) => ({ lat, lon })),
         renderRoute: (geometry) => {
           renderLocalExperimentalRoute(geometry);
           fitCoordinates(geometry);
         },
         clearRoute: clearLocalExperimentalRoute,
+        getWaypointRequest: () => readLocalWaypointRouteRequest(state, byId),
+        renderWaypointCandidates: (candidates, recommendedCandidateId) => {
+          renderLocalWaypointRouteCandidates(candidates, recommendedCandidateId);
+          fitCoordinates(candidates.flatMap((candidate) => candidate.geometry));
+        },
+        clearWaypointCandidates: clearLocalWaypointRouteCandidates,
         renderAutoTourCandidates: (candidates, recommendedCandidateId) => {
           renderLocalAutoTourCandidates(candidates, recommendedCandidateId);
           fitCoordinates(candidates.flatMap((candidate) => candidate.geometry));
@@ -2915,6 +2923,11 @@ async function start() {
           crossPackButton: byId("local-routing-cross-pack-button"),
           profileSelect: byId("local-routing-profile"),
           status: byId("local-routing-status"),
+          waypointRoute: {
+            button: byId("local-waypoint-route-button"),
+            status: byId("local-waypoint-route-status"),
+            results: byId("local-waypoint-route-results"),
+          },
           autoTour: {
             button: byId("local-auto-tour-button"),
             smokeButton: byId("local-auto-tour-smoke-button"),
@@ -2928,6 +2941,8 @@ async function start() {
           },
         },
       });
+      invalidateLocalWaypointRoute = localRoutingExperiment.invalidateLocalWaypointRoute;
+      window.addEventListener("pagehide", invalidateLocalWaypointRoute);
       void localRoutingExperiment.bind();
     }
     let sharedSnapshot = null;

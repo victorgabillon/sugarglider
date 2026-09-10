@@ -676,7 +676,7 @@ def test_frontend_exposes_nature_without_raw_polygon_requests() -> None:
     assert '"not evaluated"' in app
     assert 'state.request.status !== "running"' in app
     assert "state.request.startedAt === null" in app
-    assert "nature: state.options.naturePreference" in state
+    assert "nature: planner.options.naturePreference" in state
     assert "preferences.nature" in app
     assert "nature_class" in map_code
     assert "selected-section-nature" in map_code
@@ -694,7 +694,7 @@ def test_frontend_exposes_loop_geometry_request_metrics_and_nulls() -> None:
     assert "Prefer balanced loops" in html
     assert "outbound/return" in app.lower()
     assert 'loopGeometryPreference: "off"' in state
-    assert '? state.options.loopGeometryPreference\n        : "off"' in state
+    assert '? planner.options.loopGeometryPreference\n        : "off"' in state
     assert "preferences.loop_geometry" in app
     assert "loopGeometryCardSummary" in app
     assert "loopGeometryCardDetails" in app
@@ -808,9 +808,9 @@ def test_frontend_auto_tour_is_default_and_preserves_waypoint_mode() -> None:
     assert 'result.topology === "point_to_point" ? "explicit" : "loop_closure"' in app
     assert "currentPlanRequest" in app
     assert "preferred_discovered_poi_ids" in state_code
-    assert '? state.autoTour.directionPreference\n        : "any"' in state_code
-    assert "scenic: state.autoTour.scenicPreference" in state_code
-    assert "drinking_water: state.autoTour.drinkingWaterPreference" in state_code
+    assert '? planner.autoTour.directionPreference\n        : "any"' in state_code
+    assert "scenic: planner.autoTour.scenicPreference" in state_code
+    assert "drinking_water: planner.autoTour.drinkingWaterPreference" in state_code
     assert "requested_stops" in state_code
     assert 'distancePriority: "flexible"' in state_code
     assert 'id="distance-priority"' in html
