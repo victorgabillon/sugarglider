@@ -1070,6 +1070,6 @@ class MainActivity : Activity() {
         private const val REQUEST_WEB_GEOLOCATION_PERMISSION = 31
         private const val DEBUG_DEFAULT_ORIGIN = "http://10.0.2.2:8000"
         private const val DISCLOSURE =
-            "Sugarglider will continuously access precise location during this active sharing session, including while the app is minimized or the screen is locked. Anyone holding the unlisted outing link can see the current position. Only the latest current position is retained, not a historical track. A persistent notification is displayed, and you can stop at any time from the app or notification. If server clearing is uncertain, the last position may remain visible until expiry."
+            "Sugarglider will continuously access and send precise location during this active sharing session, including while the app is minimized or the screen is locked. Anyone holding the unlisted outing link can see your position. The server stores your current position and briefly retains recent updates so viewers can reconnect. This does not create an activity track. A persistent notification is displayed, and you can stop at any time from the app or notification. If server clearing is uncertain, the last position may remain visible until expiry."
     }
 }

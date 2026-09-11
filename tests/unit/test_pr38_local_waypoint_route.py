@@ -44,8 +44,8 @@ def test_local_endpoints_and_closure_follow_pr35_but_interiors_follow_canonical(
     assert "maximum_snap_distance_m: threshold" in source
     native = (
         ROOT
-        / "android/app/src/debug/java/io/github/victorgabillon/sugarglider"
-        / "NativeRouteEngineFactory.kt"
+        / "android/app/src/main/java/io/github/victorgabillon/sugarglider"
+        / "LocalRouteGeometry.kt"
     ).read_text()
     assert "snappedPoints += leg.last()" in native
     assert "disconnected route legs" in native

@@ -1,8 +1,40 @@
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+// Release secrets are optional for unsigned validation and must live outside Git.
+val externalSigningPath = providers.environmentVariable("SUGARGLIDER_ANDROID_SIGNING_PROPERTIES")
+    .orNull
+val externalSigning = externalSigningPath?.let { path ->
+    val repository = rootProject.projectDir.parentFile.canonicalFile.toPath()
+    val propertiesFile = File(path)
+    require(propertiesFile.isAbsolute && propertiesFile.isFile) {
+        "Android signing configuration must be an existing absolute external file"
+    }
+    require(!propertiesFile.canonicalFile.toPath().startsWith(repository)) {
+        "Android signing configuration must be outside the repository"
+    }
+    val properties = Properties()
+    try {
+        propertiesFile.inputStream().use(properties::load)
+    } catch (_: Exception) {
+        throw GradleException("Unable to read external Android signing configuration")
+    }
+    val required = setOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    require(properties.stringPropertyNames() == required &&
+        required.all { !properties.getProperty(it).isNullOrBlank() }) {
+        "Android signing configuration requires exactly storeFile, storePassword, keyAlias and keyPassword"
+    }
+    val keyStore = File(properties.getProperty("storeFile"))
+    require(keyStore.isAbsolute && keyStore.isFile &&
+        !keyStore.canonicalFile.toPath().startsWith(repository)) {
+        "Android upload keystore must be an existing absolute file outside the repository"
+    }
+    properties
 }
 
 android {
@@ -21,6 +53,17 @@ android {
         buildConfigField("boolean", "ALLOW_HTTP", "false")
     }
 
+    signingConfigs {
+        externalSigning?.let { properties ->
+            create("externalUpload") {
+                storeFile = File(properties.getProperty("storeFile"))
+                storePassword = properties.getProperty("storePassword")
+                keyAlias = properties.getProperty("keyAlias")
+                keyPassword = properties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -30,6 +73,8 @@ android {
             ndk.abiFilters += "arm64-v8a"
         }
         release {
+            signingConfig = externalSigning?.let { signingConfigs.getByName("externalUpload") }
+            isDebuggable = false
             buildConfigField("boolean", "LOCAL_ROUTING_EXPERIMENT", "false")
             isMinifyEnabled = false
             proguardFiles(
