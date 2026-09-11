@@ -74,5 +74,10 @@ internal class WebGeolocationPermissionCoordinator {
         pending = null
     }
 
+    /** Drop a callback owned by a renderer that can no longer receive a reply. */
+    fun discard() {
+        pending = null
+    }
+
     fun hasPending(): Boolean = pending != null
 }

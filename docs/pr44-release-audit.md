@@ -108,11 +108,26 @@ no claim of a silent native library or native actor reuse is justified yet.
 [pinned JNI source](https://github.com/Rallista/valhalla-mobile/blob/0.5.1/src/wrapper/main.cpp).
 
 The current AndroidX WebKit release notes list 1.17.0 and mention a new lint rule
-for missing renderer-crash handling. The application presently has no
-`onRenderProcessGone` handler; add lifecycle-safe recovery and verify it before
-calling the release hardened. Upgrading the support library alone is not a
-substitute for that behavior or an up-to-date device WebView implementation.
+for missing renderer-crash handling. A follow-up change now handles the affected
+renderer explicitly: discard its pending geolocation callback, invalidate its
+bridge/request ownership, remove/destroy only that WebView and show an explicit
+Reopen action. A late callback cannot replace a newer page. Native sharing is not
+started or stopped automatically; the recovery screen explains continued sharing
+and offers the existing native Stop action when needed, preserving uncertain-clear
+wording. WebView debugging is explicitly tied to `BuildConfig.DEBUG`. This
+follow-up passes `make check` (1,013 tests), 137 debug JUnit tests, 134 release
+JUnit tests, both lint checks and unsigned bundle assembly. It adds one
+permission-callback lifecycle test, with no failures/errors/skips. The combined
+Android run took 3 min 36 s in a 3 GiB/two-CPU scope. Real crash/low-memory
+presentation remains part of device acceptance. Upgrading the support library alone is not a
+substitute for lifecycle recovery or an up-to-date device WebView implementation.
 [WebKit release notes](https://developer.android.com/jetpack/androidx/releases/webkit?hl=en).
+
+The renderer-recovery build supersedes the preparation artifact above:
+3,528,837 bytes, SHA-256
+`8322e641658d502f4f0a77ef9a7721e20d098d9e0c350ffbf147b904c779e336`,
+at the same ignored AAB path, unsigned and still not the V1 candidate. The signing
+configuration is unchanged from the successful disposable signing test.
 
 ## Permission inventory
 

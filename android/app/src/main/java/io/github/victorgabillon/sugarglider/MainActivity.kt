@@ -22,6 +22,7 @@ import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
 import android.webkit.GeolocationPermissions
 import android.webkit.HttpAuthHandler
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -70,6 +71,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         application = getApplication() as SugargliderApplication
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         nativeRouteEngine = NativeRouteEngineFactory.create(applicationContext)
         application.statusRepository.addObserver(statusObserver)
         registerPredictiveBackCallback()
@@ -335,6 +337,24 @@ class MainActivity : Activity() {
     }
 
     private fun originIsolatingClient(origin: String): WebViewClient = object : WebViewClient() {
+        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            val wasCurrent = view === webView
+            if (wasCurrent) {
+                dismissOutingLeaveDialog()
+                // Its renderer no longer exists: discard its permission callback without invoking it.
+                webGeolocationPermissions.discard()
+                invalidateBridgePage()
+                webView = null
+            }
+            // Only dispose the affected instance. A late callback must not close a newer page.
+            (view.parent as? ViewGroup)?.removeView(view)
+            view.destroy()
+            if (wasCurrent && !isFinishing && !isDestroyed) {
+                showRendererRecovery(origin, bridgeNavigationEpoch)
+            }
+            return true
+        }
+
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
             if (view === webView) {
                 dismissOutingLeaveDialog()
@@ -370,6 +390,46 @@ class MainActivity : Activity() {
         ) {
             handler.cancel()
         }
+    }
+
+    private fun showRendererRecovery(origin: String, epoch: Long) {
+        val padding = dp(24)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(padding, padding, padding, padding)
+            setBackgroundColor(getColor(R.color.brand_cream))
+        }
+        val message = TextView(this).apply {
+            setText(R.string.page_recovery_description)
+            textSize = 16f
+            setTextColor(getColor(R.color.brand_green))
+            setPadding(0, 0, 0, dp(16))
+        }
+        root.addView(message, fullWidthWrap())
+        fun ownsRecovery(): Boolean = webView == null && configuredOrigin == origin &&
+            bridgeNavigationEpoch == epoch && !isFinishing && !isDestroyed
+        root.addView(Button(this).apply {
+            setText(R.string.page_recovery_open)
+            setOnClickListener {
+                if (ownsRecovery()) openServer(origin)
+            }
+        }, fullWidthWrap())
+        if (application.statusRepository.current().isNativeBusy()) {
+            root.addView(Button(this).apply {
+                setText(R.string.notification_stop)
+                setOnClickListener {
+                    if (ownsRecovery() && activityVisible) {
+                        startService(
+                            Intent(this@MainActivity, LocationSharingService::class.java)
+                                .setAction(LocationSharingService.ACTION_STOP),
+                        )
+                        message.setText(R.string.page_recovery_stopping)
+                    }
+                }
+            }, fullWidthWrap())
+        }
+        setContentView(root)
     }
 
     private fun foregroundGeolocationClient(created: WebView): WebChromeClient = object :
