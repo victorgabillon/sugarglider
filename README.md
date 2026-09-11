@@ -49,6 +49,14 @@ development. Release builds accept HTTPS only and have cleartext traffic disable
 See [`docs/pr27-android-background-tracking.md`](docs/pr27-android-background-tracking.md)
 for architecture, privacy, build, setup, and device-acceptance details.
 
+### Production social service
+
+The [PR43 deployment](docs/pr43-social-production.md) provides HTTPS, SQLite,
+immutable shared routes, outings and current live positions without a routing
+server. Use `deploy/social/compose.yaml` for that deployment. The repository-root
+Compose stack below remains the development/reference routing environment.
+Normal Android local planning and regional installation have their own V1 gates.
+
 ## Canonical plan API
 
 The planning surface is:

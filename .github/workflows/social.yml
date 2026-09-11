@@ -1,0 +1,57 @@
+name: Social deployment
+
+on:
+  pull_request:
+    paths: ["src/**", "apps/social/**", "deploy/social/**", "pyproject.toml", "uv.lock", ".github/workflows/social.yml"]
+  push:
+    branches: [main]
+    paths: ["src/**", "apps/social/**", "deploy/social/**", "pyproject.toml", "uv.lock", ".github/workflows/social.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deployment configuration
+        env:
+          SUGARGLIDER_DOMAIN: share.example.org
+          SUGARGLIDER_DEPLOY_REVISION: ci
+        run: docker compose -f deploy/social/compose.yaml config --quiet
+      - name: Build locked nonroot social image
+        run: docker build -f apps/social/Dockerfile -t sugarglider-social:ci .
+      - name: Smoke production factory with networking disabled
+        run: |
+          docker run --rm -i --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --tmpfs /data:uid=10001,gid=10001,mode=700 \
+            --entrypoint python sugarglider-social:ci - <<'PY'
+          import asyncio
+          import os
+          import httpx
+          from sugarglider.social_server.app import create_social_app
+          from sugarglider.social_server.settings import SocialSettings
+          assert os.getuid() == 10001
+          app = create_social_app(SocialSettings(public_origin="https://share.example.org"))
+          async def check() -> None:
+              async with app.router.lifespan_context(app), httpx.AsyncClient(
+                  transport=httpx.ASGITransport(app=app), base_url="https://share.example.org"
+              ) as client:
+                  assert (await client.get("/health")).status_code == 200
+                  assert (await client.get("/ready")).status_code == 200
+                  assert not hasattr(app.state, "route_service")
+                  assert not hasattr(app.state, "plan_service")
+                  for endpoint in ("/v2/plans/generate", "/v2/plans/reverse", "/v1/pois/search"):
+                      assert (await client.post(endpoint, json={})).status_code == 404
+                  assert (await client.get("/")).status_code == 200
+          asyncio.run(check())
+          PY
+      - name: Validate pinned HTTPS and SSE proxy
+        run: |
+          docker run --rm --network none -e SUGARGLIDER_DOMAIN=share.example.org \
+            -v "$PWD/deploy/social/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648 \
+            caddy validate --config /etc/caddy/Caddyfile
