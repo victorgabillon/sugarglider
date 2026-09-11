@@ -6,14 +6,9 @@ from fastapi import APIRouter, Body, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 
-from sugarglider.analysis.route import RouteAnalysisError
-from sugarglider.analysis.visualization import build_route_visualization
-from sugarglider.analysis.visualization_models import RouteVisualization
 from sugarglider.api.dependencies import PlanServiceDependency, RouteServiceDependency
-from sugarglider.api.errors import RouteVisualizationError
-from sugarglider.domain.models import RouteResult
+from sugarglider.api.projection import router as projection_router
 from sugarglider.gpx.writer import gpx_filename, write_plan_gpx
-from sugarglider.nature.analysis import NatureRouteAnalyzer
 from sugarglider.planning.direction.models import (
     ReversePlanRequest,
     ReversePlanResponse,
@@ -31,6 +26,7 @@ from sugarglider.pois.models import (
 from sugarglider.routing.graphhopper import RoutingError, RoutingUnavailableError
 
 router = APIRouter()
+router.include_router(projection_router)
 
 
 class HealthResponse(BaseModel):
@@ -86,19 +82,6 @@ async def routing_profiles(
 ) -> RoutingProfileCatalog:
     """Return stable public capabilities and safe runtime availability."""
     return await service.profile_catalog()
-
-
-@router.post("/v2/plans/visualization", response_model=RouteVisualization)
-async def visualize_route(
-    route: Annotated[RouteResult, Body()],
-    request: Request,
-) -> RouteVisualization:
-    """Return server-classified contiguous map sections for a route result."""
-    try:
-        nature_analyzer: NatureRouteAnalyzer | None = request.app.state.nature_analyzer
-        return build_route_visualization(route, nature_analyzer)
-    except RouteAnalysisError as exc:
-        raise RouteVisualizationError from exc
 
 
 @router.post("/v2/plans/generate", response_model=PlanResult)

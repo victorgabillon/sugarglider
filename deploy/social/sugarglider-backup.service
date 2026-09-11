@@ -1,0 +1,11 @@
+[Unit]
+Description=Back up Sugarglider immutable social snapshots
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/sugarglider
+ExecStart=/usr/bin/docker compose --env-file /etc/sugarglider/social.env -f deploy/social/compose.yaml run --rm --no-deps backup
+ExecStart=/usr/bin/docker compose --env-file /etc/sugarglider/social.env -f deploy/social/compose.yaml run --rm --no-deps backup python -m sugarglider.social_server prune-backups /backups --retain-days 7
+TimeoutStartSec=30min

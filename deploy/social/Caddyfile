@@ -1,0 +1,41 @@
+{
+	admin off
+	servers {
+		max_header_size 16KB
+		timeouts {
+			read_header 10s
+			read_body 35s
+			idle 2m
+		}
+	}
+	# Proxy error records can include full requests. Application logs provide
+	# fixed structured status/duration categories without those private fields.
+	log {
+		output discard
+	}
+}
+
+{$SUGARGLIDER_DOMAIN} {
+	# No HTTP access log: unlisted slugs, tokens and positions stay out of logs.
+	request_body {
+		max_size 12000000
+	}
+	@shell path / /static/* /manifest.webmanifest /service-worker.js
+	encode @shell zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		Referrer-Policy "no-referrer"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		-Server
+	}
+	reverse_proxy social:8000 {
+		# SSE is flushed automatically by its content type. Preserve upstream
+		# cancellation on disconnect; do not enable flush_interval -1.
+		stream_timeout 30m
+		transport http {
+			dial_timeout 3s
+			response_header_timeout 30s
+		}
+	}
+}

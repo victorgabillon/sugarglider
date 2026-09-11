@@ -1,0 +1,9 @@
+# Positive allowlist prevents sending maps, Android builds or secrets to Docker.
+**
+!pyproject.toml
+!uv.lock
+!README.md
+!src
+!src/**
+src/**/__pycache__
+src/**/*.pyc
