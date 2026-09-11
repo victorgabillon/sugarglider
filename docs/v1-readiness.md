@@ -33,9 +33,9 @@ PASS never means an author assessment alone. Superseded evidence stays identifie
 | --- | --- | --- |
 | PR40 local Auto Tour v2 / POI / nature | CODE/AUTOMATED CHECKS PASS; DEVICE GATE PENDING | Validated local PR39 readers/storage; bounded deterministic search; truthful preference/arrival evidence; unchanged hard gates; real Fairphone data, repeat and backend-isolated acceptance still required |
 | PR41 production Android local planner | NOT STARTED | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
-| PR42 region product | NOT STARTED | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
-| PR43 tiny production service | LOCAL AUTOMATED/CONTAINER CHECKS PASS; CI PENDING | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency; public hosting remains an external action |
-| PR44 Play release candidate | NOT STARTED | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
+| PR42 region product | REGIONAL SIZE/BUILD MEASUREMENT STARTED | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
+| PR43 tiny production service | CODE MERGED; LIVE HOSTING PENDING | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency; public hosting remains an external action |
+| PR44 Play release candidate | POLICY / RELEASE AUDIT STARTED | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
 
 Global validation requires `make check`, Android unit tests/lint/release bundle,
 relevant shared-web browser tests and `git diff --check`. No failing/skipped gates
@@ -80,12 +80,20 @@ GitHub [PR #39](https://github.com/victorgabillon/sugarglider/pull/39) is a draf
 at implementation `ca2fb51`; all four Python/Android checks passed. It is
 mergeable but remains unmerged because physical acceptance is still pending.
 
+After integrating main's PR43 merge into the PR40 feature branch (`e92b3b5`),
+`make check` passes again: **1,022 passed / 16 existing integration tests
+deselected**, Ruff and strict mypy pass (240 source files). This supersedes the
+991-test Python total above for the combined branch; the earlier Android/browser
+evidence remains identified with its original implementation.
+
 ## Independent PR43 evidence
 
 Prepared from unchanged main `15f3df3` in an isolated checkout while the phone
 was locked. GitHub [PR #40](https://github.com/victorgabillon/sugarglider/pull/40)
-contains conceptual PR43 at `8a19b28`; CI is pending. Its detailed runbook is
-`docs/pr43-social-production.md` on that branch.
+contains conceptual PR43 at `8a19b28`. All five CI jobs passed, including Android
+and the new production-image checks; merged with commit `5be5780` on 2026-09-11.
+Main was refreshed and the completed local/remote feature branch removed. The
+detailed runbook is [PR43 deployment](pr43-social-production.md).
 
 - `make check`: 1,011 passed, 16 existing integration tests deselected; Ruff and
   strict mypy pass (239 source files), including 31 new production social tests.
@@ -103,6 +111,27 @@ contains conceptual PR43 at `8a19b28`; CI is pending. Its detailed runbook is
   explicit restore instructions are prepared. No paid resource, domain or public
   service has been provisioned. Hosting destination question is pending.
 
+## PR42 region measurement
+
+An independent branch from main `5be5780` is preparing the Île-de-France offering
+in `/home/pompote/oldata/victor/sugarglider-v1-pr42-region`. It reuses the unchanged
+PR39 formats and local source PBF, adds one matching region/map specification, and
+caps build containers at 3,072 MiB / two CPUs without swap. The Python build scope
+has the same memory/CPU bounds. No consumer download UI or physical PASS is
+claimed yet. Measurements are pending in
+`/tmp/sugarglider-pr42-idf-build-report.json`; generated files stay ignored.
+
+## PR44 audit preparation
+
+An independent checkout at `/tmp/sugarglider-v1-pr44` records current official
+Google/Android requirements and the actual release differences. API 36 is already
+configured. The existing debug arm64 library has 16 KiB ELF alignment and the
+debug APK passes `zipalign -c -P 16 4`; these are preliminary artifact checks, not
+release-bundle or runtime acceptance. Production routing is still disabled.
+External signing, final privacy identity and all release/device gates remain open.
+The audit identified disclosure wording that needs to distinguish the current
+position from the server's bounded reconnection replay log.
+
 ## External actions and blockers
 
 | Gate | Status | Action / effect |
@@ -116,8 +145,9 @@ contains conceptual PR43 at `8a19b28`; CI is pending. Its detailed runbook is
 
 ## Current V1 status
 
-IN PROGRESS. No new milestone has passed or merged. No V1 readiness or signed
-release artifact is claimed.
+IN PROGRESS. PR43's code-side milestone is merged; public hosting remains pending.
+PR40 physical acceptance and PR41/42/44 completion are outstanding. No V1 readiness
+or signed release artifact is claimed.
 
 Physical-test setup pending the unlock: a temporary static-only server is running
 on host loopback port 8000, with an owned `adb reverse tcp:8000 tcp:8000` mapping.
