@@ -33,7 +33,7 @@ PASS never means an author assessment alone. Superseded evidence stays identifie
 | --- | --- | --- |
 | PR40 local Auto Tour v2 / POI / nature | CODE/AUTOMATED CHECKS PASS; DEVICE GATE PENDING | Validated local PR39 readers/storage; bounded deterministic search; truthful preference/arrival evidence; unchanged hard gates; real Fairphone data, repeat and backend-isolated acceptance still required |
 | PR41 production Android local planner | INTEGRATION AUDIT STARTED | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
-| PR42 region product | REGIONAL SIZE/BUILD MEASUREMENT STARTED | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
+| PR42 region product | FULL REGION MEASURED; WESTERN PARTITION BUILDING | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
 | PR43 tiny production service | CODE MERGED; LIVE HOSTING PENDING | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency; public hosting remains an external action |
 | PR44 Play release candidate | PREPARATION DRAFT; FINAL RELEASE GATES OPEN | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
 
@@ -86,6 +86,15 @@ deselected**, Ruff and strict mypy pass (240 source files). This supersedes the
 991-test Python total above for the combined branch; the earlier Android/browser
 evidence remains identified with its original implementation.
 
+A subsequent production-scale reader check raises only the installation topology
+budget from 20 to 40 million operations, based on measured Yvelines data requiring
+34.45 million operations / about 11.3 s parse+load / 420 MiB peak on the host.
+The current reader accepts that component; the 2-million-position limit and
+four-million-operation per-route analysis remain unchanged. `make check` passes
+again (1,022 tests) and all 187 browser scenarios pass. Shell v25 delivers the
+updated reader. These are component-only host measurements; physical acceptance
+and a complete installed region remain pending.
+
 ## Independent PR43 evidence
 
 Prepared from unchanged main `15f3df3` in an isolated checkout while the phone
@@ -123,16 +132,30 @@ has the same memory/CPU bounds. No consumer download UI or physical PASS is
 claimed yet. Measurements are pending in
 `/tmp/sugarglider-pr42-idf-build-report.json`; generated files stay ignored.
 
-`make check`: 1,033 tests pass / 16 existing integration tests deselected, Ruff
-and strict mypy pass (240 source files). The initial draft's four CI jobs pass.
-Map: 243,080,284 bytes in 1,252.505 s. Routing: 318,443,520 bytes in 952.890 s,
-including the source extract. Together these are 561,523,804 bytes before the
-places/nature components, which are still being built. Completed files are kept
-as inactive measurement-only hard links; no valid installed pack was replaced.
-Full regional verification, host transport/catalog and all device checks remain
-pending. GitHub release limits were audited, but its flat asset URLs need explicit
-catalog mapping to PR39's unchanged logical component paths or a static object
-store preserving the directory layout.
+Follow-up `7b230e6` passes `make check`: 1,036 tests / 16 existing integration
+tests deselected, Ruff and strict mypy (240 source files). The four CI checks on
+its preceding head passed; the follow-up CI is being checked.
+
+Full Île-de-France totals 592,588,177 bytes. Map: 243,080,284 bytes / 1,252.505 s;
+routing: 318,443,520 / 952.890 s; places: 366,485 / 1,603.828 s; nature: 30,694,816 /
+502.714 s. The combined build was killed by its 3 GiB limit during final
+verification after component completion. The same verifier in a fresh bounded
+process passed in 24.94 s. Index builds now run in separate sequential processes
+to release retained memory before the next stage; byte-equivalence and failure
+cleanup tests pass. No inactive staging was presented as an installed region.
+
+Full Île-de-France is unsuitable for the current reader: nature has 4,170,750
+positions, beyond its unchanged 2,000,000 cap. The Yvelines/west-Paris partition
+has a real PBF-built nature component of 10,634,994 bytes / 62,191 features /
+1,450,033 positions. Its current shared-reader host check passes after the
+measured topology-budget adjustment above. Its complete map/routing/places build
+is running in the same 3 GiB/two-CPU bounds, reusing that exact checksummed nature
+component; full verification and all phone checks remain pending. Report:
+`/tmp/sugarglider-pr42-yvelines-build-report.json`.
+
+GitHub release limits were audited, but its flat asset URLs need explicit catalog
+mapping to PR39's logical paths or static storage preserving the directory layout.
+No consumer catalog or public artifact has been published.
 
 ## PR44 audit preparation
 
@@ -153,15 +176,27 @@ and device transfer. CI now validates the release variant and unsigned bundle.
 - Five negative signing-configuration cases, a disposable-key signed bundle and
   signature verification pass. The unsigned artifact was restored and temporary
   key/password files removed. No permanent upload key was created.
-- Unsigned preparation AAB: 3,528,250 bytes, SHA-256
-  `ac4e278c5efda8742eed4640a6992dc4439dde113d4ad24a055ee9b6085ec798`, under the
+- Renderer recovery (`acb66c4`) now discards the affected page and pending
+  permission callback, invalidates page-owned work and offers explicit Reopen/Stop.
+  It never automatically starts sharing. Automated lifecycle checks pass; physical
+  crash/low-memory presentation remains pending.
+- Archive-only configuration/timing follow-up `b5e9b1b` passes `make check`
+  (1,013 tests), 138 debug and 134 release JUnit tests, both lint checks and AAB
+  assembly. All 124 relevant browser scenarios pass. Lint has zero errors and
+  visible dependency/update warnings. Native auxiliary/default paths are disabled,
+  and debug timing labels describe wrapper setup/reuse accurately. Shell v24 on
+  that branch must be reconciled with PR40's v25 on integration.
+- Latest unsigned preparation AAB: 3,528,820 bytes, SHA-256
+  `5a1a8ff7b7e8054a72fc5d9aa0717505c6893bf26b1107df647208656e75c64f`, under the
   PR44 checkout's `android/app/build/outputs/bundle/release/app-release.aab`.
+  It supersedes the 3,528,250-byte and 3,528,837-byte preparation artifacts.
   It contains no native routing library and is explicitly **not the V1 artifact**.
 - Existing debug arm64 ELF alignment and APK `zipalign -c -P 16 4` pass. Final
   native release/delivered-APK/16 KiB runtime verification is still required.
-- Native 0.5.1 creates a native actor per route call despite the cached Kotlin
-  wrapper and prints exception text through JNI. Final timing terminology,
-  native logging/configuration review and renderer-crash recovery remain open.
+- The wrapper embeds the expected Valhalla 3.6.3 commit and disables HTTP/services.
+  Native 0.5.1 still creates an actor per call and prints exception text through
+  JNI. Source/artifact inspection found generic route logs; physical failure-path
+  logging and final native configuration validation remain required.
 
 Production routing is still disabled. Final privacy identity/URL, public hosting,
 real upload signing and all remaining final-release/device gates remain open.
@@ -197,7 +232,9 @@ or signed release artifact is claimed.
 Physical-test setup pending the unlock: a temporary static-only server is running
 on host loopback port 8000, with an owned `adb reverse tcp:8000 tcp:8000` mapping.
 It serves only application assets and the three PR40 Marly data files, no planning
-API. Remove it before backend-isolated acceptance. To keep the device awake on
-USB, `stay_on_while_plugged_in` was temporarily set to 2; its original value 0 is
-recorded in `/tmp/sugarglider-pr40-phone-display.json` and must be restored after
-testing. Hotspot, cellular, Wi-Fi and airplane-mode settings remain untouched.
+API. Remove it before backend-isolated acceptance. The temporary USB stay-awake
+setting has been restored to its original value 0 while the phone remains locked;
+the original is recorded in `/tmp/sugarglider-pr40-phone-display.json`. The static
+server script now has the missing root shell mappings, but must be restarted
+before refreshing the phone. Hotspot, cellular, Wi-Fi and airplane-mode settings
+remain untouched.

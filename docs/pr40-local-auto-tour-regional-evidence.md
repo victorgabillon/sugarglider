@@ -95,7 +95,8 @@ when analysis is unavailable. Four million counted analysis operations per
 complete candidate bound spatial querying/intersection work. Exhaustion returns
 explicit unavailable analysis and fully unknown primary distance, never a partial
 score masquerading as complete. Index topology validation is separately bounded
-at twenty million operations. No expensive nature analysis runs on temporary
+at forty million operations after the measured regional-scale update below.
+No expensive nature analysis runs on temporary
 insertion proposals or failed routes.
 
 ## Auto Tour search and recommendation
@@ -157,3 +158,30 @@ from v22 to v23 to include all six new shared modules and the changed UI/core.
   **187 scenarios across ten harnesses PASS** (PR26/27/32–38/40).
 - Fairphone: USB authorized. Physical acceptance pending visible/unlocked app;
   hotspot/radios have not been changed. No device PASS is claimed.
+
+## Regional-scale reader measurement
+
+The initial 20-million-operation installation validation budget was measured
+against the production-region candidate prepared in PR42. Full Île-de-France
+contains 4,170,750 positions and is rejected by the unchanged 2-million-position
+limit. The smaller Yvelines/west-Paris component contains 62,191 features and
+1,450,033 positions (10,634,994 compressed / 45,278,253 expanded bytes). Its actual
+geometry requires 34,451,278 validation operations, measured using a temporary
+bounded benchmark: 2.31 s parsing plus 8.97 s indexing/validation, 429,868 KiB peak
+RSS. The original 20-million limit rejected that component explicitly.
+
+The current installation limit is therefore 40 million operations. The actual
+updated reader accepts the same component in a host probe: 2.56 s parse plus
+8.83 s validation/indexing, 431,652 KiB peak RSS. Compressed/expanded bytes,
+feature/position caps and the four-million-operation per-route analysis budget
+are unchanged. This adjustment has measured host memory/latency evidence; it
+does not establish phone performance or approve the region for release. No
+route geometry, scoring, search budget or POI promotion rule changed.
+
+`make check` passes again: 1,022 tests / 16 existing integration tests deselected,
+Ruff and strict mypy. All 187 scenarios in the ten browser harnesses pass. Shell
+cache v25 supersedes this branch's v23 for the changed reader; cache generations
+must be reconciled when independent preparation branches are merged. Evidence:
+`/tmp/sugarglider-pr40-regional-scale-{check,browser}.log` and
+`/tmp/sugarglider-pr42-yvelines-reader-40m.json`. The host probe exercises one
+component only, not a combined installed region or physical route generation.

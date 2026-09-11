@@ -47,7 +47,7 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
   const latitudeScale = EARTH_RADIUS_M * Math.PI / 180;
   const project = ([lon, lat]) => [(lon - manifest.bounds[0]) * longitudeScale, (lat - manifest.bounds[1]) * latitudeScale];
   const projectedBounds = [...project(manifest.bounds.slice(0, 2)), ...project(manifest.bounds.slice(2))];
-  const validationWork = { remaining: 20_000_000 };
+  const validationWork = { remaining: 40_000_000 };
   const natureItems = (nature?.features ?? []).map((feature) => {
     const polygons = feature.geometry.type === "Polygon" ? [feature.geometry.coordinates] : feature.geometry.coordinates;
     const projected = polygons.map((polygon) => polygon.map((ring) => ring.map(project)));
