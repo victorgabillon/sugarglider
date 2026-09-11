@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="sugarglider-tests">
+  <bounds minlat="48.0" minlon="1.0" maxlat="50.0" maxlon="4.0"/>
+  <node id="1" lat="48.85" lon="2.05"><tag k="tourism" v="viewpoint"/></node>
+  <node id="2" lat="48.86" lon="2.04"><tag k="entrance" v="yes"/></node>
+  <node id="3" lat="48.86" lon="2.08"/>
+  <node id="4" lat="48.90" lon="2.08"/>
+  <node id="5" lat="48.90" lon="2.04"/>
+  <node id="6" lat="48.87" lon="2.05"/>
+  <node id="7" lat="48.87" lon="2.06"/>
+  <node id="8" lat="48.88" lon="2.06"/>
+  <node id="9" lat="48.88" lon="2.05"/>
+  <node id="10" lat="49.0" lon="3.0"><tag k="tourism" v="viewpoint"/></node>
+  <node id="11" lat="49.0" lon="3.1"/>
+  <node id="12" lat="49.1" lon="3.1"/>
+  <node id="13" lat="49.1" lon="3.0"/>
+  <way id="20"><nd ref="2"/><nd ref="3"/>
+    <tag k="tourism" v="attraction"/><tag k="highway" v="path"/>
+  </way>
+  <way id="21"><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="5"/><nd ref="2"/>
+    <tag k="historic" v="castle"/><tag k="natural" v="wood"/>
+  </way>
+  <way id="22"><nd ref="6"/><nd ref="7"/><nd ref="8"/><nd ref="9"/><nd ref="6"/></way>
+  <way id="23"><nd ref="10"/><nd ref="11"/><nd ref="12"/><nd ref="13"/><nd ref="10"/>
+    <tag k="historic" v="castle"/><tag k="natural" v="wood"/>
+  </way>
+  <relation id="30"><member type="way" ref="21" role="outer"/>
+    <member type="way" ref="22" role="inner"/>
+    <tag k="type" v="multipolygon"/><tag k="tourism" v="attraction"/>
+    <tag k="landuse" v="forest"/>
+  </relation>
+  <relation id="31"><member type="way" ref="23" role="outer"/>
+    <tag k="type" v="multipolygon"/><tag k="tourism" v="attraction"/>
+    <tag k="landuse" v="forest"/>
+  </relation>
+</osm>

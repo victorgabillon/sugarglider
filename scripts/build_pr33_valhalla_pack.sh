@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-if [ "$#" -ne 5 ]; then
-    echo "Usage: $0 PACK_ID WEST SOUTH EAST NORTH" >&2
+if [ "$#" -ne 5 ] && [ "$#" -ne 6 ]; then
+    echo "Usage: $0 PACK_ID WEST SOUTH EAST NORTH [NEW_OUTPUT_DIRECTORY]" >&2
     exit 2
 fi
 
@@ -19,14 +19,30 @@ case "$PACK_ID" in
 esac
 
 REPOSITORY_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+if [ "$#" -eq 6 ] && [ -z "${OSM_PBF:-}" ]; then
+    echo "Isolated builds require explicit OSM_PBF" >&2
+    exit 2
+fi
 OSM_PBF=${OSM_PBF:-$REPOSITORY_ROOT/data/osm/ile-de-france-latest.osm.pbf}
 PACK_DIRECTORY=$REPOSITORY_ROOT/data/valhalla/$PACK_ID
+ISOLATED_OUTPUT=${6:-}
+if [ -n "$ISOLATED_OUTPUT" ]; then
+    [ ! -e "$ISOLATED_OUTPUT" ] && [ ! -L "$ISOLATED_OUTPUT" ] || {
+        echo "Isolated output already exists: $ISOLATED_OUTPUT" >&2
+        exit 1
+    }
+    [ -n "${OSM_PBF:-}" ] && [ -f "$OSM_PBF" ] || exit 1
+fi
 VALHALLA_IMAGE=ghcr.io/valhalla/valhalla:3.6.3
 UV_CACHE_DIR=${UV_CACHE_DIR:-/tmp/sugarglider-uv-cache}
 export UV_CACHE_DIR
 
-mkdir -p "$REPOSITORY_ROOT/data/valhalla"
-BUILD_DIRECTORY=$(mktemp -d "$REPOSITORY_ROOT/data/valhalla/.${PACK_ID}.build.XXXXXX")
+BUILD_ROOT="$REPOSITORY_ROOT/data/valhalla"
+if [ -n "$ISOLATED_OUTPUT" ]; then
+    BUILD_ROOT=$(dirname -- "$ISOLATED_OUTPUT")
+fi
+mkdir -p "$BUILD_ROOT"
+BUILD_DIRECTORY=$(mktemp -d "$BUILD_ROOT/.${PACK_ID}.build.XXXXXX")
 trap 'rm -rf "$BUILD_DIRECTORY"' EXIT HUP INT TERM
 REGION_PBF=$BUILD_DIRECTORY/$PACK_ID.osm.pbf
 
@@ -67,6 +83,15 @@ uv run python "$REPOSITORY_ROOT/scripts/write_pr33_routing_pack_manifest.py" \
     --south "$SOUTH" \
     --east "$EAST" \
     --north "$NORTH"
+
+if [ -n "$ISOLATED_OUTPUT" ]; then
+    # PR39 owns publication. Never touch legacy packs or distribute source PBFs.
+    mkdir "$BUILD_DIRECTORY/output"
+    mv "$BUILD_DIRECTORY/manifest.json" "$BUILD_DIRECTORY/valhalla_tiles.tar" \
+        "$BUILD_DIRECTORY/output/"
+    mv "$BUILD_DIRECTORY/output" "$ISOLATED_OUTPUT"
+    exit 0
+fi
 
 if [ -L "$PACK_DIRECTORY" ]; then
     echo "Refusing symbolic-link routing-pack directory: $PACK_DIRECTORY" >&2
