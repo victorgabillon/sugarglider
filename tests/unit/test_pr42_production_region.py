@@ -11,10 +11,23 @@ from sugarglider.offline_regions.validation import load_spec
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_ile_de_france_uses_one_matching_region_and_map_contract() -> None:
-    spec = load_spec(ROOT, "ile-de-france")
-    assert spec.display_name == "Île-de-France"
-    assert spec.bounds == (1.445097, 48.11918, 3.560409, 49.24271)
+@pytest.mark.parametrize(
+    ("region_id", "name", "bounds"),
+    [
+        ("ile-de-france", "Île-de-France", (1.445097, 48.11918, 3.560409, 49.24271)),
+        (
+            "yvelines-ouest-parisien",
+            "Yvelines et ouest parisien",
+            (1.445097, 48.38, 2.25, 49.1),
+        ),
+    ],
+)
+def test_region_uses_one_matching_region_and_map_contract(
+    region_id: str, name: str, bounds: tuple[float, float, float, float]
+) -> None:
+    spec = load_spec(ROOT, region_id)
+    assert spec.display_name == name
+    assert spec.bounds == bounds
     assert spec.routing.access_modes == ("foot", "bicycle")
     assert len(set(spec.component_ids)) == 4
     assert not any("dev" in identity for identity in spec.component_ids)

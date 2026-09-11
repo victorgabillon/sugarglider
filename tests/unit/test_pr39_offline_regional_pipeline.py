@@ -444,14 +444,64 @@ def test_command_runner_receives_explicit_source_and_isolated_destinations(
 
     def runner(arguments: Sequence[str], environment: Mapping[str, str]) -> None:
         calls.append((arguments, environment))
+        if arguments[0] == sys.executable:
+            subprocess.run(
+                arguments, env=dict(environment), check=True, capture_output=True
+            )
 
     output = repository / "staging"
     output.mkdir()
     build_components(repository, load_spec(repository, "marly"), pbf, output, runner)
-    assert len(calls) == 2
+    assert len(calls) == 4
     assert calls[0][0][-2:] == (str(pbf), str(output / "map"))
     assert calls[1][0][-1] == str(output / "routing")
     assert calls[1][1]["OSM_PBF"] == str(pbf)
+    spec = load_spec(repository, "marly")
+    for call, component in zip(calls[2:], ("pois", "nature"), strict=True):
+        assert call[0] == (
+            sys.executable,
+            "-m",
+            f"sugarglider.{component}.build",
+            "--osm-pbf",
+            str(pbf),
+            "--output",
+            str(output / component / "index.json.gz"),
+            "--bounds",
+            *(str(value) for value in spec.bounds),
+        )
+    # Real isolated tiny-fixture builds must preserve the in-process bytes.
+    expected = repository / "expected"
+    expected.mkdir()
+    fake_components(repository, spec, pbf, expected)
+    for component in ("pois", "nature"):
+        assert (output / component / "index.json.gz").read_bytes() == (
+            expected / component / "index.json.gz"
+        ).read_bytes()
+
+
+@pytest.mark.parametrize("failed_component", ["pois", "nature"])
+def test_isolated_index_failure_aborts_publication_and_following_phases(
+    repository: Path, pbf: Path, failed_component: str
+) -> None:
+    modules: list[str] = []
+
+    def runner(arguments: Sequence[str], environment: Mapping[str, str]) -> None:
+        if arguments[0] == sys.executable:
+            modules.append(arguments[2])
+            if arguments[2] == f"sugarglider.{failed_component}.build":
+                raise subprocess.CalledProcessError(1, arguments)
+
+    def builder(root: Path, spec: RegionSpec, source: Path, directory: Path) -> None:
+        build_components(root, spec, source, directory, runner)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        build_region(repository, "marly", pbf, builder=builder)
+    assert modules == (
+        ["sugarglider.pois.build"]
+        if failed_component == "pois"
+        else ["sugarglider.pois.build", "sugarglider.nature.build"]
+    )
+    assert list((repository / "data/offline-regions").iterdir()) == []
 
 
 def test_make_cli_ignore_and_v22_runtime_isolation() -> None:

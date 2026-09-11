@@ -76,6 +76,7 @@ def test_manifest_templates_are_strict_and_map_packs_are_ignored() -> None:
         "ile-de-france-map-v1.template.json",
         "marly-map-dev-v1.template.json",
         "paris-map-dev-v1.template.json",
+        "yvelines-ouest-parisien-map-v1.template.json",
     ]
     for path in templates:
         value = json.loads(path.read_text(encoding="utf-8"))
