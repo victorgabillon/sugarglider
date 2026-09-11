@@ -32,10 +32,10 @@ PASS never means an author assessment alone. Superseded evidence stays identifie
 | Milestone | Status | Required success evidence |
 | --- | --- | --- |
 | PR40 local Auto Tour v2 / POI / nature | CODE/AUTOMATED CHECKS PASS; DEVICE GATE PENDING | Validated local PR39 readers/storage; bounded deterministic search; truthful preference/arrival evidence; unchanged hard gates; real Fairphone data, repeat and backend-isolated acceptance still required |
-| PR41 production Android local planner | NOT STARTED | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
+| PR41 production Android local planner | INTEGRATION AUDIT STARTED | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
 | PR42 region product | REGIONAL SIZE/BUILD MEASUREMENT STARTED | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
 | PR43 tiny production service | CODE MERGED; LIVE HOSTING PENDING | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency; public hosting remains an external action |
-| PR44 Play release candidate | POLICY / RELEASE AUDIT STARTED | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
+| PR44 Play release candidate | PREPARATION DRAFT; FINAL RELEASE GATES OPEN | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
 
 Global validation requires `make check`, Android unit tests/lint/release bundle,
 relevant shared-web browser tests and `git diff --check`. No failing/skipped gates
@@ -113,7 +113,9 @@ detailed runbook is [PR43 deployment](pr43-social-production.md).
 
 ## PR42 region measurement
 
-An independent branch from main `5be5780` is preparing the Île-de-France offering
+GitHub draft [PR #41](https://github.com/victorgabillon/sugarglider/pull/41),
+implementation `f81f951` with measurement update `0e919a0`, is preparing the
+Île-de-France offering from main `5be5780`
 in `/home/pompote/oldata/victor/sugarglider-v1-pr42-region`. It reuses the unchanged
 PR39 formats and local source PBF, adds one matching region/map specification, and
 caps build containers at 3,072 MiB / two CPUs without swap. The Python build scope
@@ -121,16 +123,59 @@ has the same memory/CPU bounds. No consumer download UI or physical PASS is
 claimed yet. Measurements are pending in
 `/tmp/sugarglider-pr42-idf-build-report.json`; generated files stay ignored.
 
+`make check`: 1,033 tests pass / 16 existing integration tests deselected, Ruff
+and strict mypy pass (240 source files). The initial draft's four CI jobs pass.
+Map: 243,080,284 bytes in 1,252.505 s. Routing: 318,443,520 bytes in 952.890 s,
+including the source extract. Together these are 561,523,804 bytes before the
+places/nature components, which are still being built. Completed files are kept
+as inactive measurement-only hard links; no valid installed pack was replaced.
+Full regional verification, host transport/catalog and all device checks remain
+pending. GitHub release limits were audited, but its flat asset URLs need explicit
+catalog mapping to PR39's unchanged logical component paths or a static object
+store preserving the directory layout.
+
 ## PR44 audit preparation
 
-An independent checkout at `/tmp/sugarglider-v1-pr44` records current official
-Google/Android requirements and the actual release differences. API 36 is already
-configured. The existing debug arm64 library has 16 KiB ELF alignment and the
-debug APK passes `zipalign -c -P 16 4`; these are preliminary artifact checks, not
-release-bundle or runtime acceptance. Production routing is still disabled.
-External signing, final privacy identity and all release/device gates remain open.
-The audit identified disclosure wording that needs to distinguish the current
-position from the server's bounded reconnection replay log.
+GitHub draft [PR #42](https://github.com/victorgabillon/sugarglider/pull/42),
+implementation `b0d7761` in `/tmp/sugarglider-v1-pr44`, records current official
+Google/Android requirements and release differences, external signing, privacy/
+Data Safety drafts and the corrected bounded-replay disclosure. API 36 is already
+configured. All nine documented Android storage domains are excluded from cloud
+and device transfer. CI now validates the release variant and unsigned bundle.
+
+- `make check`: 1,013 tests pass / 16 existing integration tests deselected;
+  Ruff and strict mypy pass (240 source files).
+- Debug: 136 JUnit tests and lint pass. Release: 133 JUnit tests, lint and
+  `bundleRelease` pass. No test failure/error/skip was added. A low resource cap
+  killed the first combined build; a separate release compile then exposed
+  debug-only geometry helpers referenced by common tests. Those unchanged pure
+  helpers now live in the common source set; all checks were rerun successfully.
+- Five negative signing-configuration cases, a disposable-key signed bundle and
+  signature verification pass. The unsigned artifact was restored and temporary
+  key/password files removed. No permanent upload key was created.
+- Unsigned preparation AAB: 3,528,250 bytes, SHA-256
+  `ac4e278c5efda8742eed4640a6992dc4439dde113d4ad24a055ee9b6085ec798`, under the
+  PR44 checkout's `android/app/build/outputs/bundle/release/app-release.aab`.
+  It contains no native routing library and is explicitly **not the V1 artifact**.
+- Existing debug arm64 ELF alignment and APK `zipalign -c -P 16 4` pass. Final
+  native release/delivered-APK/16 KiB runtime verification is still required.
+- Native 0.5.1 creates a native actor per route call despite the cached Kotlin
+  wrapper and prints exception text through JNI. Final timing terminology,
+  native logging/configuration review and renderer-crash recovery remain open.
+
+Production routing is still disabled. Final privacy identity/URL, public hosting,
+real upload signing and all remaining final-release/device gates remain open.
+
+## PR41 integration findings
+
+The current release starts with server-origin setup and has no bundled normal
+planner. Enabling its native factory alone cannot meet first-launch/offline
+requirements. Integration needs bundled shell assets with a stable trusted
+origin, normal Generate/candidate display, truthful unknown-detail coverage,
+canonical signatures/traversal and local selected-candidate GPX export. The
+existing canonical analysis has explicit availability/coverage fields; no
+breaking result-schema change has been selected. Same-origin participant
+authority must remain isolated. Implementation and physical acceptance are pending.
 
 ## External actions and blockers
 
@@ -138,9 +183,9 @@ position from the server's bounded reconnection replay log.
 | --- | --- | --- |
 | Fairphone USB authorization | RESOLVED | User reconnected the phone; ADB reports Fairphone 6 as authorized. |
 | Fairphone visible/unlocked app | USER_ACTION_REQUIRED | Android reports keyguard showing and NotificationShade focused. Unlock and foreground Sugarglider Debug; request pending. No physical PASS or merge is allowed yet. |
-| Static production hosting / domain | NOT YET AUDITED | Prepare static assets first; no paid account or credentials invented. |
+| Static production hosting / domain | LIMITS AUDITED; TRANSPORT / PUBLICATION PENDING | GitHub Releases may fit measured large components, but directory mapping, redirects, full index size and real downloads still need validation. No artifact published or paid account created. |
 | Social production hosting / domain / off-host backups | USER_ACTION_REQUIRED FOR LIVE ACCEPTANCE | Provider-neutral assets and HTTPS acceptance are prepared in PR43; user choice of an existing approved host/domain or later provisioning remains pending. |
-| Upload signing key | NOT YET AUDITED | External configuration only; no permanent key creation without user action. |
+| Upload signing key | USER_ACTION_REQUIRED BEFORE SIGNED UPLOAD | External configuration and disposable-key pipeline pass. Publisher must supply an existing key or explicitly create/safeguard one; no permanent key created. |
 | Public privacy-policy identity/URL and Play declarations | USER_ACTION_REQUIRED BEFORE SUBMISSION | Prepare truthful drafts in PR44; publication/legal declarations remain human gates. |
 
 ## Current V1 status
