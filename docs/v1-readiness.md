@@ -34,7 +34,7 @@ PASS never means an author assessment alone. Superseded evidence stays identifie
 | PR40 local Auto Tour v2 / POI / nature | CODE/AUTOMATED CHECKS PASS; DEVICE GATE PENDING | Validated local PR39 readers/storage; bounded deterministic search; truthful preference/arrival evidence; unchanged hard gates; real Fairphone data, repeat and backend-isolated acceptance still required |
 | PR41 production Android local planner | NOT STARTED | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
 | PR42 region product | NOT STARTED | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
-| PR43 tiny production service | NOT STARTED | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency |
+| PR43 tiny production service | LOCAL AUTOMATED/CONTAINER CHECKS PASS; CI PENDING | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency; public hosting remains an external action |
 | PR44 Play release candidate | NOT STARTED | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
 
 Global validation requires `make check`, Android unit tests/lint/release bundle,
@@ -76,6 +76,33 @@ Implementation/evidence is detailed in
 - `git diff --check`: PASS. Protected stash hash remains unchanged; `Continue,`
   and `native` have not been edited or staged.
 
+GitHub [PR #39](https://github.com/victorgabillon/sugarglider/pull/39) is a draft
+at implementation `ca2fb51`; all four Python/Android checks passed. It is
+mergeable but remains unmerged because physical acceptance is still pending.
+
+## Independent PR43 evidence
+
+Prepared from unchanged main `15f3df3` in an isolated checkout while the phone
+was locked. GitHub [PR #40](https://github.com/victorgabillon/sugarglider/pull/40)
+contains conceptual PR43 at `8a19b28`; CI is pending. Its detailed runbook is
+`docs/pr43-social-production.md` on that branch.
+
+- `make check`: 1,011 passed, 16 existing integration tests deselected; Ruff and
+  strict mypy pass (239 source files), including 31 new production social tests.
+- Relevant browser harnesses: 94 scenarios pass (PR25 14, PR26 63, PR27 17).
+- Locked nonroot container build, Compose/proxy validation and a network-disabled
+  production-factory smoke pass. No routing process or regional data is required.
+- Temporary HTTPS container acceptance passes snapshot/outing/live/SSE/GPX,
+  restart persistence, exact stored candidates, absent routing endpoints,
+  origin/query rejection, backup verification and private logs. Backups copy no
+  live positions or replay events. Synthetic test volumes/networks were removed.
+- Small-fixture measurement: 100 sequential HTTPS snapshot reads in 2.692 seconds;
+  about 63 MiB application and 16 MiB proxy memory. This is not a production load
+  guarantee. Report: `/tmp/sugarglider-pr43-acceptance-nukh9069/report.json`.
+- Deployment, privacy-preserving logs, retention, seven-day backup timer and
+  explicit restore instructions are prepared. No paid resource, domain or public
+  service has been provisioned. Hosting destination question is pending.
+
 ## External actions and blockers
 
 | Gate | Status | Action / effect |
@@ -83,6 +110,7 @@ Implementation/evidence is detailed in
 | Fairphone USB authorization | RESOLVED | User reconnected the phone; ADB reports Fairphone 6 as authorized. |
 | Fairphone visible/unlocked app | USER_ACTION_REQUIRED | Android reports keyguard showing and NotificationShade focused. Unlock and foreground Sugarglider Debug; request pending. No physical PASS or merge is allowed yet. |
 | Static production hosting / domain | NOT YET AUDITED | Prepare static assets first; no paid account or credentials invented. |
+| Social production hosting / domain / off-host backups | USER_ACTION_REQUIRED FOR LIVE ACCEPTANCE | Provider-neutral assets and HTTPS acceptance are prepared in PR43; user choice of an existing approved host/domain or later provisioning remains pending. |
 | Upload signing key | NOT YET AUDITED | External configuration only; no permanent key creation without user action. |
 | Public privacy-policy identity/URL and Play declarations | USER_ACTION_REQUIRED BEFORE SUBMISSION | Prepare truthful drafts in PR44; publication/legal declarations remain human gates. |
 
