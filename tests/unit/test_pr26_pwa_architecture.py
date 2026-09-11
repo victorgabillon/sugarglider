@@ -150,14 +150,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v22_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v23_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v22"
+    assert generation.group(1) == "v23"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -170,13 +170,19 @@ def test_shared_shell_generation_tracks_v22_cached_assets() -> None:
             "local_routing.js",
             "local_auto_tour.js",
             "local_waypoint_route.js",
+            "regional_manifest.js",
+            "local_region_client.js",
+            "local_region_data.js",
+            "local_region_store.js",
+            "local_region_worker.js",
+            "local_region_panel.js",
             "native_bridge_transport.js",
         )
     } == {
         "index.html": (
-            "99e1e7f5ca0e944cfd0df37a2f0e501cc4c4e19e4df2e295d04fe6d85b2c541e"
+            "d8bd089da5d98b2a618765498c4220f096cb671c2b43618f5c5347696b1382d2"
         ),
-        "app.js": ("925fe42907eef4e8d83c0c5101269f6c3b136f970422c6ad57608eea3a4f4abb"),
+        "app.js": ("3ee27fb3a3ae60f65c9de8095af5ea7e2740a24248bc26f08bd901de4b887d81"),
         "state.js": (
             "de724c096dd193347bdbdb9a424e873902ead40b30d48a339925da4d9aa58abd"
         ),
@@ -188,13 +194,31 @@ def test_shared_shell_generation_tracks_v22_cached_assets() -> None:
             "ce28891c92263c084e33dd5ae9ad906a31e527253aeb321539599711e4500b9c"
         ),
         "local_routing.js": (
-            "ad7fc590f7ca66c18e8ea561b24c89f815c86dca84761b50d6d678d293a0174a"
+            "9fc987bf70bbf6cc91cfadb2b40929e79d712eeb1c5fa030ec7836113a59a832"
         ),
         "local_auto_tour.js": (
-            "0a0eb98ed923157e61aa6f3372012e7caac2bd8cf2bf110acf63a2a2c22b584e"
+            "71f5eef85b4d9a61bb4434ee2bc79378fae5aa1ac48fca87c7836a00d18998f6"
         ),
         "local_waypoint_route.js": (
             "5ba767ccd5578579129f117dcef7408cb5e3e79901b008ce6416a775816952f4"
+        ),
+        "regional_manifest.js": (
+            "f062cff8451b1a8039de394856654e07c0533f55ccfb82e25aa0e3f814e94787"
+        ),
+        "local_region_client.js": (
+            "622efdb8348be2a9e12e294b162e5c6afcdda1de0dc7287b9e130cf4c64bbeca"
+        ),
+        "local_region_data.js": (
+            "e3a84dba479cec9ef75fad4c7aa32da066c58f4c10d72bd807b418d6995e1158"
+        ),
+        "local_region_store.js": (
+            "0f4209027099d30e33a0b63bb8764db0596fb6942f35357988360ea518a2ddcb"
+        ),
+        "local_region_worker.js": (
+            "2db7aab7b00f98cd980c186016245eaebb1217014d0fb4052bb22021ca862298"
+        ),
+        "local_region_panel.js": (
+            "43c5119cb1cf5ed4249dc00ae8a7d30741dd78b307a9305f31ee6a3988c456f6"
         ),
         "native_bridge_transport.js": (
             "f601ec9b54b063ce3687fd6f51404818157fa731e860dd87ea6c84656d1528b4"

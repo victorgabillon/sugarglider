@@ -230,9 +230,9 @@ def test_waypoint_rendering_has_its_own_layers_and_preserves_existing_overlays()
     assert "LOCAL_AUTO_TOUR_PREFIX" not in clearer
 
 
-def test_offline_module_is_precached_in_exactly_v22_and_harness_is_local() -> None:
+def test_offline_module_is_precached_in_exactly_v23_and_harness_is_local() -> None:
     worker = (STATIC / "service-worker.js").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v22`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v23`" in worker
     assert '"/static/local_waypoint_route.js"' in worker
     html = HARNESS.with_suffix(".html").read_text()
     harness = HARNESS.read_text()

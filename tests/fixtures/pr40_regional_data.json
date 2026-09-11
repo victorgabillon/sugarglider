@@ -1,0 +1,683 @@
+{
+  "manifest": {
+    "schema_version": 1,
+    "region_id": "fixture",
+    "display_name": "Synthetic test region",
+    "bounds": [
+      0.0,
+      0.0,
+      0.02,
+      0.02
+    ],
+    "source": {
+      "basename": "synthetic.osm.pbf",
+      "byte_size": 1,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "header_bounds": [
+        0.0,
+        0.0,
+        0.02,
+        0.02
+      ],
+      "coverage_evidence": "osm-header-bounds",
+      "source_url": null
+    },
+    "tools": {
+      "pipeline_version": 1,
+      "protomaps_revision": "3ea8293a28131c3dc63f1bb20827bdb8a76df06f",
+      "protomaps_archive_sha256": "7b8e71f18627754af756923f6613a9008b5f1ff82377fff4e617157d053fc807",
+      "map_build_image": "maven:3.9.13-eclipse-temurin-21-alpine@sha256:194053d8f204a39710e564b49ba4d22188159fd29f073b8da1715aac61503132",
+      "valhalla_image": "ghcr.io/valhalla/valhalla:3.6.3",
+      "poi_index_schema": 2,
+      "poi_classifier": "1",
+      "nature_index_schema": 1,
+      "python_version": "3.13.5",
+      "osmium_version": "4.3.1",
+      "shapely_version": "2.1.2"
+    },
+    "components": {
+      "map": {
+        "component_id": "fixture-map",
+        "files": [
+          {
+            "path": "map/manifest.json",
+            "format": "map-manifest-v1",
+            "byte_size": 23,
+            "sha256": "716ede4186bbaf2ae111dcc11616b8aea3ca16d97d45d1d5aea562e3121df5ae"
+          },
+          {
+            "path": "map/basemap.pmtiles",
+            "format": "pmtiles-v3-mvt",
+            "byte_size": 23,
+            "sha256": "716ede4186bbaf2ae111dcc11616b8aea3ca16d97d45d1d5aea562e3121df5ae"
+          }
+        ]
+      },
+      "routing": {
+        "component_id": "fixture-routing",
+        "files": [
+          {
+            "path": "routing/manifest.json",
+            "format": "routing-manifest-v2",
+            "byte_size": 23,
+            "sha256": "716ede4186bbaf2ae111dcc11616b8aea3ca16d97d45d1d5aea562e3121df5ae"
+          },
+          {
+            "path": "routing/valhalla_tiles.tar",
+            "format": "valhalla-3.6.3-tar",
+            "byte_size": 23,
+            "sha256": "716ede4186bbaf2ae111dcc11616b8aea3ca16d97d45d1d5aea562e3121df5ae"
+          }
+        ]
+      },
+      "pois": {
+        "component_id": "fixture-pois",
+        "files": [
+          {
+            "path": "pois/index.json.gz",
+            "format": "poi-index-v2-gzip-json",
+            "byte_size": 814,
+            "sha256": "33337ff9fdbf9ba034f37d61512212b47ed33591c0e9892648d41256ba9d3daf"
+          }
+        ]
+      },
+      "nature": {
+        "component_id": "fixture-nature",
+        "files": [
+          {
+            "path": "nature/index.json.gz",
+            "format": "nature-index-v1-gzip-json",
+            "byte_size": 500,
+            "sha256": "502ec1cfc5bd8e19dff57ce7a1d10e587d17156cf97fb15f955821522e221cba"
+          }
+        ]
+      }
+    },
+    "build_id": "6a8dc19f016293452b0a3ffaae5af797fe02eaf965233b2cf93fb72966dcba08"
+  },
+  "pois": {
+    "metadata": {
+      "format_version": 2,
+      "source_basename": "synthetic.osm.pbf",
+      "source_size_bytes": 1,
+      "feature_count": 5,
+      "category_counts": {
+        "castle": 1,
+        "drinking_water": 2,
+        "fountain": 1,
+        "viewpoint": 1
+      },
+      "potability_counts": {
+        "not_applicable": 2,
+        "verified": 1,
+        "unknown": 1,
+        "non_potable": 1
+      },
+      "access_counts": {
+        "public": 3,
+        "unknown": 1,
+        "private": 1
+      },
+      "approach_counts": {
+        "exact_feature": 2,
+        "drinking_water_source": 2
+      },
+      "bounding_box": [
+        0.0,
+        0.0,
+        0.02,
+        0.02
+      ],
+      "skipped_invalid_count": 0,
+      "build_configuration": {
+        "classifier_version": "1",
+        "geometry_policy": "semantic-point_with-bounded-public-approaches",
+        "identity_policy": "osm-type-and-id",
+        "include_non_potable": true
+      },
+      "classifier_version": "1"
+    },
+    "features": [
+      {
+        "id": "node/1",
+        "osm_type": "node",
+        "osm_id": 1,
+        "coordinate": {
+          "lat": 0.01,
+          "lon": 0.005,
+          "name": null
+        },
+        "category": "castle",
+        "secondary_categories": [],
+        "group": "scenic",
+        "display_name": "Fixture 1",
+        "name_source": "name",
+        "scenic_confidence": "primary",
+        "potability": "not_applicable",
+        "access_status": "public",
+        "ruins": false,
+        "tags": [],
+        "source_updated_at": null,
+        "warnings": [],
+        "approach_candidates": [
+          {
+            "id": "node/1/approach/00-exact",
+            "coordinate": {
+              "lat": 0.01,
+              "lon": 0.005,
+              "name": null
+            },
+            "kind": "exact_feature",
+            "source": "osm_feature",
+            "access": "public",
+            "semantic_distance_m": 0.0,
+            "graph_snap_distance_m": null,
+            "arrival_tolerance_m": 25.0,
+            "name": null,
+            "osm_type": null,
+            "osm_id": null,
+            "provenance": "feature_geometry",
+            "warnings": []
+          }
+        ]
+      },
+      {
+        "id": "node/2",
+        "osm_type": "node",
+        "osm_id": 2,
+        "coordinate": {
+          "lat": 0.01,
+          "lon": 0.007,
+          "name": null
+        },
+        "category": "drinking_water",
+        "secondary_categories": [],
+        "group": "hydration",
+        "display_name": "Fixture 2",
+        "name_source": "name",
+        "scenic_confidence": "none",
+        "potability": "verified",
+        "access_status": "public",
+        "ruins": false,
+        "tags": [],
+        "source_updated_at": null,
+        "warnings": [],
+        "approach_candidates": [
+          {
+            "id": "node/2/approach/00-exact",
+            "coordinate": {
+              "lat": 0.01,
+              "lon": 0.007,
+              "name": null
+            },
+            "kind": "drinking_water_source",
+            "source": "osm_feature",
+            "access": "public",
+            "semantic_distance_m": 0.0,
+            "graph_snap_distance_m": null,
+            "arrival_tolerance_m": 15.0,
+            "name": null,
+            "osm_type": null,
+            "osm_id": null,
+            "provenance": "feature_geometry",
+            "warnings": []
+          }
+        ]
+      },
+      {
+        "id": "node/3",
+        "osm_type": "node",
+        "osm_id": 3,
+        "coordinate": {
+          "lat": 0.01,
+          "lon": 0.009000000000000001,
+          "name": null
+        },
+        "category": "fountain",
+        "secondary_categories": [],
+        "group": "hydration",
+        "display_name": "Fixture 3",
+        "name_source": "name",
+        "scenic_confidence": "none",
+        "potability": "unknown",
+        "access_status": "unknown",
+        "ruins": false,
+        "tags": [],
+        "source_updated_at": null,
+        "warnings": [],
+        "approach_candidates": [
+          {
+            "id": "node/3/approach/00-exact",
+            "coordinate": {
+              "lat": 0.01,
+              "lon": 0.009000000000000001,
+              "name": null
+            },
+            "kind": "exact_feature",
+            "source": "osm_feature",
+            "access": "unknown",
+            "semantic_distance_m": 0.0,
+            "graph_snap_distance_m": null,
+            "arrival_tolerance_m": 25.0,
+            "name": null,
+            "osm_type": null,
+            "osm_id": null,
+            "provenance": "feature_geometry",
+            "warnings": []
+          }
+        ]
+      },
+      {
+        "id": "node/4",
+        "osm_type": "node",
+        "osm_id": 4,
+        "coordinate": {
+          "lat": 0.01,
+          "lon": 0.011,
+          "name": null
+        },
+        "category": "drinking_water",
+        "secondary_categories": [],
+        "group": "hydration",
+        "display_name": "Fixture 4",
+        "name_source": "name",
+        "scenic_confidence": "none",
+        "potability": "non_potable",
+        "access_status": "public",
+        "ruins": false,
+        "tags": [],
+        "source_updated_at": null,
+        "warnings": [],
+        "approach_candidates": [
+          {
+            "id": "node/4/approach/00-exact",
+            "coordinate": {
+              "lat": 0.01,
+              "lon": 0.011,
+              "name": null
+            },
+            "kind": "drinking_water_source",
+            "source": "osm_feature",
+            "access": "public",
+            "semantic_distance_m": 0.0,
+            "graph_snap_distance_m": null,
+            "arrival_tolerance_m": 15.0,
+            "name": null,
+            "osm_type": null,
+            "osm_id": null,
+            "provenance": "feature_geometry",
+            "warnings": []
+          }
+        ]
+      },
+      {
+        "id": "node/5",
+        "osm_type": "node",
+        "osm_id": 5,
+        "coordinate": {
+          "lat": 0.01,
+          "lon": 0.013000000000000001,
+          "name": null
+        },
+        "category": "viewpoint",
+        "secondary_categories": [],
+        "group": "scenic",
+        "display_name": "Fixture 5",
+        "name_source": "name",
+        "scenic_confidence": "primary",
+        "potability": "not_applicable",
+        "access_status": "private",
+        "ruins": false,
+        "tags": [],
+        "source_updated_at": null,
+        "warnings": [],
+        "approach_candidates": []
+      }
+    ]
+  },
+  "nature": {
+    "metadata": {
+      "format_version": 1,
+      "source_basename": "synthetic.osm.pbf",
+      "source_size_bytes": 1,
+      "source_mtime_ns": null,
+      "reference_latitude": 0.01,
+      "bounding_box": [
+        0.0,
+        0.0,
+        0.02,
+        0.02
+      ],
+      "category_counts": {
+        "woodland": 1,
+        "urban": 1,
+        "water": 1,
+        "open_natural": 1,
+        "agriculture": 1,
+        "park_or_protected": 1
+      },
+      "feature_count": 6
+    },
+    "features": [
+      {
+        "feature_id": "way/1",
+        "osm_id": 1,
+        "osm_source": "way",
+        "primary_class": "woodland",
+        "park_or_protected": false,
+        "tags": {},
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                0.0,
+                0.0
+              ],
+              [
+                0.012,
+                0.0
+              ],
+              [
+                0.012,
+                0.02
+              ],
+              [
+                0.0,
+                0.02
+              ],
+              [
+                0.0,
+                0.0
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "feature_id": "way/2",
+        "osm_id": 2,
+        "osm_source": "way",
+        "primary_class": "urban",
+        "park_or_protected": false,
+        "tags": {},
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                0.004,
+                0.0
+              ],
+              [
+                0.006,
+                0.0
+              ],
+              [
+                0.006,
+                0.02
+              ],
+              [
+                0.004,
+                0.02
+              ],
+              [
+                0.004,
+                0.0
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "feature_id": "way/3",
+        "osm_id": 3,
+        "osm_source": "way",
+        "primary_class": "water",
+        "park_or_protected": false,
+        "tags": {},
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                0.009,
+                0.0
+              ],
+              [
+                0.011,
+                0.0
+              ],
+              [
+                0.011,
+                0.02
+              ],
+              [
+                0.009,
+                0.02
+              ],
+              [
+                0.009,
+                0.0
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "feature_id": "way/4",
+        "osm_id": 4,
+        "osm_source": "way",
+        "primary_class": null,
+        "park_or_protected": true,
+        "tags": {},
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                0.002,
+                0.0
+              ],
+              [
+                0.008,
+                0.0
+              ],
+              [
+                0.008,
+                0.02
+              ],
+              [
+                0.002,
+                0.02
+              ],
+              [
+                0.002,
+                0.0
+              ]
+            ],
+            [
+              [
+                0.003,
+                0.003
+              ],
+              [
+                0.005,
+                0.003
+              ],
+              [
+                0.005,
+                0.017
+              ],
+              [
+                0.003,
+                0.017
+              ],
+              [
+                0.003,
+                0.003
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "feature_id": "way/5",
+        "osm_id": 5,
+        "osm_source": "way",
+        "primary_class": "open_natural",
+        "park_or_protected": false,
+        "tags": {},
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [
+            [
+              [
+                [
+                  0.014,
+                  0.0
+                ],
+                [
+                  0.017,
+                  0.0
+                ],
+                [
+                  0.017,
+                  0.02
+                ],
+                [
+                  0.014,
+                  0.02
+                ],
+                [
+                  0.014,
+                  0.0
+                ]
+              ]
+            ],
+            [
+              [
+                [
+                  0.018,
+                  0.0
+                ],
+                [
+                  0.02,
+                  0.0
+                ],
+                [
+                  0.02,
+                  0.02
+                ],
+                [
+                  0.018,
+                  0.02
+                ],
+                [
+                  0.018,
+                  0.0
+                ]
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "feature_id": "way/6",
+        "osm_id": 6,
+        "osm_source": "way",
+        "primary_class": "agriculture",
+        "park_or_protected": false,
+        "tags": {},
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                0.015,
+                0.0
+              ],
+              [
+                0.019,
+                0.0
+              ],
+              [
+                0.019,
+                0.02
+              ],
+              [
+                0.015,
+                0.02
+              ],
+              [
+                0.015,
+                0.0
+              ]
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "route": {
+    "pack_id": "fixture-routing",
+    "distance_m": 4800,
+    "geometry": [
+      [
+        -0.002,
+        0.01
+      ],
+      [
+        0.003,
+        0.01
+      ],
+      [
+        0.006,
+        0.01
+      ],
+      [
+        0.013,
+        0.01
+      ],
+      [
+        0.022,
+        0.01
+      ]
+    ]
+  },
+  "expected": {
+    "woodland": {
+      "distance_m": 1600.0,
+      "share": 0.3333333333333333
+    },
+    "open_natural": {
+      "distance_m": 1000.0000000000007,
+      "share": 0.20833333333333348
+    },
+    "agriculture": {
+      "distance_m": 199.99999999999986,
+      "share": 0.04166666666666664
+    },
+    "water_crossing": {
+      "distance_m": 399.9999999999998,
+      "share": 0.08333333333333329
+    },
+    "urban": {
+      "distance_m": 400.0000000000001,
+      "share": 0.08333333333333336
+    },
+    "unknown_landcover": {
+      "distance_m": 1199.9999999999995,
+      "share": 0.24999999999999992
+    },
+    "park_or_protected": {
+      "distance_m": 799.9999999999999,
+      "share": 0.16666666666666663
+    },
+    "near_water": {
+      "distance_m": 759.7281509687879,
+      "share": 0.15827669811849748
+    },
+    "nature_score": 73.58290856922207
+  }
+}
