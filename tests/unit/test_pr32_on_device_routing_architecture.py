@@ -52,7 +52,8 @@ def test_valhalla_is_pinned_debug_arm64_only_and_release_is_disabled() -> None:
     assert "CostingModel.pedestrian" in policy
     assert 'ENGINE_VERSION = "0.5.1/valhalla-3.6.3"' in debug
     assert '"routing-packs"' in debug
-    assert ".withTileExtract(pack.tileArchive.absolutePath)" in debug
+    assert "localValhallaConfiguration(pack.tileArchive)" in debug
+    assert ".withTileExtract(tileArchive.absolutePath)" in debug
     assert 'ROUTING_PACK_ENGINE_VERSION = "3.6.3"' in registry
     assert "enabled = false" in release
     assert "com.valhalla" not in release
@@ -202,7 +203,7 @@ def test_pr32_browser_harness_covers_required_failure_and_ownership_cases() -> N
 
 def test_pr32_shell_generation_precaches_local_bridge() -> None:
     worker = (STATIC / "service-worker.js").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v22`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v24`" in worker
     assert '"/static/native_bridge_transport.js"' in worker
     assert '"/static/local_routing.js"' in worker
     assert '"/static/local_auto_tour.js"' in worker

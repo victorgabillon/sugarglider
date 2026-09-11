@@ -107,6 +107,33 @@ no claim of a silent native library or native actor reuse is justified yet.
 [Pinned actor source](https://github.com/Rallista/valhalla-mobile/blob/0.5.1/android/valhalla/src/main/java/com/valhalla/valhalla/ValhallaActor.kt),
 [pinned JNI source](https://github.com/Rallista/valhalla-mobile/blob/0.5.1/src/wrapper/main.cpp).
 
+A follow-up source/artifact audit confirms the embedded submodule is
+`e2f017b16080f49203de245a211b09efab09cf72`, the upstream 3.6.3 release commit.
+Wrapper CMake disables HTTP and services. The inspected ordinary route path logs
+algorithm names/tile counts and generic failures; coordinate-bearing trace strings
+found in upstream source are absent from the inspected debug library. JNI still
+prints exception messages, so this is not a claim of a silent SDK or completed
+physical failure-path log validation.
+[Pinned build configuration](https://github.com/Rallista/valhalla-mobile/blob/0.5.1/src/CMakeLists.txt),
+[embedded source](https://github.com/valhalla/valhalla/tree/e2f017b16080f49203de245a211b09efab09cf72).
+
+Native configuration now explicitly uses the selected archive with an empty tile
+directory, no remote tile URL, no auxiliary elevation/traffic/admin/timezone/
+landmark/transit paths, and no HTTP-server or statsd configuration. The pinned
+GraphReader returns no disk tile when the directory is empty; an unavailable
+archive cannot select an unrelated default directory. Its wrapper has no Android
+HTTP client. No routing-engine upgrade, native logging suppression or changed
+profile policy is implied.
+[Graph reader](https://github.com/valhalla/valhalla/blob/3.6.3/src/baldr/graphreader.cc).
+
+The debug panel now labels Kotlin wrapper preparation/reuse and native call time
+including actor setup accurately. Existing version-2 measurement field names stay
+wire-compatible and have an explicit code comment explaining their scope. Shell
+cache v24 delivers the corrected labels. A real Moshi serialization test uses the
+same pinned 1.15.1 serializer already present at wrapper runtime; it verifies the
+actual configuration JSON, including omitted optional services/traffic and empty
+auxiliary paths. No native process or real graph is needed by that unit test.
+
 The current AndroidX WebKit release notes list 1.17.0 and mention a new lint rule
 for missing renderer-crash handling. A follow-up change now handles the affected
 renderer explicitly: discard its pending geolocation callback, invalidate its
@@ -128,6 +155,23 @@ The renderer-recovery build supersedes the preparation artifact above:
 `8322e641658d502f4f0a77ef9a7721e20d098d9e0c350ffbf147b904c779e336`,
 at the same ignored AAB path, unsigned and still not the V1 candidate. The signing
 configuration is unchanged from the successful disposable signing test.
+
+The archive-only configuration/timing follow-up passes `make check` (1,013 tests,
+16 existing integration tests deselected; Ruff/strict mypy), **138 debug and 134
+release JUnit tests**, both lint checks, and unsigned AAB assembly in 3 min 27 s.
+All 124 scenarios in the six relevant browser harnesses pass. Lint reports zero
+errors, ten debug and nine release warnings, including the newly explicit test
+serializer's available update; none were suppressed. A first test compile lacked
+the serializer on the test compile classpath, and the shell fingerprint check
+required a cache generation update. Both were corrected and all affected checks
+rerun. Native configuration and accurate timing still require physical validation.
+
+Latest preparation AAB, superseding the renderer-only hash above: **3,528,820
+bytes**, SHA-256 `5a1a8ff7b7e8054a72fc5d9aa0717505c6893bf26b1107df647208656e75c64f`,
+at the same ignored path. It is unsigned and contains no native library; it is
+not the V1 artifact. External signing logic is unchanged from the disposable test.
+Evidence: `/tmp/sugarglider-pr44-native-config-{check,android-fixed,browser}.log`
+and `/tmp/sugarglider-pr44-native-config-artifact.json`.
 
 ## Permission inventory
 

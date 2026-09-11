@@ -454,7 +454,7 @@ def test_command_runner_receives_explicit_source_and_isolated_destinations(
     assert calls[1][1]["OSM_PBF"] == str(pbf)
 
 
-def test_make_cli_ignore_and_v22_runtime_isolation() -> None:
+def test_make_cli_ignore_and_v24_runtime_isolation() -> None:
     makefile = (ROOT / "Makefile").read_text()
     assert 'offline_regions build --region "$(REGION)" --pbf "$(PBF_INPUT)"' in makefile
     assert "offline-region-verify:" in makefile
@@ -473,7 +473,7 @@ def test_make_cli_ignore_and_v22_runtime_isolation() -> None:
         assert pin in map_builder
     assert provenance.valhalla_image in routing_builder
     worker = (ROOT / "src/sugarglider/web/static/service-worker.js").read_text()
-    assert "const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v22`;" in worker
+    assert "const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v24`;" in worker
     assert "offline_regions" not in worker
     for folder in (ROOT / "src/sugarglider/web", ROOT / "src/sugarglider/planning"):
         for path in folder.rglob("*.py"):

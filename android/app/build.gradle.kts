@@ -119,4 +119,6 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")
+    // Match the serializer already used by the pinned native wrapper at runtime.
+    "testDebugImplementation"("com.squareup.moshi:moshi-kotlin:1.15.1")
 }
