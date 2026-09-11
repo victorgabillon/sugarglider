@@ -1,4 +1,4 @@
-.PHONY: install format lint typecheck test check android-check android-apk brand-assets download-osm rebuild-graph map-pack nature-index poi-index benchmark-pois up down logs smoke report generate generate-all-pois generate-auto-tour
+.PHONY: install format lint typecheck test check android-check android-apk brand-assets download-osm rebuild-graph map-pack offline-region offline-region-verify nature-index poi-index benchmark-pois up down logs smoke report generate generate-all-pois generate-auto-tour
 
 install:
 	uv sync
@@ -36,6 +36,12 @@ rebuild-graph:
 
 map-pack:
 	./scripts/build_pr36_map_pack.sh "$(REGION)" "$(PBF_INPUT)"
+
+offline-region:
+	uv run python -m sugarglider.offline_regions build --region "$(REGION)" --pbf "$(PBF_INPUT)"
+
+offline-region-verify:
+	uv run python -m sugarglider.offline_regions verify --region "$(REGION)"
 
 nature-index:
 	./scripts/build_nature_index.sh

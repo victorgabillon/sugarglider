@@ -24,6 +24,7 @@ from shapely.wkb import loads as load_wkb
 from sugarglider.analysis.projection import LocalMetricProjection
 from sugarglider.analysis.route import haversine_distance_m
 from sugarglider.domain.models import Coordinate
+from sugarglider.osm_build_bounds import require_header_coverage
 from sugarglider.pois.classification import (
     CLASSIFIER_VERSION,
     PoiClassification,
@@ -86,7 +87,9 @@ class PoiIndexBuildReport:
     elapsed_seconds: float
 
 
-def build_poi_index(osm_source: Path, output: Path) -> PoiIndexBuildReport:
+def build_poi_index(
+    osm_source: Path, output: Path, *, bounds: Wgs84BoundingBox | None = None
+) -> PoiIndexBuildReport:
     """Stream nodes, ways, and relation areas and atomically write one marker each."""
     started = time.perf_counter()
     _validate_source(osm_source)
@@ -104,6 +107,21 @@ def build_poi_index(osm_source: Path, output: Path) -> PoiIndexBuildReport:
         processor = osmium.FileProcessor(osm_source).with_locations().with_areas()
         header_box = processor.header.box()
         projection = _projection_for_header(header_box)
+        region_geometry: Polygon | None = None
+        if bounds is not None:
+            require_header_coverage(header_box, bounds)
+            west, south, east, north = bounds
+            region_geometry = Polygon(
+                tuple(
+                    projection.project_position(position)
+                    for position in (
+                        (west, south),
+                        (east, south),
+                        (east, north),
+                        (west, north),
+                    )
+                )
+            )
         for entity in processor:
             if isinstance(entity, osmium.osm.Node):
                 tags = {tag.k: tag.v for tag in entity.tags}
@@ -122,6 +140,11 @@ def build_poi_index(osm_source: Path, output: Path) -> PoiIndexBuildReport:
                     skipped_invalid += 1
                     continue
                 if classification is None:
+                    continue
+                if bounds is not None and not (
+                    bounds[0] <= coordinate.lon <= bounds[2]
+                    and bounds[1] <= coordinate.lat <= bounds[3]
+                ):
                     continue
                 try:
                     _insert_feature(
@@ -181,6 +204,10 @@ def build_poi_index(osm_source: Path, output: Path) -> PoiIndexBuildReport:
                 try:
                     if metric_geometry is None:
                         raise ValueError("way geometry is unavailable")
+                    if region_geometry is not None and not metric_geometry.intersects(
+                        region_geometry
+                    ):
+                        continue
                     coordinate = _metric_representative_coordinate(
                         metric_geometry, projection
                     )
@@ -214,6 +241,10 @@ def build_poi_index(osm_source: Path, output: Path) -> PoiIndexBuildReport:
                         raise ValueError("relation area is not polygonal")
                     coordinate = _polygon_coordinate(geometry, projection)
                     relation_metric_geometry = _project_polygonal(geometry, projection)
+                    if region_geometry is not None and not (
+                        relation_metric_geometry.intersects(region_geometry)
+                    ):
+                        continue
                     feature = _feature("relation", osm_id, coordinate, classification)
                     _insert_feature(
                         features,
@@ -264,7 +295,7 @@ def build_poi_index(osm_source: Path, output: Path) -> PoiIndexBuildReport:
             }
         )
     ordered = tuple(features[key] for key in sorted(features))
-    bounds = _document_bounds(ordered, header_box)
+    bounds = bounds if bounds is not None else _document_bounds(ordered, header_box)
     category_counts = _feature_counts(ordered, "category")
     potability_counts = _feature_counts(ordered, "potability")
     access_counts = _feature_counts(ordered, "access_status")

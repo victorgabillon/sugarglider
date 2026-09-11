@@ -12,25 +12,20 @@ MAVEN_CACHE="$MAP_PACK_ROOT/.m2"
 SUPPORT_DATA="$MAP_PACK_ROOT/.protomaps-data"
 
 usage() {
-    echo "Usage: $0 marly|paris /absolute/or/relative/source.osm.pbf" >&2
+    echo "Usage: $0 REGION /absolute/or/relative/source.osm.pbf [NEW_OUTPUT_DIRECTORY]" >&2
     exit 2
 }
 
-[ "$#" -eq 2 ] || usage
+[ "$#" -eq 2 ] || [ "$#" -eq 3 ] || usage
 REGION=$1
 PBF_INPUT=$2
-
-case "$REGION" in
-    marly)
-        PACK_ID=marly-map-dev-v1
-        BOUNDS=2.0,48.8,2.16,48.94
-        ;;
-    paris)
-        PACK_ID=paris-map-dev-v1
-        BOUNDS=2.25,48.8,2.42,48.92
-        ;;
-    *) usage ;;
-esac
+REQUESTED_OUTPUT=${3:-}
+# The strict region specification owns bounds; its template must agree exactly.
+MAP_CONFIG=$(cd "$REPOSITORY_ROOT" && uv run python -m sugarglider.offline_regions \
+    map-config --region "$REGION")
+PACK_ID=$(printf '%s\n' "$MAP_CONFIG" | sed -n '1p')
+BOUNDS=$(printf '%s\n' "$MAP_CONFIG" | sed -n '2p')
+TEMPLATE=$(printf '%s\n' "$MAP_CONFIG" | sed -n '3p')
 
 [ -f "$PBF_INPUT" ] || {
     echo "OSM PBF input does not exist: $PBF_INPUT" >&2
@@ -45,9 +40,8 @@ case "$PBF_INPUT" in
 esac
 PBF_INPUT=$(CDPATH= cd -- "$(dirname -- "$PBF_INPUT")" && pwd)/$(basename -- "$PBF_INPUT")
 
-TEMPLATE="$REPOSITORY_ROOT/map-packs/$PACK_ID.template.json"
-FINAL_OUTPUT="$MAP_PACK_ROOT/$PACK_ID"
-[ ! -e "$FINAL_OUTPUT" ] || {
+FINAL_OUTPUT=${REQUESTED_OUTPUT:-$MAP_PACK_ROOT/$PACK_ID}
+[ ! -e "$FINAL_OUTPUT" ] && [ ! -L "$FINAL_OUTPUT" ] || {
     echo "Output already exists; remove it explicitly before rebuilding: $FINAL_OUTPUT" >&2
     exit 1
 }
@@ -70,7 +64,11 @@ printf '%s  %s\n' "$PROTOMAPS_ARCHIVE_SHA256" "$SOURCE_ARCHIVE" | sha256sum --ch
     exit 1
 }
 
-BUILD_DIRECTORY=$(mktemp -d "$MAP_PACK_ROOT/.build-$REGION.XXXXXX")
+BUILD_ROOT="$MAP_PACK_ROOT"
+if [ -n "$REQUESTED_OUTPUT" ]; then
+    BUILD_ROOT=$(dirname -- "$REQUESTED_OUTPUT")
+fi
+BUILD_DIRECTORY=$(mktemp -d "$BUILD_ROOT/.build-$REGION.XXXXXX")
 cleanup() {
     rm -rf "$BUILD_DIRECTORY"
 }
@@ -79,7 +77,7 @@ trap cleanup EXIT HUP INT TERM
 tar -xzf "$SOURCE_ARCHIVE" -C "$BUILD_DIRECTORY"
 SOURCE_DIRECTORY="$BUILD_DIRECTORY/basemaps-$PROTOMAPS_REVISION"
 STAGING_OUTPUT="$BUILD_DIRECTORY/output"
-mkdir -p "$STAGING_OUTPUT"
+mkdir -p "$STAGING_OUTPUT" "$BUILD_DIRECTORY/planetiler-tmp"
 
 docker run --rm \
     --user "$(id -u):$(id -g)" \
@@ -95,6 +93,7 @@ docker run --rm \
     --workdir /work \
     --volume "$SOURCE_DIRECTORY:/source:ro" \
     --volume "$SUPPORT_DATA:/work/data" \
+    --volume "$BUILD_DIRECTORY/planetiler-tmp:/work/data/tmp" \
     --volume "$STAGING_OUTPUT:/output" \
     --volume "$PBF_INPUT:/work/data/sources/pr36-input.osm.pbf:ro" \
     "$BUILD_IMAGE" \

@@ -23,6 +23,7 @@ data/graph-cache/*
 data/graph-cache-backups/
 data/valhalla/
 data/map-packs/
+data/offline-regions/
 data/nature/*
 !data/nature/.gitkeep
 data/nature/*.json

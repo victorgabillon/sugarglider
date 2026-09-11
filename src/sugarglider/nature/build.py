@@ -14,7 +14,7 @@ from typing import Literal, cast
 import osmium
 from shapely import normalize
 from shapely.errors import GEOSException
-from shapely.geometry import GeometryCollection, MultiPolygon, Polygon, mapping
+from shapely.geometry import GeometryCollection, MultiPolygon, Polygon, box, mapping
 from shapely.geometry.base import BaseGeometry
 from shapely.validation import make_valid
 from shapely.wkb import loads as load_wkb
@@ -34,6 +34,7 @@ from sugarglider.nature.models import (
     PolygonGeometry,
     Wgs84BoundingBox,
 )
+from sugarglider.osm_build_bounds import require_header_coverage
 
 DEFAULT_OSM_PBF = Path("data/osm/ile-de-france-latest.osm.pbf")
 DEFAULT_OUTPUT = Path("data/nature/ile-de-france-nature-index.json.gz")
@@ -52,7 +53,9 @@ class NatureIndexBuildReport:
     elapsed_seconds: float
 
 
-def build_nature_index(osm_source: Path, output: Path) -> NatureIndexBuildReport:
+def build_nature_index(
+    osm_source: Path, output: Path, *, bounds: Wgs84BoundingBox | None = None
+) -> NatureIndexBuildReport:
     """Stream area objects, retain selected polygons, and atomically write an index."""
     started = time.perf_counter()
     if not osm_source.is_file():
@@ -68,6 +71,10 @@ def build_nature_index(osm_source: Path, output: Path) -> NatureIndexBuildReport
     try:
         processor = osmium.FileProcessor(osm_source).with_areas()
         header_box = processor.header.box()
+        region_geometry: Polygon | None = None
+        if bounds is not None:
+            require_header_coverage(header_box, bounds)
+            region_geometry = box(*bounds)
         for entity in processor:
             if not isinstance(entity, osmium.osm.Area):
                 continue
@@ -80,6 +87,10 @@ def build_nature_index(osm_source: Path, output: Path) -> NatureIndexBuildReport
                 geometry = _valid_polygonal_geometry(raw_geometry)
                 if geometry is None:
                     skipped_invalid += 1
+                    continue
+                if region_geometry is not None and not geometry.intersects(
+                    region_geometry
+                ):
                     continue
                 source: Literal["way", "relation"] = (
                     "way" if entity.from_way() else "relation"
@@ -111,7 +122,9 @@ def build_nature_index(osm_source: Path, output: Path) -> NatureIndexBuildReport
         raise NatureIndexBuildError(
             "OSM area processing produced duplicate feature IDs"
         )
-    bounds = _document_bounds(ordered_features, header_box)
+    bounds = (
+        bounds if bounds is not None else _document_bounds(ordered_features, header_box)
+    )
     _west, south, _east, north = bounds
     reference_latitude = (south + north) / 2
     counts = _category_counts(ordered_features)
