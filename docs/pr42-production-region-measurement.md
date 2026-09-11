@@ -43,13 +43,16 @@ Build started 2026-09-11 11:17:47 UTC. Tool/source caches were already available
 | Component | Bytes | Elapsed build time | State |
 | --- | ---: | ---: | --- |
 | Map archive, zooms 0–15 | 243,080,284 (231.82 MiB) | 1,252.505 s (20 min 53 s) | Component built; full regional verification still pending |
-| Routing | Pending | Running | Not yet verified |
-| Places | Pending | Pending | Not yet built |
+| Routing archive | 318,443,520 (303.69 MiB) | 952.890 s (15 min 53 s), including extract | Component built; full regional verification still pending |
+| Places | Pending | Running | Not yet built |
 | Nature | Pending | Pending | Not yet built |
 
-The completed map has been retained as measurement-only hard links in an ignored
-directory so a later component failure does not erase this evidence. It is not an
-active installed region. No existing valid pack was replaced.
+The completed map and routing files have been retained as measurement-only hard
+links in ignored directories so a later component failure does not erase this
+evidence. They are not an active installed region. No existing valid pack was
+replaced. The routing archive SHA-256 is
+`11a1abd9f4f45bb420a59cbc9a93ae0519c815874500f0f4da2d26d367e959b8`.
+The two large components total 561,523,804 bytes before places/nature and metadata.
 
 Total download/installed/free storage, expanded index size and topology counts,
 phone installation time and route/Auto Tour latency remain unmeasured. Compare
@@ -64,6 +67,15 @@ states no total-release-size or bandwidth limit. This makes Releases a possible
 initial host if every component fits, subject to real download/CORS/redirect and
 interruption checks. It is not a bandwidth SLA or proof of consumer suitability.
 [GitHub release limits](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)
+
+The existing manifest uses relative component paths such as
+`map/basemap.pmtiles`. Release assets are individual downloads, so do not assume a
+GitHub release URL implements that directory layout. A Releases-based installer
+would need an explicit catalog mapping from each validated logical component
+path to its immutable asset URL, with bounded HTTPS redirects and unchanged
+identity/size/checksum checks. A static object-store layout can preserve the
+relative paths directly. This transport decision and actual browser/native
+download validation remain open; do not publish a catalog before they are tested.
 
 Use immutable versioned assets, publish the verified regional manifest last and
 keep the existing independent component paths/identities. A catalog must point
