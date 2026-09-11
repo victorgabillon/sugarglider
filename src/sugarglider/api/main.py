@@ -13,6 +13,10 @@ from sugarglider.analysis.route import RouteAnalyzer
 from sugarglider.api.errors import install_error_handlers
 from sugarglider.api.outing_live import router as outing_live_router
 from sugarglider.api.outings import router as outings_router
+from sugarglider.api.persistence import (
+    create_outing_services,
+    create_saved_route_service,
+)
 from sugarglider.api.routes import router
 from sugarglider.api.saved_routes import router as saved_routes_router
 from sugarglider.config import Settings
@@ -25,22 +29,15 @@ from sugarglider.nature.index import (
     unavailable_nature_status,
 )
 from sugarglider.nature.models import NatureIndexStatus
-from sugarglider.outings.errors import OutingStorageError
 from sugarglider.outings.live_broker import OutingLiveBroker
-from sugarglider.outings.live_repository import OutingLiveRepositoryError
 from sugarglider.outings.live_service import (
     OutingLiveOperations,
-    OutingLiveService,
     UnavailableOutingLiveService,
 )
-from sugarglider.outings.live_sqlite_repository import SQLiteOutingLiveRepository
-from sugarglider.outings.repository import OutingRepositoryError
 from sugarglider.outings.service import (
     OutingOperations,
-    OutingService,
     UnavailableOutingService,
 )
-from sugarglider.outings.sqlite_repository import SQLiteOutingRepository
 from sugarglider.planning.alternative_legs import LowOverlapSettings
 from sugarglider.planning.auto_tour.discovered_pois import TourPoiSettings
 from sugarglider.planning.auto_tour.service import AutoTourPlanner, AutoTourService
@@ -59,15 +56,10 @@ from sugarglider.pois.models import PoiIndexStatus
 from sugarglider.routing.graphhopper import GraphHopperClient
 from sugarglider.routing.result import RouteResultFactory
 from sugarglider.routing.service import RouteService
-from sugarglider.saved_routes.errors import SavedRouteStorageError
-from sugarglider.saved_routes.repository import SavedRouteRepositoryError
 from sugarglider.saved_routes.service import (
     SavedRouteOperations,
-    SavedRouteService,
-    UnavailableSavedRouteService,
 )
-from sugarglider.saved_routes.sqlite_repository import SQLiteSavedRouteRepository
-from sugarglider.web.models import UiConfig
+from sugarglider.web.config import build_ui_config
 from sugarglider.web.routes import STATIC_DIRECTORY
 from sugarglider.web.routes import router as web_router
 
@@ -89,9 +81,13 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        active_saved_routes = saved_route_service or _saved_routes(runtime_settings)
+        active_saved_routes = saved_route_service or create_saved_route_service(
+            runtime_settings
+        )
         if outing_service is None and outing_live_service is None:
-            active_outings, active_outing_live = _outings(runtime_settings)
+            active_outings, active_outing_live = create_outing_services(
+                runtime_settings
+            )
         else:
             active_outings = outing_service or UnavailableOutingService()
             active_outing_live = outing_live_service or UnavailableOutingLiveService()
@@ -106,38 +102,13 @@ def create_app(
             if nature_index is not None
             else None
         )
-        ui_config = UiConfig(
-            tile_url_template=runtime_settings.map_tile_url,
-            tile_attribution=runtime_settings.map_attribution,
-            initial_center=(
-                runtime_settings.map_initial_lon,
-                runtime_settings.map_initial_lat,
-            ),
-            initial_zoom=runtime_settings.map_initial_zoom,
-            max_required_points=30,
-            nature_index_available=nature_status.available,
-            nature_water_buffer_m=runtime_settings.nature_water_buffer_m,
-            nature_preference_values=("off", "prefer"),
-            loop_geometry_preference_values=("off", "prefer"),
-            poi_index_available=poi_status.available,
-            poi_default_limit=runtime_settings.poi_default_limit,
-            poi_max_limit=runtime_settings.poi_max_limit,
+        ui_config = build_ui_config(
+            runtime_settings,
+            nature_available=nature_status.available,
+            poi_available=poi_status.available,
             saved_routes_available=active_saved_routes.available,
             outings_available=active_outings.available,
-            outing_max_participants=runtime_settings.outing_max_participants,
-            outing_live_positions_available=active_outing_live.available,
-            outing_live_stale_after_seconds=(
-                runtime_settings.outing_live_stale_after_seconds
-            ),
-            outing_live_expire_after_seconds=(
-                runtime_settings.outing_live_expire_after_seconds
-            ),
-            auto_tour_scenic_corridor_radius_m=(
-                runtime_settings.auto_tour_scenic_corridor_radius_m
-            ),
-            auto_tour_water_corridor_radius_m=(
-                runtime_settings.auto_tour_water_corridor_radius_m
-            ),
+            live_available=active_outing_live.available,
         )
         app.state.ui_config = ui_config
         app.state.nature_index = nature_index
@@ -230,66 +201,6 @@ def create_app(
     app.include_router(outing_live_router)
     app.mount("/static", StaticFiles(directory=STATIC_DIRECTORY), name="static")
     return app
-
-
-def _saved_routes(settings: Settings) -> SavedRouteOperations:
-    path = settings.saved_route_database_path
-    if path is None:
-        return UnavailableSavedRouteService()
-    try:
-        repository = SQLiteSavedRouteRepository(path)
-        repository.initialize()
-        service = SavedRouteService(
-            repository,
-            ttl_days=settings.saved_route_ttl_days,
-            maximum_snapshot_bytes=settings.saved_route_max_snapshot_bytes,
-        )
-        service.purge_expired()
-        return service
-    except (SavedRouteRepositoryError, SavedRouteStorageError):
-        logger.warning("Saved-route persistence is unavailable")
-        return UnavailableSavedRouteService()
-
-
-def _outings(
-    settings: Settings,
-) -> tuple[OutingOperations, OutingLiveOperations]:
-    path = settings.outing_database_path
-    if path is None:
-        return UnavailableOutingService(), UnavailableOutingLiveService()
-    try:
-        repository = SQLiteOutingRepository(path)
-        repository.initialize()
-        live_repository = SQLiteOutingLiveRepository(path)
-        service = OutingService(
-            repository,
-            ttl_days=settings.outing_ttl_days,
-            max_participants=settings.outing_max_participants,
-            maximum_route_snapshot_bytes=(settings.outing_max_route_snapshot_bytes),
-            live_repository=live_repository,
-            live_event_retention_seconds=(settings.outing_live_event_retention_seconds),
-            live_maximum_events_per_outing=(settings.outing_live_max_events_per_outing),
-        )
-        service.purge_expired()
-        live_service = OutingLiveService(
-            live_repository,
-            stale_after_seconds=settings.outing_live_stale_after_seconds,
-            expire_after_seconds=settings.outing_live_expire_after_seconds,
-            maximum_update_age_seconds=(settings.outing_live_max_update_age_seconds),
-            future_tolerance_seconds=(settings.outing_live_future_tolerance_seconds),
-            event_retention_seconds=(settings.outing_live_event_retention_seconds),
-            maximum_events_per_outing=(settings.outing_live_max_events_per_outing),
-            keepalive_seconds=settings.outing_live_sse_keepalive_seconds,
-        )
-        live_service.startup_cleanup()
-        return service, live_service
-    except (
-        OutingLiveRepositoryError,
-        OutingRepositoryError,
-        OutingStorageError,
-    ):
-        logger.warning("Outing persistence is unavailable")
-        return UnavailableOutingService(), UnavailableOutingLiveService()
 
 
 def _load_nature(settings: Settings) -> tuple[NatureIndex | None, NatureIndexStatus]:

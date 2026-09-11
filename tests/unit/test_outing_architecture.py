@@ -53,6 +53,7 @@ def test_sqlite_is_confined_to_approved_adapters() -> None:
         "outings/live_sqlite_repository.py",
         "outings/sqlite_repository.py",
         "saved_routes/sqlite_repository.py",
+        "social_server/sqlite_repository.py",
     }
 
 
