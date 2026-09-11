@@ -71,15 +71,24 @@ above. After correction, **133 release JUnit tests pass with no failures/errors/
 skips, release lint has zero errors, and `bundleRelease` succeeds**. The exact
 command includes `--no-daemon --no-configuration-cache --max-workers=1`, a 768 MiB
 heap/512 MiB metaspace and in-process Kotlin compilation. The combined release
-run took 6 min 54 s under a one-CPU scope. Debug regression and disposable signing
-pipeline checks are still running.
+run took 6 min 54 s under a one-CPU scope. Debug regression passes all 136 JUnit
+tests and lint after the helper move.
+
+`python /tmp/sugarglider-pr44-signing-validation.py`: **PASS**. Five negative
+Gradle-configuration cases reject missing, in-repository, partial, malformed and
+in-repository-keystore inputs without printing password values. A one-day
+disposable test key signs a bundle, `jarsigner` verifies it, and a subsequent
+unsigned build has no signing-certificate entry. The temporary key/properties
+are removed in `finally`; no permanent upload key was created. Report:
+`/tmp/sugarglider-pr44-signing-validation-report.json`.
 
 The initial unsigned preparation artifact is
 `/tmp/sugarglider-v1-pr44/android/app/build/outputs/bundle/release/app-release.aab`,
 3,528,250 bytes, SHA-256
 `ac4e278c5efda8742eed4640a6992dc4439dde113d4ad24a055ee9b6085ec798`.
 It contains no native library because production local routing remains disabled.
-It is not the final V1 artifact; later builds/signing validation may supersede it.
+It is not the final V1 artifact. The signing test restored the identical unsigned
+bytes/hash above. Future production builds will supersede this preparation artifact.
 
 Debug lint's nine warnings remain visible: available dependency/Gradle updates,
 debug arm64-only ChromeOS coverage, and explicit debug cleartext. Release lint
