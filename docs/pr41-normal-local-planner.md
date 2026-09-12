@@ -49,8 +49,61 @@ fact was added. Shell v30 includes the context and changed mode modules.
   `/tmp/sugarglider-pr41-context-diagnostics.json`.
 - Native source is unchanged from `dad310c`; no new physical acceptance is claimed.
 
-Next: shared canonical candidate evaluation and portfolio, normal Generate/map/
-selection publication, truthful unknown-detail rendering, bundled first launch,
+## Canonical candidate publication — 2026-09-12
+
+The shared evaluator now publishes native drafts as the existing `RouteResult`
+and unranked `PlanCandidate` contracts. The shared portfolio alone assigns public
+roles and ranks, preserves mode ordering, deduplicates canonical signatures and
+retains Auto Tour's exact no-POI control. Unknown edge repetition cannot earn a
+smooth-route role or authorize a POI detour recommendation. A failed control
+publication cannot turn its detour into a recommendation.
+
+All six public profiles use generated registry metadata and Python-generated
+missing-detail analysis templates. Native route distance remains authoritative;
+geometry distance is measured from the returned line. Path details, repetition,
+backtracking, activity attributes and unavailable nature remain explicitly
+unknown. Signatures use Python-compatible six-decimal rounding, including ties
+and negative zero. Full routed geometry determines canonical traversal direction
+and ordered deliberate anchors; the line itself is unchanged.
+
+Auto Tour retains full indexed approach provenance and explicit per-candidate
+POI outcomes. Publication independently checks the final line, meaningful approach
+and strict arrival tolerance. Canonical stops use validated routed coordinates;
+an absent OSM ID remains an explicit diagnostic outcome without an invented
+coordinate. Nature publication preserves the existing normalized partition,
+independent overlays, weights and measured score, with regional identity and
+operation budgets in diagnostics. It does not rerun polygon analysis.
+
+`local_plan_client.js` runs publication in a bounded module worker. Single-flight
+ownership, page invalidation, stale responses, worker failure and a 60-second
+timeout remain explicit; there is no inline or server fallback. Source requests,
+gateway cache facts and phase usage remain immutable. Shell v31 includes the new
+modules and the shared decimal formatter used by local GPX export.
+
+Current validation supersedes the earlier totals above:
+
+- `make check`: **1,028 passed / 16 existing integration tests deselected**;
+  Ruff and strict mypy pass (244 files).
+- **264 scenarios across thirteen real browser harnesses pass**, including
+  40 canonical-publication scenarios and the existing regional-data cases.
+- **Thirty-seven complete browser `PlanResult` values** pass the unchanged
+  Python models and neutral submitted-candidate validator. Thirty Waypoint
+  fixtures cover five shapes across six profiles; seven Auto Tour results cover
+  all profiles, including two deliberately reached POI alternatives with nature.
+  No validator tolerance was relaxed.
+- All **39 published native candidates** also export GPX with XML fields exactly
+  matching Python's canonical writer, including selected POI waypoints.
+- The normal offline saved-route Download still passes with its static server
+  stopped: zero export fetches, unchanged snapshot, 882-byte GPX matching Python,
+  SHA-256 `fb1f53eb20d7ba7ce28ee705a5fb20c9292fe57c3d9ef453a9f3a90ad9939ba5`.
+- Evidence: `/tmp/sugarglider-pr41-publisher-{check,browser,ui}.log` and
+  `/tmp/sugarglider-{pr41_local_candidates,pr40_local_regional_data}-published-plans.json`.
+  These are host/synthetic validations, not new device acceptance.
+
+Normal Generate is still the next integration step. Explicit requested soft stops
+and unsupported mode options must not be silently discarded while it is connected.
+
+Next: normal Generate/map/selection publication, truthful unknown-detail rendering, bundled first launch,
 release routing and the complete required Fairphone matrix. Regional installer
 and useful-region device acceptance continue under PR42; public hosting/signing
 and final Play gates remain explicit in the V1 ledger.

@@ -301,8 +301,14 @@ diagnostics. Existing route/proposal behavior is retained; distinct concurrent
 Auto Tour requests are rejected explicitly. `make check` and 223 browser
 scenarios pass; 16 browser diagnostic snapshots validate through Python's
 canonical model. [Normal integration evidence](pr41-normal-local-planner.md)
-records this foundation. Canonical candidate publication and normal Generate
-remain the next required implementation; this is not a PR41 PASS.
+records this foundation. The next preparation now publishes canonical candidates
+and full results through a worker and shared portfolio, including native nature,
+validated reached POI approaches, explicit dropped outcomes and the mandatory
+no-POI control. All 37 browser results pass the unchanged Python snapshot
+validator; 264 browser scenarios and `make check` (1,028 passed / 16 deselected,
+244 mypy files) pass. Shell v31 preserves normal offline GPX Download with zero
+export fetches. Normal Generate and truthful unknown-detail UI integration remain
+next; this is not a PR41 PASS or new physical evidence.
 
 ## External actions and blockers
 

@@ -444,8 +444,8 @@ export function createLocalAutoTourEngine({
   function candidatePoiOutcomes(candidate, outcomes) {
     const selected = new Set(candidate.selected_pois.map((poi) => poi.poi_id));
     return outcomes.map((outcome) => selected.has(outcome.poi_id)
-      ? { poi_id: outcome.poi_id, status: "reached", candidate_id: candidate.candidate_id, reason: null }
-      : { poi_id: outcome.poi_id, status: "dropped", reason: outcome.status === "dropped" ? outcome.reason : "not_selected_for_this_candidate" });
+      ? { ...outcome, status: "reached", candidate_id: candidate.candidate_id, reason: null }
+      : { ...outcome, status: "dropped", reason: outcome.status === "dropped" ? outcome.reason : "not_selected_for_this_candidate" });
   }
 
   async function explorePois(request, control, data, state, ownedGeneration) {
@@ -511,20 +511,24 @@ export function createLocalAutoTourEngine({
           const selected = { poi_id: id, name: feature.display_name, category: feature.category, potability: feature.potability,
             status: "reached", semantic_coordinate: feature.coordinate, approach_coordinate: point,
             routed_coordinate: candidate.snapped_points[insertion], arrival_distance_m: arrival,
-            arrival_tolerance_m: tolerance, approach_id: approach.id, visit_index: insertion };
+            arrival_tolerance_m: tolerance, approach_id: approach.id, visit_index: insertion,
+            approach, selection_origin: preferences.requested_poi_ids.includes(id) ? "user_preferred" : "discovered" };
           retained = deepFreeze({ ...enriched, selected_pois: [selected], source_control_candidate_id: control.candidate_id });
           reason = null;
           break;
         }
       }
       if (retained) alternatives.push(retained);
-      outcomes.push(retained ? { poi_id: id, status: "reached", candidate_id: retained.candidate_id, reason: null }
-        : { poi_id: id, status: "dropped", reason: reason ?? "poi_no_routed_approach" });
+      const identity = feature ? { name: feature.display_name, category: feature.category,
+        semantic_coordinate: feature.coordinate,
+        selection_origin: preferences.requested_poi_ids.includes(id) ? "user_preferred" : "discovered" } : {};
+      outcomes.push(retained ? { ...identity, poi_id: id, status: "reached", candidate_id: retained.candidate_id, reason: null }
+        : { ...identity, poi_id: id, status: "dropped", reason: reason ?? "poi_no_routed_approach" });
     }
     const selected = rankLocalAutoTourCandidates(alternatives, request).slice(0, Math.max(0, request.candidate_count - 1));
     const selectedIds = new Set(selected.flatMap((candidate) => candidate.selected_pois.map((poi) => poi.poi_id)));
     return { candidates: selected, outcomes: outcomes.map((outcome) => outcome.status === "reached" && !selectedIds.has(outcome.poi_id)
-      ? { poi_id: outcome.poi_id, status: "dropped", reason: "poi_portfolio_limit" } : outcome) };
+      ? { ...outcome, status: "dropped", reason: "poi_portfolio_limit" } : outcome) };
   }
 
   return Object.freeze({ generate, invalidate });
@@ -773,6 +777,8 @@ function candidateFrom(reply, skeleton, request, metrics) {
     geometry_signature: geometrySignature,
     profile: reply.profile,
     pack_id: reply.pack_id,
+    engine: reply.engine,
+    engine_version: reply.engine_version,
     distance_m: reply.distance_m,
     duration_s: reply.duration_s,
     target_error_m: targetErrorM,

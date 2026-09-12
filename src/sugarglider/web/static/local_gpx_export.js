@@ -1,3 +1,4 @@
+import { canonicalFixed } from "./canonical_numbers.js";
 import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
 
 const GPX_NAMESPACE = "http://www.topografix.com/GPX/1/1";
@@ -119,22 +120,7 @@ function validateStopArrivals(geometry, stops) {
 // including negative zero, without decimal-string or epsilon approximations.
 export function fixedCoordinate(value) {
   requireExport(Number.isFinite(value) && Math.abs(value) <= 180, "invalid_export_geometry");
-  const data = new DataView(new ArrayBuffer(8));
-  data.setFloat64(0, value);
-  const bits = data.getBigUint64(0);
-  const negative = (bits >> 63n) !== 0n;
-  const exponent = Number((bits >> 52n) & 0x7ffn);
-  let numerator = bits & ((1n << 52n) - 1n);
-  if (exponent) numerator += 1n << 52n;
-  const power = (exponent || 1) - 1023 - 52;
-  numerator *= 100_000_000n;
-  const denominator = power < 0 ? 1n << BigInt(-power) : 1n;
-  if (power > 0) numerator <<= BigInt(power);
-  let rounded = numerator / denominator;
-  const remainder = numerator % denominator;
-  if (2n * remainder > denominator || (2n * remainder === denominator && rounded % 2n !== 0n)) rounded += 1n;
-  const digits = rounded.toString().padStart(9, "0");
-  return `${negative ? "-" : ""}${digits.slice(0, -8)}.${digits.slice(-8)}`;
+  return canonicalFixed(value, 8);
 }
 
 function cleanXmlText(value) { return value.replace(/[\p{Cc}\p{Cs}\uFFFE\uFFFF]/gu, ""); }

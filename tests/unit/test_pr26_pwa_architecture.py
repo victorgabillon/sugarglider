@@ -150,14 +150,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v30_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v31_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v30"
+    assert generation.group(1) == "v31"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -170,6 +170,14 @@ def test_shared_shell_generation_tracks_v30_cached_assets() -> None:
             "local_routing.js",
             "local_auto_tour.js",
             "local_planning_context.js",
+            "canonical_numbers.js",
+            "local_analysis_templates.js",
+            "local_plan_geometry.js",
+            "local_candidate_enrichment.js",
+            "local_candidate_evaluator.js",
+            "local_plan_publisher.js",
+            "local_plan_worker.js",
+            "local_plan_client.js",
             "local_waypoint_route.js",
             "regional_manifest.js",
             "local_region_client.js",
@@ -186,6 +194,30 @@ def test_shared_shell_generation_tracks_v30_cached_assets() -> None:
             "public_profile_metadata.js",
         )
     } == {
+        "canonical_numbers.js": (
+            "0c45121c5e89d9dcbd23c126740a7f3760e8c31f9683d8206b70c6d253e65a26"
+        ),
+        "local_analysis_templates.js": (
+            "6036c6d7fcf55a97514d29a57caba72e43f522ef9e811d60548886fe8f126e01"
+        ),
+        "local_plan_geometry.js": (
+            "f48a33644581705ac0ba22a4c49625d4623850281dcca76d873f5c190dbe3f3a"
+        ),
+        "local_candidate_enrichment.js": (
+            "2d71476066aa440bdebb28c26b1d0eac2b62c37dd1275b0ef8448aee3e7c2ef5"
+        ),
+        "local_candidate_evaluator.js": (
+            "ada3ea920de1434da0ba4477eae9b67d91b2322db151047af942956708cea6ba"
+        ),
+        "local_plan_publisher.js": (
+            "4f0d6f8823c3553dcf0fa108406e656715f471c168b32d228bd59f768e1720c7"
+        ),
+        "local_plan_worker.js": (
+            "c73903ff12ca433948ab1aaba7ca8f5aeb45bc9bcb54cd5cd7b22858b78f4581"
+        ),
+        "local_plan_client.js": (
+            "a50bd81a6703e5c9877ad5f637bd37490376bc614bbbf7c93aa6099446feb465"
+        ),
         "index.html": (
             "d8bd089da5d98b2a618765498c4220f096cb671c2b43618f5c5347696b1382d2"
         ),
@@ -207,7 +239,7 @@ def test_shared_shell_generation_tracks_v30_cached_assets() -> None:
             "4daf16dd06654c1d4b857fd2b4497b87821c64aac9de0c73675b0b3a59add519"
         ),
         "local_auto_tour.js": (
-            "1a9bcac65fa07dafa6a8ac263f0afc13eb3cee0d9a012e2e4a0309ec8a2694ad"
+            "2b4c13d1ca70538c28e766937756bc2bece5a852ec8880a06330e2b8cf71fc54"
         ),
         "local_waypoint_route.js": (
             "45f94090ef1cf08fb405243cc610f366bc370c8dcc1ed12f7e929d6b0e271a8b"
@@ -219,7 +251,7 @@ def test_shared_shell_generation_tracks_v30_cached_assets() -> None:
             "622efdb8348be2a9e12e294b162e5c6afcdda1de0dc7287b9e130cf4c64bbeca"
         ),
         "local_region_data.js": (
-            "0eda7dc859029650730d614bc096458533e12c486eda359affbd5b2e4c3e4af1"
+            "81d76b750de4aba6ea5e701ae2a5319ae4fd9221073b06fc472f86148828f6bb"
         ),
         "local_region_store.js": (
             "0f4209027099d30e33a0b63bb8764db0596fb6942f35357988360ea518a2ddcb"
@@ -235,7 +267,7 @@ def test_shared_shell_generation_tracks_v30_cached_assets() -> None:
         ),
         "api.js": ("2844e8cc44afc78de06e3ce24ff7e6040ce16c189fd84122b790404cdf76c297"),
         "local_gpx_export.js": (
-            "1fc03a1f665496ef2c413ca14949ce3689f6742dd8a9cc756b6db2d9b183f9f3"
+            "edc7678c70a860e014aab54af907d6ebd953894e7f4eba0dff83372903eecfd1"
         ),
         "public_profile_metadata.js": (
             "2077a93dd9291b556d2cf5ebe29c317aeda3f96b356722a3fd069ff8963f41fa"
