@@ -626,3 +626,32 @@ no-region discovery and low status-bar contrast on the native recovery page.
 Those focused UI fixes are next. The consumer-region physical matrix remains
 pending approved public downloads, and no route/region PASS is inferred from these
 startup/lifecycle checks. See [security and device evidence](pr44-maplibre-security.md).
+
+## PR44 completed regional feedback and current user boundary
+
+The MapLibre fix is draft [PR #54](https://github.com/victorgabillon/sugarglider/pull/54)
+/ `de76b95`, with all five GitHub checks passing. Its physical findings are fixed
+in the next focused follow-up: finished regional verification replaces stale
+progress text, catalog/update/cancellation errors remain visible, and native light
+pages use legible dark status-bar icons. Shell v42 retains 103 assets.
+
+`make check`: 1,055 tests, Ruff and strict mypy pass. The 21 relevant browser
+harnesses pass 366 cases; the preceding six other UI harnesses passed 114 cases.
+The full Android build passes in 4 min 42 s, with 196 tests per variant and only
+the existing two debug / one release lint warnings. Packaged shared assets and
+native library match source. Official bundletool validates the unsigned AAB at
+`/tmp/sugarglider-pr44-feedback-unsigned.aab`: 47,496,095 bytes, SHA-256
+`88c9cb2aecb96553bbc2387b53b8c10281388021adb9df7dedb1d60328d6b691`.
+This supersedes the previous patched AAB for the current implementation.
+
+The updated Fairphone debug APK passes visible completed no-region feedback,
+renderer recovery with corrected system-bar contrast, and explicit Reopen. The
+preceding keyboard test passes without changing the shared inset implementation.
+No consumer-region, routing or signed-production-install PASS is inferred. See
+[focused validation](pr44-region-readiness-feedback.md).
+
+The user now asks to finish the best available code/preparation pass, collect all
+open questions in the final report, and defer publisher/privacy/signing decisions.
+**Do not publish the app to Google Play.** Hosting remains unapproved; no public
+distribution or privacy endpoint is created. Continue independent validation and
+report the remaining external and physical gates without weakening them.

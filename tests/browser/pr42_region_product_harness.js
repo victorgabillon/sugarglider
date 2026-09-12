@@ -76,10 +76,14 @@ export async function runPr42RegionProductHarness() {
     cancel: container.querySelector("[data-cancel]"), refresh: container.querySelector("[data-refresh]") };
   const offering = () => ({ region_id: current.manifest.region_id, display_name: current.manifest.display_name, description: "Synthetic fixture coverage",
     build_id: current.manifest.build_id, bounds: current.manifest.bounds, download_bytes: regionalDownloadBytes(current.manifest), manifest_url: source });
+  let catalogUnavailable = false;
   const screen = createRegionScreen({ elements, versions, product, withRegion, selectedRegionId: () => selected, selectRegion: (id) => { selected = id; },
     onReady: (capabilities, code) => { ready = code ?? (capabilities?.enabled ? "ready" : "failed"); },
     onMapChange: async () => { await mapStore.scanInstalledPacks(); },
-    loadCatalog: async () => parseRegionCatalog({ schema_version: 1, regions: [offering()] }, pageLocation),
+    loadCatalog: async () => {
+      if (catalogUnavailable) throw new Error("Fixture catalog unavailable");
+      return parseRegionCatalog({ schema_version: 1, regions: [offering()] }, pageLocation);
+    },
     confirmRemoval: () => true, lifecycleTarget: null });
   async function nextDistribution(label) {
     current = await distribution(fixture, label);
@@ -96,11 +100,13 @@ export async function runPr42RegionProductHarness() {
     const first = await nextDistribution("First region");
     await screen.initialize();
     equal(ready, "regional_required", "fresh page requires region"); equal(requests.length, 0, "loading catalog never downloads region files");
+    equal(elements.status.dataset.state, "regional_required", "finished empty discovery does not retain checking text");
     assert(container.open && elements.list.textContent.includes("Not installed"), "first user sees clear download entry");
     cases.push("fresh_region_screen_has_no_implicit_download_or_fake_readiness");
 
     click("Download region"); await settled();
     equal(ready, "ready", "all components ready through actual UI");
+    equal(elements.status.dataset.state, "regional_ready", "finished verification replaces checking status");
     equal((await versions.read(first.manifest.region_id)).build_id, first.manifest.build_id, "committed exact version");
     assert(elements.list.textContent.includes("Map ✓ · Routing ✓ · Places ✓ · Nature ✓"), "checks reflect verified components");
     equal(requests.map((entry) => new URL(entry.url).pathname), ["/manifest.json", "/map/manifest.json", "/map/basemap.pmtiles", "/pois/index.json.gz", "/nature/index.json.gz"], "single top-level manifest and independent web files");
@@ -109,6 +115,13 @@ export async function runPr42RegionProductHarness() {
     assert((await (await mapStore.openPackSource(map.pack_id)).source.getBytes(0, 8)).data.byteLength === 8, "selected map uses real bounded shared source");
     cases.push("one_download_action_validates_and_activates_all_components");
     cases.push("selected_region_map_uses_existing_pmtiles_source_and_exact_version");
+
+    catalogUnavailable = true; await screen.refresh({ catalogToo: true });
+    equal(ready, "ready", "optional catalog failure cannot disable the verified installed region");
+    equal(elements.status.dataset.state, "regional_catalog_unavailable", "catalog failure remains visible after retained-region verification");
+    catalogUnavailable = false; await screen.refresh({ catalogToo: true });
+    equal(elements.status.dataset.state, "regional_ready", "successful explicit recheck clears the previous catalog warning");
+    cases.push("catalog_failure_and_recovery_keep_region_readiness_and_status_truthful");
 
     const before = requests.length; click("Verify download"); await settled();
     equal(requests.length, before + 1, "completed components are reused without another archive download");
@@ -146,6 +159,7 @@ export async function runPr42RegionProductHarness() {
     equal(nativeStored.size, 0, "native counterpart removed");
     equal((await mapStore.scanInstalledPacks()).packs, [], "map cannot retain removed selection");
     equal(ready, "regional_required", "no region remains explicit");
+    equal(elements.status.dataset.state, "regional_required", "removal ends in a completed no-region state");
     cases.push("explicit_region_removal_clears_components_and_map_selection");
 
     click("Download region"); await settled();

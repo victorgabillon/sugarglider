@@ -39,6 +39,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.JavaScriptReplyProxy
 import androidx.webkit.WebMessageCompat
@@ -238,6 +239,7 @@ class MainActivity : Activity() {
     private fun showServerConfiguration() {
         destroyWebView()
         configuredOrigin = null
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true
         val padding = dp(24)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -313,6 +315,7 @@ class MainActivity : Activity() {
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         destroyWebView()
         configuredOrigin = origin
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(getColor(R.color.brand_cream))
@@ -519,6 +522,7 @@ class MainActivity : Activity() {
     }
 
     private fun showRendererRecovery(origin: String, epoch: Long, pendingDocument: Boolean) {
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true
         val padding = dp(24)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
