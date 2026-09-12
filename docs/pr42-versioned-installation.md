@@ -157,7 +157,8 @@ env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
   testDebugUnitTest lintDebug testReleaseUnitTest lintRelease assembleDebug bundleRelease
 ```
 
-Ignored build outputs now supersede the previous files at these paths:
+Historical build outputs from this preparation; these paths are now superseded
+by [native transfer preparation](pr42-native-transfers.md):
 
 | Artifact | Path | Bytes | SHA-256 |
 | --- | --- | ---: | --- |
