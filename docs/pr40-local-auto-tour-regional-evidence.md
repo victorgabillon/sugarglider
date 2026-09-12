@@ -1,8 +1,9 @@
 # PR40 — Local Auto Tour and regional places/nature
 
-Status: implementation and automated checks pass. Physical acceptance has not
-passed; this milestone must not merge until it does. Production Android integration
-remains PR41, and the normal regional catalog/download flow remains PR42.
+Status: implementation, automated checks and the required PR40 Fairphone
+acceptance pass. Production Android integration remains PR41, and the normal
+regional catalog/download flow remains PR42. This evidence does not establish
+release-build planning or the offline basemap/consumer-region experience.
 
 ## Regional data and storage
 
@@ -156,8 +157,7 @@ from v22 to v23 to include all six new shared modules and the changed UI/core.
   environment failures were corrected using the installed SDK and JDK 17.
 - `uv run --offline --with websockets python /tmp/sugarglider-pr40-browser.py`:
   **187 scenarios across ten harnesses PASS** (PR26/27/32–38/40).
-- Fairphone: USB authorized. Physical acceptance pending visible/unlocked app;
-  hotspot/radios have not been changed. No device PASS is claimed.
+- The initially pending Fairphone gate is superseded by the acceptance below.
 
 ## Regional-scale reader measurement
 
@@ -185,3 +185,85 @@ must be reconciled when independent preparation branches are merged. Evidence:
 `/tmp/sugarglider-pr40-regional-scale-{check,browser}.log` and
 `/tmp/sugarglider-pr42-yvelines-reader-40m.json`. The host probe exercises one
 component only, not a combined installed region or physical route generation.
+
+## Fairphone acceptance — 2026-09-11
+
+**PASS for PR40's required scope.** Fairphone 6, Android API 36, security patch
+2026-08-05, WebView 151.0.7922.199. Shared shell v25 matched the source bytes at
+`c081878`. The installed debug APK matched the unchanged native implementation:
+144,132,773 bytes, SHA-256
+`ffcf4167db49da55f0b315d3d6503e9f6fa8da763ec6b868ff95afbbef5b5777`.
+Native capabilities reported Valhalla Mobile 0.5.1 / Valhalla 3.6.3, both foot and
+bicycle graph access, and all six public profiles. These runs exercised `hike`.
+
+The real debug installation UI installed the PR39 Marly places/nature files
+(407 / 6,734 features), build
+`9d59b0dc3a0ec70ba28bd909b62adb57bea9dce33e3ec552cf5cea6a3b2eb121`.
+The 11,939,840-byte active native routing archive was separately checked against
+that manifest: SHA-256
+`1135d9596e195e3240fe195318006aaf8fe7dcc982228a45c5509425d9a17ce9`.
+Its previous development archive was preserved in Android private
+`files/pr40-routing-backup/marly-dev-v1/`; no app data was cleared.
+
+The temporary static-only setup server was stopped and its owned USB reverse
+mapping removed **before** the accepted runs. Host ports 8000/8989 had no listener.
+The app loaded its cached shell; neither routing nor generation APIs were present.
+Hotspot, Wi-Fi, cellular and airplane-mode state were left intact. No location
+sharing was started. CDP observed the real UI result, native replies and MapLibre
+sources using non-pausing logpoints; it did not replace routing or invoke the
+planner engine directly. Only fixed fixture route summaries/hashes were retained.
+
+Command: `uv run --offline --with websockets python
+/tmp/sugarglider-pr40-phone-acceptance.py`. The visible debug Marly button used
+target 12 km, tolerance 2.5 km, two candidates, seed 35 and direction `any`.
+
+| Run | Native calls / limit | Control / POI calls | Latency | Observed network requests |
+| --- | ---: | ---: | ---: | ---: |
+| Preferences off | 6 / 24 | 6 / 0 | 1,613 ms | 0 |
+| Nature + scenic + verified water + two requested OSM IDs | 12 / 24 | 6 / 6 | 1,866 ms | 0 |
+| Identical preference repeat | 12 / 24 | 6 / 6 | 1,699 ms | 0 |
+
+Requested IDs were `node/5811898660` (water) and `node/13343026372` (Batterie des
+Arches). All six routed POI attempts failed the explicit `poi_loop_quality_gate`.
+The 64 reported outcomes also distinguished absent covered approaches (17),
+non-potable water (2), unverified potability (21), exhausted POI budget (17) and
+restricted access (1). No place was falsely marked reached.
+
+Both returned candidates were within tolerance: 14,378 m / 783 vertices and
+14,039 m / 538 vertices. Each complete geometry exactly matched an observed native
+reply and its MapLibre line source. Geometry SHA-256 values:
+
+- `245d7705c44c2705379fe6467ba52609874af9db4a0ed64cf441aabd3c49ae8a`
+- `9772a0b2927d84b6e11ef4af8c75680c8944977135cec7bd5437e404d4fe58ab`
+
+Real nature scores were 11.6632 and 59.4555; woodland shares were 8.546% and
+46.894%, with unknown shares 4.731% and 22.724%. Primary nature distances summed
+to each authoritative routed total, using 3,219,126 and 1,814,733 operations,
+within the unchanged four-million limit. Nature remained below loop quality;
+the no-POI recommendation stayed intact. Exact graph repetition and path-detail
+fields remained null. Cache identities satisfied lookup = hit + miss,
+entry = successful + failed, and native calls = misses.
+
+The preference run and repeat matched every result field except timing/native
+measurements: digest
+`84b91e6ba8483cc45f2e4a354eee9b0afc3fd26fb78c9d6985ec40d04ff59e51`.
+All three runs retained the identical native control sequence digest
+`9617f619e187d27e2ab022bb4d5c1e918646f337dcc1a01c511835b3c8a86061`.
+
+Evidence outside Git: `/tmp/sugarglider-pr40-phone-{setup,acceptance}.json`,
+the corresponding drivers/logs, and the original display value in
+`/tmp/sugarglider-pr40-phone-display.json`. No generated routes or screenshots
+are committed. The temporary stay-awake setting was commanded back to original
+value `0` after testing; its readback was not retained before disconnection.
+On 2026-09-12 ADB reports no device, no owned forwarding remains, and neither
+temporary server port has a listener. Recheck the display setting and public
+staging-file removal when the phone next connects; retain the private old-pack backup.
+
+Limitations and earlier failure: the first setup used definite HTTP 404 replies
+for optional metadata, which prevented map initialization. Its route/nature run
+therefore failed the rendering gate. After stopping the setup server and doing
+a normal cached offline reload, the full three-run acceptance passed. The basemap
+was unavailable and the native route lines used a neutral map background. This
+is not PR42 offline-map acceptance. Normal release UI, bicycle, GPX export,
+consumer-region installation and final release lifecycle checks remain separate
+PR41/42/44 requirements.

@@ -31,9 +31,9 @@ PASS never means an author assessment alone. Superseded evidence stays identifie
 
 | Milestone | Status | Required success evidence |
 | --- | --- | --- |
-| PR40 local Auto Tour v2 / POI / nature | CODE/AUTOMATED CHECKS PASS; DEVICE GATE PENDING | Validated local PR39 readers/storage; bounded deterministic search; truthful preference/arrival evidence; unchanged hard gates; real Fairphone data, repeat and backend-isolated acceptance still required |
+| PR40 local Auto Tour v2 / POI / nature | CODE / AUTOMATED / REQUIRED DEVICE CHECKS PASS; MERGE GATE BEING CHECKED | Validated local PR39 readers/storage; bounded deterministic search; real Fairphone nature/POI outcomes, repeat, native geometry and zero-network acceptance recorded below |
 | PR41 production Android local planner | INTEGRATION AUDIT STARTED | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
-| PR42 region product | FULL REGION MEASURED; WESTERN PARTITION BUILDING | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
+| PR42 region product | WESTERN PARTITION BUILT / VERIFIED; PRODUCT UI PENDING | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
 | PR43 tiny production service | CODE MERGED; LIVE HOSTING PENDING | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency; public hosting remains an external action |
 | PR44 Play release candidate | PREPARATION DRAFT; FINAL RELEASE GATES OPEN | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
 
@@ -76,9 +76,10 @@ Implementation/evidence is detailed in
 - `git diff --check`: PASS. Protected stash hash remains unchanged; `Continue,`
   and `native` have not been edited or staged.
 
-GitHub [PR #39](https://github.com/victorgabillon/sugarglider/pull/39) is a draft
-at implementation `ca2fb51`; all four Python/Android checks passed. It is
-mergeable but remains unmerged because physical acceptance is still pending.
+GitHub [PR #39](https://github.com/victorgabillon/sugarglider/pull/39) originally
+remained draft at `ca2fb51` pending physical acceptance. The current implementation
+`c081878` passes all five CI jobs and GitHub reports it mergeable. The required
+physical gate passed on 2026-09-11; final evidence/merge checks are in progress.
 
 After integrating main's PR43 merge into the PR40 feature branch (`e92b3b5`),
 `make check` passes again: **1,022 passed / 16 existing integration tests
@@ -92,8 +93,33 @@ budget from 20 to 40 million operations, based on measured Yvelines data requiri
 The current reader accepts that component; the 2-million-position limit and
 four-million-operation per-route analysis remain unchanged. `make check` passes
 again (1,022 tests) and all 187 browser scenarios pass. Shell v25 delivers the
-updated reader. These are component-only host measurements; physical acceptance
-and a complete installed region remain pending.
+updated reader. These are component-only host measurements. The subsequent Marly device evidence
+below passes PR40; a consumer-region installation remains a PR42 gate.
+
+## PR40 physical evidence
+
+Required Fairphone acceptance **PASS** at `c081878` / cached shell v25, using the
+unchanged 144,132,773-byte debug APK, SHA-256
+`ffcf4167db49da55f0b315d3d6503e9f6fa8da763ec6b868ff95afbbef5b5777`.
+The actual UI installed the real PR39 Marly places/nature files; native archive
+bytes separately matched their manifest. Phone API 36 / WebView 151.0.7922.199.
+
+`uv run --offline --with websockets python
+/tmp/sugarglider-pr40-phone-acceptance.py`: preferences off, preferences on and
+identical repeat all pass with the temporary server stopped and USB reverse
+removed. Native calls: 6 / 12 / 12 within 24; latency: 1,613 / 1,866 / 1,699 ms;
+zero observed network requests in every run. Both native candidate geometries
+matched their MapLibre sources. Nature partitions authoritative route distance,
+unknown graph facts stay null, cache accounting is exact, and all six POI route
+attempts report their loop-quality rejection without replacing the no-POI control.
+Preference/repeat result digest (excluding only measurements/timing):
+`84b91e6ba8483cc45f2e4a354eee9b0afc3fd26fb78c9d6985ec40d04ff59e51`.
+
+[Full device evidence and limits](pr40-local-auto-tour-regional-evidence.md#fairphone-acceptance--2026-09-11)
+records source/data/geometry hashes, exact requested fixture, honest POI outcomes,
+the initial setup rendering failure and successful complete offline rerun.
+Basemap was unavailable; route lines used a neutral background. No release UI,
+bicycle, GPX or consumer-region device PASS follows from these PR40 runs.
 
 ## Independent PR43 evidence
 
@@ -133,8 +159,7 @@ claimed yet. Measurements are pending in
 `/tmp/sugarglider-pr42-idf-build-report.json`; generated files stay ignored.
 
 Follow-up `7b230e6` passes `make check`: 1,036 tests / 16 existing integration
-tests deselected, Ruff and strict mypy (240 source files). The four CI checks on
-its preceding head passed; the follow-up CI is being checked.
+tests deselected, Ruff and strict mypy (240 source files). All five CI checks at `7b230e6` pass.
 
 Full Île-de-France totals 592,588,177 bytes. Map: 243,080,284 bytes / 1,252.505 s;
 routing: 318,443,520 / 952.890 s; places: 366,485 / 1,603.828 s; nature: 30,694,816 /
@@ -148,9 +173,14 @@ Full Île-de-France is unsuitable for the current reader: nature has 4,170,750
 positions, beyond its unchanged 2,000,000 cap. The Yvelines/west-Paris partition
 has a real PBF-built nature component of 10,634,994 bytes / 62,191 features /
 1,450,033 positions. Its current shared-reader host check passes after the
-measured topology-budget adjustment above. Its complete map/routing/places build
-is running in the same 3 GiB/two-CPU bounds, reusing that exact checksummed nature
-component; full verification and all phone checks remain pending. Report:
+measured topology-budget adjustment above. Its complete regional build and combined verifier now pass in the same
+3 GiB/two-CPU bounds, reusing that exact checksummed nature component. Distribution:
+188,368,868 bytes (map 81,571,296; routing 96,051,200; places 108,248; nature
+10,634,994 plus manifests). Build ID:
+`1bbf598d64f5d5cc987a60f9a4cb22318392d596ff88f3eb6b40cb70dceb4691`.
+The observed run took 2,915.404 s with nature reused; its separately measured
+nature build took 450.828 s. All phone installation/performance checks remain
+pending. Report:
 `/tmp/sugarglider-pr42-yvelines-build-report.json`.
 
 GitHub release limits were audited, but its flat asset URLs need explicit catalog
@@ -217,7 +247,7 @@ authority must remain isolated. Implementation and physical acceptance are pendi
 | Gate | Status | Action / effect |
 | --- | --- | --- |
 | Fairphone USB authorization | RESOLVED | User reconnected the phone; ADB reports Fairphone 6 as authorized. |
-| Fairphone visible/unlocked app | USER_ACTION_REQUIRED | Android reports keyguard showing and NotificationShade focused. Unlock and foreground Sugarglider Debug; request pending. No physical PASS or merge is allowed yet. |
+| Fairphone PR40 acceptance | RESOLVED | User unlocked the visible app; required PR40 acceptance passed. Phone is disconnected on 2026-09-12; further PR41/42/44 physical work needs it reconnected. |
 | Static production hosting / domain | LIMITS AUDITED; TRANSPORT / PUBLICATION PENDING | GitHub Releases may fit measured large components, but directory mapping, redirects, full index size and real downloads still need validation. No artifact published or paid account created. |
 | Social production hosting / domain / off-host backups | USER_ACTION_REQUIRED FOR LIVE ACCEPTANCE | Provider-neutral assets and HTTPS acceptance are prepared in PR43; user choice of an existing approved host/domain or later provisioning remains pending. |
 | Upload signing key | USER_ACTION_REQUIRED BEFORE SIGNED UPLOAD | External configuration and disposable-key pipeline pass. Publisher must supply an existing key or explicitly create/safeguard one; no permanent key created. |
@@ -226,15 +256,13 @@ authority must remain isolated. Implementation and physical acceptance are pendi
 ## Current V1 status
 
 IN PROGRESS. PR43's code-side milestone is merged; public hosting remains pending.
-PR40 physical acceptance and PR41/42/44 completion are outstanding. No V1 readiness
+PR40 required physical acceptance passes; PR41/42/44 completion is outstanding. No V1 readiness
 or signed release artifact is claimed.
 
-Physical-test setup pending the unlock: a temporary static-only server is running
-on host loopback port 8000, with an owned `adb reverse tcp:8000 tcp:8000` mapping.
-It serves only application assets and the three PR40 Marly data files, no planning
-API. Remove it before backend-isolated acceptance. The temporary USB stay-awake
-setting has been restored to its original value 0 while the phone remains locked;
-the original is recorded in `/tmp/sugarglider-pr40-phone-display.json`. The static
-server script now has the missing root shell mappings, but must be restarted
-before refreshing the phone. Hotspot, cellular, Wi-Fi and airplane-mode settings
-remain untouched.
+PR40 setup's temporary static server and owned USB reverse mapping were removed
+before accepted testing. On 2026-09-12 ports 8000/8989 have no listener and ADB
+has no device/forward. The original stay-awake value `0` was recorded and a
+restore command issued after testing; a retained readback is unavailable. Recheck
+that setting and removal of the public temporary routing files on reconnection.
+The private previous Marly routing archive remains backed up. No radio/hotspot
+state was changed and no app data was cleared.
