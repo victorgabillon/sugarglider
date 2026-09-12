@@ -80,7 +80,7 @@ export function createLocalPlanner({ bridge, getRegionData = async () => null, w
       requireCurrent(ownedGeneration);
       requestRegion = region;
       try {
-        const capabilities = await region.bridge.capabilities();
+        const capabilities = region.capabilities ?? await region.bridge.capabilities();
         requireCurrent(ownedGeneration);
         if (!capabilities?.enabled) throw new LocalPlannerError("local_routing_unavailable");
         if (!capabilities.installed_pack_count) throw new LocalPlannerError("routing_pack_unavailable");

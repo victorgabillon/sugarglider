@@ -50,8 +50,10 @@ self.onmessage = ({ data: message }) => {
           // The caller owns the region lease while this directory is in use.
           // Do not reacquire its lock from this worker and deadlock the caller.
           const scoped = await createVersionedRegionComponents(message.value);
-          if (data?.identity.build_id !== scoped.manifest.build_id) data = await scoped.openIndexes();
-          else await scoped.verifyIndexes();
+          if (data?.identity.build_id !== scoped.manifest.build_id) {
+            data = null; // The caller's commit lease excludes an older planning request.
+            data = await scoped.openIndexes();
+          } else await scoped.verifyIndexes();
           result = data.identity;
           break;
         }

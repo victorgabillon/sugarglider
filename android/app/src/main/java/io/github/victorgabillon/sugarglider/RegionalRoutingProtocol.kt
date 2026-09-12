@@ -9,6 +9,17 @@ internal object RegionalRoutingProtocol {
         val operationId = value.opt("operation_id") as? String ?: return null
         if (!RegionalRoutingOperations.validOperationId(operationId)) return null
         val type = value.optString("type")
+        if (type == "regional_routing_remove_region") {
+            if (value.keys().asSequence().toSet() != base + "region_id") return null
+            val regionId = value.opt("region_id") as? String ?: return null
+            val command = RegionalRoutingRegionRemoval(operationId, regionId)
+            return command.takeIf { it.isValid() }?.let { BridgeRequest.RegionalWork(requestId, pageNonce, it) }
+        }
+        if (type == "regional_routing_remove_version") {
+            if (value.keys().asSequence().toSet() != base + "regional_version") return null
+            val version = RegionalRoutingVersion.parse(value.optJSONObject("regional_version")) ?: return null
+            return BridgeRequest.RegionalWork(requestId, pageNonce, RegionalRoutingVersionRemoval(operationId, version))
+        }
         if (type in setOf("regional_routing_status", "regional_routing_cancel")) {
             if (value.keys().asSequence().toSet() != base) return null
             return BridgeRequest.RegionalStatus(requestId, pageNonce, operationId, type == "regional_routing_cancel")

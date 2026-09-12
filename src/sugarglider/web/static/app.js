@@ -9,6 +9,13 @@ import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, fo
 import { createLocalRoutingBridge } from "./local_routing.js";
 import { createLocalPlanner, LocalPlannerError } from "./local_planner.js";
 import { createLocalRegionClient } from "./local_region_client.js";
+import { createRegionVersionStore } from "./region_versions.js";
+import { createRegionalNativeClient } from "./regional_native.js";
+import { createRegionalPlanningContext } from "./regional_planning.js";
+import { createRegionalMapStore } from "./regional_map_store.js";
+import { createRegionProduct } from "./region_product.js";
+import { createRegionScreen, regionFailureMessage } from "./region_screen.js";
+import { requireData } from "./regional_manifest.js";
 import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
 import { addLocalWaypointProfileOptions } from "./local_waypoint_route.js";
 import { initializeOfflineMaps } from "./offline_map.js";
@@ -69,17 +76,30 @@ const localGpxExporter = createLocalGpxExporter();
 const gpxFileSaver = createGpxFileSaver();
 const localRoutingBridge = createLocalRoutingBridge();
 let sharedLocalRegionClient = null;
+let installerRegionClient = null;
+let selectedRegionId = null;
+let regionScreen = null;
+let offlineMaps = null;
+let regionPlanningError = "regional_checking";
+const regionVersions = createRegionVersionStore();
+const nativeRegions = createRegionalNativeClient();
 function localRegionClient() {
   sharedLocalRegionClient ??= createLocalRegionClient();
   return sharedLocalRegionClient;
 }
-async function localRegionData(packId) {
-  const regions = (await localRegionClient().list()).filter((region) => region.status === "installed"
-    && region.manifest.components.routing.component_id === packId);
-  return regions.length === 1 ? localRegionClient().load(regions[0].region_id) : null;
-}
-const localPlanner = localRoutingBridge.nativeAvailable
-  ? createLocalPlanner({ bridge: localRoutingBridge, getRegionData: localRegionData }) : null;
+const withPlanningRegion = createRegionalPlanningContext({ versions: regionVersions, bridge: localRoutingBridge,
+  selectedRegionId: () => selectedRegionId,
+  regionClient: { loadVersion: (...args) => localRegionClient().loadVersion(...args) },
+  inspectNative: async (reference) => {
+    // The route worker can inspect an installed archive while the independent
+    // regional worker downloads an inactive replacement.
+    const capabilities = await localRoutingBridge.forRegion(reference).capabilities();
+    requireData(capabilities?.enabled && capabilities.installed_pack_ids.length === 1
+      && capabilities.installed_pack_ids[0] === reference.pack_id, "regional_routing_unavailable");
+    return { status: "ready", capabilities };
+  } });
+const localPlanner = isBundledAndroidApp()
+  ? createLocalPlanner({ withRegion: withPlanningRegion }) : null;
 localGpxExporter.prepare();
 let pendingGpxExport = null;
 let elapsedTimer = null;
@@ -377,7 +397,7 @@ function renderRoutingProfiles({ preserveUnavailableSelection = false } = {}) {
   }
   const localProfiles = localPlanner ? [] : addLocalWaypointProfileOptions(select, localRouteCapabilities);
   const selected = selectedProfileStatus();
-  if (!selected?.available && !preserveUnavailableSelection && !localProfiles.includes(state.routingProfile)) {
+  if (!selected?.available && !localPlanner && !preserveUnavailableSelection && !localProfiles.includes(state.routingProfile)) {
     state.routingProfile = state.routingProfileCatalog.profiles.find(
       (status) => status.available,
     )?.profile.id ?? null;
@@ -708,6 +728,7 @@ function pointValidation() {
 }
 
 function currentGenerationAvailability() {
+  if (localPlanner && regionPlanningError) return { enabled: false, reason: regionFailureMessage(regionPlanningError) };
   if (localPlanner && !localRouteCapabilities?.enabled) return {
     enabled: false, reason: "On-device routing is unavailable in this app build.",
   };
@@ -1747,6 +1768,7 @@ function renderEmptyState() {
 }
 
 function render() {
+  regionScreen?.render();
   renderModeControls();
   renderPoiEditor();
   renderCandidatesPanel();
@@ -2939,6 +2961,32 @@ async function retryCurrentConnection() {
   }
 }
 
+async function initializeRegionScreen() {
+  const product = createRegionProduct({ versions: regionVersions, native: nativeRegions,
+    installerClient: {
+      installVersion: (...args) => { installerRegionClient ??= createLocalRegionClient(); return installerRegionClient.installVersion(...args); },
+      cancelInstall: () => installerRegionClient?.cancelInstall(),
+    } });
+  regionScreen = createRegionScreen({ versions: regionVersions, product, withRegion: withPlanningRegion,
+    selectedRegionId: () => selectedRegionId,
+    selectRegion: (id) => {
+      if (selectedRegionId === id) return;
+      selectedRegionId = id;
+      if (mapReady && !isImmutableSnapshotDisplay()) invalidateAndRender();
+    },
+    isPlanning: () => state.request.status === "running",
+    viewRegion: ([west, south, east, north]) => fitCoordinates([[west, south], [east, north]]),
+    onReady: (capabilities, code) => {
+      localRouteCapabilities = capabilities; regionPlanningError = code;
+      if (mapReady && !isImmutableSnapshotDisplay()) { renderRoutingProfiles({ preserveUnavailableSelection: true }); render(); }
+    },
+    onMapChange: async () => { if (offlineMaps) regionScreen.mapState(await offlineMaps.refresh({ reopen: true })); },
+    elements: { container: byId("offline-regions"), selector: byId("planning-region"), list: byId("regional-list"),
+      status: byId("regional-status"), mapStatus: byId("regional-map-status"), cancel: byId("regional-cancel"), refresh: byId("regional-refresh") },
+  });
+  await regionScreen.initialize();
+}
+
 async function start() {
   decorateIcons();
   try {
@@ -2956,8 +3004,11 @@ async function start() {
       requireSetup: !currentOutingSlug && !currentSharedRouteSlug,
     });
     try {
-      await initializeOfflineMaps({
-        elements: {
+      if (localPlanner) byId("offline-maps").classList.add("hidden");
+      offlineMaps = await initializeOfflineMaps({
+        ...(localPlanner ? { store: createRegionalMapStore({ versions: regionVersions, selectedRegionId: () => selectedRegionId }),
+          onStatus: (snapshot) => regionScreen?.mapState(snapshot) } : {}),
+        elements: localPlanner ? {} : {
           container: byId("offline-maps"),
           support: byId("offline-map-storage-support"),
           status: byId("offline-map-pack-status"),
@@ -3027,8 +3078,7 @@ async function start() {
       renderSnapshotProfileIdentity(sharedSnapshot.candidate.routing_profile);
     } else {
       if (localPlanner) {
-        try { localRouteCapabilities = await localRoutingBridge.capabilities(); }
-        catch { localRouteCapabilities = null; }
+        await initializeRegionScreen();
       }
       renderRoutingProfiles();
       try {

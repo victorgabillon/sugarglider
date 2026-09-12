@@ -53,6 +53,55 @@ class RegionalRoutingPackStoreTest {
         }
     }
 
+    @Test fun explicitVersionRemovalWorksWithDamagedMetadataAndPreservesOtherVersions() {
+        val reference = reference()
+        store.stage(reference, manifest, { ByteArrayInputStream(archive) })
+        val retained = reference.copy(buildId = "d".repeat(64))
+        store.stage(retained, manifest, { ByteArrayInputStream(archive) })
+        val pack = File(root, "${reference.regionId}/${reference.buildId}/${reference.packId}")
+        File(pack, "complete.json").writeText("damaged")
+        File(pack, "manifest.json").delete()
+        store.removeVersion(RegionalRoutingVersion(reference.regionId, reference.buildId))
+        assertFalse(pack.parentFile!!.exists())
+        assertEquals(retained.packId, store.open(retained).packId)
+        store.removeVersion(RegionalRoutingVersion(reference.regionId, reference.buildId))
+        assertTrue(File(root, "${retained.regionId}/${retained.buildId}").exists())
+    }
+
+    @Test fun versionRemovalDeletesAnInteriorLinkWithoutFollowingIt() {
+        val reference = reference()
+        val directory = File(root, "${reference.regionId}/${reference.buildId}/partial").also { it.mkdirs() }
+        val outside = File(temporary, "retained").also { it.mkdirs() }
+        File(outside, "keep").writeText("keep")
+        Files.createSymbolicLink(File(directory, "link").toPath(), outside.toPath())
+        store.removeVersion(RegionalRoutingVersion(reference.regionId, reference.buildId))
+        assertEquals("keep", File(outside, "keep").readText())
+        assertFalse(directory.exists())
+    }
+
+    @Test fun oversizedRecoveryTreeIsRejectedBeforeAnyDeletion() {
+        val reference = reference()
+        val directory = File(root, "${reference.regionId}/${reference.buildId}").also { it.mkdirs() }
+        repeat(65) { File(directory, "retained-$it").writeText("keep") }
+        try { store.removeVersion(RegionalRoutingVersion(reference.regionId, reference.buildId)); throw AssertionError("Expected bounded rejection") }
+        catch (error: RegionalPackException) { assertEquals(RegionalPackFailure.STORAGE_LIMIT, error.code) }
+        assertEquals(65, directory.listFiles()!!.size)
+    }
+
+    @Test fun wholeRegionRemovalClearsOrphansWithoutReadingMetadataOrOtherRegions() {
+        val reference = reference()
+        val first = File(root, "${reference.regionId}/${reference.buildId}/partial").also { it.mkdirs() }
+        File(first, "incomplete.part").writeText("partial")
+        val second = File(root, "${reference.regionId}/${"d".repeat(64)}/damaged").also { it.mkdirs() }
+        File(second, "complete.json").writeText("damaged metadata")
+        val other = reference.copy(regionId = "other-region")
+        store.stage(other, manifest, { ByteArrayInputStream(archive) })
+        store.removeRegion(reference.regionId)
+        assertFalse(File(root, reference.regionId).exists())
+        assertEquals(other.packId, store.open(other).packId)
+        store.removeRegion(reference.regionId)
+    }
+
     @Test
     fun referenceIsStrictBoundedAndNeverCarriesPathsOrAuthority() {
         val reference = reference()
