@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>PR41 local canonical GPX harness</title>
+  <pre id="result">running</pre>
+  <script type="module">
+    import { runPr41LocalGpxHarness } from "./pr41_local_gpx_harness.js";
+    const result = document.getElementById("result");
+    const fail = (error) => { result.dataset.status = "failed"; result.textContent = error?.stack ?? String(error); };
+    window.addEventListener("error", (event) => fail(event.error ?? event.message));
+    window.addEventListener("unhandledrejection", (event) => fail(event.reason));
+    try {
+      const scenarios = await runPr41LocalGpxHarness();
+      if (result.dataset.status !== "failed") { result.dataset.status = "passed"; result.textContent = JSON.stringify(scenarios); }
+    } catch (error) { fail(error); }
+  </script>
+</html>

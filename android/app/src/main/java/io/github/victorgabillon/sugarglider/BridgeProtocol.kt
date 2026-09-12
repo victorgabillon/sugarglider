@@ -17,6 +17,12 @@ internal sealed interface BridgeRequest {
         override val pageNonce: String,
     ) : BridgeRequest
 
+    data class SaveGpx(
+        override val requestId: String,
+        override val pageNonce: String,
+        val filename: String,
+    ) : BridgeRequest
+
     data class GetStatus(
         override val requestId: String,
         override val pageNonce: String,
@@ -382,7 +388,7 @@ internal object BridgeProtocol {
         )
     }
 
-    private fun pageNonce(requestId: String): String? =
+    fun pageNonce(requestId: String): String? =
         Regex("^web-([A-Fa-f0-9]{32})-[1-9][0-9]{0,9}$")
             .matchEntire(requestId)
             ?.groupValues

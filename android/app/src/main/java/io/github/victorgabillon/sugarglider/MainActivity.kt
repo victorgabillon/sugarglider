@@ -51,6 +51,7 @@ class MainActivity : Activity() {
     private var bridgeNavigationEpoch = 0L
     private var bridgeStatusCounter = 0L
     private var activityVisible = false
+    private var interruptedGpxSave = false
     private var pendingStart: PendingStart? = null
     private var pendingLocalRoute: PendingLocalRoute? = null
     private var localRouteWorkerBusy = false
@@ -59,6 +60,12 @@ class MainActivity : Activity() {
     private var outingLeaveDialog: AlertDialog? = null
     private val bridgeLedger = BridgeRequestLedger()
     private val localRouteExecutor = Executors.newSingleThreadExecutor()
+    private val documentExecutor = Executors.newSingleThreadExecutor()
+    private val gpxDocumentSaver = GpxDocumentSaver(
+        showPicker = ::showGpxDocumentPicker,
+        execute = { work -> documentExecutor.execute(work) },
+        dispatch = { work -> runOnUiThread(work) },
+    )
     private val webGeolocationPermissions = WebGeolocationPermissionCoordinator()
     private val statusObserver = NativeStatusRepository.Observer { status, terminalFailure ->
         runOnUiThread {
@@ -69,6 +76,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        interruptedGpxSave = savedInstanceState?.getBoolean(STATE_GPX_SAVE_PENDING) == true
         application = getApplication() as SugargliderApplication
         nativeRouteEngine = NativeRouteEngineFactory.create(applicationContext)
         application.statusRepository.addObserver(statusObserver)
@@ -90,9 +98,23 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        // Only an uncertainty flag survives recreation, never file bytes or URI.
+        outState.putBoolean(STATE_GPX_SAVE_PENDING, interruptedGpxSave || gpxDocumentSaver.hasPendingWork())
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onResume() {
         super.onResume()
         activityVisible = true
+        if (interruptedGpxSave) {
+            interruptedGpxSave = false
+            AlertDialog.Builder(this)
+                .setTitle("Check your GPX file")
+                .setMessage("The app restarted during a GPX save. If you selected a file, check it before saving again.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
     }
 
     override fun onPause() {
@@ -104,11 +126,39 @@ class MainActivity : Activity() {
         pendingStart = null
         pendingLocalRoute = null
         localRouteExecutor.shutdownNow()
+        gpxDocumentSaver.close()
+        documentExecutor.shutdown()
         dismissOutingLeaveDialog()
         unregisterPredictiveBackCallback()
         application.statusRepository.removeObserver(statusObserver)
         destroyWebView()
         super.onDestroy()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun showGpxDocumentPicker(filename: String) {
+        startActivityForResult(
+            Intent(Intent.ACTION_CREATE_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType(GpxDocumentProtocol.MIME_TYPE)
+                .putExtra(Intent.EXTRA_TITLE, filename),
+            REQUEST_GPX_DOCUMENT,
+        )
+    }
+
+    @Deprecated("Activity result API for the existing platform Activity")
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_GPX_DOCUMENT) return
+        if (resultCode != RESULT_OK) { gpxDocumentSaver.selected(null); return }
+        val uri = data?.data
+        gpxDocumentSaver.selected {
+            // Only the explicit picker result grants access; never persist its URI
+            // or permission, or delete a possibly existing user file on failure.
+            require(uri?.scheme == "content")
+            contentResolver.openOutputStream(requireNotNull(uri), "wt")
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -445,8 +495,17 @@ class MainActivity : Activity() {
                     System.identityHashCode(sourceView),
                 )
             ) return@addWebMessageListener
-            val payload = message.data ?: return@addWebMessageListener
-            val request = BridgeProtocol.parse(payload) ?: return@addWebMessageListener
+            val document = if (message.type == WebMessageCompat.TYPE_ARRAY_BUFFER) {
+                if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER)) {
+                    return@addWebMessageListener
+                }
+                GpxDocumentProtocol.parse(message.arrayBuffer) ?: return@addWebMessageListener
+            } else null
+            val payload = if (document != null) document.ledgerPayload else {
+                if (message.type != WebMessageCompat.TYPE_STRING) return@addWebMessageListener
+                message.data ?: return@addWebMessageListener
+            }
+            val request = document?.request ?: BridgeProtocol.parse(payload) ?: return@addWebMessageListener
             val channel = acceptBridgePage(request, replyProxy, sourceView) ?: return@addWebMessageListener
             bridgeLedger.lookup(request, payload)?.let {
                 replyProxy.postMessage(it)
@@ -461,6 +520,17 @@ class MainActivity : Activity() {
                     "hello_result",
                     application.statusRepository.current(),
                 )
+                is BridgeRequest.SaveGpx -> {
+                    val prepared = document ?: return@addWebMessageListener
+                    val finish: (GpxSaveStatus) -> Unit = { status ->
+                        completeBridgePayload(
+                            request, payload, channel,
+                            GpxDocumentProtocol.reply(request.requestId, status),
+                        )
+                    }
+                    if (!activityVisible) finish(GpxSaveStatus.UNAVAILABLE)
+                    else gpxDocumentSaver.begin(prepared, finish)
+                }
                 is BridgeRequest.GetStatus -> {
                     completeBridgeRequest(
                         request,
@@ -936,6 +1006,7 @@ class MainActivity : Activity() {
     }
 
     private fun invalidateBridgePage() {
+        gpxDocumentSaver.invalidate()
         webGeolocationPermissions.invalidate()
         bridgeNavigationEpoch += 1
         activeBridgeChannel = null
@@ -1066,6 +1137,8 @@ class MainActivity : Activity() {
 
     companion object {
         private const val PREFERENCE_SERVER_ORIGIN = "server_origin"
+        private const val STATE_GPX_SAVE_PENDING = "gpx_save_pending"
+        private const val REQUEST_GPX_DOCUMENT = 41
         private const val REQUEST_TRACKING_PERMISSIONS = 27
         private const val REQUEST_WEB_GEOLOCATION_PERMISSION = 31
         private const val DEBUG_DEFAULT_ORIGIN = "http://10.0.2.2:8000"

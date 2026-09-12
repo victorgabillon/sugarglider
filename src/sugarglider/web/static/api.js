@@ -99,18 +99,3 @@ export async function visualizeRoute(route, signal) {
   if (!response.ok) throw await responseError(response);
   return response.json();
 }
-
-export async function exportPlanCandidate(candidate) {
-  const response = await fetch("/v2/plans/gpx", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/gpx+xml" },
-    body: JSON.stringify({ schema_version: 1, candidate }),
-  });
-  if (!response.ok) throw await responseError(response);
-  return { blob: await response.blob(), filename: attachmentFilename(response.headers.get("Content-Disposition")) };
-}
-
-function attachmentFilename(header) {
-  const match = header?.match(/filename="?([^";]+)"?/i);
-  return match?.[1] ?? "sugarglider-route.gpx";
-}

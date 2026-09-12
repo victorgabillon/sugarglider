@@ -1,0 +1,403 @@
+{
+  "candidate": {
+    "id": "geometry:704dd8e71539856cd42b96a25e57b243a62a100dead21d02c3126860896f9f5c",
+    "kind": "waypoint_route",
+    "topology": "point_to_point",
+    "routing_profile": "hike",
+    "rank": 2,
+    "roles": [
+      "smooth_low_detour"
+    ],
+    "route": {
+      "name": "Marly & woods",
+      "routing_profile": "hike",
+      "summary": {
+        "distance_m": 2500.5,
+        "duration_ms": 1800000,
+        "ascend_m": null,
+        "descend_m": null,
+        "input_point_count": 2,
+        "routed_point_count": 3
+      },
+      "geometry": [
+        [
+          2.096667,
+          48.871389
+        ],
+        [
+          2.1,
+          48.87
+        ],
+        [
+          2.124421,
+          48.871454
+        ]
+      ],
+      "snapped_points": [
+        [
+          2.096667,
+          48.871389
+        ],
+        [
+          2.124421,
+          48.871454
+        ]
+      ],
+      "path_details": {},
+      "analysis": {
+        "route_distance_m": 2500.5,
+        "geometry_distance_m": 2082.0312240069848,
+        "distance_scale_factor": 1.2009906341306682,
+        "detail_breakdowns": {},
+        "paved": {
+          "distance_m": 0.0,
+          "share": 0.0
+        },
+        "unpaved": {
+          "distance_m": 0.0,
+          "share": 0.0
+        },
+        "unknown_surface": {
+          "distance_m": 2500.5,
+          "share": 1.0
+        },
+        "major_road": {
+          "distance_m": 0.0,
+          "share": 0.0
+        },
+        "car_accessible": {
+          "distance_m": 0.0,
+          "share": 0.0
+        },
+        "activity_quality": {
+          "activity_kind": "walking",
+          "trail_like": {
+            "distance_m": 0.0,
+            "share": 0.0
+          },
+          "official_hiking_network": {
+            "distance_m": 0.0,
+            "share": 0.0
+          },
+          "technical_hiking": {
+            "distance_m": 0.0,
+            "share": 0.0
+          },
+          "steps": {
+            "distance_m": 0.0,
+            "share": 0.0
+          },
+          "poor_smoothness": {
+            "distance_m": 0.0,
+            "share": 0.0
+          },
+          "detail_coverage": {}
+        },
+        "repetition": {
+          "edge_id_coverage": {
+            "distance_m": 0.0,
+            "share": 0.0
+          },
+          "available": false,
+          "unique_edge_count": 0,
+          "traversed_edge_run_count": 0,
+          "repeated_edge_count": 0,
+          "repeated_distance": {
+            "distance_m": 0.0,
+            "share": 0.0
+          }
+        },
+        "immediate_backtrack": {
+          "distance_m": 0.0,
+          "share": 0.0
+        },
+        "backtrack_edge_id_coverage": {
+          "distance_m": 0.0,
+          "share": 0.0
+        },
+        "spurs": {
+          "spurs": [],
+          "spur_count": 0,
+          "total_excursion_distance_m": 0.0,
+          "total_repeated_distance_m": 0.0,
+          "longest_spur_distance_m": 0.0,
+          "warnings": []
+        },
+        "loop_geometry": null,
+        "nature": null,
+        "warnings": [
+          "backtrack_edge_id_coverage_insufficient",
+          "car_access_coverage_incomplete",
+          "edge_id_coverage_incomplete",
+          "foot_network_coverage_incomplete",
+          "hike_rating_coverage_incomplete",
+          "road_class_coverage_incomplete",
+          "smoothness_coverage_incomplete",
+          "surface_coverage_incomplete"
+        ]
+      }
+    },
+    "score": {
+      "total": 12.5,
+      "components": {
+        "distance": 12.5
+      }
+    },
+    "traversal": {
+      "direction": "start_to_end",
+      "anchors": [
+        {
+          "id": "endpoint/start",
+          "name": "Start",
+          "kind": "start",
+          "routed_coordinate": {
+            "lat": 48.871389,
+            "lon": 2.096667,
+            "name": null
+          },
+          "semantic_coordinate": {
+            "lat": 48.871389,
+            "lon": 2.096667,
+            "name": null
+          },
+          "route_progress": 0.0,
+          "constraint_strength": "exact",
+          "outcome": "reached"
+        },
+        {
+          "id": "endpoint/end",
+          "name": "End",
+          "kind": "end",
+          "routed_coordinate": {
+            "lat": 48.871454,
+            "lon": 2.124421,
+            "name": null
+          },
+          "semantic_coordinate": {
+            "lat": 48.871454,
+            "lon": 2.124421,
+            "name": null
+          },
+          "route_progress": 1.0,
+          "constraint_strength": "exact",
+          "outcome": "reached"
+        }
+      ]
+    },
+    "reached_stops": [
+      {
+        "id": "later",
+        "name": "Étape & source",
+        "semantic_coordinate": {
+          "lat": 48.87,
+          "lon": 2.1,
+          "name": null
+        },
+        "category": "requested_stop",
+        "importance": null,
+        "selection_origin": "requested",
+        "selection_method": "deliberate_insertion",
+        "resolved_approach": {
+          "id": "approach-1",
+          "coordinate": {
+            "lat": 48.87,
+            "lon": 2.1,
+            "name": null
+          },
+          "kind": "strict_graph_snap",
+          "source": "imported_coordinate",
+          "access": "unknown",
+          "semantic_distance_m": 0.0,
+          "graph_snap_distance_m": null,
+          "arrival_tolerance_m": 25.0,
+          "name": null,
+          "osm_type": null,
+          "osm_id": null,
+          "provenance": "imported_coordinate",
+          "warnings": []
+        },
+        "route_progress": 0.75,
+        "route_to_approach_m": 0.0
+      }
+    ],
+    "approximated_stops": [
+      {
+        "id": "earlier",
+        "name": "Forêt <ouverte>",
+        "semantic_coordinate": {
+          "lat": 48.872389,
+          "lon": 2.096667,
+          "name": null
+        },
+        "category": "viewpoint",
+        "importance": null,
+        "selection_origin": "requested",
+        "resolved_approach": {
+          "id": "approach-0",
+          "coordinate": {
+            "lat": 48.871389,
+            "lon": 2.096667,
+            "name": null
+          },
+          "kind": "strict_graph_snap",
+          "source": "imported_coordinate",
+          "access": "unknown",
+          "semantic_distance_m": 0.0,
+          "graph_snap_distance_m": null,
+          "arrival_tolerance_m": 25.0,
+          "name": null,
+          "osm_type": null,
+          "osm_id": null,
+          "provenance": "imported_coordinate",
+          "warnings": []
+        },
+        "route_progress": 0.25,
+        "distance_m": 111.195,
+        "normal_tolerance_m": 25.0,
+        "configured_maximum_m": 500.0,
+        "reason": "nearest_routeable_point_used"
+      }
+    ],
+    "dropped_stops": [],
+    "compromises": [],
+    "diagnostics": {
+      "safety_eligible": true,
+      "target_error_m": 499.5,
+      "within_tolerance": true,
+      "requested_stop_count": 0,
+      "approximated_stop_count": 0,
+      "dropped_stop_count": 0,
+      "immediate_backtracking_m": 0.0,
+      "repeated_distance_m": 0.0,
+      "spur_count": 0,
+      "spur_repeated_distance_m": 0.0,
+      "longest_spur_distance_m": 0.0,
+      "details": {
+        "construction": "saved-test"
+      }
+    }
+  },
+  "expected": {
+    "name": "Marly & woods — Hike",
+    "description": "Route preference based on mapped OpenStreetMap data; conditions, access and suitability must be checked locally.",
+    "type": "hiking",
+    "points": [
+      {
+        "lat": "48.87138900",
+        "lon": "2.09666700"
+      },
+      {
+        "lat": "48.87000000",
+        "lon": "2.10000000"
+      },
+      {
+        "lat": "48.87145400",
+        "lon": "2.12442100"
+      }
+    ],
+    "waypoints": [
+      {
+        "coordinate": {
+          "lat": "48.87138900",
+          "lon": "2.09666700"
+        },
+        "name": "1. Forêt <ouverte> — approximate",
+        "description": "Visit 1; viewpoint; approach strict_graph_snap.",
+        "type": "viewpoint"
+      },
+      {
+        "coordinate": {
+          "lat": "48.87000000",
+          "lon": "2.10000000"
+        },
+        "name": "2. Étape & source",
+        "description": "Visit 2; requested_stop; approach strict_graph_snap.",
+        "type": "requested_stop"
+      }
+    ]
+  },
+  "coordinates": [
+    {
+      "value": 0.0,
+      "formatted": "0.00000000"
+    },
+    {
+      "value": -0.0,
+      "formatted": "-0.00000000"
+    },
+    {
+      "value": 180.0,
+      "formatted": "180.00000000"
+    },
+    {
+      "value": -180.0,
+      "formatted": "-180.00000000"
+    },
+    {
+      "value": 2.096667,
+      "formatted": "2.09666700"
+    },
+    {
+      "value": 48.871389,
+      "formatted": "48.87138900"
+    },
+    {
+      "value": 0.001953125,
+      "formatted": "0.00195312"
+    },
+    {
+      "value": 0.005859375,
+      "formatted": "0.00585938"
+    },
+    {
+      "value": -0.001953125,
+      "formatted": "-0.00195312"
+    },
+    {
+      "value": -0.005859375,
+      "formatted": "-0.00585938"
+    },
+    {
+      "value": 1e-10,
+      "formatted": "0.00000000"
+    },
+    {
+      "value": -1e-10,
+      "formatted": "-0.00000000"
+    },
+    {
+      "value": 1e-300,
+      "formatted": "0.00000000"
+    },
+    {
+      "value": 179.999999995,
+      "formatted": "179.99999999"
+    }
+  ],
+  "filenames": [
+    {
+      "name": " Désert: de / Retz? \"été\" ",
+      "filename": "Desert-de-Retz-ete.gpx"
+    },
+    {
+      "name": "\u0000 / ",
+      "filename": "sugarglider-route.gpx"
+    },
+    {
+      "name": "水源",
+      "filename": "sugarglider-route.gpx"
+    },
+    {
+      "name": "A\nB\tC￾￿",
+      "filename": "ABC.gpx"
+    },
+    {
+      "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "filename": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gpx"
+    },
+    {
+      "name": "<& > à__",
+      "filename": "&-a.gpx"
+    }
+  ]
+}

@@ -94,7 +94,8 @@ def write_plan_gpx(candidate: PlanCandidate) -> bytes:
     root = ElementTree.fromstring(write_gpx(candidate.route))
     metadata = root.find(_tag("metadata"))
     insertion_index = list(root).index(metadata) + 1 if metadata is not None else 0
-    for order, stop in enumerate(stops, start=1):
+    ordered_stops = sorted(stops, key=lambda stop: (stop.route_progress, stop.id))
+    for order, stop in enumerate(ordered_stops, start=1):
         approach = stop.resolved_approach
         waypoint = ElementTree.Element(
             _tag("wpt"),

@@ -31,8 +31,8 @@ PASS never means an author assessment alone. Superseded evidence stays identifie
 
 | Milestone | Status | Required success evidence |
 | --- | --- | --- |
-| PR40 local Auto Tour v2 / POI / nature | CODE / AUTOMATED / REQUIRED DEVICE CHECKS PASS; MERGE GATE BEING CHECKED | Validated local PR39 readers/storage; bounded deterministic search; real Fairphone nature/POI outcomes, repeat, native geometry and zero-network acceptance recorded below |
-| PR41 production Android local planner | INTEGRATION AUDIT STARTED | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
+| PR40 local Auto Tour v2 / POI / nature | MERGED; REQUIRED PR40 CHECKS PASS | Validated local PR39 readers/storage; bounded deterministic search; real Fairphone nature/POI outcomes, repeat, native geometry and zero-network acceptance recorded below |
+| PR41 production Android local planner | LOCAL CANONICAL GPX + NATIVE SAVE IMPLEMENTED; NORMAL PLANNING / DEVICE GATES PENDING | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
 | PR42 region product | WESTERN PARTITION BUILT / VERIFIED; PRODUCT UI PENDING | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
 | PR43 tiny production service | CODE MERGED; LIVE HOSTING PENDING | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency; public hosting remains an external action |
 | PR44 Play release candidate | PREPARATION DRAFT; FINAL RELEASE GATES OPEN | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
@@ -79,7 +79,10 @@ Implementation/evidence is detailed in
 GitHub [PR #39](https://github.com/victorgabillon/sugarglider/pull/39) originally
 remained draft at `ca2fb51` pending physical acceptance. The current implementation
 `c081878` passes all five CI jobs and GitHub reports it mergeable. The required
-physical gate passed on 2026-09-11; final evidence/merge checks are in progress.
+physical gate passed on 2026-09-11. Evidence update `dbf9900` passed all five CI
+jobs and merged as `d129c22` on 2026-09-12 (merge commit). Main was refreshed;
+the completed local/remote feature branch was removed. Protected untracked
+entries and stash were verified unchanged.
 
 After integrating main's PR43 merge into the PR40 feature branch (`e92b3b5`),
 `make check` passes again: **1,022 passed / 16 existing integration tests
@@ -159,7 +162,7 @@ claimed yet. Measurements are pending in
 `/tmp/sugarglider-pr42-idf-build-report.json`; generated files stay ignored.
 
 Follow-up `7b230e6` passes `make check`: 1,036 tests / 16 existing integration
-tests deselected, Ruff and strict mypy (240 source files). All five CI checks at `7b230e6` pass.
+tests deselected, Ruff and strict mypy (240 source files). All five CI checks at `7b230e6` and measurement update `86cf7e0` pass.
 
 Full Île-de-France totals 592,588,177 bytes. Map: 243,080,284 bytes / 1,252.505 s;
 routing: 318,443,520 / 952.890 s; places: 366,485 / 1,603.828 s; nature: 30,694,816 /
@@ -216,10 +219,23 @@ and device transfer. CI now validates the release variant and unsigned bundle.
   visible dependency/update warnings. Native auxiliary/default paths are disabled,
   and debug timing labels describe wrapper setup/reuse accurately. Shell v24 on
   that branch must be reconciled with PR40's v25 on integration.
-- Latest unsigned preparation AAB: 3,528,820 bytes, SHA-256
-  `5a1a8ff7b7e8054a72fc5d9aa0717505c6893bf26b1107df647208656e75c64f`, under the
+- Message-type follow-up `a10e835` rejects binary bridge payloads before WebKit's
+  string accessor, preventing the pinned library's demonstrated exception. Exact
+  origin/frame/page ownership checks remain intact. `make check` passes (1,013),
+  as do 138 debug / 134 release JUnit tests, both lint checks and bundle assembly
+  in a 3 GiB / two-CPU scope (3 min 19 s). No new device PASS is claimed. Evidence:
+  `/tmp/sugarglider-pr44-message-type-{check,android}.log` and artifact report.
+- PR44 merged main's PR40 through merge commit `2ab30b8`, preserving its native
+  hardening and reconciling the shared shell at v27. Combined `make check` passes
+  1,024 tests; 187 scenarios across ten browser harnesses pass. All five GitHub CI
+  checks pass and the draft is mergeable. Native files are unchanged from
+  `a10e835`, so its native test/bundle evidence still applies. This supersedes
+  the earlier cache reconciliation note; full PR44 acceptance remains pending.
+- Latest unsigned preparation AAB: 3,529,014 bytes, SHA-256
+  `c6d2cf35d1f591560e7d36c8911bbdc0faacc92619dd8734690d87ff6d4c7804`, under the
   PR44 checkout's `android/app/build/outputs/bundle/release/app-release.aab`.
-  It supersedes the 3,528,250-byte and 3,528,837-byte preparation artifacts.
+  It supersedes the 3,528,250-byte, 3,528,837-byte and 3,528,820-byte
+  preparation artifacts.
   It contains no native routing library and is explicitly **not the V1 artifact**.
 - Existing debug arm64 ELF alignment and APK `zipalign -c -P 16 4` pass. Final
   native release/delivered-APK/16 KiB runtime verification is still required.
@@ -240,23 +256,71 @@ origin, normal Generate/candidate display, truthful unknown-detail coverage,
 canonical signatures/traversal and local selected-candidate GPX export. The
 existing canonical analysis has explicit availability/coverage fields; no
 breaking result-schema change has been selected. Same-origin participant
-authority must remain isolated. Implementation and physical acceptance are pending.
+authority must remain isolated. Normal Generate and physical acceptance remain
+pending.
+
+The first implementation part, `b6a097e` on `feat/pr41-local-canonical-export`,
+is GitHub draft [PR #43](https://github.com/victorgabillon/sugarglider/pull/43).
+All five CI checks pass at evidence head `b6c7d20`; the worker follow-up also passes all five checks at `6a0314c`; native-save changes require their own CI. It connects
+normal Download GPX to local serialization of the existing canonical candidate,
+including a saved offline snapshot. It preserves exact track order/profile,
+revalidates strict selected-stop arrivals, omits dropped stops and extensions,
+and orders reached/approximated approaches together. Generated public profile
+metadata comes from the sole Python registry. Shell v29 caches the serializer, metadata, client and worker modules.
+See [PR41 local canonical export](pr41-local-canonical-export.md).
+
+`make check`: 1,026 tests / 16 existing integration tests deselected, Ruff and
+strict mypy pass (242 files). Relevant browser suites: 137 scenarios pass,
+including 20 GPX cases. Validation/formatting now runs in a worker with a
+16 MiB output bound, one pending export, cancellation and a 60-second limit. The actual shared-page host test saved a synthetic
+snapshot through the UI, stopped its fixture server, reloaded offline and used
+normal Download GPX successfully: zero export HTTP requests, unchanged snapshot,
+and complete XML field equality with Python's canonical writer. Reports/logs:
+`/tmp/sugarglider-pr41-export-worker-{check,browser,ui}.log` and
+`/tmp/sugarglider-pr41-export-ui.json`.
+The thin Android document-save adapter is implemented with bounded binary
+transfer, the existing exact-origin/page gate, one picker/write slot, offloaded
+output and truthful cancelled/failed/uncertain outcomes. Its validation passes
+144 debug / 139 release unit tests, both lint checks, debug/release bundle assembly and 214
+browser scenarios. Restart during saving retains only a boolean uncertainty
+flag; file bytes and selected URIs are never restored. The actual shared-page offline Download test passes again.
+Physical picker acceptance remains pending; the phone was in a call and was
+left undisturbed. No new APK was installed during that call. The current unsigned
+root preparation AAB has 3,531,390 bytes and SHA-256
+`a0dc420df538974f3de50655de301e5b3e9c569878b35fb52a3d995fa1644574`; it has no native routing library and is not a V1 artifact.
+The export document records both APK/AAB paths and hashes.
+
+Physical Android saving, normal local candidate publication, bundled first launch,
+release native routing and every required PR41 phone case remain outstanding.
+This preparation does not establish a release-equivalent device PASS.
 
 ## External actions and blockers
 
 | Gate | Status | Action / effect |
 | --- | --- | --- |
 | Fairphone USB authorization | RESOLVED | User reconnected the phone; ADB reports Fairphone 6 as authorized. |
-| Fairphone PR40 acceptance | RESOLVED | User unlocked the visible app; required PR40 acceptance passed. Phone is disconnected on 2026-09-12; further PR41/42/44 physical work needs it reconnected. |
+| Fairphone PR40 acceptance | RESOLVED | User unlocked the visible app; required PR40 acceptance passed. Phone reconnected on 2026-09-12; display restoration, staging removal, retained backup and empty ADB forwarding are verified. Further physical gates remain open. |
 | Static production hosting / domain | LIMITS AUDITED; TRANSPORT / PUBLICATION PENDING | GitHub Releases may fit measured large components, but directory mapping, redirects, full index size and real downloads still need validation. No artifact published or paid account created. |
 | Social production hosting / domain / off-host backups | USER_ACTION_REQUIRED FOR LIVE ACCEPTANCE | Provider-neutral assets and HTTPS acceptance are prepared in PR43; user choice of an existing approved host/domain or later provisioning remains pending. |
 | Upload signing key | USER_ACTION_REQUIRED BEFORE SIGNED UPLOAD | External configuration and disposable-key pipeline pass. Publisher must supply an existing key or explicitly create/safeguard one; no permanent key created. |
 | Public privacy-policy identity/URL and Play declarations | USER_ACTION_REQUIRED BEFORE SUBMISSION | Prepare truthful drafts in PR44; publication/legal declarations remain human gates. |
 
+## Temporary evidence availability
+
+The host restarted on 2026-09-12 and cleared `/tmp`, including the PR43/PR44
+preparation worktrees and their temporary AAB/reports. Their committed sources
+remain on Git branches and GitHub; historical measured evidence above remains
+recorded, but those temporary artifact paths are no longer available. PR44's clean checkout has now been restored at
+`/home/pompote/oldata/victor/sugarglider-v1-pr44` from `2ab30b8`; the completed PR43
+checkout was not needed. Rebuild PR44 artifacts before further current-artifact
+claims. Root and PR42 checkouts, the protected entries/stash,
+and uncommitted PR41 source changes survived. PR41 native-save checks were
+rerun after restart; its current artifacts are under root `android/app/build`.
+
 ## Current V1 status
 
-IN PROGRESS. PR43's code-side milestone is merged; public hosting remains pending.
-PR40 required physical acceptance passes; PR41/42/44 completion is outstanding. No V1 readiness
+IN PROGRESS. PR40 and PR43's code-side milestones are merged; public hosting
+remains pending. PR40 required physical acceptance passes; PR41/42/44 completion is outstanding. No V1 readiness
 or signed release artifact is claimed.
 
 PR40 setup's temporary static server and owned USB reverse mapping were removed
