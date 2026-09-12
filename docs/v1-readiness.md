@@ -14,6 +14,11 @@ The complete acceptance brief is the V1 Goal supplied on 2026-09-11. Each milest
 needs concrete automated and (where specified) physical evidence before merge.
 PASS never means an author assessment alone. Superseded evidence stays identified.
 
+The [first-pass handoff report](v1-first-pass-report.md) is the current concise
+entry point for implemented behavior, artifacts, physical evidence and deferred
+questions. The chronological evidence below is retained. No Play publication is
+authorized; global readiness remains blocked on the explicit remaining gates.
+
 ## Starting evidence
 
 - `git status --short`: only unrelated `?? Continue,` and `?? native`.
@@ -35,7 +40,7 @@ PASS never means an author assessment alone. Superseded evidence stays identifie
 | PR41 production Android local planner | SHARED RELEASE ROUTER PACKAGED; FINAL RELEASE / REGION GATES PENDING | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
 | PR42 region product | UI / COMMITTED REGIONAL PLANNER IMPLEMENTED; DISTRIBUTION / PHYSICAL GATES OPEN | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
 | PR43 tiny production service | CODE MERGED; LIVE HOSTING PENDING | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency; public hosting remains an external action |
-| PR44 Play release candidate | PREPARATION DRAFT; FINAL RELEASE GATES OPEN | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
+| PR44 Play release candidate | HARDENING / PATCHED DEPENDENCIES / VALIDATED UNSIGNED AAB; FINAL RELEASE GATES OPEN | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
 
 Global validation requires `make check`, Android unit tests/lint/release bundle,
 relevant shared-web browser tests and `git diff --check`. No failing/skipped gates
@@ -655,3 +660,26 @@ open questions in the final report, and defer publisher/privacy/signing decision
 **Do not publish the app to Google Play.** Hosting remains unapproved; no public
 distribution or privacy endpoint is created. Continue independent validation and
 report the remaining external and physical gates without weakening them.
+
+## First-pass handoff
+
+Application source `05b77ba` is pushed as draft
+[PR #55](https://github.com/victorgabillon/sugarglider/pull/55); all five GitHub
+checks pass at that commit. The same APK additionally passes empty-planner
+background/resume and process restart on the Fairphone, with no data reset,
+sharing service or radio change. That limited evidence does not close installed
+production-region persistence or active-operation acceptance.
+
+The exact unsigned AAB, separate debug APK and unpublished regional ZIP are
+preserved outside Git in
+`/home/pompote/oldata/victor/sugarglider-v1-artifacts/2026-09-12-05b77ba/`, with
+verified hashes, `manifest.json` and `SHA256SUMS`. Application builds/tests do not
+change for this documentation-only handoff. See the
+[first-pass report](v1-first-pass-report.md) for all seventeen requested report
+topics and the plain-language list of deferred questions.
+
+**V1 BLOCKED:** public regional distribution approval, final consumer-region and
+release/device acceptance, and deferred publisher/privacy/signing information.
+The optional social deployment also awaits an approved endpoint/backup destination.
+No draft is merged past its original gates, and no Play upload/publication occurs.
+Main remains `d129c22`; protected untracked entries and stash remain untouched.

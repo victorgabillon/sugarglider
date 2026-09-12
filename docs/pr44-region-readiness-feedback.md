@@ -61,3 +61,18 @@ production-region acceptance is inferred. Public download hosting, final
 region/planning tests, public privacy details and publisher actions remain open
 in the V1 ledger. The user has deferred these external decisions until the end of
 this first goal pass and has explicitly prohibited Play publication.
+
+The current APK also passes a subsequent empty-planner lifecycle check.
+Home/reopen retains the same page sentinel and native PID 5760. A guarded stop of
+only the empty debug process, followed by explicit launch, creates PID 7555 and
+returns to the bundled origin with completed `regional_required` and Generate
+disabled. Browser resource entries remain at the packaged origin and no sharing
+service starts. The ephemeral sentinel disappears as expected after process
+restart; no app data is cleared. Installed-region persistence and active
+route/GPX/sharing lifecycle are still separate pending cases.
+
+The exact AAB, debug APK and regional publication ZIP are now also preserved in
+`/home/pompote/oldata/victor/sugarglider-v1-artifacts/2026-09-12-05b77ba/`, outside
+Git, with `manifest.json` and `SHA256SUMS`. The
+[first-pass report](v1-first-pass-report.md) collects the full handoff and open
+questions. These documentation updates do not alter application source `05b77ba`.
