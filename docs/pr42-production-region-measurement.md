@@ -1,8 +1,9 @@
-# PR42 production-region measurement — in progress
+# PR42 production-region measurement
 
-This branch measures the preferred Île-de-France offering before choosing a
-consumer download or a smaller meaningful partition. It does not yet implement
-the normal download UI or establish a device acceptance pass.
+Full Île-de-France exceeds the current consumer reader's position limit. The
+measured Yvelines/west-Paris partition now builds and passes both the combined
+PR39 verifier and the actual PR40 host reader. The normal download UI and all
+device installation/performance acceptance remain outstanding.
 
 ## Reproducible input and limits
 
@@ -98,14 +99,72 @@ A temporary bounded benchmark established that complete validation needs
 429,868 KiB peak RSS. This supports the separately recorded PR40 adjustment to a
 strict **40-million-operation installation budget**. The 2-million-position,
 128 MiB expanded/32 MiB compressed and four-million-per-route analysis limits
-remain unchanged. The benchmark is component-only host evidence, not a complete
-installed region or Fairphone acceptance. Final current-reader validation,
-combined map/routing/places measurements, phone installation/latency and storage
-measurements remain required before this becomes a consumer offering.
+remain unchanged. The benchmark is component-only host evidence. Subsequent
+complete-output verification is recorded below; phone installation/latency and
+storage measurements remain required before this becomes a consumer offering.
 
 Probe/build reports live under `/tmp/sugarglider-pr42-*`; generated data stays
 ignored. The partition's matching spec/map template are source-controlled inputs.
 No regional catalog or public artifact has been published.
+
+## Completed Yvelines/west-Paris build
+
+The bounded build started 2026-09-11 12:55:34 UTC and completed successfully.
+`systemctl --user show sugarglider-pr42-yvelines-measure.scope` reports
+`Result=success`, `ActiveState=inactive`, `SubState=dead`; no build is still
+running. `/tmp/sugarglider-pr42-measure-yvelines.py` called the standard
+`build_region` / `build_components` path, which verifies the combined output
+before publishing its local directory. Code: `7b230e6`.
+
+| Component | Bytes | Build time | Verified contents |
+| --- | ---: | ---: | --- |
+| Map archive, zooms 0–15 | 81,571,296 | 977.288 s | PMTiles/MVT structure and bounds |
+| Routing archive | 96,051,200 | 428.084 s | Valhalla 3.6.3 tiles, foot/bicycle access |
+| Places | 108,248 | 1,499.002 s | 2,153 features; 1,678,985 expanded bytes |
+| Nature | 10,634,994 | 450.828 s, earlier probe reused | 62,191 features; 45,278,253 expanded bytes |
+| Three manifests | 3,130 | Included | Component identities, sources and checksums |
+
+Total distribution: **188,368,868 bytes** (188.37 MB / 179.64 MiB). This is the
+seven-file download size and stored component payload, not a measured phone free
+space requirement. The actual run took **2,915.404 s (48 min 35 s)** because it
+reused the already built nature component by hard link after checking both its
+hash and original source-PBF hash. Including the independently timed nature
+build gives approximately 56 min 6 s of sequential work under these constraints;
+this is not a second measured end-to-end rebuild. No multi-hundred-MB file was
+copied for conceptual storage uniformity.
+
+Content build ID:
+`1bbf598d64f5d5cc987a60f9a4cb22318392d596ff88f3eb6b40cb70dceb4691`.
+Ignored output: `data/offline-regions/yvelines-ouest-parisien/` in the PR42
+checkout. Component SHA-256 values:
+
+- Map: `620dddfcb7e9c77995d91987299a5651ad1be4ef957154ab5c81ff414b60ff94`
+- Routing: `94d83392f4261809ce830f916d01d24db14b7d0a30f1e9ded655078c37364b0f`
+- Places: `03ed6ca8250e8f540a91b108fbfc989082161aa6f9231be17417ea51a660cb17`
+- Nature: `abb0819a4f4b02d8ee844aa19de71c1760e0b63a1a9f7bd3410513d82dca7b90`
+
+The current PR40 shared modules at `c081878` were checked byte-for-byte before
+the complete host admission probe:
+
+```sh
+node --max-old-space-size=2048 /tmp/sugarglider-pr42-yvelines-combined-reader.mjs
+```
+
+It parsed the real combined manifest without modifying its bounds/identity,
+verified all six component-file sizes and hashes, decoded both indexes through
+the production bounded decoder, and built both indexes with the current
+40-million-operation admission limit. **PASS:** 2,153 places / 62,191 nature
+features, matching routing-pack ID/archive hash. Hash/decode time 3.448 s;
+validation/indexing 6.938 s; maximum RSS 661,268 KiB. This host probe also read
+the entire map/routing files to verify checksums; that RSS is not a phone or
+streaming-installer measurement. It does not exercise OPFS, Android storage,
+map rendering or route generation.
+
+Reports: `/tmp/sugarglider-pr42-yvelines-build-report.json` and
+`/tmp/sugarglider-pr42-yvelines-combined-reader.json`; corresponding logs and
+drivers remain outside Git. Required next evidence: actual normal UI download,
+free/installed/peak-update storage, phone installation time, map/route/Auto Tour
+latency, restart/offline persistence, cancellation and removal.
 
 ## Static-host candidate
 
@@ -142,7 +201,7 @@ strict mypy pass. The resource/specification and isolated-builder tests use no D
 or real map data. The actual long-running build is separately identified here;
 it is not counted as a unit test or physical acceptance.
 
-Outstanding: complete partition measurements and integrity verification, regional catalog
+Outstanding: regional catalog
 and normal failure-safe four-component install/update/remove flow, staged
 activation/recovery, and every required Fairphone fresh-install/offline/restart/
 cancellation/removal case. No PR42 readiness or merge approval is implied.
