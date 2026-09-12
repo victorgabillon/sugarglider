@@ -7,6 +7,7 @@ import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.location.LocationManager
@@ -22,6 +23,7 @@ import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
 import android.webkit.GeolocationPermissions
 import android.webkit.HttpAuthHandler
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -31,9 +33,11 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.JavaScriptReplyProxy
@@ -124,6 +128,14 @@ class MainActivity : Activity() {
     override fun onPause() {
         activityVisible = false
         super.onPause()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Retain the live page and its in-memory authority across size changes.
+        // Never serialize WebView state, reload, reroute, or restart sharing here.
+        webView?.invalidate()
+        ViewCompat.requestApplyInsets(window.decorView)
     }
 
     override fun onDestroy() {
@@ -298,6 +310,7 @@ class MainActivity : Activity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun openServer(origin: String) {
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         destroyWebView()
         configuredOrigin = origin
         val root = LinearLayout(this).apply {
@@ -324,10 +337,16 @@ class MainActivity : Activity() {
                 WindowInsetsCompat.Type.systemBars() or
                     WindowInsetsCompat.Type.displayCutout(),
             )
+            root.setPadding(
+                systemBars.left,
+                0,
+                systemBars.right,
+                maxOf(systemBars.bottom, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom),
+            )
             view.setPadding(
                 chromeStartPadding,
                 systemBars.top + chromeTopPadding,
-                systemBars.right + chromeEndPadding,
+                chromeEndPadding,
                 chromeBottomPadding,
             )
             insets
@@ -343,6 +362,17 @@ class MainActivity : Activity() {
             setPadding(dp(12), 0, dp(12), 0)
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener { showServerMenu(origin) }
+        })
+        serverChrome.addView(Button(this).apply {
+            setText(R.string.privacy_title)
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            isAllCaps = false
+            minWidth = 0
+            minHeight = dp(40)
+            setPadding(dp(12), 0, dp(12), 0)
+            setBackgroundColor(Color.TRANSPARENT)
+            setOnClickListener { showPrivacyDetails() }
         })
         root.addView(serverChrome, fullWidthWrap())
         val created = WebView(this)
@@ -372,6 +402,25 @@ class MainActivity : Activity() {
         setContentView(root)
         ViewCompat.requestApplyInsets(serverChrome)
         loadConfiguredPage()
+    }
+
+    private fun showPrivacyDetails() {
+        val content = TextView(this).apply {
+            setText(R.string.privacy_description)
+            textSize = 16f
+            setPadding(dp(20), dp(12), dp(20), dp(12))
+        }
+        val scroll = ScrollView(this).apply { addView(content) }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.privacy_title)
+            .setView(scroll)
+            .setPositiveButton(R.string.privacy_close, null)
+        if (BuildConfig.PRIVACY_POLICY_URL.isNotEmpty()) {
+            dialog.setNeutralButton(R.string.privacy_online) { _, _ ->
+                openExternal(BuildConfig.PRIVACY_POLICY_URL.toUri())
+            }
+        }
+        dialog.show()
     }
 
     private fun showServerMenu(origin: String) {
@@ -413,6 +462,25 @@ class MainActivity : Activity() {
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
             if (origin == BundledShellPolicy.ORIGIN) bundledShellAssets.intercept(request.url, request.method) else null
 
+        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            val wasCurrent = view === webView
+            val pendingDocument = wasCurrent && gpxDocumentSaver.hasPendingWork()
+            if (wasCurrent) {
+                dismissOutingLeaveDialog()
+                // Its renderer no longer exists: discard its permission callback without invoking it.
+                webGeolocationPermissions.discard()
+                invalidateBridgePage()
+                webView = null
+            }
+            // Only dispose the affected instance. A late callback must not close a newer page.
+            (view.parent as? ViewGroup)?.removeView(view)
+            view.destroy()
+            if (wasCurrent && !isFinishing && !isDestroyed) {
+                showRendererRecovery(origin, bridgeNavigationEpoch, pendingDocument)
+            }
+            return true
+        }
+
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
             if (view === webView) {
                 dismissOutingLeaveDialog()
@@ -448,6 +516,52 @@ class MainActivity : Activity() {
         ) {
             handler.cancel()
         }
+    }
+
+    private fun showRendererRecovery(origin: String, epoch: Long, pendingDocument: Boolean) {
+        val padding = dp(24)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(padding, padding, padding, padding)
+            setBackgroundColor(getColor(R.color.brand_cream))
+        }
+        val message = TextView(this).apply {
+            text = if (pendingDocument) {
+                getString(
+                    R.string.page_recovery_with_gpx,
+                    getString(R.string.page_recovery_description),
+                    getString(R.string.page_recovery_gpx),
+                )
+            } else getString(R.string.page_recovery_description)
+            textSize = 16f
+            setTextColor(getColor(R.color.brand_green))
+            setPadding(0, 0, 0, dp(16))
+        }
+        root.addView(message, fullWidthWrap())
+        fun ownsRecovery(): Boolean = webView == null && configuredOrigin == origin &&
+            bridgeNavigationEpoch == epoch && !isFinishing && !isDestroyed
+        root.addView(Button(this).apply {
+            setText(R.string.page_recovery_open)
+            setOnClickListener {
+                if (ownsRecovery()) openServer(origin)
+            }
+        }, fullWidthWrap())
+        if (application.statusRepository.current().isNativeBusy()) {
+            root.addView(Button(this).apply {
+                setText(R.string.notification_stop)
+                setOnClickListener {
+                    if (ownsRecovery() && activityVisible) {
+                        startService(
+                            Intent(this@MainActivity, LocationSharingService::class.java)
+                                .setAction(LocationSharingService.ACTION_STOP),
+                        )
+                        message.setText(R.string.page_recovery_stopping)
+                    }
+                }
+            }, fullWidthWrap())
+        }
+        setContentView(root)
     }
 
     private fun foregroundGeolocationClient(created: WebView): WebChromeClient = object :
@@ -827,14 +941,22 @@ class MainActivity : Activity() {
         }
         val operation = PendingStart(request, payload, channel)
         pendingStart = operation
-        AlertDialog.Builder(this)
+        val disclosure = AlertDialog.Builder(this)
             .setTitle("Share precise location with the screen off?")
             .setMessage(DISCLOSURE)
             .setNegativeButton("Cancel") { _, _ ->
                 finishPendingStart(operation, "permission_denied")
             }.setPositiveButton("Continue") { _, _ -> requestTrackingPermissions(operation) }
+            .setNeutralButton(R.string.privacy_title, null)
             .setOnCancelListener { finishPendingStart(operation, "permission_denied") }
-            .show()
+            .create()
+        disclosure.setOnShowListener {
+            // Reading privacy details does not dismiss disclosure or grant Start.
+            disclosure.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                if (pendingStart === operation && activityVisible) showPrivacyDetails()
+            }
+        }
+        disclosure.show()
     }
 
     private fun requestTrackingPermissions(operation: PendingStart) {
@@ -1214,6 +1336,6 @@ class MainActivity : Activity() {
         private const val REQUEST_WEB_GEOLOCATION_PERMISSION = 31
         private const val DEBUG_DEFAULT_ORIGIN = "http://10.0.2.2:8000"
         private const val DISCLOSURE =
-            "Sugarglider will continuously access precise location during this active sharing session, including while the app is minimized or the screen is locked. Anyone holding the unlisted outing link can see the current position. Only the latest current position is retained, not a historical track. A persistent notification is displayed, and you can stop at any time from the app or notification. If server clearing is uncertain, the last position may remain visible until expiry."
+            "Sugarglider will continuously access and send precise location during this active sharing session, including while the app is minimized or the screen is locked. Anyone holding the unlisted outing link can see your position. The server stores your current position and briefly retains recent updates so viewers can reconnect. This does not create an activity track. A persistent notification is displayed, and you can stop at any time from the app or notification. If server clearing is uncertain, the last position may remain visible until expiry."
     }
 }

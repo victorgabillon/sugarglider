@@ -74,5 +74,8 @@ internal class WebGeolocationPermissionCoordinator {
         pending = null
     }
 
+    // A dead renderer cannot receive a permission callback.
+    fun discard() { pending = null }
+
     fun hasPending(): Boolean = pending != null
 }

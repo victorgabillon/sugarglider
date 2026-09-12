@@ -553,3 +553,41 @@ host, or supply an existing approved HTTPS static host. Current documented Pages
 limits/terms, byte/CORS contract, retained-version publishing and physical gates
 are recorded in [static distribution preparation](pr42-static-distribution.md).
 No paid resource, account or domain is provisioned by this proposal.
+
+
+## PR44 production native integration follow-up
+
+The integration after `9ed8dbe` selectively carries forward external signing,
+all-domain backup exclusion and renderer recovery from the old PR44 preparation,
+while preserving the production native router, regional bridge v3 and binary GPX.
+It adds local Privacy details and an approved-public-URL build setting, truthful
+bounded-replay disclosure, same-page rotation handling and full planner insets.
+Code 2 / name 1.0.0 is proposed because the Fairphone already has a Play-installed
+main package at code 1; that installation remains untouched. Publisher confirmation
+of unused version code and existing upload-key setup is required.
+
+`make check` passes 1,052 tests, Ruff and strict mypy; 196 native tests per variant
+and both lint checks pass (two debug / one release existing warnings, zero errors).
+All 101 packaged shell assets and the shared native library match source. The
+unsigned native-integration AAB is 47,423,654 bytes, SHA-256
+`a6072bc17ab57191db88e96b6d7247fc56e5cd2573a2e196d5591f0361d8c451` at
+`/tmp/sugarglider-pr44-native-unsigned.aab`. Disposable host signing, official
+bundletool validation, delivered APK signature/16 KiB ZIP alignment and native
+ELF alignment pass; disposable secrets were removed. These results supersede the
+old PR44 preparation artifact for production-router packaging, not its open
+physical gates. See [native release evidence](pr44-production-release.md),
+[privacy inventory](pr44-privacy-data-safety.md), [signing](pr44-signing-and-bundle.md)
+and [submission/device matrix](pr44-store-acceptance.md).
+
+**New release blocker:** the current MapLibre 4.7.1 dependency is affected by
+GHSA-jrc7-96c5-q579, the published attribution sanitizer bypass. The official patched
+6.4.1 package is integrity-verified for a separate browser/module integration
+follow-up. Current native artifacts are not release candidates. The resolved 34
+Maven packages and the other three directly vendored browser packages returned no
+matching OSV advisory; this is a bounded query, not a complete security assurance.
+
+Public regional publication approval is still pending for the concrete reviewed
+188.4 MB package. No distribution repository, Pages site, Release asset, paid
+resource or public privacy endpoint has been created. The phone is now USB-authorized and was observed unlocked with no call; no consumer-region physical
+PASS is inferred. Privacy identity/URL, existing upload-key setup, Play declarations
+and the final physical matrix remain USER_ACTION_REQUIRED / acceptance gates.
