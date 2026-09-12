@@ -70,6 +70,7 @@ pwa_network.js
 pwa_runtime.js
 pwa_store.js
 pwa_view.js
+regional_integrity.js
 regional_manifest.js
 saved_routes.js
 service_worker_policy.js
@@ -79,6 +80,11 @@ trail_profile.js
 vendor/maplibre-gl-4.7.1/LICENSE.txt
 vendor/maplibre-gl-4.7.1/maplibre-gl.css
 vendor/maplibre-gl-4.7.1/maplibre-gl.js
+vendor/noble-hashes-2.4.0/LICENSE
+vendor/noble-hashes-2.4.0/_md.js
+vendor/noble-hashes-2.4.0/_u64.js
+vendor/noble-hashes-2.4.0/sha2.js
+vendor/noble-hashes-2.4.0/utils.js
 vendor/pmtiles-4.5.0/LICENSE.txt
 vendor/pmtiles-4.5.0/pmtiles.js
 vendor/protomaps-basemaps-5.7.2/LICENSE.md

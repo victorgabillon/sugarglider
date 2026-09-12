@@ -9,6 +9,7 @@ import {
   OpfsPmtilesSource,
   validateOpfsPmtilesArchive,
 } from "./opfs_pmtiles_source.js";
+import { regionalFileIntegrity, verifyRegionalFile } from "./regional_integrity.js";
 
 export const MAP_PACK_DIRECTORY = "sugarglider-map-packs";
 const CAPABILITY_PROBE_PREFIX = ".opfs-capability-probe-";
@@ -173,7 +174,10 @@ export class MapPackStore {
     });
   }
 
-  async installPack(manifestUrl, { signal, onProgress } = {}) {
+  async installPack(manifestUrl, { signal, onProgress, expectedArchive = null } = {}) {
+    // PR42's coordinator supplies the verified top-level regional descriptor.
+    // Standalone PR36 manifests have no checksum field and retain that limitation.
+    const integrity = expectedArchive === null ? null : regionalFileIntegrity(expectedArchive);
     if (typeof this.fetchRequest !== "function") {
       throw new MapPackStoreError("map_pack_install_failed", "Pack download is unavailable.");
     }
@@ -186,6 +190,9 @@ export class MapPackStore {
       signal,
     );
     const manifest = parseMapPackManifestJson(manifestText);
+    if (integrity && integrity.byte_size !== manifest.byte_size) {
+      throw new MapPackStoreError("regional_size_mismatch", "Regional and map archive sizes differ.");
+    }
     if (this.activeInstalls.has(manifest.pack_id)) {
       throw new MapPackStoreError(
         "map_pack_install_in_progress",
@@ -206,6 +213,7 @@ export class MapPackStore {
       manifestUrl: safeManifestUrl,
       operation,
       onProgress,
+      integrity,
     });
     this.activeInstalls.set(manifest.pack_id, operation);
     try {
@@ -248,7 +256,7 @@ export class MapPackStore {
     return optionalBoolean(() => this.storageManager.persist());
   }
 
-  async finishInstall({ manifest, manifestUrl, operation, onProgress }) {
+  async finishInstall({ manifest, manifestUrl, operation, onProgress, integrity }) {
     const root = await this.mapPackRoot();
     let ownsDirectory = false;
     let writable = null;
@@ -296,6 +304,12 @@ export class MapPackStore {
         );
       }
       this.requireCurrentInstall(manifest.pack_id, operation);
+      if (integrity) {
+        await verifyRegionalFile(await archiveHandle.getFile(), integrity, {
+          signal: operation.controller.signal,
+        });
+        this.requireCurrentInstall(manifest.pack_id, operation);
+      }
       const source = this.sourceFactory({
         fileHandle: archiveHandle,
         key: `sugarglider-map-pack/${manifest.pack_id}/${manifest.build_id}`,
@@ -327,7 +341,8 @@ export class MapPackStore {
       if (operation.controller.signal.aborted || error?.name === "AbortError") {
         throw new MapPackStoreError("map_pack_download_cancelled", "Map-pack installation was cancelled.");
       }
-      if (error instanceof MapPackStoreError || error?.code === "map_pack_invalid") throw error;
+      if (error instanceof MapPackStoreError || error?.code === "map_pack_invalid"
+        || ["regional_size_mismatch", "regional_checksum_mismatch", "regional_read_failed"].includes(error?.code)) throw error;
       throw new MapPackStoreError(
         "map_pack_install_failed",
         `Map-pack installation failed: ${safeErrorMessage(error)}`,

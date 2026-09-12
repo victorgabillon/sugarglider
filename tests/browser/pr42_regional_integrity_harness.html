@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>PR42 regional integrity harness</title>
+  <pre id="result">running</pre>
+  <script type="module">
+    const result = document.getElementById("result");
+    const fail = (error) => { result.dataset.status = "failed"; result.textContent = error?.stack ?? String(error); };
+    window.addEventListener("error", (event) => fail(event.error ?? event.message));
+    window.addEventListener("unhandledrejection", (event) => fail(event.reason));
+    try {
+      const { runPr42RegionalIntegrityHarness } = await import("./pr42_regional_integrity_harness.js");
+      const scenarios = await runPr42RegionalIntegrityHarness();
+      if (result.dataset.status !== "failed") { result.dataset.status = "passed"; result.textContent = JSON.stringify(scenarios); }
+    } catch (error) { fail(error); }
+  </script>
+</html>

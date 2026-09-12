@@ -46,6 +46,12 @@ export async function runPr36OfflineMapsHarness() {
   scenarios.push("partial_ignored_and_duplicate_install_explicit");
   await scenarioInterruptedInstall();
   scenarios.push("interrupted_install_never_becomes_active");
+  await scenarioRegionalIntegrity();
+  scenarios.push("regional_checksum_verified_before_map_activation");
+  await scenarioRegionalCorruption();
+  scenarios.push("regional_checksum_failure_never_activates_map");
+  await scenarioRegionalDescriptorFailure();
+  scenarios.push("regional_descriptor_and_size_failure_before_archive_download");
   scenarioInstallUrlSecurity();
   scenarios.push("install_url_policy_is_https_or_debug_private_http");
   await scenarioCoveringPackBootstrap();
@@ -202,6 +208,44 @@ async function scenarioInterruptedInstall() {
   const scan = await store.scanInstalledPacks();
   equal(scan.packs.length, 0, "cancelled pack absent");
   equal(scan.partial_pack_ids.length, 0, "owned partial cleaned");
+}
+
+async function scenarioRegionalIntegrity() {
+  const archive = new Uint8Array([1, 2, 3, 4, 5]);
+  const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", archive)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const expectedArchive = { byte_size: archive.length, sha256: digest };
+  const store = createTestStore({ storageManager: createMemoryStorageManager(), archive });
+  await store.installPack("https://packs.test/marly/manifest.json", {
+    expectedArchive,
+    onProgress: () => { expectedArchive.sha256 = "0".repeat(64); },
+  });
+  equal((await store.listInstalledPacks()).length, 1, "verified map installed with captured descriptor");
+}
+
+async function scenarioRegionalCorruption() {
+  const archive = new Uint8Array([1, 2, 3, 4, 5]), fetchLog = [];
+  const store = createTestStore({ storageManager: createMemoryStorageManager(), archive, fetchLog });
+  await rejectsCode(() => store.installPack("https://packs.test/marly/manifest.json", {
+    expectedArchive: { byte_size: archive.length, sha256: "0".repeat(64) },
+  }), "regional_checksum_mismatch");
+  const scan = await store.scanInstalledPacks();
+  equal(scan.packs.length, 0, "mismatching bytes never active");
+  equal(scan.partial_pack_ids.length, 0, "failed owned directory removed");
+  equal(fetchLog.length, 2, "one manifest and archive request, no retry");
+}
+
+async function scenarioRegionalDescriptorFailure() {
+  const archive = new Uint8Array([1, 2, 3]), fetchLog = [];
+  const store = createTestStore({ storageManager: createMemoryStorageManager(), archive, fetchLog });
+  await rejectsCode(() => store.installPack("https://packs.test/marly/manifest.json", {
+    expectedArchive: { byte_size: archive.length, sha256: "invalid" },
+  }), "invalid_regional_file");
+  equal(fetchLog.length, 0, "invalid identity does not fetch");
+  await rejectsCode(() => store.installPack("https://packs.test/marly/manifest.json", {
+    expectedArchive: { byte_size: archive.length + 1, sha256: "0".repeat(64) },
+  }), "regional_size_mismatch");
+  equal(fetchLog.length, 1, "cross-manifest size mismatch never downloads archive");
+  equal((await store.listInstalledPacks()).length, 0, "no partial activation");
 }
 
 function scenarioInstallUrlSecurity() {
