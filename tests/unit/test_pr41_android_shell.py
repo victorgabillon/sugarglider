@@ -23,7 +23,7 @@ def test_android_shell_allowlist_matches_current_shared_runtime() -> None:
     assert len(paths) == len(set(paths))
     assert "android_app.js" in paths and "local_plan_worker.js" in paths
     assert "service-worker.js" not in paths
-    assert len([path for path in paths if "LICENSE" in path]) == 4
+    assert len([path for path in paths if "LICENSE" in path]) == 5
     for path in paths:
         assert (STATIC / path).is_file()
         assert not (STATIC / path).is_symlink()

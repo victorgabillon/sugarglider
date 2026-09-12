@@ -190,6 +190,21 @@ GitHub release limits were audited, but its flat asset URLs need explicit catalo
 mapping to PR39's logical paths or static storage preserving the directory layout.
 No consumer catalog or public artifact has been published.
 
+The first installer component now adds bounded incremental verification of OPFS
+files, with a captured PR39 digest and size. The shared map store verifies that
+identity before its completion marker; checksum failures never activate. It uses
+pinned local noble-hashes modules, with no runtime dependency download. The real
+81,571,296-byte Yvelines map verifies from Chrome OPFS after fixture-server shutdown
+in 4,533 ms / 312 reads / maximum 256 KiB per read. This is host integrity evidence.
+`make check` passes 1,033 tests / 16 existing integration deselections, 304 browser
+scenarios pass, and Android checks retain 150 tests in each variant with no lint
+errors. All 90 shared assets match APK/AAB bytes. The current unsigned AAB is
+47,368,403 bytes, SHA-256
+`e355ff37522d5c73f818e21e787d76e08f629cc1ed978385008b914ab0a99ff9`.
+[Integrity preparation](pr42-regional-integrity.md) records exact scope and tests.
+Catalog/distribution, coordinated staging/activation/update/remove and actual
+consumer-region phone acceptance remain open; PR42 is not complete.
+
 ## PR44 audit preparation
 
 GitHub draft [PR #42](https://github.com/victorgabillon/sugarglider/pull/42),
@@ -365,7 +380,10 @@ checks pass `af37a1f` and bundled-shell head `5f43bce` on draft
 Release routing, the coordinated consumer region installer/useful-region phone
 acceptance and full release-equivalent PR41/44 gates remain open.
 
-The next dependent preparation, `feat/pr41-production-native-routing`, now compiles
+The next dependent preparation, `b8ebe3a` on
+`feat/pr41-production-native-routing` / draft
+[PR #46](https://github.com/victorgabillon/sugarglider/pull/46), passes all five CI
+checks and now compiles
 one shared production engine and profile policy in both variants. Configuration
 uses only the selected archive, with auxiliary/default paths disabled; wire timing
 fields are retained but described truthfully as wrapper/native-call measurements.
