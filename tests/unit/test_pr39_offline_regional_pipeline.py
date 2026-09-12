@@ -552,3 +552,196 @@ def test_make_cli_ignore_and_runtime_isolation() -> None:
     )
     assert "data/offline-regions/marly/manifest.json" in ignored.stdout
     assert toolchain().pipeline_version == 1
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "http://packs.example/",
+        "https://user@packs.example/",
+        "https://packs.example/?token=secret",
+        "https://packs.example/#private",
+        "https://packs.example",
+        "https://packs.example/a/../",
+        "https://packs.example//",
+        "https://packs.example/%2e/",
+        "https://packs.example:65536/",
+    ],
+)
+def test_static_distribution_rejects_noncanonical_hosts(value: str) -> None:
+    from sugarglider.offline_regions.distribution import distribution_base_url
+
+    with pytest.raises(ValueError):
+        distribution_base_url(value)
+
+
+def test_static_distribution_preserves_exact_bytes_and_is_deterministic(
+    repository: Path, pbf: Path, tmp_path: Path
+) -> None:
+    import zipfile
+
+    from sugarglider.offline_regions.distribution import prepare_distribution
+    from sugarglider.offline_regions.unpack_distribution import unpack_distribution
+
+    source = build_region(repository, "marly", pbf, builder=fake_components)
+    manifest = verify_region(source)
+    arguments = {
+        "base_url": "https://packs.example/app/",
+        "description": "Tiny <fixture>",
+    }
+    first = prepare_distribution(
+        source,
+        tmp_path / "distribution-one",
+        base_url=arguments["base_url"],
+        description=arguments["description"],
+    )
+    second = prepare_distribution(
+        source,
+        tmp_path / "distribution-two",
+        base_url=arguments["base_url"],
+        description=arguments["description"],
+    )
+    relative = f"regions/{manifest.region_id}/{manifest.build_id}"
+    assert verify_region(first / "site" / relative) == manifest
+    for path in source.rglob("*"):
+        if path.is_file():
+            assert (
+                path.read_bytes()
+                == (first / "site" / relative / path.relative_to(source)).read_bytes()
+            )
+    catalog = json.loads((first / "site/catalog.json").read_bytes())
+    assert catalog["regions"][0]["manifest_url"] == (
+        f"https://packs.example/app/{relative}/manifest.json"
+    )
+    assert catalog["regions"][0]["download_bytes"] == sum(
+        file.byte_size
+        for component in manifest.components.ordered
+        for file in component.files
+    )
+    assert "Tiny &lt;fixture&gt;" in (first / "site/index.html").read_text()
+    assert "OpenStreetMap contributors" in (first / "site/README.txt").read_text()
+    assert (
+        "https://opendatacommons.org/licenses/odbl/1-0/"
+        in (first / "site/README.txt").read_text()
+    )
+    archive = first / "sugarglider-regions-static.zip"
+    assert archive.read_bytes() == (second / archive.name).read_bytes()
+    with zipfile.ZipFile(archive) as bundle:
+        for member in bundle.infolist():
+            assert not member.filename.startswith("/") and ".." not in member.filename
+            assert not member.filename.endswith(".pbf")
+            assert (
+                bundle.read(member) == (first / "site" / member.filename).read_bytes()
+            )
+    report = json.loads((first / "report.json").read_bytes())
+    assert report["publication"] == "not published"
+    assert report["archive_sha256"] == hashlib.sha256(archive.read_bytes()).hexdigest()
+    deployed = unpack_distribution(
+        archive, tmp_path / "extracted-site", report["archive_sha256"]
+    )
+    assert verify_region(deployed / relative) == manifest
+    with pytest.raises(ValueError, match="checksum"):
+        unpack_distribution(archive, tmp_path / "bad-digest", "0" * 64)
+    assert not (tmp_path / "bad-digest").exists()
+    with pytest.raises(FileExistsError):
+        prepare_distribution(
+            source,
+            first,
+            base_url=arguments["base_url"],
+            description=arguments["description"],
+        )
+    assert archive.read_bytes() == (second / archive.name).read_bytes()
+
+
+def test_static_distribution_rejects_corruption_and_preserves_source(
+    repository: Path, pbf: Path, tmp_path: Path
+) -> None:
+    from sugarglider.offline_regions.distribution import prepare_distribution
+
+    source = build_region(repository, "marly", pbf, builder=fake_components)
+    arguments = {"base_url": "https://packs.example/", "description": "Fixture"}
+    with pytest.raises(ValueError, match="outside the source"):
+        prepare_distribution(
+            source,
+            source / "output",
+            base_url=arguments["base_url"],
+            description=arguments["description"],
+        )
+    output = tmp_path / "corrupt-output"
+    (source / "routing/valhalla_tiles.tar").write_bytes(b"invalid")
+    with pytest.raises(ValueError):
+        prepare_distribution(
+            source,
+            output,
+            base_url=arguments["base_url"],
+            description=arguments["description"],
+        )
+    assert not output.exists()
+    assert (source / "routing/valhalla_tiles.tar").read_bytes() == b"invalid"
+
+
+@pytest.mark.parametrize(
+    "name,mode",
+    [
+        ("../escape", 0o100644),
+        ("/absolute", 0o100644),
+        (".env", 0o100644),
+        ("README.txt", 0o120777),
+    ],
+)
+def test_static_unpack_rejects_unsafe_entries_before_output(
+    name: str, mode: int, tmp_path: Path
+) -> None:
+    import zipfile
+
+    from sugarglider.offline_regions.unpack_distribution import unpack_distribution
+
+    archive = tmp_path / "unsafe.zip"
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as bundle:
+        member = zipfile.ZipInfo(name)
+        member.external_attr = mode << 16
+        bundle.writestr(member, b"outside")
+    output = tmp_path / "unpacked"
+    with pytest.raises(ValueError):
+        unpack_distribution(
+            archive, output, hashlib.sha256(archive.read_bytes()).hexdigest()
+        )
+    assert not output.exists()
+    assert not (tmp_path / "escape").exists()
+
+
+def test_static_update_retains_previous_immutable_downloads(
+    repository: Path, pbf: Path, tmp_path: Path
+) -> None:
+    from sugarglider.offline_regions.distribution import prepare_distribution
+    from sugarglider.offline_regions.models import build_identity
+
+    source = build_region(repository, "marly", pbf, builder=fake_components)
+    current = verify_region(source)
+    previous = tmp_path / "previous-region"
+    shutil.copytree(source, previous)
+    value = json.loads((previous / "manifest.json").read_bytes())
+    value["display_name"] = "Previous offering"
+    del value["build_id"]
+    value["build_id"] = build_identity(value)
+    (previous / "manifest.json").write_bytes(canonical_json(value))
+    old = verify_region(previous)
+    output = prepare_distribution(
+        source,
+        tmp_path / "retained-site",
+        base_url="https://packs.example/",
+        description="Current offering",
+        retain_directory=previous,
+    )
+    for version in (current, old):
+        assert (
+            verify_region(
+                output / "site/regions" / version.region_id / version.build_id
+            )
+            == version
+        )
+    catalog = json.loads((output / "site/catalog.json").read_bytes())
+    assert [row["build_id"] for row in catalog["regions"]] == [current.build_id]
+    assert json.loads((output / "report.json").read_bytes())["retained_build_ids"] == [
+        old.build_id
+    ]

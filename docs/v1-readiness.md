@@ -530,3 +530,26 @@ WebView inspection confirmed bundled startup, the honest unavailable 188.4 MB
 catalog entry, no committed region, and Generate disabled with the download
 explanation. This limited startup result does not replace visible physical
 acceptance. No owned USB forward/reverse remains.
+
+## PR42 static publication preparation
+
+Product draft [PR #51](https://github.com/victorgabillon/sugarglider/pull/51) at
+`b568418` passes all five CI checks. Dependent static distribution work prepares
+and revalidates the exact regional files, attributed landing page/README, public
+catalog and deterministic ZIP. A standalone confined extractor and inactive,
+manually triggered GitHub Pages workflow are prepared for a separate public data
+repository; generated data never enters either repository's Git history.
+
+`make check`: 1,049 passed / 16 existing integration tests deselected; Ruff and
+strict mypy pass. Real Yvelines publication ZIP: 188,374,659 bytes, SHA-256
+`40990c600c0b7bf934522daef1c92d7db44d0ab890077e1224084a6244476a9f`,
+at `/tmp/sugarglider-pr42-static-publication/sugarglider-regions-static.zip`.
+Standalone extraction preserves all eleven site files exactly. The app catalog
+remains unavailable and no data has been published.
+
+USER_ACTION_REQUIRED: approve the proposed separate public
+`victorgabillon/sugarglider-regions` repository, data release and free GitHub Pages
+host, or supply an existing approved HTTPS static host. Current documented Pages
+limits/terms, byte/CORS contract, retained-version publishing and physical gates
+are recorded in [static distribution preparation](pr42-static-distribution.md).
+No paid resource, account or domain is provisioned by this proposal.
