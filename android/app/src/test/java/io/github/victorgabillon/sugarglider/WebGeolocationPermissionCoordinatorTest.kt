@@ -141,6 +141,33 @@ class WebGeolocationPermissionCoordinatorTest {
     }
 
     @Test
+    fun deadRendererCallbackIsDiscardedBeforeANewPageCanRequestLocation() {
+        val gate = coordinator()
+        beginPending(gate) { error("A dead renderer cannot receive a permission reply") }
+        gate.discard()
+        gate.invalidate()
+        assertFalse(gate.hasPending())
+        assertFalse(gate.complete(true, ORIGIN, 4, 8))
+
+        val decisions = mutableListOf<Boolean>()
+        assertEquals(
+            WebGeolocationPermissionAction.REQUEST_FOREGROUND_LOCATION,
+            gate.begin(
+                requestedOrigin = ORIGIN,
+                configuredOrigin = ORIGIN,
+                navigationEpoch = 5,
+                sourceWebViewIdentity = 9,
+                currentWebViewIdentity = 9,
+                activityVisible = true,
+                preciseLocationGranted = false,
+                resolve = decisions::add,
+            ),
+        )
+        assertTrue(gate.complete(true, ORIGIN, 5, 9))
+        assertEquals(listOf(true), decisions)
+    }
+
+    @Test
     fun serverChangeCannotReusePriorOriginRequest() {
         val oldDecisions = mutableListOf<Boolean>()
         val newDecisions = mutableListOf<Boolean>()

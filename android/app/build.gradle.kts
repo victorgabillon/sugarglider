@@ -1,5 +1,7 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.net.URI
 import java.nio.file.Files
+import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
@@ -27,6 +29,48 @@ val bundleSharedWebShell by tasks.registering(Sync::class) {
     }
 }
 
+// Release secrets are optional for unsigned validation and must live outside Git.
+val externalSigningPath = providers.environmentVariable("SUGARGLIDER_ANDROID_SIGNING_PROPERTIES")
+    .orNull
+val externalSigning = externalSigningPath?.let { path ->
+    val repository = rootProject.projectDir.parentFile.canonicalFile.toPath()
+    val propertiesFile = File(path)
+    require(propertiesFile.isAbsolute && propertiesFile.isFile) {
+        "Android signing configuration must be an existing absolute external file"
+    }
+    require(!propertiesFile.canonicalFile.toPath().startsWith(repository)) {
+        "Android signing configuration must be outside the repository"
+    }
+    val properties = Properties()
+    try {
+        propertiesFile.inputStream().use(properties::load)
+    } catch (_: Exception) {
+        throw GradleException("Unable to read external Android signing configuration")
+    }
+    val required = setOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    require(properties.stringPropertyNames() == required &&
+        required.all { !properties.getProperty(it).isNullOrBlank() }) {
+        "Android signing configuration requires exactly storeFile, storePassword, keyAlias and keyPassword"
+    }
+    val keyStore = File(properties.getProperty("storeFile"))
+    require(keyStore.isAbsolute && keyStore.isFile &&
+        !keyStore.canonicalFile.toPath().startsWith(repository)) {
+        "Android upload keystore must be an existing absolute file outside the repository"
+    }
+    properties
+}
+
+// This public URL is separate from signing secrets and must be approved before upload.
+val publicPrivacyPolicy = providers.environmentVariable("SUGARGLIDER_ANDROID_PRIVACY_POLICY_URL")
+    .orElse("").get()
+if (publicPrivacyPolicy.isNotEmpty()) {
+    val uri = runCatching { URI(publicPrivacyPolicy) }.getOrNull()
+    require(publicPrivacyPolicy.length <= 2_048 && uri != null && uri.scheme == "https" &&
+        uri.host != null && uri.userInfo == null && uri.query == null && uri.fragment == null) {
+        "Privacy policy URL must be a public HTTPS URL without credentials, query or fragment"
+    }
+}
+
 android {
     namespace = "io.github.victorgabillon.sugarglider"
     compileSdk = 36
@@ -36,12 +80,24 @@ android {
         applicationId = "io.github.victorgabillon.sugarglider"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("boolean", "ALLOW_HTTP", "false")
+        buildConfigField("String", "PRIVACY_POLICY_URL", "\"$publicPrivacyPolicy\"")
         ndk.abiFilters += "arm64-v8a"
+    }
+
+    signingConfigs {
+        externalSigning?.let { properties ->
+            create("externalUpload") {
+                storeFile = File(properties.getProperty("storeFile"))
+                storePassword = properties.getProperty("storePassword")
+                keyAlias = properties.getProperty("keyAlias")
+                keyPassword = properties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -51,6 +107,8 @@ android {
             buildConfigField("boolean", "ALLOW_HTTP", "true")
         }
         release {
+            signingConfig = externalSigning?.let { signingConfigs.getByName("externalUpload") }
+            isDebuggable = false
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
