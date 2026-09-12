@@ -74,7 +74,8 @@ On 2026-09-12, after removal of normal experiment wiring:
   was introduced. Initial static checks still expected the removed panel wiring
   and old app fingerprint; updated contracts now assert its absence.
 
-Current ignored artifacts:
+Historical ignored artifacts for this preparation (current build-output paths
+are superseded by [PR42 integrity](pr42-regional-integrity.md)):
 
 | Artifact | Path | Bytes | SHA-256 |
 | --- | --- | ---: | --- |

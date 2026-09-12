@@ -150,14 +150,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v36_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v37_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v36"
+    assert generation.group(1) == "v37"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -310,11 +310,10 @@ def test_precache_covers_index_and_static_module_graph() -> None:
             continue
         visited.add(name)
         source = (STATIC_DIRECTORY / name).read_text()
-        pending.extend(
-            match
-            for match in re.findall(r'from "\./([^"]+\.js)"', source)
-            if match not in visited
-        )
+        for relative in re.findall(r'from "\./([^"]+\.js)"', source):
+            dependency = (Path(name).parent / relative).as_posix()
+            if dependency not in visited:
+                pending.append(dependency)
     assert {f"/static/{name}" for name in visited} <= core
     assert (
         "ROOT_SHELL"

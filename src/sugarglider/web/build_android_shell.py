@@ -18,6 +18,7 @@ EXTRA_ASSETS = (
     "vendor/pmtiles-4.5.0/LICENSE.txt",
     "vendor/protomaps-basemaps-5.7.2/LICENSE.md",
     "fonts/Open Sans Semibold/LICENSE.txt",
+    "vendor/noble-hashes-2.4.0/LICENSE",
 )
 
 
