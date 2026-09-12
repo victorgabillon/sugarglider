@@ -5,11 +5,20 @@ Google approval. The existing Play application ID is
 `io.github.victorgabillon.sugarglider`; do not create a replacement app or install
 a disposable certificate over its existing Fairphone installation.
 
+The user-supplied prior-release record identifies the public developer name as
+**Sugarglider**, reports code 1 / name 0.1.0 published to internal testing on
+2026-08-28, and says an upload key and recovery information were privately backed
+up. The current Fairphone package inspection confirms that this version is
+installed through Google Play. Current Console track contents, upload-key access
+and successful launch are separate checks; no new upload/publication is authorized.
+
 ## Publisher submission material
 
-- Confirm the existing upload-key/App Signing configuration and the highest used
-  version code on every track. The proposed update is code 2 / name 1.0.0.
-- Approve the public publisher identity, privacy contact, policy text and active
+- Locate the existing privately backed-up upload key, confirm the App Signing
+  configuration and the highest used version code on every track. The proposed
+  update is code 2 / name 1.0.0.
+- Retain the supplied public developer name Sugarglider; supply any required legal
+  publisher identity and approve the privacy contact, policy text and active
   HTTPS policy URL. Embed that URL with
   `SUGARGLIDER_ANDROID_PRIVACY_POLICY_URL`, and verify the in-app link and policy
   from a device before upload. The local Privacy screen is available now.

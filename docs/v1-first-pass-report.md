@@ -230,6 +230,30 @@ is implemented; a final public policy link, provider details and publisher
 declarations are still absent. Official policy links and the 28-second disclosure
 demo shot list are in the linked privacy and store documents; recheck before upload.
 
+## Previous Play release record supplied after the first pass
+
+The user supplied a historical internal-testing handoff. It reports public
+developer name **Sugarglider**, an activated developer account, the existing
+package's code 1 / name 0.1.0 internal release on 2026-08-28, and a privately
+created/backed-up upload key. No production release was reported. This adds
+context to the V1 preparation; it is not authorization for another upload or
+publication, and the current Console was not inspected.
+
+Read-only inspection of the Fairphone now confirms the main package at code 1 /
+name 0.1.0, installed by `com.android.vending`. Its installation is established;
+the old handoff's uncertainty on that point is superseded. Launch and live HTTPS
+operation of that old app were not tested: another app was foregrounded, and no
+server configuration, permission or installed data was changed.
+
+The historical `chore/play-internal-testing` branch is absent from local refs and
+remote heads. V1's signing configuration is already committed/pushed, and
+`android/.kotlin/` is already ignored, so those old preparation todos do not require
+restoring the old branch. A bounded filename-only search found no matching upload
+key/configuration in the checked standard local locations; locating the existing
+private backup remains open. No secret contents were read, no replacement key was
+created, and no tester-invitation link or private account/address/payment data is
+copied into these public project documents.
+
 ## Open questions to answer later
 
 No reply is required during this pass. These are the remaining external decisions,
@@ -240,15 +264,18 @@ in the order that unlocks the next work:
    or name an existing HTTPS static host. Nothing has been published. Once chosen,
    verify the real download/CORS/checksum contract, enable the catalog URL, and run
    the complete Yvelines phone matrix before claiming consumer readiness.
-2. **Who publishes the app, and how can users contact them about privacy?** Supply
-   the public publisher name and contact, then choose where the prepared privacy
-   page should be publicly readable. The privacy-policy URL is simply that page's
-   HTTPS address. Final named hosts/retention must match the actual deployment.
-3. **How is the existing Play app signed?** Its upload key is the publisher's
-   signing credential for updates, distinct from a chat password. Confirm the
-   existing Play App Signing/upload-key setup and highest used version code across
-   all tracks. If an external signing-properties file already exists, supply only
-   its path; never send passwords or private-key material. Exact steps are in
+2. **How can users contact Sugarglider about privacy, and where should the policy
+   be hosted?** The public developer name is now supplied as Sugarglider. A public
+   privacy contact, any required legal publisher identity, and an approved host
+   remain open. The privacy-policy URL is simply the prepared page's public HTTPS
+   address. Final named hosts/retention must match the actual deployment.
+3. **Where is the existing upload-key backup/configuration?** The supplied record
+   confirms that a key was created for the earlier internal release. Its upload
+   key is the publisher's signing credential for updates, distinct from a chat
+   password. Locate that existing backup, confirm the Play App Signing setup and
+   highest used version code across all tracks. If an external signing-properties
+   file already exists, supply only its path; never send passwords or private-key
+   material. Exact steps are in
    [signing and bundle preparation](pr44-signing-and-bundle.md).
 4. **Where should optional sharing/outings run?** Name an approved server/domain
    and encrypted backup destination, or leave this optional endpoint unconfigured

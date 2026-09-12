@@ -7,6 +7,12 @@ installation path are implemented. This inventory describes their current code
 and the supplied PR43 production defaults;
 it is not a claim that every release acceptance gate has passed.
 
+The user has since supplied the previous internal-release record: the public
+Google Play developer name is **Sugarglider**. That resolves the public-name
+question. A public privacy contact, any required legal publisher identity and the
+approved policy host/URL still need to be supplied. Private account, address,
+payment and tester-invitation details from that record are not needed here.
+
 ## Code-backed inventory
 
 | Data | Trigger and destination | Retention and control |

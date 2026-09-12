@@ -683,3 +683,33 @@ release/device acceptance, and deferred publisher/privacy/signing information.
 The optional social deployment also awaits an approved endpoint/backup destination.
 No draft is merged past its original gates, and no Play upload/publication occurs.
 Main remains `d129c22`; protected untracked entries and stash remain untouched.
+
+## Supplied existing Play release record
+
+After the first-pass handoff, the user supplied the previous 0.1.0 internal-testing
+record. It identifies the public developer name as **Sugarglider**, reports code 1
+published internally on 2026-08-28 with no production release, and states that an
+upload key/recovery information were privately created and backed up. These are
+historical user-supplied Console facts, not a current authenticated Console audit.
+The instruction against new Play publication remains in force.
+
+Read-only Fairphone inspection confirms code 1 / name 0.1.0 installed by
+`com.android.vending`; the old record's installation uncertainty is resolved.
+The app was not opened over the user's foreground app. No permissions, settings
+or app data were changed, and no key material or passwords were read. The historical
+`chore/play-internal-testing` branch is absent from local refs and remote heads.
+Current V1 signing is already committed/pushed, and `android/.kotlin/` is ignored.
+
+A bounded filename-only check of standard local backup locations found no matching
+upload-key/configuration candidate. This narrows the question to locating the
+existing private backup; it does not establish key loss or authorize replacement.
+The public developer name is resolved; privacy contact/required legal identity and
+URL, regional hosting, access to that existing signing setup, current track version
+availability and final physical acceptance remain open. The
+[handoff questions](v1-first-pass-report.md#open-questions-to-answer-later) and
+[signing instructions](pr44-signing-and-bundle.md) reflect this new information.
+
+Documentation follow-up validation: `make check` passes 1,055 tests / 16 existing
+integration deselections, Ruff and strict mypy; local document links and
+`git diff --check` pass. No application source, APK/AAB bytes or runtime behavior
+changes in this follow-up.
