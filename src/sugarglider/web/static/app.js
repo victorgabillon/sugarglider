@@ -1,5 +1,5 @@
 import { ApiError, generatePlan, getConfig, getPoiStatus, getRoutingProfiles, reversePlan, searchPois, visualizeRoute } from "./api.js";
-import { exportCanonicalCandidate } from "./local_gpx_export.js";
+import { createLocalGpxExporter } from "./local_gpx_client.js";
 import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
@@ -61,6 +61,9 @@ import {
 } from "./trail_profile.js";
 
 const byId = (id) => document.getElementById(id);
+const localGpxExporter = createLocalGpxExporter();
+localGpxExporter.prepare();
+let pendingGpxExport = null;
 let elapsedTimer = null;
 let mapReady = false;
 let poiDebounceTimer = null;
@@ -1500,7 +1503,8 @@ function renderMetrics() {
   const busy = ["running", "reversing"].includes(state.request.status);
   const readOnly = isImmutableSnapshotDisplay();
   const savingUnavailable = !state.config?.saved_routes_available;
-  byId("download-gpx").disabled = !candidate || busy;
+  byId("download-gpx").disabled = !candidate || busy || pendingGpxExport !== null;
+  byId("download-gpx").setAttribute("aria-busy", String(pendingGpxExport !== null));
   byId("reverse-route").disabled = readOnly || !candidate || busy || Boolean(state.importedGpx && !state.generationResult);
   byId("save-route").disabled = savingUnavailable || readOnly || !candidate || busy;
   byId("save-route").classList.toggle("hidden", savingUnavailable || readOnly || !candidate);
@@ -2257,9 +2261,13 @@ async function importGpx(file) {
 
 async function downloadSelected() {
   const candidate = selectedCandidate();
-  if (!candidate || ["running", "reversing"].includes(state.request.status)) return;
+  if (!candidate || pendingGpxExport || ["running", "reversing"].includes(state.request.status)) return;
+  const operation = {};
+  pendingGpxExport = operation;
+  renderMetrics();
+  byId("request-status").textContent = "Preparing GPX…";
   try {
-    const { blob, filename } = exportCanonicalCandidate(candidate);
+    const { blob, filename } = await localGpxExporter.exportCandidate(candidate);
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -2268,7 +2276,10 @@ async function downloadSelected() {
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
     byId("request-status").textContent = `${filename} prepared from the selected route.`;
   } catch (error) {
-    handleError(error, "GPX export failed.");
+    if (error.name !== "AbortError") handleError(error, "GPX export failed.");
+  } finally {
+    if (pendingGpxExport === operation) pendingGpxExport = null;
+    renderMetrics();
   }
 }
 

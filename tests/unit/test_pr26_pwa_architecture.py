@@ -150,14 +150,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v26_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v28_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v26"
+    assert generation.group(1) == "v28"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -179,13 +179,15 @@ def test_shared_shell_generation_tracks_v26_cached_assets() -> None:
             "native_bridge_transport.js",
             "api.js",
             "local_gpx_export.js",
+            "local_gpx_client.js",
+            "local_gpx_worker.js",
             "public_profile_metadata.js",
         )
     } == {
         "index.html": (
             "d8bd089da5d98b2a618765498c4220f096cb671c2b43618f5c5347696b1382d2"
         ),
-        "app.js": ("e7cf73e669e1c58bb82987905b22b8101b7510bae48eba48145cd4bc10b2e7f3"),
+        "app.js": ("90f69fb341e1a88e8e9c9f5eba1b3152cd2ad811d583ad29a94ec6ebfcecb396"),
         "state.js": (
             "de724c096dd193347bdbdb9a424e873902ead40b30d48a339925da4d9aa58abd"
         ),
@@ -228,10 +230,16 @@ def test_shared_shell_generation_tracks_v26_cached_assets() -> None:
         ),
         "api.js": ("2844e8cc44afc78de06e3ce24ff7e6040ce16c189fd84122b790404cdf76c297"),
         "local_gpx_export.js": (
-            "ff85940460760a0e2cf4518db589518f3c5e67f42db23d6b1edc351a5bcca228"
+            "1fc03a1f665496ef2c413ca14949ce3689f6742dd8a9cc756b6db2d9b183f9f3"
         ),
         "public_profile_metadata.js": (
             "2077a93dd9291b556d2cf5ebe29c317aeda3f96b356722a3fd069ff8963f41fa"
+        ),
+        "local_gpx_client.js": (
+            "607a89cea494125a4fea99e717751f7f69a4c7d76a5325d6fceeef3f50b8d511"
+        ),
+        "local_gpx_worker.js": (
+            "ad4769fc03bb5e205d4bcd4e9833256f96fe7931fa0cc53e9bc4cb5ca90bc0b2"
         ),
     }
 

@@ -69,10 +69,15 @@ def test_normal_export_is_local_and_available_with_an_offline_candidate() -> Non
     app = (STATIC_DIRECTORY / "app.js").read_text()
     handler = app[app.index("async function downloadSelected()") :]
     handler = handler[: handler.index("function renderSavedRoutePanel()")]
-    assert "exportCanonicalCandidate(candidate)" in handler
+    assert "await localGpxExporter.exportCandidate(candidate)" in handler
     assert "serverFeaturesUnavailable" not in handler
     assert "downloadSavedRouteGpx" not in handler
     assert 'byId("download-gpx").disabled = !candidate || busy' in app
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
-    for name in ("local_gpx_export", "public_profile_metadata"):
+    for name in (
+        "local_gpx_export",
+        "local_gpx_client",
+        "local_gpx_worker",
+        "public_profile_metadata",
+    ):
         assert f'"/static/{name}.js"' in worker

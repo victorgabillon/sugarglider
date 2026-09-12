@@ -16,6 +16,9 @@ export class LocalGpxExportError extends Error {
       export_limit_exceeded: "This route exceeds the local GPX export limit.",
       export_stop_not_reached: "A selected place is not reached by this track within its recorded tolerance.",
       invalid_export_name: "This route has no valid export name.",
+      export_busy: "Another GPX file is being prepared.",
+      export_worker_unavailable: "GPX export could not start. Reload the page to try again; your route is unchanged.",
+      export_timed_out: "GPX export took too long. Your route is unchanged.",
     }[code] ?? "This route could not be exported.");
     this.name = "LocalGpxExportError";
     this.code = code;

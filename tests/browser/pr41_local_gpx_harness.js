@@ -3,6 +3,7 @@ import {
   MAX_GPX_STOPS, MAX_GPX_VERTICES,
 } from "../../src/sugarglider/web/static/local_gpx_export.js";
 import { PUBLIC_PROFILE_METADATA } from "../../src/sugarglider/web/static/public_profile_metadata.js";
+import { createLocalGpxExporter } from "../../src/sugarglider/web/static/local_gpx_client.js";
 
 export async function runPr41LocalGpxHarness() {
   const fixture = await (await fetch("/tests/fixtures/pr41_local_gpx.json")).json();
@@ -114,7 +115,90 @@ export async function runPr41LocalGpxHarness() {
       rejects(() => exportCanonicalCandidate(conflict), "invalid_export_stops");
     }],
   ]) { await run(); scenarios.push(name); }
+  for (const [name, run] of workerScenarios(candidate)) { await run(); scenarios.push(name); }
   return scenarios;
+}
+
+function workerScenarios(candidate) {
+  const fake = () => {
+    const workers = [], timers = [], lifecycle = new EventTarget();
+    const client = createLocalGpxExporter({
+      createWorker: () => {
+        const value = { terminated:false, postMessage(data) { this.sent=data; }, terminate() { this.terminated=true; } };
+        workers.push(value); return value;
+      },
+      lifecycleTarget:lifecycle,
+      schedule:(callback) => { timers.push(callback); return timers.length; },
+      cancelScheduled:() => {},
+    });
+    const reply = () => {
+      const worker = workers.at(-1), result=exportCanonicalCandidate(worker.sent.candidate);
+      worker.onmessage({data:{type:"result",id:worker.sent.id,...result}});
+    };
+    return {client,workers,timers,lifecycle,reply};
+  };
+  return [
+    ["real_worker_matches_canonical_output", async () => {
+      const client=createLocalGpxExporter({lifecycleTarget:null});
+      try {
+        assert(client.prepare(), "module worker available");
+        const result=await client.exportCandidate(candidate());
+        equal(await result.blob.text(), await exportCanonicalCandidate(candidate()).blob.text(), "real worker preserves exact GPX bytes");
+      } finally { client.invalidate(); }
+    }],
+    ["large_export_keeps_main_thread_responsive", async () => {
+      const client=createLocalGpxExporter({lifecycleTarget:null}), input=candidate();
+      input.reached_stops=[];input.approximated_stops=[];
+      input.route.geometry=Array.from({length:20000},(_,i)=>[2+(i%2)*.001,48+(i%3)*.001]);
+      let ticked=false;
+      const timer=setTimeout(()=>{ticked=true;},0);
+      try {
+        const result=await client.exportCandidate(input);
+        assert(ticked, "UI timer ran while worker formatted track");
+        equal(new DOMParser().parseFromString(await result.blob.text(),"application/xml").querySelectorAll("trkpt").length,20000,"no simplified geometry");
+      } finally {clearTimeout(timer);client.invalidate();}
+    }],
+    ["worker_snapshots_only_export_fields_and_is_single_flight", async () => {
+      const h=fake(), input=candidate(); input.capability_test="never transfer";
+      const first=h.client.exportCandidate(input);
+      input.route.geometry[0][0]+=1;
+      assert(!JSON.stringify(h.workers[0].sent).includes("never transfer"),"private extra omitted");
+      assert(!Object.hasOwn(h.workers[0].sent.candidate.route,"analysis"),"analysis omitted");
+      equal(h.workers[0].sent.candidate.route.geometry[0],candidate().route.geometry[0],"captured geometry unchanged by caller");
+      await asyncRejects(h.client.exportCandidate(candidate()),"export_busy");
+      h.reply();await first;h.client.invalidate();
+    }],
+    ["pagehide_cancels_and_old_worker_callbacks_cannot_touch_new_export", async () => {
+      const h=fake();const first=h.client.exportCandidate(candidate());
+      const rejected=first.catch((error)=>error.name), oldError=h.workers[0].onerror;
+      h.lifecycle.dispatchEvent(new Event("pagehide"));
+      equal(await rejected,"AbortError","pagehide cancellation");
+      assert(h.workers[0].terminated,"old worker released");
+      const second=h.client.exportCandidate(candidate());
+      oldError();h.reply();await second;h.client.invalidate();
+    }],
+    ["worker_timeout_and_late_timer_ownership", async () => {
+      const h=fake(), first=h.client.exportCandidate(candidate());
+      h.reply();await first;
+      const second=h.client.exportCandidate(candidate());
+      h.timers[0]();h.reply();await second;
+      const third=h.client.exportCandidate(candidate());
+      const rejected=asyncRejects(third,"export_timed_out");h.timers[2]();await rejected;
+      assert(h.workers[0].terminated,"timed-out worker released");h.client.invalidate();
+    }],
+    ["worker_failure_or_unavailability_never_runs_inline_fallback", async () => {
+      const unavailable=createLocalGpxExporter({createWorker:()=>{throw new Error("unsupported");},lifecycleTarget:null});
+      await asyncRejects(unavailable.exportCandidate(candidate()),"export_worker_unavailable");
+      const h=fake(), pending=h.client.exportCandidate(candidate());
+      const rejected=asyncRejects(pending,"export_worker_unavailable");h.workers[0].onerror();await rejected;
+      assert(h.workers[0].terminated,"failed worker released");h.client.invalidate();
+    }],
+  ];
+}
+
+async function asyncRejects(promise, code) {
+  let error;try {await promise;}catch(caught){error=caught;}
+  assert(error instanceof LocalGpxExportError && error.code===code,`expected ${code}, got ${error}`);
 }
 
 async function exported(input) {

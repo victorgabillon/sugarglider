@@ -225,6 +225,12 @@ and device transfer. CI now validates the release variant and unsigned bundle.
   as do 138 debug / 134 release JUnit tests, both lint checks and bundle assembly
   in a 3 GiB / two-CPU scope (3 min 19 s). No new device PASS is claimed. Evidence:
   `/tmp/sugarglider-pr44-message-type-{check,android}.log` and artifact report.
+- PR44 merged main's PR40 through merge commit `2ab30b8`, preserving its native
+  hardening and reconciling the shared shell at v27. Combined `make check` passes
+  1,024 tests; 187 scenarios across ten browser harnesses pass. All five GitHub CI
+  checks pass and the draft is mergeable. Native files are unchanged from
+  `a10e835`, so its native test/bundle evidence still applies. This supersedes
+  the earlier cache reconciliation note; full PR44 acceptance remains pending.
 - Latest unsigned preparation AAB: 3,529,014 bytes, SHA-256
   `c6d2cf35d1f591560e7d36c8911bbdc0faacc92619dd8734690d87ff6d4c7804`, under the
   PR44 checkout's `android/app/build/outputs/bundle/release/app-release.aab`.
@@ -255,21 +261,23 @@ pending.
 
 The first implementation part, `b6a097e` on `feat/pr41-local-canonical-export`,
 is GitHub draft [PR #43](https://github.com/victorgabillon/sugarglider/pull/43).
-All five CI checks pass at evidence head `2ac8c0b`. It connects
+All five CI checks pass at evidence head `b6c7d20`; subsequent worker changes require their own CI. It connects
 normal Download GPX to local serialization of the existing canonical candidate,
 including a saved offline snapshot. It preserves exact track order/profile,
 revalidates strict selected-stop arrivals, omits dropped stops and extensions,
 and orders reached/approximated approaches together. Generated public profile
-metadata comes from the sole Python registry. Shell v26 caches the new modules.
+metadata comes from the sole Python registry. Shell v28 caches the serializer, metadata, client and worker modules.
 See [PR41 local canonical export](pr41-local-canonical-export.md).
 
 `make check`: 1,026 tests / 16 existing integration tests deselected, Ruff and
-strict mypy pass (242 files). Relevant browser suites: 131 scenarios pass,
-including 14 new GPX cases. The actual shared-page host test saved a synthetic
+strict mypy pass (242 files). Relevant browser suites: 137 scenarios pass,
+including 20 GPX cases. Validation/formatting now runs in a worker with a
+16 MiB output bound, one pending export, cancellation and a 60-second limit. The actual shared-page host test saved a synthetic
 snapshot through the UI, stopped its fixture server, reloaded offline and used
 normal Download GPX successfully: zero export HTTP requests, unchanged snapshot,
 and complete XML field equality with Python's canonical writer. Reports/logs:
-`/tmp/sugarglider-pr41-{local-export-check,local-export-browser,export-ui}.*`.
+`/tmp/sugarglider-pr41-export-worker-{check,browser,ui}.log` and
+`/tmp/sugarglider-pr41-export-ui.json`.
 Android file saving, normal local candidate publication, bundled first launch,
 release native routing and every required PR41 phone case remain outstanding.
 This preparation does not establish a release-equivalent device PASS.
@@ -279,7 +287,7 @@ This preparation does not establish a release-equivalent device PASS.
 | Gate | Status | Action / effect |
 | --- | --- | --- |
 | Fairphone USB authorization | RESOLVED | User reconnected the phone; ADB reports Fairphone 6 as authorized. |
-| Fairphone PR40 acceptance | RESOLVED | User unlocked the visible app; required PR40 acceptance passed. Phone is disconnected on 2026-09-12; further PR41/42/44 physical work needs it reconnected. |
+| Fairphone PR40 acceptance | RESOLVED | User unlocked the visible app; required PR40 acceptance passed. Phone reconnected on 2026-09-12; display restoration, staging removal, retained backup and empty ADB forwarding are verified. Further physical gates remain open. |
 | Static production hosting / domain | LIMITS AUDITED; TRANSPORT / PUBLICATION PENDING | GitHub Releases may fit measured large components, but directory mapping, redirects, full index size and real downloads still need validation. No artifact published or paid account created. |
 | Social production hosting / domain / off-host backups | USER_ACTION_REQUIRED FOR LIVE ACCEPTANCE | Provider-neutral assets and HTTPS acceptance are prepared in PR43; user choice of an existing approved host/domain or later provisioning remains pending. |
 | Upload signing key | USER_ACTION_REQUIRED BEFORE SIGNED UPLOAD | External configuration and disposable-key pipeline pass. Publisher must supply an existing key or explicitly create/safeguard one; no permanent key created. |
