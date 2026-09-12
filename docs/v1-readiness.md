@@ -32,7 +32,7 @@ PASS never means an author assessment alone. Superseded evidence stays identifie
 | Milestone | Status | Required success evidence |
 | --- | --- | --- |
 | PR40 local Auto Tour v2 / POI / nature | MERGED; REQUIRED PR40 CHECKS PASS | Validated local PR39 readers/storage; bounded deterministic search; real Fairphone nature/POI outcomes, repeat, native geometry and zero-network acceptance recorded below |
-| PR41 production Android local planner | LOCAL CANONICAL GPX + NATIVE SAVE IMPLEMENTED; NORMAL PLANNING / DEVICE GATES PENDING | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
+| PR41 production Android local planner | NORMAL LOCAL GENERATE / CANONICAL GPX IMPLEMENTED; BUNDLED RELEASE / DEVICE GATES PENDING | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
 | PR42 region product | WESTERN PARTITION BUILT / VERIFIED; PRODUCT UI PENDING | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
 | PR43 tiny production service | CODE MERGED; LIVE HOSTING PENDING | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency; public hosting remains an external action |
 | PR44 Play release candidate | PREPARATION DRAFT; FINAL RELEASE GATES OPEN | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
@@ -261,7 +261,7 @@ pending.
 
 The first implementation part, `b6a097e` on `feat/pr41-local-canonical-export`,
 is GitHub draft [PR #43](https://github.com/victorgabillon/sugarglider/pull/43).
-All five CI checks pass at evidence head `b6c7d20`; the worker follow-up also passes all five checks at `6a0314c`; native-save changes require their own CI. It connects
+All five CI checks pass at evidence head `b6c7d20`; the worker follow-up also passes all five checks at `6a0314c`; all five native-save checks also pass at `dad310c`. It connects
 normal Download GPX to local serialization of the existing canonical candidate,
 including a saved offline snapshot. It preserves exact track order/profile,
 revalidates strict selected-stop arrivals, omits dropped stops and extensions,
@@ -294,6 +294,56 @@ Physical Android saving, normal local candidate publication, bundled first launc
 release native routing and every required PR41 phone case remain outstanding.
 This preparation does not establish a release-equivalent device PASS.
 
+Normal-planner work continues on dependent branch
+`feat/pr41-normal-local-planner`, based on `dad310c`. Both local searches now own
+one shared request context with cached native calls and canonical budget/cache
+diagnostics. Existing route/proposal behavior is retained; distinct concurrent
+Auto Tour requests are rejected explicitly. `make check` and 223 browser
+scenarios pass; 16 browser diagnostic snapshots validate through Python's
+canonical model. [Normal integration evidence](pr41-normal-local-planner.md)
+records this foundation. The next preparation now publishes canonical candidates
+and full results through a worker and shared portfolio, including native nature,
+validated reached POI approaches, explicit dropped outcomes and the mandatory
+no-POI control. All 37 browser results pass the unchanged Python snapshot
+validator; 264 browser scenarios and `make check` (1,028 passed / 16 deselected,
+244 mypy files) pass. Shell v31 preserves normal offline GPX Download with zero
+export fetches. Normal Generate and truthful unknown-detail UI integration remain
+next; this is not a PR41 PASS or new physical evidence.
+
+The subsequent normal-UI integration on draft GitHub
+[PR #44](https://github.com/victorgabillon/sugarglider/pull/44) now selects the local
+core when Android's bridge is present, publishes normal map/selection objects and
+exports through the native document-save adapter. Shell v32 includes the existing
+licensed required-label glyphs and restricts static cache access to its explicit
+file list. `make check` remains green (1,028 / 16 deselected); 282 browser scenarios,
+50 Python-validated canonical results and 59 matching candidate GPX exports pass.
+Four actual-page tests with a disclosed synthetic native bridge pass after stopping
+the static server: both modes with hiking/cycling, exact map lines/direction arrows,
+normal GPX export, truthful unknown metrics and uncovered-region failure, with zero
+generation/export API requests. These are host fixtures, not Fairphone or graph
+evidence. Required/interior Auto Tour points, imported soft stops, native reversal,
+map-wide local POI discovery, bundled first launch and release routing remain
+explicit integration limitations; see the current PR41 document. All five CI
+checks passed the earlier canonical-publication head `8fcd4a7`.
+
+The next Fairphone preparation supersedes the earlier pending normal-UI/document
+checks: the unchanged native APK was upgraded preserving data, and shell v34
+passes normal Waypoint Route and Auto Tour with hiking and cycling. Exact map
+geometry, direction arrows, visible local-map attribution, canonical validation,
+local nature on tours, deterministic repeats, and outside-coverage failure pass.
+There are zero planning API calls with the static setup server stopped. The
+original cycling endpoint fails truthfully at 34.8 m against its 25 m limit; a
+separate explicit graph-coordinate fixture succeeds. The error now exposes that
+measured evidence without weakening the request. Android GPX Cancel and Save pass;
+the 22,717-byte file matches Python exactly, retains 518 trackpoints in one track
+and segment, and makes zero routing calls. `make check` and 283 browser scenarios
+pass, and the final actual-page host check passes. All five CI checks passed
+`fe80ea7`; the new follow-up needs its own checks. See the
+[full physical evidence](pr41-normal-local-planner.md#fairphone-normal-planner-preparation--2026-09-12).
+This remains a debug APK with a setup origin and development packs. Bundled first
+launch, production routing, coordinated regional installation and the required
+release-equivalent matrix remain outstanding; no PR41 or V1 PASS is claimed.
+
 ## External actions and blockers
 
 | Gate | Status | Action / effect |
@@ -323,10 +373,9 @@ IN PROGRESS. PR40 and PR43's code-side milestones are merged; public hosting
 remains pending. PR40 required physical acceptance passes; PR41/42/44 completion is outstanding. No V1 readiness
 or signed release artifact is claimed.
 
-PR40 setup's temporary static server and owned USB reverse mapping were removed
-before accepted testing. On 2026-09-12 ports 8000/8989 have no listener and ADB
-has no device/forward. The original stay-awake value `0` was recorded and a
-restore command issued after testing; a retained readback is unavailable. Recheck
-that setting and removal of the public temporary routing files on reconnection.
-The private previous Marly routing archive remains backed up. No radio/hotspot
-state was changed and no app data was cleared.
+Temporary static servers and owned USB reverse mappings were removed before
+accepted PR40/PR41 testing. After the PR41 preparation on 2026-09-12, the phone
+remains authorized, both ADB forwarding lists are empty, and the original
+stay-awake setting is confirmed as `0`. The private previous Marly routing archive
+remains backed up. No radio/hotspot state was changed, no location sharing was
+started, and no app data was cleared.
