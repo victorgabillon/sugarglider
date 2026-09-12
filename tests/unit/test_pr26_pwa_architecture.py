@@ -150,14 +150,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v37_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v38_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v37"
+    assert generation.group(1) == "v38"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -258,7 +258,7 @@ def test_shared_shell_generation_tracks_v37_cached_assets() -> None:
             "81d76b750de4aba6ea5e701ae2a5319ae4fd9221073b06fc472f86148828f6bb"
         ),
         "local_region_store.js": (
-            "0f4209027099d30e33a0b63bb8764db0596fb6942f35357988360ea518a2ddcb"
+            "1d031f544b27c0c38ef37efd68b2d9d107843af4bbb8e12fe7c87428bab78eb5"
         ),
         "local_region_worker.js": (
             "2db7aab7b00f98cd980c186016245eaebb1217014d0fb4052bb22021ca862298"

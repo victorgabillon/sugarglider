@@ -70,6 +70,8 @@ pwa_network.js
 pwa_runtime.js
 pwa_store.js
 pwa_view.js
+region_components.js
+region_versions.js
 regional_integrity.js
 regional_manifest.js
 saved_routes.js
