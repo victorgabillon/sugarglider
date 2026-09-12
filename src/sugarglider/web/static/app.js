@@ -1,4 +1,5 @@
-import { ApiError, exportPlanCandidate, generatePlan, getConfig, getPoiStatus, getRoutingProfiles, reversePlan, searchPois, visualizeRoute } from "./api.js";
+import { ApiError, generatePlan, getConfig, getPoiStatus, getRoutingProfiles, reversePlan, searchPois, visualizeRoute } from "./api.js";
+import { exportCanonicalCandidate } from "./local_gpx_export.js";
 import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
@@ -51,7 +52,7 @@ import {
   renderOfflineCopyControls,
   renderPwaStatus,
 } from "./pwa_view.js";
-import { createSavedRoute, deleteSavedRoute, downloadSavedRouteGpx, getSavedRoute, savedRouteShareUrl, shareSavedRoute, sharedRouteSlug } from "./saved_routes.js";
+import { createSavedRoute, deleteSavedRoute, getSavedRoute, savedRouteShareUrl, shareSavedRoute, sharedRouteSlug } from "./saved_routes.js";
 import { applyImplicitEndpointMapClick, assignRouteEndpoint, currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, generationAvailability, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, readPlannerOptionsFromControls, renderEndpointTopologyControls, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, setRouteTopology, state, switchPlanningMode } from "./state.js";
 import {
   initializeTrailProfile,
@@ -1499,9 +1500,7 @@ function renderMetrics() {
   const busy = ["running", "reversing"].includes(state.request.status);
   const readOnly = isImmutableSnapshotDisplay();
   const savingUnavailable = !state.config?.saved_routes_available;
-  byId("download-gpx").disabled = !candidate
-    || busy
-    || serverFeaturesUnavailable();
+  byId("download-gpx").disabled = !candidate || busy;
   byId("reverse-route").disabled = readOnly || !candidate || busy || Boolean(state.importedGpx && !state.generationResult);
   byId("save-route").disabled = savingUnavailable || readOnly || !candidate || busy;
   byId("save-route").classList.toggle("hidden", savingUnavailable || readOnly || !candidate);
@@ -2258,18 +2257,16 @@ async function importGpx(file) {
 
 async function downloadSelected() {
   const candidate = selectedCandidate();
-  if (!candidate || serverFeaturesUnavailable()) return;
+  if (!candidate || ["running", "reversing"].includes(state.request.status)) return;
   try {
-    const { blob, filename } = isSavedRouteSnapshotDisplay()
-      ? await downloadSavedRouteGpx(state.savedRouteSnapshot.slug)
-      : await exportPlanCandidate(candidate);
+    const { blob, filename } = exportCanonicalCandidate(candidate);
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
     link.download = filename;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
-    byId("request-status").textContent = `${filename} downloaded without rerunning generation.`;
+    byId("request-status").textContent = `${filename} prepared from the selected route.`;
   } catch (error) {
     handleError(error, "GPX export failed.");
   }

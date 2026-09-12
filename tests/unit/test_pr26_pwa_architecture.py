@@ -150,14 +150,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v25_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v26_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v25"
+    assert generation.group(1) == "v26"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -177,12 +177,15 @@ def test_shared_shell_generation_tracks_v25_cached_assets() -> None:
             "local_region_worker.js",
             "local_region_panel.js",
             "native_bridge_transport.js",
+            "api.js",
+            "local_gpx_export.js",
+            "public_profile_metadata.js",
         )
     } == {
         "index.html": (
             "d8bd089da5d98b2a618765498c4220f096cb671c2b43618f5c5347696b1382d2"
         ),
-        "app.js": ("3ee27fb3a3ae60f65c9de8095af5ea7e2740a24248bc26f08bd901de4b887d81"),
+        "app.js": ("e7cf73e669e1c58bb82987905b22b8101b7510bae48eba48145cd4bc10b2e7f3"),
         "state.js": (
             "de724c096dd193347bdbdb9a424e873902ead40b30d48a339925da4d9aa58abd"
         ),
@@ -222,6 +225,13 @@ def test_shared_shell_generation_tracks_v25_cached_assets() -> None:
         ),
         "native_bridge_transport.js": (
             "f601ec9b54b063ce3687fd6f51404818157fa731e860dd87ea6c84656d1528b4"
+        ),
+        "api.js": ("2844e8cc44afc78de06e3ce24ff7e6040ce16c189fd84122b790404cdf76c297"),
+        "local_gpx_export.js": (
+            "ff85940460760a0e2cf4518db589518f3c5e67f42db23d6b1edc351a5bcca228"
+        ),
+        "public_profile_metadata.js": (
+            "2077a93dd9291b556d2cf5ebe29c317aeda3f96b356722a3fd069ff8963f41fa"
         ),
     }
 

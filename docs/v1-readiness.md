@@ -31,8 +31,8 @@ PASS never means an author assessment alone. Superseded evidence stays identifie
 
 | Milestone | Status | Required success evidence |
 | --- | --- | --- |
-| PR40 local Auto Tour v2 / POI / nature | CODE / AUTOMATED / REQUIRED DEVICE CHECKS PASS; MERGE GATE BEING CHECKED | Validated local PR39 readers/storage; bounded deterministic search; real Fairphone nature/POI outcomes, repeat, native geometry and zero-network acceptance recorded below |
-| PR41 production Android local planner | INTEGRATION AUDIT STARTED | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
+| PR40 local Auto Tour v2 / POI / nature | MERGED; REQUIRED PR40 CHECKS PASS | Validated local PR39 readers/storage; bounded deterministic search; real Fairphone nature/POI outcomes, repeat, native geometry and zero-network acceptance recorded below |
+| PR41 production Android local planner | LOCAL CANONICAL GPX IMPLEMENTED; NORMAL PLANNING / NATIVE EXPORT PENDING | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
 | PR42 region product | WESTERN PARTITION BUILT / VERIFIED; PRODUCT UI PENDING | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
 | PR43 tiny production service | CODE MERGED; LIVE HOSTING PENDING | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency; public hosting remains an external action |
 | PR44 Play release candidate | PREPARATION DRAFT; FINAL RELEASE GATES OPEN | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
@@ -79,7 +79,10 @@ Implementation/evidence is detailed in
 GitHub [PR #39](https://github.com/victorgabillon/sugarglider/pull/39) originally
 remained draft at `ca2fb51` pending physical acceptance. The current implementation
 `c081878` passes all five CI jobs and GitHub reports it mergeable. The required
-physical gate passed on 2026-09-11; final evidence/merge checks are in progress.
+physical gate passed on 2026-09-11. Evidence update `dbf9900` passed all five CI
+jobs and merged as `d129c22` on 2026-09-12 (merge commit). Main was refreshed;
+the completed local/remote feature branch was removed. Protected untracked
+entries and stash were verified unchanged.
 
 After integrating main's PR43 merge into the PR40 feature branch (`e92b3b5`),
 `make check` passes again: **1,022 passed / 16 existing integration tests
@@ -159,7 +162,7 @@ claimed yet. Measurements are pending in
 `/tmp/sugarglider-pr42-idf-build-report.json`; generated files stay ignored.
 
 Follow-up `7b230e6` passes `make check`: 1,036 tests / 16 existing integration
-tests deselected, Ruff and strict mypy (240 source files). All five CI checks at `7b230e6` pass.
+tests deselected, Ruff and strict mypy (240 source files). All five CI checks at `7b230e6` and measurement update `86cf7e0` pass.
 
 Full Île-de-France totals 592,588,177 bytes. Map: 243,080,284 bytes / 1,252.505 s;
 routing: 318,443,520 / 952.890 s; places: 366,485 / 1,603.828 s; nature: 30,694,816 /
@@ -240,7 +243,27 @@ origin, normal Generate/candidate display, truthful unknown-detail coverage,
 canonical signatures/traversal and local selected-candidate GPX export. The
 existing canonical analysis has explicit availability/coverage fields; no
 breaking result-schema change has been selected. Same-origin participant
-authority must remain isolated. Implementation and physical acceptance are pending.
+authority must remain isolated. Normal Generate and physical acceptance remain
+pending.
+
+The first implementation part, `feat/pr41-local-canonical-export`, now connects
+normal Download GPX to local serialization of the existing canonical candidate,
+including a saved offline snapshot. It preserves exact track order/profile,
+revalidates strict selected-stop arrivals, omits dropped stops and extensions,
+and orders reached/approximated approaches together. Generated public profile
+metadata comes from the sole Python registry. Shell v26 caches the new modules.
+See [PR41 local canonical export](pr41-local-canonical-export.md).
+
+`make check`: 1,026 tests / 16 existing integration tests deselected, Ruff and
+strict mypy pass (242 files). Relevant browser suites: 131 scenarios pass,
+including 14 new GPX cases. The actual shared-page host test saved a synthetic
+snapshot through the UI, stopped its fixture server, reloaded offline and used
+normal Download GPX successfully: zero export HTTP requests, unchanged snapshot,
+and complete XML field equality with Python's canonical writer. Reports/logs:
+`/tmp/sugarglider-pr41-{local-export-check,local-export-browser,export-ui}.*`.
+Android file saving, normal local candidate publication, bundled first launch,
+release native routing and every required PR41 phone case remain outstanding.
+This preparation does not establish a release-equivalent device PASS.
 
 ## External actions and blockers
 
@@ -255,8 +278,8 @@ authority must remain isolated. Implementation and physical acceptance are pendi
 
 ## Current V1 status
 
-IN PROGRESS. PR43's code-side milestone is merged; public hosting remains pending.
-PR40 required physical acceptance passes; PR41/42/44 completion is outstanding. No V1 readiness
+IN PROGRESS. PR40 and PR43's code-side milestones are merged; public hosting
+remains pending. PR40 required physical acceptance passes; PR41/42/44 completion is outstanding. No V1 readiness
 or signed release artifact is claimed.
 
 PR40 setup's temporary static server and owned USB reverse mapping were removed
