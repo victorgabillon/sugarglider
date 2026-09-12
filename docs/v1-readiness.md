@@ -212,13 +212,26 @@ store. Original component manifest bytes and full hashes survive restart checks;
 failed updates preserve the active version. `make check` passes 1,033 tests,
 334 browser scenarios pass, and Android passes 164 tests in each variant with
 only the existing lint warnings. All 92 assets match the built artifacts. The
-current unsigned AAB is 47,381,958 bytes, SHA-256
+unsigned AAB from that preparation was 47,381,958 bytes, SHA-256
 `1216c415cf7acc108b4ca0a9c1a63661e5636fa9cae3839830f6c4c766b87ec2`.
 These stores are packaged but not wired into production planning or a download
 screen. Native HTTP/storage adapters, routing-version transport, worker and
 coordinator integration, catalog and Fairphone consumer-region acceptance remain
 open. Browser native completion is synthetic and JVM archives are synthetic;
 neither is physical regional-install evidence. The phone remains on `b8ebe3a`.
+
+The [native transfer preparation](pr42-native-transfers.md) adds strict static
+directory URLs, credential-free streamed downloads, timeout/cancellation checks,
+and Android storage estimation/allocation before the archive download. It reuses
+completed verified archives and leaves partial/corrupt versions explicit.
+`make check` passes 1,033 tests; both Android variants pass 174 tests and retain
+only existing lint warnings. All 92 shared assets and the native library are
+unchanged. The current unsigned AAB is 47,389,057 bytes, SHA-256
+`af7afb52bb5dd4bb8aa2abea98e60955d8ede914834b14a994b8fef1b4695fec`.
+The adapter is not yet connected to the bridge or product screen. Runtime
+version ownership, catalog, coordinator/worker/UI integration and physical
+consumer-region acceptance remain open. No phone or public distribution claim
+is made by these fake-connection tests.
 
 ## PR44 audit preparation
 
