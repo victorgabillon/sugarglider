@@ -5,11 +5,20 @@ Google approval. The existing Play application ID is
 `io.github.victorgabillon.sugarglider`; do not create a replacement app or install
 a disposable certificate over its existing Fairphone installation.
 
+The user-supplied prior-release record identifies the public developer name as
+**Sugarglider**, reports code 1 / name 0.1.0 published to internal testing on
+2026-08-28, and says an upload key and recovery information were privately backed
+up. The current Fairphone package inspection confirms that this version is
+installed through Google Play. Current Console track contents, upload-key access
+and successful launch are separate checks; no new upload/publication is authorized.
+
 ## Publisher submission material
 
-- Confirm the existing upload-key/App Signing configuration and the highest used
-  version code on every track. The proposed update is code 2 / name 1.0.0.
-- Approve the public publisher identity, privacy contact, policy text and active
+- Locate the existing privately backed-up upload key, confirm the App Signing
+  configuration and the highest used version code on every track. The proposed
+  update is code 2 / name 1.0.0.
+- Retain the supplied public developer name Sugarglider; supply any required legal
+  publisher identity and approve the privacy contact, policy text and active
   HTTPS policy URL. Embed that URL with
   `SUGARGLIDER_ANDROID_PRIVACY_POLICY_URL`, and verify the in-app link and policy
   from a device before upload. The local Privacy screen is available now.
@@ -66,27 +75,33 @@ the consumer operation itself must be available through normal release UI.
 
 | Scenario | Required evidence | Current status |
 | --- | --- | --- |
-| Fresh consumer-region install | Real Download action, four integrity checks, activation, measured duration/storage | Pending approved static host and unlocked device |
+| Fresh consumer-region install | Real Download action, four integrity checks, activation, measured duration/storage | Device unlocked/authorized; pending approved static host |
 | Normal local planning | Waypoint + Auto Tour, pedestrian + bicycle, selected production region, deterministic repeat, no routing API | Earlier Marly debug/shared-engine evidence only; final region/build pending |
 | Six profiles | Public selection/capability identity; real reachable requests or truthful failures for each | Shared-engine automated coverage; final regional device cases pending |
 | Offline restart | Installed map/POI/nature, routes and GPX after restart with backend inaccessible | Pending final region; do not change hotspot/radios |
 | Remove/reinstall/cancel | Real product controls, retained valid version, explicit interruption/recovery | Automated coordinator/storage coverage passes; physical pending |
-| No region / outside coverage | Disabled Generate or explicit failure with unchanged request and no fallback | No-region locked-device startup observed on product build; final visible cases pending |
-| Rotation and resizing | Plan, current page and focus remain usable; no automatic geolocation or sharing | Pending final implementation/device check |
-| Background/resume / process restart | UI truth and region persistence; sharing lifecycle and uncertain GPX outcome preserved | Pending final build |
-| Renderer loss | Explicit Reopen, truthful unsaved/GPX warning, native Stop available, no implicit Start | Callback unit coverage; physical recovery pending |
+| No region / outside coverage | Disabled Generate or explicit failure with unchanged request and no fallback | Visible current no-region status passes; earlier Marly outside-coverage passes; production-region case pending |
+| Rotation and resizing | Plan, current page and focus remain usable; no automatic geolocation or sharing | Patched-build page/edit retention and keyboard visibility pass; active production-region route pending |
+| Background/resume / process restart | UI truth and region persistence; sharing lifecycle and uncertain GPX outcome preserved | Current empty debug planner passes same-page background/resume and process restart; installed-region/active-operation cases pending |
+| Renderer loss | Explicit Reopen, truthful unsaved/GPX warning, native Stop available, no implicit Start | Current empty-renderer native recovery/Reopen and readable system bars pass; active GPX/sharing cases pending |
 | Permission denied | Location/notifications denial remains explicit; local planning still usable | Prior architecture tests; final physical pending |
 | Location disabled | Explicit native-sharing failure with no hidden fallback | Pending; changing the user's device setting requires separate per-test agreement |
 | GPX save/export | System Cancel + Save, one track/segment, exact canonical geometry, no routing during export | Earlier real device Marly evidence; final production region/build pending |
 | Social unavailable | Local planner remains independent; social error explicit | Architecture/browser evidence; final physical pending |
 | Social available | Approved HTTPS service, synthetic sharing/outing/Start/Stop and cleanup | No approved production endpoint configured |
 | Release identity / upgrade | Existing upload-signing path, compatible update with retained user data | Disposable host pipeline only; existing Play app untouched |
-| Launcher / large screen | Existing artwork legible, system-bar/cutout/keyboard controls visible | Legacy bitmap icon retained; adaptive/launcher presentation not asserted |
+| Launcher / large screen | Existing artwork legible, system-bar/cutout/keyboard controls visible | Phone system-bar and keyboard checks pass; legacy bitmap icon retained; adaptive/large-screen presentation not asserted |
 | 16 KiB runtime | Compatible runtime launch and local route on a 16 KiB device/emulator | Binary/package alignment is separate evidence; runtime pending |
 
 Do not use `pm clear`, uninstall the Play app or replace it with a disposable
 signature. Fresh state can use app-level region removal or a separately named test
 application. Browser simulations and unit tests cannot close physical rows.
+
+The [first-pass report](v1-first-pass-report.md) consolidates source/artifact
+identities, physical limits, review history and every deferred publisher question.
+The user has requested that these decisions wait until after this pass and has
+explicitly prohibited Play publication. The unsigned build and signing/deployment
+procedures are prepared; no upload or public endpoint is claimed.
 
 ## Current policy dates
 

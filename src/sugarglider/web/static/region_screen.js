@@ -119,14 +119,20 @@ export function createRegionScreen({ elements, versions, product, withRegion,
   async function inspectSelection() {
     let row;
     try { row = selectCommittedRegion(rows, selectedRegionId()); }
-    catch (error) { readyBuild = null; onReady(null, error.code, null); renderRows(); await onMapChange(); return; }
+    catch (error) {
+      readyBuild = null; onReady(null, error.code, null);
+      message(regionFailureMessage(error.code), error.code);
+      renderRows(); await onMapChange(); return;
+    }
     if (selectedRegionId() === null) selectRegion(row.region_id);
     onReady(null, "regional_checking", null);
+    message(regionFailureMessage("regional_checking"), "regional_checking");
     try {
       const checked = await withRegion(async (region) => ({ capabilities: region.capabilities ?? await region.bridge.capabilities(), reference: region.reference }));
       if (closed) return;
       readyBuild = checked.reference.build_id;
       onReady(checked.capabilities, null, checked.reference);
+      message("The selected region is ready for offline planning.", "regional_ready");
     } catch (error) {
       if (closed) return;
       readyBuild = null; onReady(null, error.code ?? "regional_components_unavailable", null);
@@ -137,9 +143,10 @@ export function createRegionScreen({ elements, versions, product, withRegion,
   }
 
   async function refresh({ catalogToo = false } = {}) {
+    let catalogUnavailable = false;
     if (catalogToo) {
       try { catalog = await loadCatalog(); }
-      catch { message(regionFailureMessage("regional_catalog_unavailable"), "regional_catalog_unavailable"); }
+      catch { catalogUnavailable = true; }
     }
     try { rows = await versions.list(); }
     catch {
@@ -150,17 +157,25 @@ export function createRegionScreen({ elements, versions, product, withRegion,
     if (closed) return;
     renderRows();
     await inspectSelection();
+    if (catalogUnavailable) message(regionFailureMessage("regional_catalog_unavailable"), "regional_catalog_unavailable");
   }
 
   async function act(action, { refreshAfter = true } = {}) {
     if (pending || closed) return;
     pending = true; cancelling = false; render();
+    let failure = null;
     try { await action(); }
-    catch (error) { message(regionFailureMessage(error.name === "AbortError" ? "regional_install_cancelled" : error.code), error.code ?? "regional_operation_failed"); }
+    catch (error) {
+      const code = error.name === "AbortError" ? "regional_install_cancelled" : error.code ?? "regional_operation_failed";
+      failure = { text: regionFailureMessage(code), code };
+      message(failure.text, failure.code);
+    }
     finally {
       if (!closed) {
         try { if (refreshAfter) await refresh(); }
         catch { message("The region list could not be refreshed. Reopen the app to check it.", "regional_storage_unavailable"); }
+        // Checking the retained region must not conceal a failed/cancelled update.
+        if (failure) message(failure.text, failure.code);
         pending = false; render();
       }
     }
