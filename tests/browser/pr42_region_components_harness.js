@@ -2,6 +2,7 @@ import { createRegionVersionStore } from "../../src/sugarglider/web/static/regio
 import { createVersionedRegionComponents } from "../../src/sugarglider/web/static/region_components.js";
 import { regionalBuildIdentity, sha256Bytes } from "../../src/sugarglider/web/static/regional_manifest.js";
 import { manifest as mapManifest, tinyPmtiles } from "./pr36_offline_maps_harness.js";
+import { createLocalRegionClient } from "../../src/sugarglider/web/static/local_region_client.js";
 
 export async function runPr42RegionComponentsHarness() {
   const fixture = await (await fetch("../fixtures/pr40_regional_data.json")).json();
@@ -73,6 +74,28 @@ export async function runPr42RegionComponentsHarness() {
     });
     cases.push("new_instance_reopens_exact_map_and_golden_indexes_without_fetch");
     cases.push("original_component_manifest_bytes_preserve_digest_across_restart");
+
+    const worker = createLocalRegionClient();
+    try {
+      await versions.withCommittedRegions(async () => {
+        const manifest = original.manifest;
+        const directory = await versions.committedDirectory(manifest.region_id, manifest.build_id);
+        const session = await worker.loadVersion(manifest, directory);
+        equal(session.identity.build_id, manifest.build_id, "real worker loads owned OPFS version");
+        const analyzed = await session.analyzeNature(fixture.route);
+        assert(Math.abs(analyzed.nature_score - fixture.expected.nature_score) < 1e-6, "worker keeps golden nature semantics");
+        equal((await worker.loadVersion(manifest, directory)).identity, session.identity, "verified immutable cache reuse");
+        const componentRoot = await directory.getDirectoryHandle("sugarglider-region-components");
+        const indexVersion = await (await componentRoot.getDirectoryHandle(manifest.region_id)).getDirectoryHandle(manifest.build_id);
+        const natureFile = await (await indexVersion.getDirectoryHandle("nature")).getFileHandle("index.json.gz");
+        const originalBytes = new Uint8Array(await (await natureFile.getFile()).arrayBuffer());
+        const broken = originalBytes.slice(); broken[broken.length - 1] ^= 1;
+        let writable = await natureFile.createWritable(); await writable.write(broken); await writable.close();
+        await rejects(() => worker.loadVersion(manifest, directory), "regional_checksum_mismatch");
+        writable = await natureFile.createWritable(); await writable.write(originalBytes); await writable.close();
+      });
+      cases.push("real_worker_uses_owned_version_and_detects_disk_corruption_despite_parsed_cache");
+    } finally { worker.close(); }
 
     available = true;
     current = await distribution(fixture, "Corrupt update");

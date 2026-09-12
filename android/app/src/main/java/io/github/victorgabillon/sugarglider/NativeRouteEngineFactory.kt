@@ -20,18 +20,13 @@ internal object NativeRouteEngineFactory {
 
 private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
     private val applicationContext = context.applicationContext
-    private val registry = RoutingPackRegistry(
-        File(
-            applicationContext.filesDir,
-            "routing-packs",
-        ),
-    )
+    private val repository = (applicationContext as SugargliderApplication).regionalRoutingRepository
     private val actorHolder = SingleCurrentRoutingPackActor(
         ::initializeActor,
     )
 
-    override fun capabilities(): NativeRouteCapabilities {
-        val installedPacks = registry.installedPacks()
+    override fun capabilities(reference: RegionalRoutingPackReference?): NativeRouteCapabilities {
+        val installedPacks = reference?.let { repository.withPack(it) { pack -> listOf(pack) } } ?: emptyList()
         return NativeRouteCapabilities(
             enabled = true,
             engine = ENGINE_ID,
@@ -53,21 +48,20 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
         if (!request.isValid()) {
             return NativeRouteResult.Failure(NativeRouteFailureCode.INVALID_REQUEST)
         }
+        return try {
+            repository.withPack(request.regionalReference) { pack -> routeInPack(request, pack) }
+        } catch (_: RegionalPackException) {
+            NativeRouteResult.Failure(NativeRouteFailureCode.ROUTING_PACK_UNAVAILABLE)
+        }
+    }
+
+    private fun routeInPack(request: NativeRouteRequest, selectedPack: RoutingPack): NativeRouteResult {
         val policy = ValhallaProfilePolicies.forProfile(request.profile)
-        val selectedPack = when (
-            val selection = registry.select(request.points, request.profile.accessMode)
-        ) {
-            is RoutingPackSelection.Selected -> selection.pack
-            RoutingPackSelection.NoGeographicCoverage -> {
-                return NativeRouteResult.Failure(
-                    NativeRouteFailureCode.NO_COVERING_ROUTING_PACK,
-                )
-            }
-            RoutingPackSelection.NoCompatibleAccessMode -> {
-                return NativeRouteResult.Failure(
-                    NativeRouteFailureCode.NO_COMPATIBLE_ROUTING_PACK,
-                )
-            }
+        if (!selectedPack.covers(request.points)) {
+            return NativeRouteResult.Failure(NativeRouteFailureCode.NO_COVERING_ROUTING_PACK)
+        }
+        if (!selectedPack.supports(request.profile.accessMode)) {
+            return NativeRouteResult.Failure(NativeRouteFailureCode.NO_COMPATIBLE_ROUTING_PACK)
         }
         val selectedActor = try {
             actorHolder.actorFor(selectedPack)

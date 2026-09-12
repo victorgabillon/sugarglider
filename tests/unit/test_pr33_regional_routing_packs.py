@@ -54,7 +54,9 @@ def test_manifest_registry_is_strict_confined_and_deterministic() -> None:
 def test_shared_engine_selects_one_pack_and_keeps_one_current_wrapper() -> None:
     engine = (KOTLIN / "NativeRouteEngineFactory.kt").read_text()
     registry = (KOTLIN / "RoutingPackRegistry.kt").read_text()
-    assert "registry.select(request.points, request.profile.accessMode)" in engine
+    assert "repository.withPack(request.regionalReference)" in engine
+    assert "selectedPack.covers(request.points)" in engine
+    assert "registry.select(" not in engine
     assert "NativeRouteFailureCode.NO_COVERING_ROUTING_PACK" in engine
     assert "NativeRouteFailureCode.NO_COMPATIBLE_ROUTING_PACK" in engine
     assert "SingleCurrentRoutingPackActor" in engine
@@ -82,7 +84,8 @@ def test_public_bridge_reports_pack_ids_without_paths_with_shared_release_engine
     assert '"pack_id", result.packId' in protocol
     assert "absolutePath" not in protocol
     assert "enabled = true" in release
-    assert "registry.installedPacks()" in release
+    assert "reference?.let { repository.withPack(it)" in release
+    assert "RoutingPackRegistry" not in release
     assert "installedPacks.any { it.supports(profile.accessMode) }" in release
     assert "NativeRouteFailureCode.ROUTING_PACK_UNAVAILABLE" in release
     assert "localValhallaConfiguration(pack.tileArchive)" in release

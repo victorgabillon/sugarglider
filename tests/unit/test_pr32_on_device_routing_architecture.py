@@ -44,7 +44,8 @@ def test_valhalla_is_pinned_arm64_with_one_shared_production_implementation() ->
         ).exists()
     assert "CostingModel.pedestrian" in policy
     assert 'ENGINE_VERSION = "0.5.1/valhalla-3.6.3"' in engine
-    assert '"routing-packs"' in engine
+    assert '"routing-packs"' not in engine
+    assert "regionalRoutingRepository" in engine
     assert "localValhallaConfiguration(pack.tileArchive)" in engine
     assert ".withTileExtract(tileArchive.absolutePath)" in engine
     assert '.withTileDir("")' in engine
@@ -197,7 +198,7 @@ def test_pr32_browser_harness_covers_required_failure_and_ownership_cases() -> N
 
 def test_pr32_shell_generation_precaches_local_bridge() -> None:
     worker = (STATIC / "service-worker.js").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v38`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v39`" in worker
     assert '"/static/native_bridge_transport.js"' in worker
     assert '"/static/local_routing.js"' in worker
     assert '"/static/local_auto_tour.js"' in worker

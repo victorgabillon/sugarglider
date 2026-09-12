@@ -23,7 +23,7 @@ export function createLocalPlanPublisher({
     };
     created.onerror = created.onmessageerror = () => { if (worker === created) fail("local_publication_worker_unavailable"); };
   }
-  function publish(request, search) {
+  function publish(request, search, regionalReference = null) {
     if (pending) return Promise.reject(failure("local_publication_busy"));
     if (!Array.isArray(search?.candidates) || search.candidates.length > 5
       || search.candidates.some((draft) => !Array.isArray(draft.geometry) || draft.geometry.length > 200_000)) {
@@ -35,7 +35,7 @@ export function createLocalPlanPublisher({
       pending = { id, resolve, reject, profile: request.routing_profile, kind: request.kind,
         timer: schedule(() => { if (pending?.id === id) fail("local_publication_timed_out"); }, 60_000) };
       // postMessage snapshots both inputs synchronously before this call returns.
-      try { worker.postMessage({ type: "publish", id, request, search }); }
+      try { worker.postMessage({ type: "publish", id, request, search, regionalReference }); }
       catch { fail("local_publication_worker_unavailable"); }
     });
   }

@@ -74,6 +74,9 @@ region_components.js
 region_versions.js
 regional_integrity.js
 regional_manifest.js
+regional_native.js
+regional_planning.js
+regional_routing_reference.js
 saved_routes.js
 service_worker_policy.js
 state.js
