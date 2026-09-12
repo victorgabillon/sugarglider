@@ -184,7 +184,7 @@ export function initializeMap(config, handlers) {
       center: config.initial_center,
       zoom: config.initial_zoom,
       style: initialMapStyle(config),
-      attributionControl: true,
+      attributionControl: { customAttribution: config.tile_attribution },
     });
   } catch {
     handlers.onError("MapLibre loaded, but this browser could not initialize WebGL. Route controls remain available.");

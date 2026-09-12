@@ -1,4 +1,7 @@
+import { isBundledAndroidApp } from "./android_app.js";
+
 export function createPwaController({
+  bundledShell = isBundledAndroidApp(),
   serviceWorkers = typeof navigator === "undefined"
     ? null
     : navigator.serviceWorker,
@@ -20,6 +23,9 @@ export function createPwaController({
   let controllerListenerBound = false;
 
   async function register() {
+    // Android supplies current APK bytes, including workers, on every launch.
+    // An independent service-worker cache must not retain an older app version.
+    if (bundledShell) { onSupported(false); onStatus("ready"); return null; }
     if (
       !serviceWorkers
       || !allowedRegistrationContext(locationObject, secureContext)
