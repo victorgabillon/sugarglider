@@ -33,6 +33,13 @@ export function createLocalRegionClient({
   }
   async function load(regionId) {
     const identity = await request("load", { region_id: regionId });
+    return session(identity);
+  }
+  async function loadVersion(manifest, directory) {
+    const identity = await request("load_version", { manifest, directory });
+    return session(identity);
+  }
+  function session(identity) {
     return Object.freeze({ identity,
       queryPois: (query) => request("query_pois", { build_id: identity.build_id, query }),
       analyzeNature: (candidate) => request("analyze_nature", { build_id: identity.build_id,
@@ -42,8 +49,9 @@ export function createLocalRegionClient({
   return Object.freeze({
     list: () => request("list"),
     install: (url) => request("install", { url }),
+    installVersion: (url, manifest, directory) => request("install_version", { url, manifest, directory }),
     cancelInstall: () => worker.postMessage({ type: "cancel_install" }),
     remove: (regionId) => request("remove", { region_id: regionId }),
-    load, close,
+    load, loadVersion, close,
   });
 }

@@ -50,12 +50,19 @@ class BundledShellPolicyTest {
 
     @Test fun bundledBridgeAllowsPlanningAndExportWithoutSharingAuthority() {
         val id = "page-one"; val nonce = "page"
-        val route = NativeRouteRequest(2, id, listOf(LocalRouteCoordinate(48.0, 2.0), LocalRouteCoordinate(48.1, 2.1)), LocalRouteProfile.HIKE)
+        val route = NativeRouteRequest(LOCAL_ROUTE_REQUEST_VERSION, id, listOf(LocalRouteCoordinate(48.0, 2.0), LocalRouteCoordinate(48.1, 2.1)), LocalRouteProfile.HIKE, syntheticRegionalRoutingReference())
         for (request in listOf(
-            BridgeRequest.Hello(id, nonce), BridgeRequest.GetLocalRouteCapabilities(id, nonce),
+            BridgeRequest.Hello(id, nonce), BridgeRequest.GetLocalRouteCapabilities(id, nonce, null),
             BridgeRequest.LocalRoute(id, nonce, route), BridgeRequest.SaveGpx(id, nonce, "route.gpx"),
             BridgeRequest.RejectedLocalRoute(id, nonce, NativeRouteFailureCode.INVALID_REQUEST),
-        )) assertTrue(BundledShellPolicy.acceptsRequest(request))
+        )) {
+            assertTrue(BundledShellPolicy.acceptsRequest(request))
+            assertTrue(BundledShellPolicy.acceptsOrigin(request, origin))
+            if (request is BridgeRequest.LocalRoute || request is BridgeRequest.GetLocalRouteCapabilities ||
+                request is BridgeRequest.RejectedLocalRoute) {
+                assertFalse(BundledShellPolicy.acceptsOrigin(request, "https://sharing.example"))
+            }
+        }
         for (request in listOf(
             BridgeRequest.GetStatus(id, nonce), BridgeRequest.StopTracking(id, nonce, "outing", "participant"),
             BridgeRequest.AcknowledgeTerminalFailure(id, nonce, 1, "outing", "participant"),

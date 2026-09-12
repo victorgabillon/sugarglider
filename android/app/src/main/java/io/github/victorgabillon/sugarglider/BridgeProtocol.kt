@@ -31,6 +31,7 @@ internal sealed interface BridgeRequest {
     data class GetLocalRouteCapabilities(
         override val requestId: String,
         override val pageNonce: String,
+        val regionalReference: RegionalRoutingPackReference?,
     ) : BridgeRequest
 
     data class LocalRoute(
@@ -43,6 +44,19 @@ internal sealed interface BridgeRequest {
         override val requestId: String,
         override val pageNonce: String,
         val code: NativeRouteFailureCode,
+    ) : BridgeRequest
+
+    data class RegionalWork(
+        override val requestId: String,
+        override val pageNonce: String,
+        val command: RegionalRoutingCommand,
+    ) : BridgeRequest
+
+    data class RegionalStatus(
+        override val requestId: String,
+        override val pageNonce: String,
+        val operationId: String,
+        val cancel: Boolean,
     ) : BridgeRequest
 
     data class StopTracking(
@@ -89,6 +103,7 @@ internal object BridgeProtocol {
         "route_version",
         "profile",
         "points",
+        "regional_reference",
     )
     private val coordinateFields = setOf("lat", "lon")
 
@@ -115,12 +130,17 @@ internal object BridgeProtocol {
                     null
                 }
             "get_local_route_capabilities" ->
-                if (hasExactly(value, baseFields)) {
-                    BridgeRequest.GetLocalRouteCapabilities(requestId, pageNonce)
+                if (hasExactly(value, baseFields + "regional_reference")) {
+                    val reference = if (value.isNull("regional_reference")) null else {
+                        RegionalRoutingPackReference.parse(value.optJSONObject("regional_reference")) ?: return null
+                    }
+                    BridgeRequest.GetLocalRouteCapabilities(requestId, pageNonce, reference)
                 } else {
                     null
                 }
             "local_route" -> parseLocalRoute(value, requestId, pageNonce)
+            "regional_routing_inspect", "regional_routing_install", "regional_routing_remove",
+            "regional_routing_status", "regional_routing_cancel" -> RegionalRoutingProtocol.parse(value, requestId, pageNonce)
             "stop_tracking" ->
                 parseStop(value, requestId, pageNonce)
             "ack_terminal_failure" ->
@@ -340,6 +360,8 @@ internal object BridgeProtocol {
             requestId = requestId,
             points = points,
             profile = profile,
+            regionalReference = RegionalRoutingPackReference.parse(value.optJSONObject("regional_reference"))
+                ?: return BridgeRequest.RejectedLocalRoute(requestId, pageNonce, NativeRouteFailureCode.INVALID_REQUEST),
         )
         if (!routeRequest.isValid()) {
             return BridgeRequest.RejectedLocalRoute(

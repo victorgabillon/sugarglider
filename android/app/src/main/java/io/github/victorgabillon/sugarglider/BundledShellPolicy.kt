@@ -35,7 +35,15 @@ internal object BundledShellPolicy {
     fun acceptsRequest(request: BridgeRequest): Boolean = when (request) {
         is BridgeRequest.Hello, is BridgeRequest.SaveGpx,
         is BridgeRequest.GetLocalRouteCapabilities, is BridgeRequest.LocalRoute,
+        is BridgeRequest.RegionalWork, is BridgeRequest.RegionalStatus,
         is BridgeRequest.RejectedLocalRoute -> true
         else -> false
+    }
+
+    fun acceptsOrigin(request: BridgeRequest, origin: String): Boolean = when (request) {
+        is BridgeRequest.GetLocalRouteCapabilities, is BridgeRequest.LocalRoute,
+        is BridgeRequest.RejectedLocalRoute, is BridgeRequest.RegionalWork,
+        is BridgeRequest.RegionalStatus -> origin == ORIGIN
+        else -> origin != ORIGIN || acceptsRequest(request)
     }
 }

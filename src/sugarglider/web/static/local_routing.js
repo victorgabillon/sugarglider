@@ -4,9 +4,10 @@ import {
 import { createLocalAutoTourExperiment } from "./local_auto_tour.js";
 import { createLocalWaypointRouteExperiment } from "./local_waypoint_route.js";
 import { createLocalRegionPanel } from "./local_region_panel.js";
+import { captureRegionalRoutingReference } from "./regional_routing_reference.js";
 
 const SCHEMA_VERSION = 1;
-const LOCAL_ROUTE_VERSION = 2;
+const LOCAL_ROUTE_VERSION = 3;
 const MIN_ROUTE_POINTS = 2;
 export const MAX_ROUTE_POINTS = 16;
 const MAX_ROUTE_VERTICES = 20_000;
@@ -80,7 +81,9 @@ export const CROSS_PACK_FAILURE_TEST = Object.freeze({
 
 export function createLocalRoutingBridge({
   transport = nativeBridgeTransport,
+  regionalReference = null,
 } = {}) {
+  const reference = regionalReference === null ? null : captureRegionalRoutingReference(regionalReference);
   const nativeAvailable = transport.nativeAvailable;
   let trusted = false;
   let operationCounter = 0;
@@ -101,19 +104,20 @@ export function createLocalRoutingBridge({
   async function capabilities() {
     if (!await initialize()) return null;
     const reply = await request(
-      "get_local_route_capabilities", {}, 5_000, null,
+      "get_local_route_capabilities", { regional_reference: reference }, 30_000, null,
     );
     return reply?.type === "local_route_capabilities_result" ? reply : null;
   }
 
   async function route({ points, profile }) {
-    if (!PUBLIC_LOCAL_ROUTE_PROFILES.includes(profile)) return null;
+    if (reference === null || !PUBLIC_LOCAL_ROUTE_PROFILES.includes(profile)) return null;
     if (!await initialize()) return null;
     const operation = ++operationCounter;
     currentOperation = operation;
     const reply = await request("local_route", {
       route_version: LOCAL_ROUTE_VERSION,
       profile,
+      regional_reference: reference,
       points: points.map(({ lat, lon }) => ({ lat, lon })),
     }, ROUTE_TIMEOUT_MS, operation);
     return operation === currentOperation ? reply : null;
@@ -139,6 +143,7 @@ export function createLocalRoutingBridge({
     capabilities,
     route,
     invalidate,
+    forRegion: (nextReference) => createLocalRoutingBridge({ transport, regionalReference: nextReference }),
   });
 }
 

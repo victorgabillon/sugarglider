@@ -72,3 +72,7 @@ Ignored artifacts superseding the previous files at these paths:
 
 These are preparation artifacts, not the final V1 release candidate. The phone
 was not upgraded and no region was downloaded onto it by this change.
+
+The standard build paths below are now superseded by the dependent
+[regional runtime bridge](pr42-regional-runtime.md) build. Their recorded hashes
+remain historical evidence for `e7dc680`; no phone replacement was performed.

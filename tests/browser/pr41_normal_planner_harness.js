@@ -11,7 +11,7 @@ async function rejected(operation, code) {
   const actual = typeof error?.code === "string" ? error.code : error?.name;
   assert(actual === code, `Expected ${code}, got ${actual}`);
 }
-function nativeReply(input) {
+export function nativeReply(input) {
   return { schema_version: 1, request_id: "synthetic-request", type: "local_route_result", profile: input.profile,
     engine: "valhalla-mobile", engine_version: "synthetic-test", pack_id: "synthetic-region", distance_m: 4000,
     duration_s: 1200, geometry: input.points.map(({ lon, lat }) => [lon, lat]),
@@ -19,7 +19,7 @@ function nativeReply(input) {
       cold_start: false, engine_initialization_ms: 0, route_ms: 0,
       memory_before_initialization_bytes: 0, memory_after_initialization_bytes: 0, memory_after_route_bytes: 0 } };
 }
-function request(kind, profile = "hike") {
+export function request(kind, profile = "hike") {
   const common = { schema_version: 1, kind, name: "Normal local planner", topology: "loop", start: { lat: 48, lon: 2, name: "Start" },
     end: null, routing_profile: profile, candidate_count: 2, seed: 35,
     distance_objective: { target_m: 4000, tolerance_m: 500, maximum_m: null, priority: "balanced" } };

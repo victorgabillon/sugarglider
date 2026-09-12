@@ -460,3 +460,34 @@ remains authorized, both ADB forwarding lists are empty, and the original
 stay-awake setting is confirmed as `0`. The private previous Marly routing archive
 remains backed up. No radio/hotspot state was changed, no location sharing was
 started, and no app data was cleared.
+
+## PR42 explicit regional runtime bridge
+
+The next dependent foundation follows `e7dc680` / draft PR #49. It replaces
+development-directory routing discovery with an explicit immutable region/build/pack
+reference on protocol-v3 route calls. Native read leases protect complete JNI
+operations from removal. One application-owned regional worker exposes bounded
+inspect/install/remove status and cancellation; only the bundled main-frame origin
+may invoke regional or local-routing operations.
+
+The shared planning context holds a committed version through search, native drain
+and canonical publication. Index workers open its owned OPFS directory and recheck
+compressed hashes even when parsed data is cached. Candidate/search diagnostics
+retain the exact regional version; GPX remains unchanged.
+
+Validation: `make check` passes 1,033 tests (16 existing integration tests deselected),
+Ruff and strict mypy. The host browser suite passes 348 cases in 19 harnesses,
+including real OPFS/worker corruption checks; 51 full canonical results and 60 GPX
+documents pass Python validation/serializer comparison. Native tests/lint and final
+artifact details are recorded in [runtime bridge evidence](pr42-regional-runtime.md).
+These are component and synthetic native-fixture tests, not physical PASS.
+
+The application coordinator, selected-region map display, catalog and install UI
+remain the next dependent slice. The phone remains on `b8ebe3a`; its real development
+packs are preserved and are not silently migrated. This draft is not merge-ready
+until the region product and physical acceptance gates pass.
+
+The regional runtime artifact build passes in 4 min 7 s: 187 native tests per
+variant, lint with only the existing two debug / one release warnings, debug APK
+and unsigned release AAB, and all 95 packaged shared assets byte-identical to
+source. Artifact paths/hashes/sizes are in the linked runtime evidence.
