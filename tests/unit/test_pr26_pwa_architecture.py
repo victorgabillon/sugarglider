@@ -150,14 +150,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v32_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v34_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v32"
+    assert generation.group(1) == "v34"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -196,7 +196,7 @@ def test_shared_shell_generation_tracks_v32_cached_assets() -> None:
         )
     } == {
         "local_planner.js": (
-            "cbdd67dfa2e82e9c18158c142b405e4273584fa4ea60b941ff5ee943bb8c1313"
+            "f57c33a9232290764908bf6cf9c55a04b2c125955ff6c61f41e400a813325f0e"
         ),
         "canonical_numbers.js": (
             "0c45121c5e89d9dcbd23c126740a7f3760e8c31f9683d8206b70c6d253e65a26"
@@ -214,7 +214,7 @@ def test_shared_shell_generation_tracks_v32_cached_assets() -> None:
             "2b56af7f998db9a2d174670847608ed394de24b40fbed2c84e2242f1037b2788"
         ),
         "local_plan_publisher.js": (
-            "eec12c5b0b6aa58edf758c7beda7fcb20c0e6813ef9198a0a049827fef260201"
+            "4e9531b526fd833f64c027cd68fe81993cedf605ba7d744a7457c03dc10e3db8"
         ),
         "local_plan_worker.js": (
             "c73903ff12ca433948ab1aaba7ca8f5aeb45bc9bcb54cd5cd7b22858b78f4581"
@@ -225,7 +225,7 @@ def test_shared_shell_generation_tracks_v32_cached_assets() -> None:
         "index.html": (
             "d8bd089da5d98b2a618765498c4220f096cb671c2b43618f5c5347696b1382d2"
         ),
-        "app.js": ("bc8e5d342c36060e928428c90311dcb9abc35991aaf572bfe4a2c78ede51e0e1"),
+        "app.js": ("62bfdb4b6ea529a2e13d185594734e591e433ee85b23083c2514d2e168767419"),
         "state.js": (
             "de724c096dd193347bdbdb9a424e873902ead40b30d48a339925da4d9aa58abd"
         ),

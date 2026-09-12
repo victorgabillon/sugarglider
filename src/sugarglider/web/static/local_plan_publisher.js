@@ -37,6 +37,7 @@ export async function publishLocalPlan(request, search) {
   diagnostics.details.local_planning = {
     engine: "valhalla-mobile", pack_id: search.pack_id,
     rejected_attempt_counts: search.rejected_attempt_counts,
+    rejected_attempts: search.rejected_attempts ?? [],
     failure_code: candidates.length ? null : search.code
       ?? Object.keys(search.rejected_attempt_counts ?? {})[0]?.replace(/^local_route_/, "")
       ?? rejected[0]?.code ?? "no_valid_local_candidate",

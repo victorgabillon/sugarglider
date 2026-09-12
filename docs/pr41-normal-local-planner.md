@@ -171,3 +171,72 @@ Next: physical normal-UI and document-save checks, bundled first launch,
 release routing and the complete required Fairphone matrix. Regional installer
 and useful-region device acceptance continue under PR42; public hosting/signing
 and final Play gates remain explicit in the V1 ledger.
+
+## Fairphone normal-planner preparation — 2026-09-12
+
+USB authorization was resolved and the existing debug installation was upgraded
+with `adb install -r`, preserving its data. APK SHA-256 is
+`20341a5f4b382ee90807b07203e19c24ec31b11838b65218eef0ed7c1329408b`
+(the unchanged native source at `dad310c`). The shared page uses shell v34 on
+Fairphone 6 / Android API 36 / WebView 151. **This is debug preparation evidence,
+not the required release-equivalent PR41 acceptance.** The configured localhost
+origin and prior development-region installation still require setup.
+
+A temporary static-only server supplied the new shell. That process and its USB
+reverse connection were removed before each accepted run. The actual Import JSON
+and normal Generate controls invoked real native Valhalla; routing was not mocked.
+Non-pausing diagnostic logpoints observed call counts and the actual MapLibre
+candidate sources without substituting results. All logpoints were removed.
+
+| Normal Generate case | Time | Native calls | Candidates | Recommended distance | Vertices |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Waypoint Route / hike | 304 ms | 1 | 1 | 4,226 m | 270 |
+| Waypoint Route / city bike | 314 ms | 1 | 1 | 4,249 m | 259 |
+| Auto Tour / hike | 2,254 ms | 12 | 2 | 14,378 m | 783 |
+| Auto Tour / city bike | 2,021 ms | 14 | 2 | 14,397 m | 518 |
+
+All four use `marly-dev-v1`, pass the unchanged Python canonical/submitted-candidate
+validator, and display the exact candidate line, direction arrows and visible
+Marly offline-map attribution. Missing graph details remain unknown. Both tours
+consume installed local nature data (scores 11.6632 and 43.9662); the no-POI
+control remains exposed. Repeats preserve all candidate IDs/order, recommended
+geometry hashes, distances, nature scores and native call counts. Zero API
+requests occurred during generation. Page request events for cached worker/glyph
+assets are reported separately; this is not a claim of zero HTTP-shaped events or
+of disabled Internet connectivity.
+
+The original cycling test used hiking endpoints and correctly failed: its start
+snapped **34.7999 m** away, beyond the unchanged **25 m** hard limit. The failure
+retains one call and no weakened retry. Public diagnostics now preserve bounded
+rejected-attempt evidence, and the normal error shows the named point, measured
+distance and limit. The separate successful cycling fixture explicitly uses
+native bicycle graph coordinates: start 48.871420, 2.096040; checkpoint 48.884970,
+2.096471; end 48.898605, 2.096757. No product constraint or source request was
+silently changed. A separate outside-coverage fixture returns
+`no_covering_routing_pack`, one native call, no API call and no retry.
+
+Normal Download on the cycling tour passed Android document-picker cancellation
+and saving, including a filename changed in the picker. Cancellation leaves the
+selected candidate intact and re-enables Download. The saved GPX is **22,717 bytes**,
+518 trackpoints, one track/segment, no route or extensions, and exactly matches
+Python's canonical XML fields. SHA-256:
+`2e8b12321ced15e0b04bac0c2b8011fdace6c8de5da59f10200fe5bf1b7db1c6`.
+The candidate is unchanged and export makes zero native route calls. The final
+success message is “GPX file saved.” because Android may rename the suggested
+filename without returning that name to the web page. The first automation tap
+did not activate Save; keyboard focus/Enter completed the real picker, and the
+full Save test was repeated successfully.
+
+Current automated evidence: `make check` passes **1,028 tests / 16 existing
+integration deselections**, Ruff and strict mypy (244 files). **283 browser
+scenarios** pass; the new case asserts measured exact-endpoint rejection and no
+weakened retry. The actual-page synthetic native integration passes again after
+the final shell/message change. All five GitHub checks passed `fe80ea7`; this
+follow-up requires its own CI.
+
+Reports and small drivers are under `/tmp/sugarglider-pr41-phone-*`; automated logs
+are `/tmp/sugarglider-pr41-snap-browser.log` and
+`/tmp/sugarglider-pr41-phone-followup-{check,ui}.log`. Generated GPX stays outside
+Git. Owned ADB forwarding/reverse connections and static servers were removed.
+The original stay-awake setting remains `0`; hotspot/radios were unchanged, no
+location sharing was started, and no app data was cleared.

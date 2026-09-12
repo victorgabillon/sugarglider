@@ -190,3 +190,16 @@ unknown-detail rendering, bundled first launch with a stable trusted origin,
 normal local Generate/capability selection, physical Android document saving, release
 factory integration and the complete Fairphone Waypoint/Auto Tour/pedestrian/
 bicycle/region/GPX/no-backend/outside-coverage acceptance.
+
+## Subsequent physical document-save evidence — 2026-09-12
+
+The earlier pending picker status is superseded by the normal-planner preparation
+in [PR41 normal integration](pr41-normal-local-planner.md#fairphone-normal-planner-preparation--2026-09-12).
+The same native APK above was installed with `adb install -r` after the call ended.
+Normal Download passed real Android Cancel and Save, including a renamed file,
+with the setup server stopped. The selected native cycling-tour candidate is
+unchanged, no route call occurs, and the resulting 22,717-byte GPX matches Python
+exactly (518 trackpoints, one track/segment, no extensions). The shared UI now says
+“GPX file saved.” without claiming the picker retained the suggested filename.
+This debug-device evidence does not enable production routing or satisfy bundled
+first-launch/release-equivalent acceptance; those gates remain open.

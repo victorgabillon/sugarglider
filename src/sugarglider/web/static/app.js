@@ -2036,8 +2036,17 @@ function showNoCandidateError(result) {
   const localFailure = result.search_diagnostics.details.local_planning?.failure_code;
   if (localFailure) {
     const error = new LocalPlannerError(localFailure);
+    const attempt = result.search_diagnostics.details.local_planning.rejected_attempts?.find((item) => item.code === localFailure);
+    const details = attempt?.details;
+    const source = state.generationSourceRequest;
+    const pointName = details?.waypoint_id
+      ? (source?.waypoints ?? source?.hard_waypoints ?? []).find((point) => point.id === details.waypoint_id)?.name ?? "Exact waypoint"
+      : details?.position === 0 ? source?.start?.name || "Start" : source?.end?.name || "End";
+    const measured = Number.isFinite(details?.snap_distance_m) && Number.isFinite(details?.maximum_snap_distance_m)
+      ? `${pointName} snapped ${details.snap_distance_m.toFixed(1)} m away; the permitted limit is ${details.maximum_snap_distance_m.toFixed(0)} m. `
+      : "";
     showError(error.message, safeGenerationDiagnostics(result), error.code,
-      "Your requested points and settings are unchanged.", "Review the points, activity and installed region before trying again.");
+      `${measured}Your requested points and settings are unchanged.`, "Review the points, activity and installed region before trying again.");
     return;
   }
   showError(
@@ -2352,7 +2361,7 @@ async function downloadSelected() {
       return;
     }
     if (result.status === "saved") {
-      byId("request-status").textContent = `${result.filename} saved.`;
+      byId("request-status").textContent = "GPX file saved.";
       return;
     }
     const { blob, filename } = result;

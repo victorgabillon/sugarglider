@@ -326,6 +326,24 @@ map-wide local POI discovery, bundled first launch and release routing remain
 explicit integration limitations; see the current PR41 document. All five CI
 checks passed the earlier canonical-publication head `8fcd4a7`.
 
+The next Fairphone preparation supersedes the earlier pending normal-UI/document
+checks: the unchanged native APK was upgraded preserving data, and shell v34
+passes normal Waypoint Route and Auto Tour with hiking and cycling. Exact map
+geometry, direction arrows, visible local-map attribution, canonical validation,
+local nature on tours, deterministic repeats, and outside-coverage failure pass.
+There are zero planning API calls with the static setup server stopped. The
+original cycling endpoint fails truthfully at 34.8 m against its 25 m limit; a
+separate explicit graph-coordinate fixture succeeds. The error now exposes that
+measured evidence without weakening the request. Android GPX Cancel and Save pass;
+the 22,717-byte file matches Python exactly, retains 518 trackpoints in one track
+and segment, and makes zero routing calls. `make check` and 283 browser scenarios
+pass, and the final actual-page host check passes. All five CI checks passed
+`fe80ea7`; the new follow-up needs its own checks. See the
+[full physical evidence](pr41-normal-local-planner.md#fairphone-normal-planner-preparation--2026-09-12).
+This remains a debug APK with a setup origin and development packs. Bundled first
+launch, production routing, coordinated regional installation and the required
+release-equivalent matrix remain outstanding; no PR41 or V1 PASS is claimed.
+
 ## External actions and blockers
 
 | Gate | Status | Action / effect |
@@ -355,10 +373,9 @@ IN PROGRESS. PR40 and PR43's code-side milestones are merged; public hosting
 remains pending. PR40 required physical acceptance passes; PR41/42/44 completion is outstanding. No V1 readiness
 or signed release artifact is claimed.
 
-PR40 setup's temporary static server and owned USB reverse mapping were removed
-before accepted testing. On 2026-09-12 ports 8000/8989 have no listener and ADB
-has no device/forward. The original stay-awake value `0` was recorded and a
-restore command issued after testing; a retained readback is unavailable. Recheck
-that setting and removal of the public temporary routing files on reconnection.
-The private previous Marly routing archive remains backed up. No radio/hotspot
-state was changed and no app data was cleared.
+Temporary static servers and owned USB reverse mappings were removed before
+accepted PR40/PR41 testing. After the PR41 preparation on 2026-09-12, the phone
+remains authorized, both ADB forwarding lists are empty, and the original
+stay-awake setting is confirmed as `0`. The private previous Marly routing archive
+remains backed up. No radio/hotspot state was changed, no location sharing was
+started, and no app data was cleared.

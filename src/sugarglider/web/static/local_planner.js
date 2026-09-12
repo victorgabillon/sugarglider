@@ -14,6 +14,8 @@ export class LocalPlannerError extends Error {
       no_route: "No connected route was found in the installed regional graph for these points.",
       routing_busy: "An on-device route calculation is still finishing. Try again shortly.",
       routing_failure: "The on-device routing engine could not finish this route.",
+      endpoint_not_reached: "A required endpoint could not be reached within its strict snap limit for this activity.",
+      exact_waypoint_not_reached: "An exact waypoint could not be reached within its permitted snap limit for this activity.",
       unsupported_preference: "Local Waypoint Route currently supports Shortest with nature and loop-shape preferences off. Your settings are unchanged.",
       unsupported_constraint_strength: "Local Waypoint Route currently supports exact points. Your approach or best-effort point is unchanged.",
       unsupported_profile: "The installed region does not support the selected activity.",

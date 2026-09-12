@@ -63,6 +63,16 @@ export async function runPr41NormalPlannerHarness() {
   assert(!outside.candidates.length && outside.search_diagnostics.details.local_planning.failure_code === "no_covering_routing_pack", "outside coverage is explicit canonical failure");
   assert(outside.search_diagnostics.cache.backend_call_count === 1, "no hidden retry or other backend");failed.invalidate();
   scenarios.push("outside_region_no_backend_fallback");
+  const displaced = createLocalPlanner({ lifecycleTarget: null, bridge: { capabilities: async () => capabilities,
+    route: async (input) => { const reply = nativeReply(input);reply.snapped_points[0].lat += .001;
+      reply.geometry[0][1] = reply.snapped_points[0].lat;return reply; } } });
+  const displacedResult = await displaced.generate(request("waypoint_route"));
+  const failedSnap = displacedResult.search_diagnostics.details.local_planning.rejected_attempts[0];
+  assert(!displacedResult.candidates.length && failedSnap.code === "endpoint_not_reached", "strict endpoint rejection preserved");
+  assert(failedSnap.details.snap_distance_m > 100 && failedSnap.details.maximum_snap_distance_m === 25
+    && failedSnap.details.position === 0, "actual failed endpoint distance and threshold remain public");
+  assert(displacedResult.search_diagnostics.cache.backend_call_count === 1, "no weakened retry after exact failure");
+  displaced.invalidate();scenarios.push("failed_exact_endpoint_keeps_measured_snap_evidence");
   const orderedRequest = request("waypoint_route");
   orderedRequest.topology = "loop";orderedRequest.end = null;orderedRequest.waypoint_order = "optimize";
   orderedRequest.waypoints.push({ ...structuredClone(orderedRequest.waypoints[0]), id: "point-2", name: "Second named place",
