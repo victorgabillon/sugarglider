@@ -19,6 +19,7 @@ case "$PACK_ID" in
 esac
 
 REPOSITORY_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$REPOSITORY_ROOT/scripts/offline_build_resources.sh"
 if [ "$#" -eq 6 ] && [ -z "${OSM_PBF:-}" ]; then
     echo "Isolated builds require explicit OSM_PBF" >&2
     exit 2
@@ -55,6 +56,10 @@ uv run python "$REPOSITORY_ROOT/scripts/extract_pr33_regional_pbf.py" \
     --north "$NORTH"
 
 docker run --rm \
+    --label io.github.victorgabillon.sugarglider.build=offline-region \
+    --memory "${SUGARGLIDER_BUILD_MEMORY_MB}m" \
+    --memory-swap "${SUGARGLIDER_BUILD_MEMORY_MB}m" \
+    --cpus "$SUGARGLIDER_BUILD_CPUS" \
     --user "$(id -u):$(id -g)" \
     --volume "$BUILD_DIRECTORY:/work" \
     "$VALHALLA_IMAGE" \

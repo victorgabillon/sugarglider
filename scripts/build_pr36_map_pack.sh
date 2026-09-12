@@ -2,6 +2,7 @@
 set -eu
 
 REPOSITORY_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$REPOSITORY_ROOT/scripts/offline_build_resources.sh"
 PROTOMAPS_REVISION=3ea8293a28131c3dc63f1bb20827bdb8a76df06f
 PROTOMAPS_ARCHIVE_SHA256=7b8e71f18627754af756923f6613a9008b5f1ff82377fff4e617157d053fc807
 PROTOMAPS_ARCHIVE_URL="https://codeload.github.com/protomaps/basemaps/tar.gz/$PROTOMAPS_REVISION"
@@ -80,8 +81,12 @@ STAGING_OUTPUT="$BUILD_DIRECTORY/output"
 mkdir -p "$STAGING_OUTPUT" "$BUILD_DIRECTORY/planetiler-tmp"
 
 docker run --rm \
+    --label io.github.victorgabillon.sugarglider.build=offline-region \
+    --memory "${SUGARGLIDER_BUILD_MEMORY_MB}m" \
+    --memory-swap "${SUGARGLIDER_BUILD_MEMORY_MB}m" \
+    --cpus "$SUGARGLIDER_BUILD_CPUS" \
     --user "$(id -u):$(id -g)" \
-    --env HOME=/tmp/pr36-home \
+    --env "MAVEN_OPTS=-Xmx${SUGARGLIDER_BUILD_JAVA_HEAP_MB}m -Duser.home=/tmp/pr36-home" \
     --volume "$SOURCE_DIRECTORY:/source" \
     --volume "$MAVEN_CACHE:/tmp/pr36-home/.m2" \
     "$BUILD_IMAGE" \
@@ -89,6 +94,10 @@ docker run --rm \
         -DskipTests package
 
 docker run --rm \
+    --label io.github.victorgabillon.sugarglider.build=offline-region \
+    --memory "${SUGARGLIDER_BUILD_MEMORY_MB}m" \
+    --memory-swap "${SUGARGLIDER_BUILD_MEMORY_MB}m" \
+    --cpus "$SUGARGLIDER_BUILD_CPUS" \
     --user "$(id -u):$(id -g)" \
     --workdir /work \
     --volume "$SOURCE_DIRECTORY:/source:ro" \
@@ -97,7 +106,8 @@ docker run --rm \
     --volume "$STAGING_OUTPUT:/output" \
     --volume "$PBF_INPUT:/work/data/sources/pr36-input.osm.pbf:ro" \
     "$BUILD_IMAGE" \
-    java -jar /source/tiles/target/protomaps-basemap-HEAD-with-deps.jar \
+    java "-Xmx${SUGARGLIDER_BUILD_JAVA_HEAP_MB}m" \
+        -jar /source/tiles/target/protomaps-basemap-HEAD-with-deps.jar \
         --area=pr36-input \
         --bounds="$BOUNDS" \
         --maxzoom=15 \

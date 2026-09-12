@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "pack_id": "ile-de-france-map-v1",
+  "display_name": "Île-de-France",
+  "bounds": [1.445097, 48.11918, 3.560409, 49.24271],
+  "min_zoom": 0,
+  "max_zoom": 15,
+  "format": "pmtiles-v3",
+  "tile_type": "mvt",
+  "archive_filename": "basemap.pmtiles",
+  "byte_size": 1,
+  "attribution": "© OpenStreetMap contributors (ODbL) · ESA WorldCover (CC BY 4.0) · Natural Earth · Protomaps basemap",
+  "data_source": "Regional OpenStreetMap PBF rendered with Protomaps Basemaps 4.14.1",
+  "build_id": "generated-by-build-pr36-map-pack"
+}

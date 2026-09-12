@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "region_id": "ile-de-france",
+  "display_name": "Île-de-France",
+  "bounds": [1.445097, 48.11918, 3.560409, 49.24271],
+  "map": {"pack_id": "ile-de-france-map-v1", "template": "map-packs/ile-de-france-map-v1.template.json"},
+  "routing": {"pack_id": "ile-de-france-v1", "engine": "valhalla", "engine_version": "3.6.3", "access_modes": ["foot", "bicycle"]},
+  "pois": {"component_id": "ile-de-france-pois-v1"},
+  "nature": {"component_id": "ile-de-france-nature-v1"}
+}

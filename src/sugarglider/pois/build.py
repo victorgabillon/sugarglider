@@ -843,6 +843,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--osm-pbf", type=Path, default=DEFAULT_OSM_PBF)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--bounds", type=float, nargs=4, metavar=("W", "S", "E", "N"))
     return parser
 
 
@@ -869,9 +870,13 @@ def _format_counts(counts: dict[str, int]) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
+    bounds: Wgs84BoundingBox | None = None
+    if arguments.bounds is not None:
+        west, south, east, north = arguments.bounds
+        bounds = (west, south, east, north)
     try:
-        report = build_poi_index(arguments.osm_pbf, arguments.output)
-    except PoiIndexBuildError as exc:
+        report = build_poi_index(arguments.osm_pbf, arguments.output, bounds=bounds)
+    except (PoiIndexBuildError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
     _print_report(report)
