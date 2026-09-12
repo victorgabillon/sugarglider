@@ -563,7 +563,7 @@ function onlineConfig(initialCenter = [2.09, 48.88]) {
   };
 }
 
-function manifest(packId, bounds, byteSize) {
+export function manifest(packId, bounds, byteSize) {
   return {
     schema_version: 1,
     pack_id: packId,
@@ -581,7 +581,7 @@ function manifest(packId, bounds, byteSize) {
   };
 }
 
-function tinyPmtiles(bounds, minZoom, maxZoom) {
+export function tinyPmtiles(bounds, minZoom, maxZoom) {
   const metadata = new TextEncoder().encode(JSON.stringify({
     vector_layers: REQUIRED_LAYER_IDS.map((id) => ({ id })),
   }));
