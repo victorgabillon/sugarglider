@@ -42,6 +42,8 @@ jobs:
           python3 -c 'import os,re; assert re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,119}", os.environ["REGION_RELEASE_TAG"]); assert re.fullmatch(r"[a-f0-9]{64}", os.environ["REGION_ARCHIVE_SHA256"])'
           gh release download "$REGION_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern sugarglider-regions-static.zip --dir "$RUNNER_TEMP/region-publication"
           python3 unpack_distribution.py "$RUNNER_TEMP/region-publication/sugarglider-regions-static.zip" "$RUNNER_TEMP/region-site" "$REGION_ARCHIVE_SHA256"
+      - name: Include the publisher-reviewed privacy page
+        run: python3 copy_public_privacy.py privacy/index.html "$RUNNER_TEMP/region-site"
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:

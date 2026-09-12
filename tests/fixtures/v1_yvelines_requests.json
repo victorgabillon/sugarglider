@@ -1,0 +1,247 @@
+{
+  "description": "Deliberate public Marly test proposals, not user GPS. Real production-region routing is NOT RUN; exact arrival and graph validity remain acceptance gates.",
+  "cases": [
+    {
+      "case": "waypoint_hike",
+      "request": {
+        "schema_version": 1,
+        "kind": "waypoint_route",
+        "name": "Yvelines acceptance Waypoint hike",
+        "topology": "point_to_point",
+        "start": {
+          "lat": 48.8715,
+          "lon": 2.0965,
+          "name": "Marly test start"
+        },
+        "end": {
+          "lat": 48.8983,
+          "lon": 2.0969,
+          "name": "Marly test end"
+        },
+        "routing_profile": "hike",
+        "candidate_count": 2,
+        "seed": 35,
+        "distance_objective": {
+          "target_m": 4500,
+          "tolerance_m": 1000,
+          "maximum_m": null,
+          "priority": "balanced"
+        },
+        "preferences": {
+          "nature": "off",
+          "path_selection": "shortest",
+          "loop_geometry": "off"
+        },
+        "waypoint_order": "fixed",
+        "waypoints": [
+          {
+            "id": "point-1",
+            "name": "Marly exact test point",
+            "coordinate": {
+              "lat": 48.8848,
+              "lon": 2.0967,
+              "name": "Marly exact test point"
+            },
+            "constraint_strength": "exact",
+            "access_search_radius_m": 500,
+            "maximum_best_effort_distance_m": null,
+            "approach_override": null
+          }
+        ]
+      }
+    },
+    {
+      "case": "auto_tour_hike_off",
+      "request": {
+        "schema_version": 1,
+        "kind": "auto_tour",
+        "name": "Yvelines acceptance Auto Tour hike off",
+        "topology": "loop",
+        "start": {
+          "lat": 48.8715,
+          "lon": 2.0965,
+          "name": "Marly test start"
+        },
+        "end": null,
+        "routing_profile": "hike",
+        "candidate_count": 2,
+        "seed": 35,
+        "distance_objective": {
+          "target_m": 12000,
+          "tolerance_m": 2500,
+          "maximum_m": null,
+          "priority": "balanced"
+        },
+        "preferences": {
+          "nature": "off",
+          "path_selection": "low_overlap",
+          "loop_geometry": "prefer",
+          "scenic": "off",
+          "drinking_water": "off",
+          "direction": "any"
+        },
+        "hard_waypoints": [],
+        "requested_stops": [],
+        "preferred_discovered_poi_ids": [],
+        "free_poi_spur_physical_m": 200
+      }
+    },
+    {
+      "case": "auto_tour_hike_prefer",
+      "request": {
+        "schema_version": 1,
+        "kind": "auto_tour",
+        "name": "Yvelines acceptance Auto Tour hike prefer",
+        "topology": "loop",
+        "start": {
+          "lat": 48.8715,
+          "lon": 2.0965,
+          "name": "Marly test start"
+        },
+        "end": null,
+        "routing_profile": "hike",
+        "candidate_count": 2,
+        "seed": 35,
+        "distance_objective": {
+          "target_m": 12000,
+          "tolerance_m": 2500,
+          "maximum_m": null,
+          "priority": "balanced"
+        },
+        "preferences": {
+          "nature": "prefer",
+          "path_selection": "low_overlap",
+          "loop_geometry": "prefer",
+          "scenic": "prefer",
+          "drinking_water": "prefer",
+          "direction": "any"
+        },
+        "hard_waypoints": [],
+        "requested_stops": [],
+        "preferred_discovered_poi_ids": [],
+        "free_poi_spur_physical_m": 200
+      }
+    },
+    {
+      "case": "waypoint_city_bike",
+      "request": {
+        "schema_version": 1,
+        "kind": "waypoint_route",
+        "name": "Yvelines acceptance Waypoint city_bike",
+        "topology": "point_to_point",
+        "start": {
+          "lat": 48.87142,
+          "lon": 2.09604,
+          "name": "Marly test start"
+        },
+        "end": {
+          "lat": 48.898605,
+          "lon": 2.096757,
+          "name": "Marly test end"
+        },
+        "routing_profile": "city_bike",
+        "candidate_count": 2,
+        "seed": 35,
+        "distance_objective": {
+          "target_m": 4500,
+          "tolerance_m": 1000,
+          "maximum_m": null,
+          "priority": "balanced"
+        },
+        "preferences": {
+          "nature": "off",
+          "path_selection": "shortest",
+          "loop_geometry": "off"
+        },
+        "waypoint_order": "fixed",
+        "waypoints": [
+          {
+            "id": "point-1",
+            "name": "Marly exact test point",
+            "coordinate": {
+              "lat": 48.88497,
+              "lon": 2.096471,
+              "name": "Marly exact test point"
+            },
+            "constraint_strength": "exact",
+            "access_search_radius_m": 500,
+            "maximum_best_effort_distance_m": null,
+            "approach_override": null
+          }
+        ]
+      }
+    },
+    {
+      "case": "auto_tour_city_bike_off",
+      "request": {
+        "schema_version": 1,
+        "kind": "auto_tour",
+        "name": "Yvelines acceptance Auto Tour city_bike off",
+        "topology": "loop",
+        "start": {
+          "lat": 48.87142,
+          "lon": 2.09604,
+          "name": "Marly test start"
+        },
+        "end": null,
+        "routing_profile": "city_bike",
+        "candidate_count": 2,
+        "seed": 35,
+        "distance_objective": {
+          "target_m": 12000,
+          "tolerance_m": 2500,
+          "maximum_m": null,
+          "priority": "balanced"
+        },
+        "preferences": {
+          "nature": "off",
+          "path_selection": "low_overlap",
+          "loop_geometry": "prefer",
+          "scenic": "off",
+          "drinking_water": "off",
+          "direction": "any"
+        },
+        "hard_waypoints": [],
+        "requested_stops": [],
+        "preferred_discovered_poi_ids": [],
+        "free_poi_spur_physical_m": 200
+      }
+    },
+    {
+      "case": "auto_tour_city_bike_prefer",
+      "request": {
+        "schema_version": 1,
+        "kind": "auto_tour",
+        "name": "Yvelines acceptance Auto Tour city_bike prefer",
+        "topology": "loop",
+        "start": {
+          "lat": 48.87142,
+          "lon": 2.09604,
+          "name": "Marly test start"
+        },
+        "end": null,
+        "routing_profile": "city_bike",
+        "candidate_count": 2,
+        "seed": 35,
+        "distance_objective": {
+          "target_m": 12000,
+          "tolerance_m": 2500,
+          "maximum_m": null,
+          "priority": "balanced"
+        },
+        "preferences": {
+          "nature": "prefer",
+          "path_selection": "low_overlap",
+          "loop_geometry": "prefer",
+          "scenic": "prefer",
+          "drinking_water": "prefer",
+          "direction": "any"
+        },
+        "hard_waypoints": [],
+        "requested_stops": [],
+        "preferred_discovered_poi_ids": [],
+        "free_poi_spur_physical_m": 200
+      }
+    }
+  ]
+}
