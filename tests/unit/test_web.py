@@ -186,6 +186,23 @@ def test_brand_asset_sync_is_independent_of_current_working_directory(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "module",
+    ("maplibre-gl.mjs", "maplibre-gl-shared.mjs", "maplibre-gl-worker.mjs"),
+)
+async def test_maplibre_modules_are_served_with_browser_executable_mime(
+    client: httpx.AsyncClient, module: str
+) -> None:
+    path = f"vendor/maplibre-gl-6.4.1/{module}"
+    response = await client.get(f"/static/{path}")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith(
+        ("text/javascript", "application/javascript")
+    )
+    assert response.content == (STATIC_DIRECTORY / path).read_bytes()
+
+
+@pytest.mark.asyncio
 async def test_application_and_static_assets_are_served(
     client: httpx.AsyncClient,
 ) -> None:
@@ -221,7 +238,7 @@ async def test_application_and_static_assets_are_served(
         assert f'from "./{module_name}"' in outing_controller.text
     assert index.headers["content-type"].startswith("text/html")
     assert "<main" in index.text and "<nav" in index.text and "<footer" in index.text
-    assert "maplibre-gl@4.7.1" in index.text
+    assert "maplibre-gl@6.4.1" in index.text
     assert "latest" not in index.text.lower()
     assert missing.status_code == 404
 
@@ -682,7 +699,7 @@ def test_frontend_exposes_nature_without_raw_polygon_requests() -> None:
     assert "selected-section-nature" in map_code
     assert "Object.entries(styles)" in map_code
     assert "/v1/nature/polygons" not in app + map_code
-    assert "maplibre-gl@4.7.1" in html
+    assert "maplibre-gl@6.4.1" in html
 
 
 def test_frontend_exposes_loop_geometry_request_metrics_and_nulls() -> None:

@@ -591,3 +591,38 @@ Public regional publication approval is still pending for the concrete reviewed
 resource or public privacy endpoint has been created. The phone is now USB-authorized and was observed unlocked with no call; no consumer-region physical
 PASS is inferred. Privacy identity/URL, existing upload-key setup, Play declarations
 and the final physical matrix remain USER_ACTION_REQUIRED / acceptance gates.
+
+
+## PR44 MapLibre security follow-up
+
+Native hardening is draft [PR #53](https://github.com/victorgabillon/sugarglider/pull/53)
+/ `e58acdd`; its four returned GitHub checks pass. The following security change
+replaces vulnerable MapLibre 4.7.1 with the integrity-verified official 6.4.1 ESM
+entry/shared/worker distribution, all packaged locally in shell v41 / 103 assets.
+The old attribution exploit fails the actual previous bundle and passes all four
+regression cases on 6.4.1. This supersedes the dependency blocker above for the
+patched implementation; final V1 acceptance remains open.
+
+`make check`: 1,055 tests pass / 16 existing integration tests deselected, Ruff and
+strict mypy pass. All 27 browser harnesses pass 479 cases, plus four actual-page
+synthetic-adapter planning cases with canonical map/GPX equality, no routing API
+and no uncaught page error. Android: 196 tests per variant, lint and APK/AAB pass;
+all packaged files and the native library match source. Patched unsigned AAB:
+47,495,818 bytes, SHA-256
+`ffdcfc5520e2b81cc8ee0aa324fba5429d38eddda8f4faee472c1b6c3a48526e`, at
+`/tmp/sugarglider-pr44-maplibre-unsigned.aab`; official bundletool validation passes.
+
+The Fairphone debug app is updated in place with APK 151,938,674 bytes / SHA-256
+`f5c15540013e5605c73aee1423640da52bad78c198623c9841df9e54c4313dad`.
+Unlocked visible checks pass for bundled startup, patched module loading, readable
+Privacy preserving page/edits, rotation preserving page/edits, and deliberate
+empty-renderer crash followed by explicit native Reopen. Original distance and
+automatic rotation are restored; no location/sharing, radio/hotspot change,
+Play-package replacement or persistent ADB forwarding occurred. Screenshot files
+remain under `/tmp` and are not committed.
+
+The device check exposed stale regional “Checking…” feedback after finished
+no-region discovery and low status-bar contrast on the native recovery page.
+Those focused UI fixes are next. The consumer-region physical matrix remains
+pending approved public downloads, and no route/region PASS is inferred from these
+startup/lifecycle checks. See [security and device evidence](pr44-maplibre-security.md).
