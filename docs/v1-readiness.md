@@ -33,7 +33,7 @@ PASS never means an author assessment alone. Superseded evidence stays identifie
 | --- | --- | --- |
 | PR40 local Auto Tour v2 / POI / nature | MERGED; REQUIRED PR40 CHECKS PASS | Validated local PR39 readers/storage; bounded deterministic search; real Fairphone nature/POI outcomes, repeat, native geometry and zero-network acceptance recorded below |
 | PR41 production Android local planner | SHARED RELEASE ROUTER PACKAGED; FINAL RELEASE / REGION GATES PENDING | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
-| PR42 region product | WESTERN PARTITION BUILT / VERIFIED; PRODUCT UI PENDING | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
+| PR42 region product | UI / COMMITTED REGIONAL PLANNER IMPLEMENTED; DISTRIBUTION / PHYSICAL GATES OPEN | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
 | PR43 tiny production service | CODE MERGED; LIVE HOSTING PENDING | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency; public hosting remains an external action |
 | PR44 Play release candidate | PREPARATION DRAFT; FINAL RELEASE GATES OPEN | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
 
@@ -491,3 +491,42 @@ The regional runtime artifact build passes in 4 min 7 s: 187 native tests per
 variant, lint with only the existing two debug / one release warnings, debug APK
 and unsigned release AAB, and all 95 packaged shared assets byte-identical to
 source. Artifact paths/hashes/sizes are in the linked runtime evidence.
+
+
+## PR42 region download product
+
+Dependent branch `feat/pr42-region-product-ui` follows `1ac0a3c` / draft
+[PR #50](https://github.com/victorgabillon/sugarglider/pull/50), which passed all
+five CI jobs. The bundled app now selects its committed regional context for
+normal planning and maps. One UI action coordinates verified map, native routing,
+places and nature downloads. Update, cancellation drain, partial-data recovery,
+scoped removal (including damaged metadata/orphaned native files), and map-view
+controls are implemented. Catalog download URLs remain visibly unavailable
+until static distribution is configured; this is not a consumer-region PASS.
+
+`make check` passes 1,033 tests / 16 existing integration tests deselected. Twenty
+browser harnesses pass 361 scenarios, including thirteen focused product cases;
+51 full canonical results, 30 submitted fixtures, 16 diagnostics and 60 GPX
+comparisons pass Python validation. An additional actual-page browser check
+passes Download, activation, distribution-unavailable reload, shared PMTiles map
+view, normal Waypoint Route and Auto Tour for hiking/cycling, exact canonical
+map/traversal display and export without rerouting. It uses a disclosed synthetic
+native adapter: no native/physical PASS is inferred. See
+[product behavior and evidence](pr42-region-product.md).
+
+Both native variants pass 195 unit tests and lint with zero errors/failures/skips.
+The final APK/AAB must include all 101 shared shell assets byte-identically.
+Consumer-region physical installation, restart, map, native planning latency,
+interruption/cancellation and removal/reinstall remain required. The phone is
+still authorized; no hotspot/radio or existing user-data reset was used.
+
+The product APK and unsigned AAB now pass exact source comparisons for all 101
+assets. APK: 151,696,861 bytes, SHA-256
+`7c634034b20825a835d361cf8fb3a5be4fc0bfe11755b3866e9d4765c0e0fff2`;
+AAB: 47,419,436 bytes, SHA-256
+`4ab95d6456d20c937228b787d1d4a12e1183ef8aeb35bce52e4e753415c608b5`.
+`adb install -r` upgraded the Fairphone successfully. While the phone was locked,
+WebView inspection confirmed bundled startup, the honest unavailable 188.4 MB
+catalog entry, no committed region, and Generate disabled with the download
+explanation. This limited startup result does not replace visible physical
+acceptance. No owned USB forward/reverse remains.

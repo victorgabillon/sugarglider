@@ -7,6 +7,8 @@ package io.github.victorgabillon.sugarglider
 internal class RegionalRoutingRepository(
     private val openPack: (RegionalRoutingPackReference) -> RoutingPack,
     private val removePack: (RegionalRoutingPackReference) -> Unit,
+    private val removeVersionFiles: (RegionalRoutingVersion) -> Unit,
+    private val removeRegionFiles: (String) -> Unit,
 ) {
     private val gate = Any()
     private val leases = mutableMapOf<IdentityPath, Int>()
@@ -34,6 +36,24 @@ internal class RegionalRoutingRepository(
             if (path in leases) throw RegionalPackException(RegionalPackFailure.BUSY)
             // New readers cannot acquire the same path halfway through removal.
             removePack(reference)
+        }
+    }
+
+    fun removeVersion(version: RegionalRoutingVersion) {
+        if (!version.isValid()) throw RegionalPackException(RegionalPackFailure.INVALID_REFERENCE)
+        synchronized(gate) {
+            if (leases.keys.any { it.regionId == version.regionId && it.buildId == version.buildId }) {
+                throw RegionalPackException(RegionalPackFailure.BUSY)
+            }
+            removeVersionFiles(version)
+        }
+    }
+
+    fun removeRegion(regionId: String) {
+        if (!isRoutingPackId(regionId) || regionId.contains("..")) throw RegionalPackException(RegionalPackFailure.INVALID_REFERENCE)
+        synchronized(gate) {
+            if (leases.keys.any { it.regionId == regionId }) throw RegionalPackException(RegionalPackFailure.BUSY)
+            removeRegionFiles(regionId)
         }
     }
 

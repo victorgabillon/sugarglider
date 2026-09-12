@@ -159,7 +159,8 @@ class SugargliderApplication : Application() {
     internal val statusRepository = NativeStatusRepository()
     internal val regionalPackStore by lazy { createRegionalRoutingPackStore(this) }
     internal val regionalRoutingRepository by lazy {
-        RegionalRoutingRepository({ regionalPackStore.open(it) }, { regionalPackStore.remove(it) })
+        RegionalRoutingRepository({ regionalPackStore.open(it) }, { regionalPackStore.remove(it) },
+            { regionalPackStore.removeVersion(it) }, { regionalPackStore.removeRegion(it) })
     }
     internal val regionalRoutingOperations by lazy {
         RegionalRoutingOperations(
@@ -171,6 +172,8 @@ class SugargliderApplication : Application() {
                 Unit
             },
             remove = { reference -> regionalRoutingRepository.remove(reference) },
+            removeVersion = { version -> regionalRoutingRepository.removeVersion(version) },
+            removeRegion = { regionId -> regionalRoutingRepository.removeRegion(regionId) },
         )
     }
 

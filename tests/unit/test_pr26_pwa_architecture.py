@@ -150,14 +150,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v39_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v40_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v39"
+    assert generation.group(1) == "v40"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -196,7 +196,7 @@ def test_shared_shell_generation_tracks_v39_cached_assets() -> None:
         )
     } == {
         "local_planner.js": (
-            "54aed99e27e5f952bda6df3a196c44ff980b02c6e79b76514bd1d3c4d25fc309"
+            "a2ea147a2cf3d987d38ac1f3b3980112984db3c3577ab8e171b6a9f53caaa20f"
         ),
         "canonical_numbers.js": (
             "0c45121c5e89d9dcbd23c126740a7f3760e8c31f9683d8206b70c6d253e65a26"
@@ -223,15 +223,15 @@ def test_shared_shell_generation_tracks_v39_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "d8bd089da5d98b2a618765498c4220f096cb671c2b43618f5c5347696b1382d2"
+            "636a406b7f541fc88df8df0afd406e0accbc5eec0076976626db441c5847e8d2"
         ),
-        "app.js": ("4f5ae0155cbd62aa745321522c3f8962c00d28c0ea2a41cb29d0f4920e1c8654"),
+        "app.js": ("5fc0a7f5c09941702b98fc42673240a8a64d1a653c01eb87febdba247653051b"),
         "state.js": (
             "de724c096dd193347bdbdb9a424e873902ead40b30d48a339925da4d9aa58abd"
         ),
         "map.js": ("3f4441a3b4b73c969d5a52e0810bbbffce7a9d3567dcd55110fdb3016e622316"),
         "styles.css": (
-            "ae7274097a2d77be36f587156edf07c4f69dd4a158da63e177ecd64fcb0c7ca5"
+            "11026a66bc90cc66deb477e8d3602b9ebd65f72ed59990bd570b8a7eb9d37e4d"
         ),
         "planner_location.js": (
             "ce28891c92263c084e33dd5ae9ad906a31e527253aeb321539599711e4500b9c"
@@ -261,7 +261,7 @@ def test_shared_shell_generation_tracks_v39_cached_assets() -> None:
             "1d031f544b27c0c38ef37efd68b2d9d107843af4bbb8e12fe7c87428bab78eb5"
         ),
         "local_region_worker.js": (
-            "de4841b90c86a1cd0f627fead62724af6aa39e267738b246549d678cac57b591"
+            "a463b22af5ef1f68b9199d9b1177df84ae7feb64fd4c41224e88bc14c63dfd11"
         ),
         "local_region_panel.js": (
             "43c5119cb1cf5ed4249dc00ae8a7d30741dd78b307a9305f31ee6a3988c456f6"

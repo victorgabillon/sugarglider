@@ -186,15 +186,31 @@ export function createRegionVersionStore({
     });
   }
 
-  async function removeInactiveVersion(regionId, buildId) {
+  async function removeInactiveVersion(regionId, buildId, { beforeRemove = async () => {} } = {}) {
     requireData(validSha256(buildId), "invalid_regional_version");
     return ownVersion(regionId, buildId, () => mutate(async () => {
       const directory = await region(regionId);
       if (!directory) return;
       requireData(await activeBuild(directory) !== buildId, "regional_version_in_use");
+      await beforeRemove();
       try { await directory.removeEntry(buildId, { recursive: true }); }
       catch (error) { if (error?.name !== "NotFoundError") throw error; }
     }));
+  }
+
+  async function inspectVersions(regionId) {
+    return mutate(async () => {
+      const directory = await region(regionId);
+      if (!directory) return [];
+      const result = [];
+      for (const buildId of await names(directory, validSha256, MAX_VERSIONS)) {
+        try {
+          const opened = await openVersion(directory, regionId, buildId);
+          result.push({ build_id: buildId, manifest: opened.manifest, code: null });
+        } catch { result.push({ build_id: buildId, manifest: null, code: "regional_install_incomplete" }); }
+      }
+      return freezeData(result);
+    });
   }
 
   async function removeEmptyRegion(regionId) {
@@ -205,6 +221,25 @@ export function createRegionVersionStore({
       requireData((await names(directory, validSha256, MAX_VERSIONS)).length === 0, "regional_staging_in_use");
       await (await root()).removeEntry(regionId, { recursive: true });
     });
+  }
+
+  async function removeRegion(regionId, { beforeRemove = async () => {} } = {}) {
+    const captured = await mutate(async () => {
+      const directory = await region(regionId);
+      return directory ? names(directory, validSha256, MAX_VERSIONS) : [];
+    });
+    const ownAll = (index, action) => index === captured.length ? action()
+      : ownVersion(regionId, captured[index], () => ownAll(index + 1, action));
+    return ownAll(0, () => mutate(async () => {
+      const directory = await region(regionId);
+      const current = directory ? await names(directory, validSha256, MAX_VERSIONS) : [];
+      requireData(JSON.stringify(current) === JSON.stringify(captured), "regional_version_changed");
+      // Explicit whole-region removal needs no guessed manifest or old pointer.
+      // Deactivate before native deletion; a partial removal remains unavailable.
+      if (directory) await writeJson(directory, "active.json", { schema_version: 1, build_id: null });
+      await beforeRemove();
+      if (directory) await (await root()).removeEntry(regionId, { recursive: true });
+    }));
   }
 
   // Explicit recovery makes a corrupt pointer unavailable without deleting any
@@ -230,7 +265,7 @@ export function createRegionVersionStore({
 
   return Object.freeze({ list, read, stage, activate, deactivate,
     removeInactiveVersion, removeEmptyRegion, recoverCorruptRecord, withCommittedRegions,
-    withStagedVersion, committedDirectory });
+    withStagedVersion, committedDirectory, inspectVersions, removeRegion });
 }
 
 async function names(directory, valid, maximum) {

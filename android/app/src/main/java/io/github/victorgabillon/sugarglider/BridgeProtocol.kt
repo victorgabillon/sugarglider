@@ -49,7 +49,7 @@ internal sealed interface BridgeRequest {
     data class RegionalWork(
         override val requestId: String,
         override val pageNonce: String,
-        val command: RegionalRoutingCommand,
+        val command: RegionalOperationCommand,
     ) : BridgeRequest
 
     data class RegionalStatus(
@@ -140,6 +140,8 @@ internal object BridgeProtocol {
                 }
             "local_route" -> parseLocalRoute(value, requestId, pageNonce)
             "regional_routing_inspect", "regional_routing_install", "regional_routing_remove",
+            "regional_routing_remove_version",
+            "regional_routing_remove_region",
             "regional_routing_status", "regional_routing_cancel" -> RegionalRoutingProtocol.parse(value, requestId, pageNonce)
             "stop_tracking" ->
                 parseStop(value, requestId, pageNonce)

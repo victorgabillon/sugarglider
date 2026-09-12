@@ -50,6 +50,7 @@ map_pack_store.js
 native_bridge_transport.js
 native_gpx_save.js
 offline_map.js
+offline_region_catalog.json
 offline_snapshots.js
 opfs_pmtiles_source.js
 outing_controller.js
@@ -70,10 +71,15 @@ pwa_network.js
 pwa_runtime.js
 pwa_store.js
 pwa_view.js
+region_catalog.js
 region_components.js
+region_product.js
+region_screen.js
 region_versions.js
+regional_distribution.js
 regional_integrity.js
 regional_manifest.js
+regional_map_store.js
 regional_native.js
 regional_planning.js
 regional_routing_reference.js

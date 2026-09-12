@@ -164,7 +164,7 @@ export async function runPr42RegionComponentsHarness() {
   } finally { await origin.removeEntry(name, { recursive: true }); }
 }
 
-async function distribution(fixture, displayName, mutation = null) {
+export async function distribution(fixture, displayName, mutation = null) {
   const manifest = structuredClone(fixture.manifest), files = new Map();
   manifest.display_name = displayName;
   const archive = tinyPmtiles(manifest.bounds, 0, 14);

@@ -21,7 +21,7 @@ class RegionalRoutingRepositoryTest {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
         val removed = mutableListOf<RegionalRoutingPackReference>()
-        val repository = RegionalRoutingRepository({ assertEquals(reference, it); pack }, removed::add)
+        val repository = RegionalRoutingRepository({ assertEquals(reference, it); pack }, removed::add, {}, {})
         val executor = Executors.newSingleThreadExecutor()
         try {
             val pending = executor.submit<String> {
@@ -49,7 +49,7 @@ class RegionalRoutingRepositoryTest {
         val repository = RegionalRoutingRepository({
             if (failOpen) throw RegionalPackException(RegionalPackFailure.UNAVAILABLE)
             pack
-        }, { removals++ })
+        }, { removals++ }, {}, {})
         try { repository.withPack(reference) { error("Failed open must not call native work") } }
         catch (error: RegionalPackException) { assertEquals(RegionalPackFailure.UNAVAILABLE, error.code) }
         repository.remove(reference)
@@ -63,7 +63,7 @@ class RegionalRoutingRepositoryTest {
     @Test
     fun concurrentLeasesAreBoundedAndNoPackIsSelectedOrCachedImplicitly() {
         val opened = mutableListOf<RegionalRoutingPackReference>()
-        val repository = RegionalRoutingRepository({ opened += it; pack }, {})
+        val repository = RegionalRoutingRepository({ opened += it; pack }, {}, {}, {})
         fun nested(depth: Int) {
             if (depth == 16) { busy { repository.withPack(reference) {} }; return }
             repository.withPack(reference) { nested(depth + 1) }
@@ -85,7 +85,7 @@ class RegionalRoutingRepositoryTest {
             opened.countDown()
             if (!exists) throw RegionalPackException(RegionalPackFailure.UNAVAILABLE)
             pack
-        }, { entered.countDown(); check(release.await(5, TimeUnit.SECONDS)); exists = false })
+        }, { entered.countDown(); check(release.await(5, TimeUnit.SECONDS)); exists = false }, {}, {})
         val executor = Executors.newFixedThreadPool(2)
         try {
             val removal = executor.submit { repository.remove(reference) }
@@ -103,5 +103,28 @@ class RegionalRoutingRepositoryTest {
     private fun busy(action: () -> Unit) {
         try { action(); throw AssertionError("Expected busy") }
         catch (error: RegionalPackException) { assertEquals(RegionalPackFailure.BUSY, error.code) }
+    }
+
+    @Test fun versionRecoveryCannotDeleteAnyPackWithAnActiveLease() {
+        val removed = mutableListOf<RegionalRoutingVersion>()
+        val repository = RegionalRoutingRepository({ pack }, {}, removed::add, {})
+        val version = RegionalRoutingVersion(reference.regionId, reference.buildId)
+        repository.withPack(reference) {
+            busy { repository.removeVersion(version) }
+            repository.removeVersion(version.copy(buildId = "d".repeat(64)))
+        }
+        repository.removeVersion(version)
+        assertEquals(listOf(version.copy(buildId = "d".repeat(64)), version), removed)
+    }
+
+    @Test fun wholeRegionRecoveryKeepsOtherRegionsAndEveryActiveVersionLease() {
+        val removed = mutableListOf<String>()
+        val repository = RegionalRoutingRepository({ pack }, {}, {}, removed::add)
+        repository.withPack(reference) {
+            busy { repository.removeRegion(reference.regionId) }
+            repository.removeRegion("another-region")
+        }
+        repository.removeRegion(reference.regionId)
+        assertEquals(listOf("another-region", reference.regionId), removed)
     }
 }
