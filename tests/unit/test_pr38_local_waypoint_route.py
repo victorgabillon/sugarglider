@@ -152,9 +152,7 @@ def test_lifecycle_retains_native_drain_and_request_identity_ownership() -> None
     assert "validateLocalWaypointRouteRequest(getRequest())" in source
 
 
-def test_debug_ui_uses_current_intent_without_changing_server_generate_or_release() -> (
-    None
-):
+def test_current_intent_and_native_generate_keep_explicit_release_gate() -> None:
     app = (STATIC / "app.js").read_text()
     local = (STATIC / "local_routing.js").read_text()
     index = (STATIC / "index.html").read_text()
@@ -165,14 +163,13 @@ def test_debug_ui_uses_current_intent_without_changing_server_generate_or_releas
     ).read_text()
     assert "getWaypointRequest: () => readLocalWaypointRouteRequest(state, byId)" in app
     assert 'window.addEventListener("pagehide", invalidateLocalWaypointRoute)' in app
-    assert (
-        "const result = await generatePlan(request, state.abortController.signal)"
-        in app
-    )
+    assert "? await localPlanner.generate(request, state.abortController.signal)" in app
     assert "profileAvailable: Boolean(selectedProfileStatus()?.available)" in app
     assert "Server Generate remains unavailable" in app
     assert "onCapabilities(capabilities)" in local
     assert "if (!capabilities.enabled) return false" in local
+    assert ": await generatePlan(request, state.abortController.signal)" in app
+    assert "const localPlanner = localRoutingBridge.nativeAvailable" in app
     assert "enabled = false" in release
     for element in ("button", "status", "results"):
         assert f'id="local-waypoint-route-{element}"' in index
@@ -238,7 +235,7 @@ def test_waypoint_rendering_has_its_own_layers_and_preserves_existing_overlays()
 
 def test_offline_module_is_precached_in_exactly_v28_and_harness_is_local() -> None:
     worker = (STATIC / "service-worker.js").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v31`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v32`" in worker
     assert '"/static/local_waypoint_route.js"' in worker
     html = HARNESS.with_suffix(".html").read_text()
     harness = HARNESS.read_text()

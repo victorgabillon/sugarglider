@@ -97,7 +97,7 @@ def test_hard_validation_ranking_and_unavailable_metrics_are_truthful() -> None:
         assert marker in source
 
 
-def test_ui_is_debug_separate_and_normal_generate_remains_server_backed() -> None:
+def test_normal_android_generate_uses_local_core_with_release_gate_retained() -> None:
     index = (STATIC / "index.html").read_text()
     app = (STATIC / "app.js").read_text()
     map_source = (STATIC / "map.js").read_text()
@@ -121,10 +121,9 @@ def test_ui_is_debug_separate_and_normal_generate_remains_server_backed() -> Non
     assert "Loop-only and bounded, with optional installed places/nature" in index
     assert "renderLocalAutoTourCandidates" in app
     assert "renderLocalAutoTourCandidates" in map_source
-    assert (
-        "const result = await generatePlan(request, state.abortController.signal)"
-        in app
-    )
+    assert "? await localPlanner.generate(request, state.abortController.signal)" in app
+    assert ": await generatePlan(request, state.abortController.signal)" in app
+    assert "const localPlanner = localRoutingBridge.nativeAvailable" in app
     assert "enabled = false" in release
 
 

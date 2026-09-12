@@ -6,7 +6,7 @@ import {
 } from "/static/service_worker_policy.js";
 
 const SHELL_CACHE_PREFIX = "sugarglider-shell-";
-const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v31`;
+const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v32`;
 const ROOT_SHELL = "/";
 const shellCache = createCurrentCacheAccess(caches, SHELL_CACHE);
 
@@ -29,6 +29,9 @@ const CORE_ASSETS = Object.freeze([
   "/static/public_profile_metadata.js",
   "/static/icons.js",
   "/static/map.js",
+  "/static/fonts/Open%20Sans%20Semibold/0-255.pbf",
+  "/static/fonts/Open%20Sans%20Semibold/256-511.pbf",
+  "/static/fonts/Open%20Sans%20Semibold/8192-8447.pbf",
   "/static/map_pack_manifest.js",
   "/static/map_pack_store.js",
   "/static/opfs_pmtiles_source.js",
@@ -45,6 +48,7 @@ const CORE_ASSETS = Object.freeze([
   "/static/local_routing.js",
   "/static/local_auto_tour.js",
   "/static/local_planning_context.js",
+  "/static/local_planner.js",
   "/static/canonical_numbers.js",
   "/static/local_analysis_templates.js",
   "/static/local_plan_geometry.js",
@@ -142,7 +146,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(navigationResponse(request));
     return;
   }
-  if (classification === "static") {
+  if (classification === "static" && CORE_ASSETS.includes(new URL(request.url).pathname)) {
     event.respondWith(staticResponse(request));
   }
 });

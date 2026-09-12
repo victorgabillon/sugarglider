@@ -32,7 +32,7 @@ PASS never means an author assessment alone. Superseded evidence stays identifie
 | Milestone | Status | Required success evidence |
 | --- | --- | --- |
 | PR40 local Auto Tour v2 / POI / nature | MERGED; REQUIRED PR40 CHECKS PASS | Validated local PR39 readers/storage; bounded deterministic search; real Fairphone nature/POI outcomes, repeat, native geometry and zero-network acceptance recorded below |
-| PR41 production Android local planner | LOCAL CANONICAL GPX + NATIVE SAVE IMPLEMENTED; NORMAL PLANNING / DEVICE GATES PENDING | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
+| PR41 production Android local planner | NORMAL LOCAL GENERATE / CANONICAL GPX IMPLEMENTED; BUNDLED RELEASE / DEVICE GATES PENDING | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
 | PR42 region product | WESTERN PARTITION BUILT / VERIFIED; PRODUCT UI PENDING | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
 | PR43 tiny production service | CODE MERGED; LIVE HOSTING PENDING | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency; public hosting remains an external action |
 | PR44 Play release candidate | PREPARATION DRAFT; FINAL RELEASE GATES OPEN | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
@@ -309,6 +309,22 @@ validator; 264 browser scenarios and `make check` (1,028 passed / 16 deselected,
 244 mypy files) pass. Shell v31 preserves normal offline GPX Download with zero
 export fetches. Normal Generate and truthful unknown-detail UI integration remain
 next; this is not a PR41 PASS or new physical evidence.
+
+The subsequent normal-UI integration on draft GitHub
+[PR #44](https://github.com/victorgabillon/sugarglider/pull/44) now selects the local
+core when Android's bridge is present, publishes normal map/selection objects and
+exports through the native document-save adapter. Shell v32 includes the existing
+licensed required-label glyphs and restricts static cache access to its explicit
+file list. `make check` remains green (1,028 / 16 deselected); 282 browser scenarios,
+50 Python-validated canonical results and 59 matching candidate GPX exports pass.
+Four actual-page tests with a disclosed synthetic native bridge pass after stopping
+the static server: both modes with hiking/cycling, exact map lines/direction arrows,
+normal GPX export, truthful unknown metrics and uncovered-region failure, with zero
+generation/export API requests. These are host fixtures, not Fairphone or graph
+evidence. Required/interior Auto Tour points, imported soft stops, native reversal,
+map-wide local POI discovery, bundled first launch and release routing remain
+explicit integration limitations; see the current PR41 document. All five CI
+checks passed the earlier canonical-publication head `8fcd4a7`.
 
 ## External actions and blockers
 

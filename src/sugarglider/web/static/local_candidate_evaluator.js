@@ -79,7 +79,27 @@ export async function evaluateLocalCandidateDraft(request, draft) {
     profile: request.routing_profile,
     suggestion: "Adjust the target distance or edit the requested points and generate a new plan.",
   }];
+  const unmet = [];
+  if (request.preferences.path_selection === "low_overlap") unmet.push(
+    "Exact edge repetition is unavailable, so the low-overlap preference could not be evaluated.");
+  if (request.preferences.nature === "prefer" && !analysis.nature) unmet.push(
+    "Mapped nature could not be evaluated with the installed regional data.");
+  if (request.preferences.loop_geometry === "prefer") unmet.push(draft.geometry_metrics
+    ? "Local shape screening was used; complete loop-geometry analysis is unavailable."
+    : "Loop-geometry preference could not be evaluated for this local route.");
+  for (const reason of unmet) compromises.push({ code: "optional_preference_unmet", severity: "info",
+    constraint_id: null, constraint_name: null, semantic_coordinate: null, routed_coordinate: null,
+    distance_m: null, normal_tolerance_m: null, configured_maximum_m: null, reason,
+    profile: request.routing_profile, suggestion: "Review the routed line and the available analysis before using this route." });
   const id = await localCandidateSignature(route.geometry, request.routing_profile, request.topology);
+  const requestedOrder = request.kind === "waypoint_route" ? request.waypoints.map((point) => point.id) : [];
+  const actualOrder = draft.actual_waypoint_order ?? requestedOrder;
+  requireCandidate(actualOrder.length === requestedOrder.length && new Set(actualOrder).size === requestedOrder.length
+    && actualOrder.every((value) => requestedOrder.includes(value)), "invalid_local_waypoint_order");
+  const requiredVisits = request.kind === "waypoint_route" ? actualOrder.map((value) => {
+    const index = requestedOrder.indexOf(value), point = request.waypoints[index];
+    return { original_index: index, coordinate: { ...point.coordinate, name: point.name } };
+  }) : [{ original_index: 0, coordinate: request.start }];
   return deepFreeze({
     id, kind: request.kind, topology: request.topology, routing_profile: request.routing_profile,
     route, score: { total: targetError / Math.max(1, objective.target_m),
@@ -93,6 +113,7 @@ export async function evaluateLocalCandidateDraft(request, draft) {
       immediate_backtracking_m: 0, repeated_distance_m: 0, spur_count: 0,
       spur_repeated_distance_m: 0, longest_spur_distance_m: 0,
       details: { construction: draft.construction?.construction ?? draft.construction?.family ?? "local_routed_path",
+        required_waypoint_order: requiredVisits,
         local_routing: { engine: draft.engine, engine_version: draft.engine_version,
         pack_id: draft.pack_id, source_candidate_id: draft.candidate_id,
         source_control_candidate_id: draft.source_control_candidate_id ?? null,
