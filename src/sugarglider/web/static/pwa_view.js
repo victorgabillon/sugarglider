@@ -1,3 +1,5 @@
+import { isBundledAndroidApp } from "./android_app.js";
+
 const byId = (id) => document.getElementById(id);
 
 export function bindPwaControls({
@@ -50,7 +52,7 @@ export function renderPwaStatus(state) {
     || !["idle", "ready"].includes(state.pwaStatus)
     || state.storagePersistenceStatus !== "unknown";
   panel.classList.toggle("hidden", !meaningful);
-  byId("pwa-network-status").textContent = offline ? "Offline" : "Online";
+  byId("pwa-network-status").textContent = isBundledAndroidApp() ? "On device" : offline ? "Offline" : "Online";
   byId("pwa-status-message").textContent = statusMessage(state);
   byId("retry-connection").classList.toggle("hidden", !offline);
   byId("reload-pwa-update").classList.toggle(
@@ -154,5 +156,6 @@ function statusMessage(state) {
   if (state.networkStatus === "offline") {
     return "Server features are unavailable. Retry when connectivity returns.";
   }
+  if (isBundledAndroidApp()) return "Maps and routes use installed regions. Sharing needs a connection.";
   return "App ready for offline use.";
 }

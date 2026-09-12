@@ -1,5 +1,6 @@
 import { ApiError, generatePlan, getConfig, getPoiStatus, getRoutingProfiles, reversePlan, searchPois, visualizeRoute } from "./api.js";
 import { createLocalGpxExporter } from "./local_gpx_client.js";
+import { isBundledAndroidApp } from "./android_app.js";
 import { createGpxFileSaver } from "./native_gpx_save.js";
 import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
@@ -2916,6 +2917,7 @@ async function persistSavedRouteNetworkData(loaded, isCurrent) {
 async function retryCurrentConnection() {
   if (state.outingDisplay) return retryCurrentOutingConnection();
   if (state.savedRouteSnapshotDisplay) return retrySavedRouteConnection();
+  if (isBundledAndroidApp()) { window.location.reload(); return true; }
   try {
     const [config, catalog] = await Promise.all([
       getConfig(),
@@ -2995,7 +2997,7 @@ async function start() {
     }
     bindEvents();
     const sharedSlug = currentSharedRouteSlug;
-    if (!sharedSlug) {
+    if (!sharedSlug && !isBundledAndroidApp()) {
       const localRoutingExperiment = createLocalRoutingExperiment({
         bridge: localRoutingBridge,
         regionClient: localPlanner ? (() => { try { return localRegionClient(); } catch { return undefined; } })() : undefined,
@@ -3071,6 +3073,7 @@ async function start() {
           getConfig(),
           localPlanner ? Promise.resolve({ profiles: [] }) : getRoutingProfiles(),
         ]);
+        if (isBundledAndroidApp()) state.config = { ...state.config, offline_mode: true };
         clearOfflineSnapshotStatus();
         const persisted = await settleOptionalPersistence([
           () => storePublicConfig(state.config),

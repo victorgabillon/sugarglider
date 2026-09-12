@@ -6,7 +6,7 @@ import {
 } from "/static/service_worker_policy.js";
 
 const SHELL_CACHE_PREFIX = "sugarglider-shell-";
-const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v34`;
+const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v35`;
 const ROOT_SHELL = "/";
 const shellCache = createCurrentCacheAccess(caches, SHELL_CACHE);
 
@@ -18,6 +18,7 @@ const CORE_ASSETS = Object.freeze([
   "/static/vendor/pmtiles-4.5.0/pmtiles.js",
   "/static/vendor/protomaps-basemaps-5.7.2/basemaps.js",
   "/static/app.js",
+  "/static/android_app.js",
   "/static/avatar.js",
   "/static/api.js",
   "/static/format.js",

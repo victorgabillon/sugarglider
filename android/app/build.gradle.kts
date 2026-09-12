@@ -1,8 +1,30 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.nio.file.Files
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+val sharedWebDirectory = rootProject.file("../src/sugarglider/web/static")
+val shellAssetList = rootProject.file("shell-assets.txt")
+val shellAssetPaths = shellAssetList.readLines().filter { it.isNotBlank() && !it.startsWith('#') }
+require(shellAssetPaths.isNotEmpty() && shellAssetPaths.distinct().size == shellAssetPaths.size)
+require(shellAssetPaths.all { path ->
+    !path.startsWith('/') && '\\' !in path && path.split('/').none { it in setOf("", ".", "..") }
+})
+val bundledShellDirectory = layout.buildDirectory.dir("generated/bundled-shell")
+val bundleSharedWebShell by tasks.registering(Sync::class) {
+    inputs.file(shellAssetList)
+    from(sharedWebDirectory) { include(shellAssetPaths); into("web") }
+    from(shellAssetList)
+    into(bundledShellDirectory)
+    doFirst {
+        require(shellAssetPaths.all { path ->
+            val source = sharedWebDirectory.resolve(path)
+            source.isFile && !Files.isSymbolicLink(source.toPath())
+        }) { "The declared shared Android shell is incomplete." }
+    }
 }
 
 android {
@@ -55,7 +77,11 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
+
+    sourceSets.getByName("main").assets.srcDir(bundledShellDirectory)
 }
+
+tasks.named("preBuild").configure { dependsOn(bundleSharedWebShell) }
 
 kotlin {
     compilerOptions {
