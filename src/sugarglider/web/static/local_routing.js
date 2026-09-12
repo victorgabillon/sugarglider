@@ -281,15 +281,15 @@ export function createLocalRoutingExperiment({
         measurements.memory_after_route_bytes,
       ].map((value) => (value / 1_048_576).toFixed(1));
       elements.status.textContent = (
-        `${measurements.cold_start ? "Cold" : "Warm"} local Valhalla experiment · `
+        `Local Valhalla experiment · wrapper ${measurements.cold_start ? "prepared" : "reused"} · `
         + `${(reply.distance_m / 1_000).toFixed(2)} km · ${duration} · `
         + `${reply.geometry.length} vertices · ${reply.snapped_points.length} snapped points · `
         + `profile ${reply.profile} · pack ${reply.pack_id} · `
         + `engine ${reply.engine} `
-        + `${reply.engine_version} · initialization `
-        + `${measurements.engine_initialization_ms} ms · route `
-        + `${measurements.route_ms} ms · PSS before initialization ${pss[0]} MiB / `
-        + `after initialization ${pss[1]} MiB / after routing ${pss[2]} MiB`
+        + `${reply.engine_version} · wrapper setup `
+        + `${measurements.engine_initialization_ms} ms · native call including actor setup `
+        + `${measurements.route_ms} ms · PSS before wrapper setup ${pss[0]} MiB / `
+        + `after wrapper setup ${pss[1]} MiB / after routing ${pss[2]} MiB`
       );
       return reply;
     }

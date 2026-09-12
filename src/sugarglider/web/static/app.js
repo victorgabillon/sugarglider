@@ -5,13 +5,12 @@ import { createGpxFileSaver } from "./native_gpx_save.js";
 import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
-import { clearLocalExperimentalRoute, clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderLocalAutoTourCandidates, renderLocalExperimentalRoute, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
-import { createLocalRoutingBridge, createLocalRoutingExperiment } from "./local_routing.js";
+import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
+import { createLocalRoutingBridge } from "./local_routing.js";
 import { createLocalPlanner, LocalPlannerError } from "./local_planner.js";
 import { createLocalRegionClient } from "./local_region_client.js";
 import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
-import { clearLocalWaypointRouteCandidates, renderLocalWaypointRouteCandidates } from "./map.js";
-import { addLocalWaypointProfileOptions, readLocalWaypointRouteRequest } from "./local_waypoint_route.js";
+import { addLocalWaypointProfileOptions } from "./local_waypoint_route.js";
 import { initializeOfflineMaps } from "./offline_map.js";
 import {
   centerPlannerCurrentLocation,
@@ -102,7 +101,6 @@ const HYDRATION_CATEGORIES = ["drinking_water", "fountain", "water_tap"];
 
 const GENERATION_SUGGESTION = "Use Auto Tour for approximate places, or remove or move the exact waypoint.";
 let lastExactFailure = null;
-let invalidateLocalWaypointRoute = () => {};
 let localRouteCapabilities = null;
 
 function showError(message, details = "", code = "", context = "", suggestion = "") {
@@ -750,7 +748,6 @@ function activeMapPlacementGuidance() {
 
 function invalidateAndRender() {
   localPlanner?.invalidate();
-  invalidateLocalWaypointRoute();
   saveActivePoints();
   if (state.request.status === "running") {
     state.abortController?.abort();
@@ -2997,73 +2994,6 @@ async function start() {
     }
     bindEvents();
     const sharedSlug = currentSharedRouteSlug;
-    if (!sharedSlug && !isBundledAndroidApp()) {
-      const localRoutingExperiment = createLocalRoutingExperiment({
-        bridge: localRoutingBridge,
-        regionClient: localPlanner ? (() => { try { return localRegionClient(); } catch { return undefined; } })() : undefined,
-        onCapabilities: (capabilities) => {
-          localRouteCapabilities = capabilities;
-          if (!isImmutableSnapshotDisplay()) {
-            renderRoutingProfiles({ preserveUnavailableSelection: true });
-            renderStatus();
-          }
-        },
-        getPoints: () => state.points.map(({ lat, lon }) => ({ lat, lon })),
-        renderRoute: (geometry) => {
-          renderLocalExperimentalRoute(geometry);
-          fitCoordinates(geometry);
-        },
-        clearRoute: clearLocalExperimentalRoute,
-        getWaypointRequest: () => readLocalWaypointRouteRequest(state, byId),
-        renderWaypointCandidates: (candidates, recommendedCandidateId) => {
-          renderLocalWaypointRouteCandidates(candidates, recommendedCandidateId);
-          fitCoordinates(candidates.flatMap((candidate) => candidate.geometry));
-        },
-        clearWaypointCandidates: clearLocalWaypointRouteCandidates,
-        renderAutoTourCandidates: (candidates, recommendedCandidateId) => {
-          renderLocalAutoTourCandidates(candidates, recommendedCandidateId);
-          fitCoordinates(candidates.flatMap((candidate) => candidate.geometry));
-        },
-        elements: {
-          container: byId("local-routing-experiment"),
-          button: byId("local-routing-button"),
-          smokeButton: byId("local-routing-smoke-button"),
-          parisSmokeButton: byId("local-routing-paris-smoke-button"),
-          viaSmokeButton: byId("local-routing-via-smoke-button"),
-          crossPackButton: byId("local-routing-cross-pack-button"),
-          profileSelect: byId("local-routing-profile"),
-          status: byId("local-routing-status"),
-          regionalData: {
-            url: byId("local-region-data-url"), install: byId("local-region-data-install"),
-            cancel: byId("local-region-data-cancel"), status: byId("local-region-data-status"),
-            regions: byId("local-region-data-regions"),
-          },
-          waypointRoute: {
-            button: byId("local-waypoint-route-button"),
-            status: byId("local-waypoint-route-status"),
-            results: byId("local-waypoint-route-results"),
-          },
-          autoTour: {
-            button: byId("local-auto-tour-button"),
-            smokeButton: byId("local-auto-tour-smoke-button"),
-            targetDistanceInput: byId("local-auto-tour-target-km"),
-            toleranceInput: byId("local-auto-tour-tolerance-km"),
-            candidateCountSelect: byId("local-auto-tour-candidate-count"),
-            seedInput: byId("local-auto-tour-seed"),
-            directionSelect: byId("local-auto-tour-direction"),
-            natureSelect: byId("local-auto-tour-nature"),
-            scenicInput: byId("local-auto-tour-scenic"),
-            waterInput: byId("local-auto-tour-water"),
-            requestedPoisInput: byId("local-auto-tour-requested-pois"),
-            status: byId("local-auto-tour-status"),
-            results: byId("local-auto-tour-results"),
-          },
-        },
-      });
-      invalidateLocalWaypointRoute = localRoutingExperiment.invalidateLocalWaypointRoute;
-      window.addEventListener("pagehide", invalidateLocalWaypointRoute);
-      void localRoutingExperiment.bind();
-    }
     let sharedSnapshot = null;
     if (sharedSlug) {
       sharedSnapshot = await loadSavedRoutePage(sharedSlug);
