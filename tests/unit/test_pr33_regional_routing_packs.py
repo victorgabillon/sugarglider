@@ -51,8 +51,8 @@ def test_manifest_registry_is_strict_confined_and_deterministic() -> None:
     )
 
 
-def test_debug_engine_selects_one_pack_and_keeps_one_current_actor() -> None:
-    engine = (DEBUG_KOTLIN / "NativeRouteEngineFactory.kt").read_text()
+def test_shared_engine_selects_one_pack_and_keeps_one_current_wrapper() -> None:
+    engine = (KOTLIN / "NativeRouteEngineFactory.kt").read_text()
     registry = (KOTLIN / "RoutingPackRegistry.kt").read_text()
     assert "registry.select(request.points, request.profile.accessMode)" in engine
     assert "NativeRouteFailureCode.NO_COVERING_ROUTING_PACK" in engine
@@ -61,17 +61,17 @@ def test_debug_engine_selects_one_pack_and_keeps_one_current_actor() -> None:
     assert "private var current: CurrentActor<T>? = null" in registry
     assert "current = CurrentActor(key, created)" in registry
     assert "MutableMap" not in registry
-    assert ".withTileExtract(pack.tileArchive.absolutePath)" in engine
+    assert ".withTileExtract(tileArchive.absolutePath)" in engine
     assert "ValhallaProfilePolicies.forProfile(request.profile)" in engine
     assert "Executors" not in engine
 
 
-def test_public_bridge_reports_pack_ids_without_paths_and_release_stays_disabled() -> (
+def test_public_bridge_reports_pack_ids_without_paths_with_shared_release_engine() -> (
     None
 ):
     boundary = (KOTLIN / "NativeRouteEngine.kt").read_text()
     protocol = (KOTLIN / "BridgeProtocol.kt").read_text()
-    release = (RELEASE_KOTLIN / "NativeRouteEngineFactory.kt").read_text()
+    release = (KOTLIN / "NativeRouteEngineFactory.kt").read_text()
     assert 'NO_COVERING_ROUTING_PACK("no_covering_routing_pack")' in boundary
     assert "val installedPackIds: List<String>" in boundary
     assert "val packId: String" in boundary
@@ -81,11 +81,11 @@ def test_public_bridge_reports_pack_ids_without_paths_and_release_stays_disabled
     assert '"pack_capabilities"' in protocol
     assert '"pack_id", result.packId' in protocol
     assert "absolutePath" not in protocol
-    assert "enabled = false" in release
-    assert "packs = emptyList()" in release
-    assert "supportedProfiles = emptyList()" in release
+    assert "enabled = true" in release
+    assert "registry.installedPacks()" in release
+    assert "installedPacks.any { it.supports(profile.accessMode) }" in release
     assert "NativeRouteFailureCode.ROUTING_PACK_UNAVAILABLE" in release
-    assert "com.valhalla" not in release
+    assert "localValhallaConfiguration(pack.tileArchive)" in release
 
 
 def test_debug_browser_has_fixed_regional_actions_and_strict_replies() -> None:
@@ -105,8 +105,8 @@ def test_debug_browser_has_fixed_regional_actions_and_strict_replies() -> None:
         assert marker in source
     assert 'id="local-routing-paris-smoke-button"' in index
     assert 'id="local-routing-cross-pack-button"' in index
-    assert "local-routing-paris-smoke-button" in app
-    assert "local-routing-cross-pack-button" in app
+    assert "local-routing-paris-smoke-button" not in app
+    assert "local-routing-cross-pack-button" not in app
     assert "globalThis.fetch" not in source
     assert "generatePlan" not in source
 

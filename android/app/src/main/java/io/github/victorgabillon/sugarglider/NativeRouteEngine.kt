@@ -96,6 +96,9 @@ internal enum class NativeRouteFailureCode(val wireValue: String) {
     ROUTING_FAILURE("routing_failure");
 }
 
+// Version-2 field names are stable. Initialization measures Kotlin wrapper
+// preparation, not a retained JNI actor; route time includes per-call native
+// actor construction in valhalla-mobile 0.5.1.
 internal data class NativeRouteMeasurements(
     val coldStart: Boolean,
     val engineInitializationMs: Long,

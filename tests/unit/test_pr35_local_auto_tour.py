@@ -97,13 +97,13 @@ def test_hard_validation_ranking_and_unavailable_metrics_are_truthful() -> None:
         assert marker in source
 
 
-def test_normal_android_generate_uses_local_core_with_release_gate_retained() -> None:
+def test_normal_android_generate_uses_local_core_in_both_android_variants() -> None:
     index = (STATIC / "index.html").read_text()
     app = (STATIC / "app.js").read_text()
     map_source = (STATIC / "map.js").read_text()
     release = (
         ROOT
-        / "android/app/src/release/java/io/github/victorgabillon/sugarglider"
+        / "android/app/src/main/java/io/github/victorgabillon/sugarglider"
         / "NativeRouteEngineFactory.kt"
     ).read_text()
     for element_id in (
@@ -119,12 +119,12 @@ def test_normal_android_generate_uses_local_core_with_release_gate_retained() ->
     ):
         assert f'id="{element_id}"' in index
     assert "Loop-only and bounded, with optional installed places/nature" in index
-    assert "renderLocalAutoTourCandidates" in app
+    assert "renderLocalAutoTourCandidates" not in app
     assert "renderLocalAutoTourCandidates" in map_source
     assert "? await localPlanner.generate(request, state.abortController.signal)" in app
     assert ": await generatePlan(request, state.abortController.signal)" in app
     assert "const localPlanner = localRoutingBridge.nativeAvailable" in app
-    assert "enabled = false" in release
+    assert "enabled = true" in release
 
 
 def test_concurrency_harness_covers_single_flight_staleness_and_no_fallback() -> None:

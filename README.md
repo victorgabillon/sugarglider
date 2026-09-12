@@ -33,8 +33,8 @@ adapter.
 
 The Kotlin project under `android/` packages the shared web planner and opens it
 without a server on first launch. Map and regional analysis files are installed
-separately; the release routing factory and consumer region installer still have
-open V1 gates. Optional route sharing and outings use a separately configured
+separately. Both Android variants include the same on-device routing engine;
+the consumer region installer and final release acceptance still have open V1 gates. Optional route sharing and outings use a separately configured
 server. User-initiated screen-off location sharing uses an Android foreground
 service. Server databases and GraphHopper are not embedded in the APK.
 

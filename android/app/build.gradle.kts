@@ -41,6 +41,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("boolean", "ALLOW_HTTP", "false")
+        ndk.abiFilters += "arm64-v8a"
     }
 
     buildTypes {
@@ -48,11 +49,8 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             buildConfigField("boolean", "ALLOW_HTTP", "true")
-            buildConfigField("boolean", "LOCAL_ROUTING_EXPERIMENT", "true")
-            ndk.abiFilters += "arm64-v8a"
         }
         release {
-            buildConfigField("boolean", "LOCAL_ROUTING_EXPERIMENT", "false")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -94,10 +92,11 @@ dependencies {
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.webkit:webkit:1.15.0")
 
-    debugImplementation("io.github.rallista:valhalla-mobile:0.5.1")
-    debugImplementation("io.github.rallista:valhalla-models:0.1.1")
-    debugImplementation("io.github.rallista:valhalla-models-config:0.1.1")
+    implementation("io.github.rallista:valhalla-mobile:0.5.1")
+    implementation("io.github.rallista:valhalla-models:0.1.1")
+    implementation("io.github.rallista:valhalla-models-config:0.1.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("com.squareup.moshi:moshi-kotlin:1.15.1")
     testImplementation("org.json:json:20250517")
 }
