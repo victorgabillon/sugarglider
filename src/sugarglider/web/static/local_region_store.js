@@ -68,10 +68,13 @@ export function createLocalRegionStore({
     }
   }
 
-  async function install(urlText, { signal, onProgress = () => {} } = {}) {
+  async function install(urlText, { signal, onProgress = () => {}, regionalManifest = null } = {}) {
     const url = validateMapPackInstallUrl(urlText, pageLocation);
+    // PR42 supplies its captured manifest; do not refetch a possibly newer one
+    // while other components are being staged for the original build.
+    const suppliedManifest = regionalManifest === null ? null : await parseRegionalManifest(JSON.stringify(regionalManifest));
     return mutate(async () => {
-      const manifest = await parseRegionalManifest(new TextDecoder("utf-8", { fatal: true }).decode(
+      const manifest = suppliedManifest ?? await parseRegionalManifest(new TextDecoder("utf-8", { fatal: true }).decode(
         await download(url, REGIONAL_MANIFEST_MAX_BYTES, signal, false),
       ));
       const existing = await list();

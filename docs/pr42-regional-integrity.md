@@ -73,7 +73,8 @@ Final validation on 2026-09-12:
 - All **90 packaged shared assets**, including the incremental-hash module closure
   and license, match their source bytes. `git diff --check` passes.
 
-Ignored generated artifacts (superseding previous build-output paths):
+Historical generated artifacts from this preparation (the build-output paths
+are now superseded by [versioned-storage preparation](pr42-versioned-installation.md)):
 
 | Artifact | Path | Bytes | SHA-256 |
 | --- | --- | ---: | --- |

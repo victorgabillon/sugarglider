@@ -198,12 +198,27 @@ pinned local noble-hashes modules, with no runtime dependency download. The real
 in 4,533 ms / 312 reads / maximum 256 KiB per read. This is host integrity evidence.
 `make check` passes 1,033 tests / 16 existing integration deselections, 304 browser
 scenarios pass, and Android checks retain 150 tests in each variant with no lint
-errors. All 90 shared assets match APK/AAB bytes. The current unsigned AAB is
+errors. All 90 shared assets match APK/AAB bytes. That preparation's unsigned AAB was
 47,368,403 bytes, SHA-256
 `e355ff37522d5c73f818e21e787d76e08f629cc1ed978385008b914ab0a99ff9`.
 [Integrity preparation](pr42-regional-integrity.md) records exact scope and tests.
 Catalog/distribution, coordinated staging/activation/update/remove and actual
 consumer-region phone acceptance remain open; PR42 is not complete.
+
+The next [versioned-storage preparation](pr42-versioned-installation.md) adds
+bounded regional activation records, concurrent request/writer ownership, scoped
+reuse of the existing OPFS map/index formats, and a native immutable archive
+store. Original component manifest bytes and full hashes survive restart checks;
+failed updates preserve the active version. `make check` passes 1,033 tests,
+334 browser scenarios pass, and Android passes 164 tests in each variant with
+only the existing lint warnings. All 92 assets match the built artifacts. The
+current unsigned AAB is 47,381,958 bytes, SHA-256
+`1216c415cf7acc108b4ca0a9c1a63661e5636fa9cae3839830f6c4c766b87ec2`.
+These stores are packaged but not wired into production planning or a download
+screen. Native HTTP/storage adapters, routing-version transport, worker and
+coordinator integration, catalog and Fairphone consumer-region acceptance remain
+open. Browser native completion is synthetic and JVM archives are synthetic;
+neither is physical regional-install evidence. The phone remains on `b8ebe3a`.
 
 ## PR44 audit preparation
 
