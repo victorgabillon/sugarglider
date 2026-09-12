@@ -1,5 +1,6 @@
 import { ApiError, generatePlan, getConfig, getPoiStatus, getRoutingProfiles, reversePlan, searchPois, visualizeRoute } from "./api.js";
 import { createLocalGpxExporter } from "./local_gpx_client.js";
+import { createGpxFileSaver } from "./native_gpx_save.js";
 import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
@@ -62,6 +63,7 @@ import {
 
 const byId = (id) => document.getElementById(id);
 const localGpxExporter = createLocalGpxExporter();
+const gpxFileSaver = createGpxFileSaver();
 localGpxExporter.prepare();
 let pendingGpxExport = null;
 let elapsedTimer = null;
@@ -2267,7 +2269,18 @@ async function downloadSelected() {
   renderMetrics();
   byId("request-status").textContent = "Preparing GPX…";
   try {
-    const { blob, filename } = await localGpxExporter.exportCandidate(candidate);
+    const prepared = await localGpxExporter.exportCandidate(candidate);
+    byId("request-status").textContent = "Choose where to save the GPX file…";
+    const result = await gpxFileSaver.save(prepared);
+    if (result.status === "cancelled") {
+      byId("request-status").textContent = "GPX save cancelled. Your route is unchanged.";
+      return;
+    }
+    if (result.status === "saved") {
+      byId("request-status").textContent = `${result.filename} saved.`;
+      return;
+    }
+    const { blob, filename } = result;
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;

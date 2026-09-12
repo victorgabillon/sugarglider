@@ -78,18 +78,19 @@ export function createNativeBridgeTransport({
     owner,
     parseReply,
     timeoutMs,
+    binary = null,
   }) {
     if (trusted && !invalidated) {
-      return postRequest(type, fields, { owner, parseReply, timeoutMs });
+      return postRequest(type, fields, { owner, parseReply, timeoutMs, binary });
     }
     return initialize().then((payload) => (
       payload && trusted && !invalidated
-        ? postRequest(type, fields, { owner, parseReply, timeoutMs })
+        ? postRequest(type, fields, { owner, parseReply, timeoutMs, binary })
         : null
     ));
   }
 
-  function postRequest(type, fields, { owner, parseReply, timeoutMs }) {
+  function postRequest(type, fields, { owner, parseReply, timeoutMs, binary = null }) {
     if (
       invalidated
       || !listening
@@ -109,10 +110,28 @@ export function createNativeBridgeTransport({
       const timer = schedule(() => settle(requestId, null), timeoutMs);
       pending.set(requestId, { owner, parseReply, resolve, timer });
       try {
-        port.postMessage(payload);
+        if (binary === null) port.postMessage(payload);
+        else {
+          const header = new TextEncoder().encode(payload);
+          if (header.length > 1024) throw new Error("Invalid GPX header");
+          const framed = new Uint8Array(4 + header.length + binary.byteLength);
+          new DataView(framed.buffer).setUint32(0, header.length);
+          framed.set(header, 4);
+          framed.set(new Uint8Array(binary), 4 + header.length);
+          port.postMessage(framed.buffer);
+        }
       } catch {
         settle(requestId, null);
       }
+    });
+  }
+
+  function saveGpx(filename, bytes, options) {
+    if (!(bytes instanceof ArrayBuffer) || bytes.byteLength < 1
+      || bytes.byteLength > 16 * 1024 * 1024
+      || typeof filename !== "string" || filename.length > 104) return Promise.resolve(null);
+    return request("save_gpx", { filename, byte_count: bytes.byteLength }, {
+      ...options, binary: bytes,
     });
   }
 
@@ -178,6 +197,7 @@ export function createNativeBridgeTransport({
     nativeAvailable,
     initialize,
     request,
+    saveGpx,
     cancelOwner,
     subscribeUnsolicited,
     invalidate,

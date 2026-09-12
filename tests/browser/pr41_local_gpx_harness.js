@@ -3,6 +3,8 @@ import {
   MAX_GPX_STOPS, MAX_GPX_VERTICES,
 } from "../../src/sugarglider/web/static/local_gpx_export.js";
 import { PUBLIC_PROFILE_METADATA } from "../../src/sugarglider/web/static/public_profile_metadata.js";
+import { createGpxFileSaver, parseSaveReply } from "../../src/sugarglider/web/static/native_gpx_save.js";
+import { createNativeBridgeTransport } from "../../src/sugarglider/web/static/native_bridge_transport.js";
 import { createLocalGpxExporter } from "../../src/sugarglider/web/static/local_gpx_client.js";
 
 export async function runPr41LocalGpxHarness() {
@@ -116,6 +118,7 @@ export async function runPr41LocalGpxHarness() {
     }],
   ]) { await run(); scenarios.push(name); }
   for (const [name, run] of workerScenarios(candidate)) { await run(); scenarios.push(name); }
+  for (const [name, run] of documentScenarios(candidate)) { await run(); scenarios.push(name); }
   return scenarios;
 }
 
@@ -222,3 +225,93 @@ function freeze(value) { if(value && typeof value === "object") {Object.values(v
 function rejects(run, code) { let error; try { run(); } catch (caught) { error=caught; } assert(error instanceof LocalGpxExportError && error.code===code, `expected ${code}; got ${error}`); }
 function assert(value, message) { if (!value) throw new Error(message); }
 function equal(actual, expected, message) { assert(JSON.stringify(actual)===JSON.stringify(expected), `${message}: ${JSON.stringify(actual)} != ${JSON.stringify(expected)}`); }
+
+function documentScenarios(candidate) {
+  const prepared = () => exportCanonicalCandidate(candidate());
+  const reply = (status, request_id = "test-1") => ({schema_version:1,request_id,type:"save_gpx_result",status});
+  const failure = async (promise, fragment) => {
+    let error; try {await promise;} catch (caught) {error=caught;}
+    assert(error?.message.includes(fragment), `expected error containing ${fragment}, got ${error}`);
+  };
+  return [
+    ["ordinary_browser_keeps_existing_download", async () => {
+      const input=prepared(), saver=createGpxFileSaver({transport:{nativeAvailable:false},lifecycleTarget:null});
+      const result=await saver.save(input);
+      equal(result.status,"browser","browser download selected");
+      assert(result.blob===input.blob,"same immutable Blob");
+    }],
+    ["native_binary_document_uses_shared_handshake_and_exact_bytes", async () => {
+      const input=prepared(), frames=[];
+      const port={onmessage:null,postMessage(payload) {
+        if (typeof payload==="string") {
+          const request=JSON.parse(payload);equal(request.type,"hello","only shared handshake is text");
+          queueMicrotask(()=>this.onmessage({data:JSON.stringify({schema_version:1,request_id:request.request_id,
+            type:"hello_result",outing_slug:null,participant_id:null,active:false,state:"stopped",
+            last_published_at:null,pending_sample:false,stop_warning:null})}));
+        } else {
+          assert(payload instanceof ArrayBuffer,"binary transport");frames.push(payload);
+          const size=new DataView(payload).getUint32(0);
+          const header=JSON.parse(new TextDecoder().decode(new Uint8Array(payload,4,size)));
+          equal(Object.keys(header).sort(),["byte_count","filename","request_id","schema_version","type"],"bounded metadata only");
+          equal(header.filename,input.filename,"same filename");
+          equal(header.byte_count,input.blob.size,"exact declared size");
+          equal(header.type,"save_gpx","document-only binary protocol");
+          queueMicrotask(()=>this.onmessage({data:JSON.stringify(reply("saved",header.request_id))}));
+        }
+      }};
+      const transport=createNativeBridgeTransport({port,pageNonce:"a".repeat(32),lifecycleTarget:null});
+      try {
+        const saver=createGpxFileSaver({transport,lifecycleTarget:null});
+        equal((await saver.save(input)).status,"saved","native confirmed completion");
+        equal(frames.length,1,"one binary send");
+        const frame=frames[0], offset=4+new DataView(frame).getUint32(0);
+        equal(Array.from(new Uint8Array(frame,offset)),Array.from(new Uint8Array(await input.blob.arrayBuffer())),"unchanged GPX bytes");
+      } finally {transport.invalidate();}
+    }],
+    ["native_document_cancel_and_failures_are_explicit", async () => {
+      for (const [status, expected] of [["cancelled",null],["busy","picker"],["unavailable","could not open"],["write_failed","completely"]]) {
+        let calls=0;
+        const transport={nativeAvailable:true,saveGpx:async()=>{calls+=1;return reply(status);}};
+        const saver=createGpxFileSaver({transport,lifecycleTarget:null});
+        if (expected) await failure(saver.save(prepared()),expected);
+        else equal((await saver.save(prepared())).status,"cancelled","cancelled means no success");
+        equal(calls,1,"no automatic retry or browser fallback");
+      }
+    }],
+    ["document_reply_rejects_uri_coordinates_and_authority", () => {
+      assert(parseSaveReply(JSON.stringify(reply("saved"))),"valid reply");
+      for (const field of ["uri","latitude","participant_token","owner_token"]) {
+        equal(parseSaveReply(JSON.stringify({...reply("saved"),[field]:"forbidden"})),null,"extra private field rejected");
+      }
+      equal(parseSaveReply(JSON.stringify(reply("invented"))),null,"unknown outcome");
+    }],
+    ["pagehide_invalidates_native_save_and_blocks_concurrent_save", async () => {
+      const lifecycle=new EventTarget();let finish, owner, calls=0;
+      const transport={nativeAvailable:true,saveGpx:(_filename,_bytes,options)=>{
+        calls+=1;owner=options.owner;return new Promise((resolve)=>{finish=resolve;});
+      },cancelOwner:(value)=>{assert(value===owner,"exact operation cancelled");finish(null);}};
+      const saver=createGpxFileSaver({transport,lifecycleTarget:lifecycle});
+      const first=saver.save(prepared());
+      while (!finish) await new Promise((resolve)=>setTimeout(resolve,0));
+      await failure(saver.save(prepared()),"in progress");
+      const rejected=first.catch((error)=>error.name);
+      lifecycle.dispatchEvent(new Event("pagehide"));
+      equal(await rejected,"AbortError","page departure does not claim failure/success on another page");
+      equal(calls,1,"one pending save");
+    }],
+    ["pagehide_during_blob_read_never_dispatches_native_request", async () => {
+      const lifecycle=new EventTarget(), input=prepared();let release, calls=0;
+      const original=input.blob.arrayBuffer.bind(input.blob);
+      input.blob.arrayBuffer=()=>new Promise((resolve)=>{release=()=>original().then(resolve);});
+      const saver=createGpxFileSaver({transport:{nativeAvailable:true,saveGpx:()=>{calls+=1;},cancelOwner:()=>{}},lifecycleTarget:lifecycle});
+      const first=saver.save(input), rejected=first.catch((error)=>error.name);
+      lifecycle.dispatchEvent(new Event("pagehide"));release();
+      equal(await rejected,"AbortError","stale buffer result cancelled");equal(calls,0,"no stale send");
+    }],
+    ["unknown_native_save_outcome_never_claims_saved_or_retries", async () => {
+      let calls=0;
+      const saver=createGpxFileSaver({transport:{nativeAvailable:true,saveGpx:async()=>{calls+=1;return null;}},lifecycleTarget:null});
+      await failure(saver.save(prepared()),"check it before trying again");equal(calls,1,"no retry on uncertain outcome");
+    }],
+  ];
+}

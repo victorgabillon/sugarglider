@@ -4,14 +4,16 @@ Normal **Download GPX** now serializes the displayed canonical `PlanCandidate`
 locally. The same action works for a generated candidate and an explicitly
 stored offline route snapshot. It uses the candidate's existing route geometry,
 profile and validated selected approaches, without an API request, generation,
-rerouting, ranking or snapshot mutation. The browser download is offered even
-when the optional server is unavailable.
+rerouting, ranking or snapshot mutation. Export remains available when the
+optional server is unavailable. Android uses its document picker; ordinary
+browsers keep their existing download flow.
 
 This is one reviewable part of production Android integration. It does not yet
 enable the release native routing factory, bundle first-launch assets, connect
-normal Generate to local planning, or implement Android's document-save adapter.
-Browser blob download alone is not evidence that Android's WebView can save a
-file. The required PR41 release-equivalent Fairphone matrix remains open.
+normal Generate to local planning, or complete normal local candidate publication.
+Android document saving is now implemented below; its physical picker/export
+acceptance remains pending. The required PR41 release-equivalent Fairphone
+matrix remains open.
 
 ## Canonical data and export contract
 
@@ -62,8 +64,8 @@ limit produce explicit errors, with no inline or server fallback. Replies and
 timers retain worker/request ownership; stale callbacks cannot affect a later
 export. The output is bounded to 16 MiB. The obsolete planning
 GPX POST helper is removed from `api.js`; server GPX endpoints still serialize
-stored candidates for external consumers. Service-worker shell **v28** includes
-the four new modules and changed normal page/API. Cache fingerprints and the full
+stored candidates for external consumers. Service-worker shell **v29** includes
+the export and native-save modules and changed normal page/API. Cache fingerprints and the full
 module allowlist remain checked; no route, GPX, data pack or API is precached.
 
 ## Evidence — 2026-09-12
@@ -109,8 +111,82 @@ module allowlist remain checked; no route, GPX, data pack or API is precached.
   and lint evidence remains applicable to that native code. A final native
   release build/device export still requires its own validation.
 
+## Android document-save adapter
+
+Normal **Download GPX** now sends the already prepared Blob to Android's document
+picker when the existing native bridge is present. The same web serializer owns
+all route/stop/GPX semantics. Android accepts one bounded binary message (at most
+16 MiB of GPX plus a 1,024-byte metadata header), validates its exact field set,
+page nonce, filename and byte count, and offers `ACTION_CREATE_DOCUMENT` with
+`application/gpx+xml`. Only the returned content URI grants write access. No
+storage permission, persisted URI/grant, temporary GPX copy, network upload,
+route computation or coordinate history is introduced.
+
+The binary path uses the existing exact-origin, current-WebView, main-frame and
+handshaken page gate. WebKit feature/type checks precede the matching accessor;
+normal JSON requests keep their 8 KiB bound. Only a digest enters the bounded
+request ledger. Native replies contain a request ID and fixed outcome, never a
+URI, GPX content, coordinate or capability. Unsupported bridge/transport outcomes
+remain explicit; they do not select a hidden browser/server fallback.
+
+There is one picker/write slot. Page departure discards an unselected document,
+and its outstanding picker cannot consume a newer page's bytes. An explicitly
+selected write is offloaded and retains its slot until output and close finish;
+stale completion cannot update a newer page. Cancellation never opens output.
+Provider/open/write/close failure reports that a file may be incomplete; the app
+never deletes a possibly existing user file or retries an uncertain write.
+Android saves are confirmed only after output closes successfully. Activity
+recreation retains only a boolean uncertainty flag and prompts the user to check
+any chosen file; it never restores file bytes, a URI, or an automatic save. The web wait
+is bounded to ten minutes and reports an uncertain outcome truthfully.
+
+API basis, checked 2026-09-12:
+[Android document storage](https://developer.android.com/training/data-storage/shared/documents-files)
+and [WebMessageCompat](https://developer.android.com/reference/androidx/webkit/WebMessageCompat).
+
+Validation after the native adapter:
+
+- `make check`: **1,026 passed / 16 existing integration tests deselected**,
+  Ruff and strict mypy pass. A stale shell-version assertion was corrected to
+  v29 with matching asset fingerprints; no acceptance requirement was removed.
+- Eleven real browser harnesses: **214 scenarios pass**, including 27 GPX cases.
+  New cases cover exact binary bytes and shared handshake, browser behavior,
+  native cancellation/failures, private-field rejection, one pending save, stale
+  Blob reads/page departure, and uncertain outcomes without retry.
+- `testDebugUnitTest lintDebug testReleaseUnitTest lintRelease assembleDebug`:
+  **144 debug / 139 release tests pass**, zero failures/errors/skips; lint has
+  zero errors/fatal findings (two debug warnings, one release warning). Eight
+  document protocol/lifecycle/write tests run in both variants. Two existing
+  native geometry tests moved unchanged into `testDebug` because their helpers
+  exist only in debug; this fixes the release-test compilation failure and keeps
+  all debug coverage. The first complete bounded build took 2 min 55 s; after adding the restart
+  uncertainty flag, all native checks plus `bundleRelease` pass in 3 min 38 s.
+- `/tmp/sugarglider-pr41-document-browser.py` and
+  `/tmp/sugarglider-pr41-document-ui.py` reproduce the browser/real-page checks.
+  The latter stops its static fixture server, reloads an explicitly saved offline
+  snapshot, clicks normal Download, and obtains the same 882-byte GPX hash above,
+  with exact Python XML field equality, unchanged snapshot, and zero application
+  fetch calls during export. This remains host evidence, not phone evidence.
+- Logs: `/tmp/sugarglider-pr41-document-{check,browser,ui,restoration}.log`.
+  The host restarted during the earlier run and cleared temporary evidence;
+  debug reports survived but release testing/assembly were incomplete. The
+  complete checks above were rerun. One initial command used an incorrect SDK
+  path; the successful run uses `/home/pompote/Android/Sdk` and Java 17.
+
+Current preparation artifacts (outside Git):
+
+- Debug APK: `/home/pompote/oldata/victor/sugarglider/android/app/build/outputs/apk/debug/app-debug.apk`, 144,140,685 bytes, SHA-256
+  `20341a5f4b382ee90807b07203e19c24ec31b11838b65218eef0ed7c1329408b`.
+- Unsigned release AAB: `/home/pompote/oldata/victor/sugarglider/android/app/build/outputs/bundle/release/app-release.aab`, 3,531,390 bytes, SHA-256
+  `a0dc420df538974f3de50655de301e5b3e9c569878b35fb52a3d995fa1644574`. It contains no native routing library: the production
+  routing factory is still disabled. **This is not the V1 artifact.**
+- Machine-readable report: `/tmp/sugarglider-pr41-document-artifacts.json`.
+
+Physical save/cancel acceptance is pending. No new APK was installed while the
+Fairphone was in a call; no display/radio/hotspot settings were changed.
+
 Remaining PR41 work: canonical local candidate/search publication, truthful
 unknown-detail rendering, bundled first launch with a stable trusted origin,
-normal local Generate/capability selection, Android document saving, release
+normal local Generate/capability selection, physical Android document saving, release
 factory integration and the complete Fairphone Waypoint/Auto Tour/pedestrian/
 bicycle/region/GPX/no-backend/outside-coverage acceptance.
