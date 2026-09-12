@@ -112,7 +112,7 @@ def test_ui_is_debug_separate_and_normal_generate_remains_server_backed() -> Non
         "local-auto-tour-results",
     ):
         assert f'id="{element_id}"' in index
-    assert "Loop-only, bounded and geometry-only" in index
+    assert "Loop-only and bounded, with optional installed places/nature" in index
     assert "renderLocalAutoTourCandidates" in app
     assert "renderLocalAutoTourCandidates" in map_source
     assert (

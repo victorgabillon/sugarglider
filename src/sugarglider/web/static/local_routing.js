@@ -3,6 +3,7 @@ import {
 } from "./native_bridge_transport.js";
 import { createLocalAutoTourExperiment } from "./local_auto_tour.js";
 import { createLocalWaypointRouteExperiment } from "./local_waypoint_route.js";
+import { createLocalRegionPanel } from "./local_region_panel.js";
 
 const SCHEMA_VERSION = 1;
 const LOCAL_ROUTE_VERSION = 2;
@@ -156,6 +157,14 @@ export function createLocalRoutingExperiment({
   let packAvailable = false;
   let supportedProfiles = new Set();
   let localBusy = false;
+  let regionPanel = null;
+  if (elements.regionalData) {
+    try { regionPanel = createLocalRegionPanel(elements.regionalData); }
+    catch {
+      elements.regionalData.status.textContent = "Local places/nature storage is unavailable. Local routing remains independent.";
+      elements.regionalData.install.disabled = true;
+    }
+  }
   const waypointRoute = elements.waypointRoute
     ? createLocalWaypointRouteExperiment({
       bridge,
@@ -173,6 +182,7 @@ export function createLocalRoutingExperiment({
       bridge,
       getStart: () => getPoints()[0] ?? null,
       getProfile: selectedProfile,
+      getRegionData: (packId) => regionPanel?.getRegionData(packId) ?? null,
       renderCandidates: renderAutoTourCandidates,
       clearCandidates: clearRoute,
       onBusy: setBusy,
@@ -325,6 +335,10 @@ export function createLocalRoutingExperiment({
       autoTourElement("candidateCountSelect"),
       autoTourElement("seedInput"),
       autoTourElement("directionSelect"),
+      autoTourElement("natureSelect"),
+      autoTourElement("scenicInput"),
+      autoTourElement("waterInput"),
+      autoTourElement("requestedPoisInput"),
     ]) {
       if (control) control.disabled = busy || !packAvailable;
     }

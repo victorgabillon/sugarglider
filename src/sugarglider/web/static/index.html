@@ -380,7 +380,24 @@
               <p id="local-waypoint-route-status" role="status" aria-live="polite"></p>
               <ol id="local-waypoint-route-results" class="local-auto-tour-results"></ol>
               <strong id="local-auto-tour-title">Local Auto Tour experiment</strong>
-              <p>Loop-only, bounded and geometry-only. No POI, nature, exact edge-repetition, or GraphHopper parity claim.</p>
+              <fieldset>
+                <legend>Development regional places and nature</legend>
+                <p>Install PR39 places/nature data for an already installed routing region. Map and routing files stay separate.</p>
+                <label for="local-region-data-url">Regional manifest URL</label>
+                <input id="local-region-data-url" type="url" autocomplete="off" spellcheck="false">
+                <button id="local-region-data-install" type="button" class="button secondary">Install places and nature</button>
+                <button id="local-region-data-cancel" type="button" class="button secondary" disabled>Cancel installation</button>
+                <p id="local-region-data-status" role="status" aria-live="polite"></p>
+                <ul id="local-region-data-regions"></ul>
+              </fieldset>
+              <label for="local-auto-tour-nature">Nature preference</label>
+              <select id="local-auto-tour-nature"><option value="off">Off</option><option value="prefer">Prefer mapped nature below loop quality</option></select>
+              <label><input id="local-auto-tour-scenic" type="checkbox"> Consider scenic places</label>
+              <label><input id="local-auto-tour-water" type="checkbox"> Consider mapped verified drinking water</label>
+              <label for="local-auto-tour-requested-pois">Requested local OSM place IDs (comma-separated)</label>
+              <input id="local-auto-tour-requested-pois" type="text" autocomplete="off" spellcheck="false">
+              <p>POI alternatives retain the no-POI recommendation while exact repetition/backtracking evidence is unavailable. Mapped water does not guarantee current potability or operation.</p>
+              <p>Loop-only and bounded, with optional installed places/nature. Exact edge repetition and GraphHopper parity remain unavailable.</p>
               <label for="local-auto-tour-target-km">Target distance (km)</label>
               <input id="local-auto-tour-target-km" type="number" min="2" max="60" step="0.5" value="12" disabled>
               <label for="local-auto-tour-tolerance-km">Tolerance (km)</label>

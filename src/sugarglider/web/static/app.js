@@ -2923,6 +2923,11 @@ async function start() {
           crossPackButton: byId("local-routing-cross-pack-button"),
           profileSelect: byId("local-routing-profile"),
           status: byId("local-routing-status"),
+          regionalData: {
+            url: byId("local-region-data-url"), install: byId("local-region-data-install"),
+            cancel: byId("local-region-data-cancel"), status: byId("local-region-data-status"),
+            regions: byId("local-region-data-regions"),
+          },
           waypointRoute: {
             button: byId("local-waypoint-route-button"),
             status: byId("local-waypoint-route-status"),
@@ -2936,6 +2941,10 @@ async function start() {
             candidateCountSelect: byId("local-auto-tour-candidate-count"),
             seedInput: byId("local-auto-tour-seed"),
             directionSelect: byId("local-auto-tour-direction"),
+            natureSelect: byId("local-auto-tour-nature"),
+            scenicInput: byId("local-auto-tour-scenic"),
+            waterInput: byId("local-auto-tour-water"),
+            requestedPoisInput: byId("local-auto-tour-requested-pois"),
             status: byId("local-auto-tour-status"),
             results: byId("local-auto-tour-results"),
           },
