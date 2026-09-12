@@ -2,13 +2,35 @@
 
 This configures an external upload-key workflow for the shared production native
 router and bundled regional planner. Consumer-region physical acceptance and
-final release gates remain open. No permanent key has been created.
+final release gates remain open. The V1 preparation did not create a permanent key.
+
+A subsequently supplied user record says an upload key **was already created and
+backed up for the previous 0.1.0 internal release**. Reuse that existing identity;
+the unresolved action is
+locating its private backup/configuration, not creating another key by default.
+
+The same record identifies the public developer name as **Sugarglider** and reports
+an active internal release of code 1 / name 0.1.0 on 2026-08-28, with no production
+release. These are supplied historical Play Console facts, not a new live Console
+inspection. Read-only Fairphone package inspection now confirms code 1 / name
+0.1.0 installed by `com.android.vending`, resolving the record's installation
+uncertainty. This does not establish successful launch or current track contents.
 
 The Fairphone already contains a Play-installed release with version code 1 /
 name 0.1.0. The proposed V1 update uses code 2 / name 1.0.0. The publisher must
 confirm that code 2 is unused across every Play track before upload and use the
 existing app’s upload-key/App Signing setup. Do not create a new app identity or
 replace the existing phone installation with a disposable signing certificate.
+
+The old `chore/play-internal-testing` branch is absent from current local refs and
+remote heads. The current signing implementation is already committed/pushed in
+`e58acdd` and uses the external four-field properties file described below;
+`android/.kotlin/` is already ignored. The old “commit signing configuration” todo
+is therefore superseded for V1. Do not restore an unexamined historical Gradle file.
+A bounded filename-only check of Downloads, Documents, `.config` and
+`.local/share` found no Sugarglider/upload/Play keystore or signing-properties
+candidate. No key/password contents were read; this is not proof that the private
+backup is missing elsewhere.
 
 ## Unsigned validation
 
