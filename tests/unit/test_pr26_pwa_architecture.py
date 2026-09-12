@@ -150,14 +150,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v29_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v30_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v29"
+    assert generation.group(1) == "v30"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -169,6 +169,7 @@ def test_shared_shell_generation_tracks_v29_cached_assets() -> None:
             "planner_location.js",
             "local_routing.js",
             "local_auto_tour.js",
+            "local_planning_context.js",
             "local_waypoint_route.js",
             "regional_manifest.js",
             "local_region_client.js",
@@ -202,11 +203,14 @@ def test_shared_shell_generation_tracks_v29_cached_assets() -> None:
         "local_routing.js": (
             "9fc987bf70bbf6cc91cfadb2b40929e79d712eeb1c5fa030ec7836113a59a832"
         ),
+        "local_planning_context.js": (
+            "4daf16dd06654c1d4b857fd2b4497b87821c64aac9de0c73675b0b3a59add519"
+        ),
         "local_auto_tour.js": (
-            "71f5eef85b4d9a61bb4434ee2bc79378fae5aa1ac48fca87c7836a00d18998f6"
+            "1a9bcac65fa07dafa6a8ac263f0afc13eb3cee0d9a012e2e4a0309ec8a2694ad"
         ),
         "local_waypoint_route.js": (
-            "5ba767ccd5578579129f117dcef7408cb5e3e79901b008ce6416a775816952f4"
+            "45f94090ef1cf08fb405243cc610f366bc370c8dcc1ed12f7e929d6b0e271a8b"
         ),
         "regional_manifest.js": (
             "f062cff8451b1a8039de394856654e07c0533f55ccfb82e25aa0e3f814e94787"

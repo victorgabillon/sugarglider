@@ -261,7 +261,7 @@ pending.
 
 The first implementation part, `b6a097e` on `feat/pr41-local-canonical-export`,
 is GitHub draft [PR #43](https://github.com/victorgabillon/sugarglider/pull/43).
-All five CI checks pass at evidence head `b6c7d20`; the worker follow-up also passes all five checks at `6a0314c`; native-save changes require their own CI. It connects
+All five CI checks pass at evidence head `b6c7d20`; the worker follow-up also passes all five checks at `6a0314c`; all five native-save checks also pass at `dad310c`. It connects
 normal Download GPX to local serialization of the existing canonical candidate,
 including a saved offline snapshot. It preserves exact track order/profile,
 revalidates strict selected-stop arrivals, omits dropped stops and extensions,
@@ -293,6 +293,16 @@ The export document records both APK/AAB paths and hashes.
 Physical Android saving, normal local candidate publication, bundled first launch,
 release native routing and every required PR41 phone case remain outstanding.
 This preparation does not establish a release-equivalent device PASS.
+
+Normal-planner work continues on dependent branch
+`feat/pr41-normal-local-planner`, based on `dad310c`. Both local searches now own
+one shared request context with cached native calls and canonical budget/cache
+diagnostics. Existing route/proposal behavior is retained; distinct concurrent
+Auto Tour requests are rejected explicitly. `make check` and 223 browser
+scenarios pass; 16 browser diagnostic snapshots validate through Python's
+canonical model. [Normal integration evidence](pr41-normal-local-planner.md)
+records this foundation. Canonical candidate publication and normal Generate
+remain the next required implementation; this is not a PR41 PASS.
 
 ## External actions and blockers
 

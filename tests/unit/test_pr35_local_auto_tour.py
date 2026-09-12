@@ -53,12 +53,18 @@ def test_search_uses_only_pr34_routes_with_one_correction_and_strict_budget() ->
     local = (STATIC / "local_routing.js").read_text()
     transport = (STATIC / "native_bridge_transport.js").read_text()
     assert "LOCAL_AUTO_TOUR_ROUTE_CALL_BUDGET = 24" in source
-    assert "state.routeCalls += 1" in source
-    assert "state.routeCalls >= routeCallBudget" in source
+    context = (STATIC / "local_planning_context.js").read_text()
+    assert "state.context.totalUsed >= routeCallBudget" in source
+    assert "totalLimit: routeCallBudget" in source
+    assert "state.context.requestRoute(skeleton.points, phase)" in source
+    assert "used >= totalLimit || phaseUsage[phase] >= limits[phase]" in context
+    assert context.index("used += 1") < context.index(
+        "route({ profile, points: coordinates })"
+    )
+    assert "await route(" not in source
     assert "MIN_CORRECTION_FACTOR = 0.7" in source
     assert "MAX_CORRECTION_FACTOR = 1.3" in source
     assert "skeleton.correction_step + 1" in source
-    assert "route({ points: skeleton.points, profile: request.profile })" in source
     assert 'from "./local_routing.js"' in source
     assert 'from "./native_bridge_transport.js"' not in source
     assert "createLocalAutoTourExperiment" in local

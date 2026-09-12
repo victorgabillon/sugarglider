@@ -99,9 +99,15 @@ def test_order_proposals_and_native_calls_are_strictly_bounded() -> None:
     )
     assert _constant(source, "MAX_ORDER_PROPOSALS") == 16
     assert "seedShuffle(reversals, request.seed)" in source
-    assert source.index("routeCalls += 1") < source.index("rawReply = await route(")
-    assert source.count("await route(") == 1
-    assert "routeCalls >= routeCallBudget" in source
+    context = (STATIC / "local_planning_context.js").read_text()
+    assert source.count('context.requestRoute(points, "waypoint")') == 1
+    assert "await route(" not in source
+    assert "totalLimit: routeCallBudget" in source
+    assert "context.totalUsed >= routeCallBudget" in source
+    assert context.index("used += 1") < context.index(
+        "route({ profile, points: coordinates })"
+    )
+    assert "search_diagnostics: context.snapshot()" in source
     assert "unattempted_order_count" in source
     assert "Promise.all(" not in source
     assert "Math.random(" not in source
@@ -232,7 +238,7 @@ def test_waypoint_rendering_has_its_own_layers_and_preserves_existing_overlays()
 
 def test_offline_module_is_precached_in_exactly_v28_and_harness_is_local() -> None:
     worker = (STATIC / "service-worker.js").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v29`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v30`" in worker
     assert '"/static/local_waypoint_route.js"' in worker
     html = HARNESS.with_suffix(".html").read_text()
     harness = HARNESS.read_text()

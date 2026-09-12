@@ -6,7 +6,7 @@ import {
 } from "/static/service_worker_policy.js";
 
 const SHELL_CACHE_PREFIX = "sugarglider-shell-";
-const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v29`;
+const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v30`;
 const ROOT_SHELL = "/";
 const shellCache = createCurrentCacheAccess(caches, SHELL_CACHE);
 
@@ -44,6 +44,7 @@ const CORE_ASSETS = Object.freeze([
   "/static/outing_native_bridge.js",
   "/static/local_routing.js",
   "/static/local_auto_tour.js",
+  "/static/local_planning_context.js",
   "/static/local_waypoint_route.js",
   "/static/regional_manifest.js",
   "/static/local_region_data.js",
