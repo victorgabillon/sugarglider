@@ -1,3 +1,4 @@
+import { createLocalPlanningContext } from "./local_planning_context.js";
 import {
   MAX_ROUTE_POINTS,
   PUBLIC_LOCAL_ROUTE_PROFILES,
@@ -207,7 +208,9 @@ export function createLocalWaypointRouteEngine({
     const candidates = [];
     const rejected = new Map();
     const rejectedAttempts = [];
-    let routeCalls = 0;
+    const context = createLocalPlanningContext({ profile: request.routing_profile, route,
+      totalLimit: routeCallBudget, phaseLimits: { waypoint: routeCallBudget } });
+    let attemptedOrders = 0;
     let selectedPack = null;
     let terminalCode = null;
     const requestId = `local-waypoint-${hashText(JSON.stringify(request))}`;
@@ -217,12 +220,12 @@ export function createLocalWaypointRouteEngine({
     };
     for (const proposal of proposals) {
       if (!owns(request, ownedGeneration)) return null;
-      if (routeCalls >= routeCallBudget) break;
+      if (context.totalUsed >= routeCallBudget) break;
+      attemptedOrders += 1;
       const points = routingPoints(request, proposal.order);
       let rawReply;
-      routeCalls += 1;
       try {
-        rawReply = await route({ points: points.map(({ lat, lon }) => ({ lat, lon })), profile: request.routing_profile });
+        rawReply = await context.requestRoute(points, "waypoint");
       } catch {
         if (!owns(request, ownedGeneration)) return null;
         reject("local_route_exception", proposal.proposal_id);
@@ -290,10 +293,11 @@ export function createLocalWaypointRouteEngine({
       requested_waypoint_order: request.waypoints.map((point) => point.id),
       requested_candidate_count: request.candidate_count, candidates: ranked,
       recommended_candidate_id: ranked[0]?.candidate_id ?? null, pack_id: ranked[0]?.pack_id ?? null,
-      route_call_count: routeCalls, route_call_budget: routeCallBudget,
-      proposed_order_count: proposals.length, unattempted_order_count: proposals.length - routeCalls,
-      budget_exhausted: routeCalls === routeCallBudget, rejected_attempt_counts: rejections,
+      route_call_count: context.totalUsed, route_call_budget: routeCallBudget,
+      proposed_order_count: proposals.length, unattempted_order_count: proposals.length - attemptedOrders,
+      budget_exhausted: context.totalUsed === routeCallBudget, rejected_attempt_counts: rejections,
       rejected_attempts: rejectedAttempts,
+      search_diagnostics: context.snapshot(),
       warnings: ranked.length < request.candidate_count ? [...WARNINGS, "fewer_candidates_than_requested"] : WARNINGS,
     });
   }

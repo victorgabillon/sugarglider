@@ -7,6 +7,8 @@ const EARTH_RADIUS_M = 6_371_008.8;
 const MAX_FEATURES = 250_000;
 const MAX_POSITIONS = 2_000_000;
 const MAX_ANALYSIS_OPERATIONS = 4_000_000;
+export const LOCAL_NATURE_WEIGHTS = Object.freeze({ woodland: 1, open_natural: 0.85, agriculture: 0.3,
+  park_or_protected: 0.2, near_water: 0.15, urban: -1, unknown: -0.1 });
 const PRIMARY_CLASSES = Object.freeze(["urban", "water", "woodland", "open_natural", "agriculture"]);
 const CATEGORIES = Object.freeze(["viewpoint", "castle", "ruins", "archaeological_site", "observation_tower", "tourism_attraction", "drinking_water", "fountain", "water_tap"]);
 const ACCESS = Object.freeze(["public", "unknown", "private", "restricted"]);
@@ -150,8 +152,7 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
     // Normalize the final rounding residual without attributing uncovered distance.
     distances.unknown = Math.max(0, candidate.distance_m - PRIMARY_CLASSES.reduce((sum, key) => sum + distances[key], 0));
     const metric = (value) => ({ distance_m: value, share: value / candidate.distance_m });
-    const breakdown = Object.fromEntries(Object.entries({ woodland: 1, open_natural: 0.85, agriculture: 0.3,
-      park_or_protected: 0.2, near_water: 0.15, urban: -1, unknown: -0.1 })
+    const breakdown = Object.fromEntries(Object.entries(LOCAL_NATURE_WEIGHTS)
       .map(([key, weight]) => [key, 50 * weight * distances[key] / candidate.distance_m]));
     return freezeData({
       available: true, identity, method: "normalized_routed_edge_polygon_intervals",

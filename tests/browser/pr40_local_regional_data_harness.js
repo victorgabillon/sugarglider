@@ -3,6 +3,10 @@ import { createLocalRegionData, decodeRegionalIndex, eligibleLocalPoi } from "..
 import { createLocalRegionStore, loadLocalRegionData } from "../../src/sugarglider/web/static/local_region_store.js";
 import { createLocalAutoTourEngine, validateLocalAutoTourRequest } from "../../src/sugarglider/web/static/local_auto_tour.js";
 import { createLocalRegionClient } from "../../src/sugarglider/web/static/local_region_client.js";
+import { publishLocalPlan } from "../../src/sugarglider/web/static/local_plan_publisher.js";
+import { publishLocalNature } from "../../src/sugarglider/web/static/local_candidate_enrichment.js";
+
+export const publishedPlans = [];
 
 export async function runPr40LocalRegionalDataHarness() {
   const fixture = await (await fetch("../fixtures/pr40_regional_data.json")).json();
@@ -159,12 +163,31 @@ export async function runPr40LocalRegionalDataHarness() {
   assert(result.poi_outcomes.some((outcome) => outcome.poi_id === "node/999" && outcome.reason === "poi_not_found"), "requested absent place explicitly dropped");
   equal(await engine.generate(request), result, "same graph/data/input yields identical complete result");
   scenarios.push("bounded_auto_tour_control_nature_poi_outcomes_and_determinism");
+  const canonical=canonicalRequest(request);
+  const published=await publishLocalPlan(canonical,result);
+  assert(published.candidates.length===result.candidates.length,'all validated native Auto Tour candidates published');
+  equal(published.candidates[0].diagnostics.details.local_routing.source_candidate_id,result.no_poi_control_candidate_id,'canonical recommendation preserves exact no-POI control');
+  for (const candidate of published.candidates) {
+    assert(candidate.route.analysis.nature.available,'canonical nature evidence available');
+    const raw=result.candidates.find(value=>value.candidate_id===candidate.diagnostics.details.local_routing.source_candidate_id);
+    equal(candidate.reached_stops.length,raw.selected_pois.length,'selected approaches preserved');
+    equal(candidate.route.geometry,raw.geometry,'native geometry unchanged through publication');
+    assert(!candidate.roles.includes('smooth_low_detour'),'unavailable exact repetition never earns smooth role');
+  }
+  publishedPlans.push({request:canonical,result:published});
+  const damagedNature=structuredClone(result.candidates[0]);damagedNature.nature_analysis.woodland.distance_m+=1;
+  await rejects(()=>publishLocalNature(damagedNature),'invalid_local_candidate_enrichment');
+  scenarios.push('canonical_auto_tour_nature_stops_control_and_partition_validation');
 
   for (const profile of ["hike", "trail_run", "city_bike", "gravel_bike", "mountain_bike", "road_bike"]) {
     const tour = await createLocalAutoTourEngine({ route: async (input) => { equal(input.profile, profile, "explicit selected profile"); return reply(input); },
       getRegionData: async () => data, routeCallBudget: 1, now: () => 0 }).generate({ ...request, profile });
     assert(tour.route_call_count <= 1 && tour.phase_route_calls.poi === 0, "POIs cannot expand exhausted budget");
     assert(tour.candidates.every((candidate) => candidate.profile === profile), "candidate profile identity");
+    const canonical=canonicalRequest({...request,profile});
+    const published=await publishLocalPlan(canonical,tour);
+    assert(published.candidates.length===tour.candidates.length,'all six native profiles publish');
+    publishedPlans.push({request:canonical,result:published});
   }
   scenarios.push("six_profiles_and_exhausted_budget_no_weakened_retry");
 
@@ -224,8 +247,16 @@ export async function runPr40LocalRegionalDataHarness() {
 }
 
 function reply(input) {
-  return { type: "local_route_result", pack_id: "fixture-routing", profile: input.profile, distance_m: 2000, duration_s: 1000,
+  return { type: "local_route_result", engine: "valhalla-mobile", engine_version: "synthetic-test", pack_id: "fixture-routing", profile: input.profile, distance_m: 2000, duration_s: 1000,
     geometry: input.points.map(({ lon, lat }) => [lon, lat]), snapped_points: input.points.map((point) => ({ ...point })), measurements: null };
+}
+
+function canonicalRequest(request) {
+  return {schema_version:1,kind:'auto_tour',name:'Local tour & forest',topology:'loop',start:{...request.start,name:'Start'},end:null,
+    routing_profile:request.profile,candidate_count:request.candidate_count,seed:request.seed,
+    distance_objective:{target_m:request.target_distance_m,tolerance_m:request.tolerance_m,maximum_m:null,priority:'flexible'},
+    preferences:{nature:request.preferences.nature,scenic:'prefer',drinking_water:'prefer',path_selection:'low_overlap',loop_geometry:'prefer',direction:request.direction_preference},
+    hard_waypoints:[],requested_stops:[],preferred_discovered_poi_ids:request.preferences.requested_poi_ids,free_poi_spur_physical_m:200};
 }
 
 async function downloadable(fixture, displayName = fixture.manifest.display_name) {

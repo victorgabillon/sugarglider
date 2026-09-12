@@ -106,7 +106,8 @@ export function createLocalRoutingBridge({
     return reply?.type === "local_route_capabilities_result" ? reply : null;
   }
 
-  async function route({ points, profile = "hike" }) {
+  async function route({ points, profile }) {
+    if (!PUBLIC_LOCAL_ROUTE_PROFILES.includes(profile)) return null;
     if (!await initialize()) return null;
     const operation = ++operationCounter;
     currentOperation = operation;
@@ -151,6 +152,7 @@ export function createLocalRoutingExperiment({
   renderWaypointCandidates = () => {},
   clearWaypointCandidates = () => {},
   onCapabilities = () => {},
+  regionClient,
   elements,
 } = {}) {
   let currentRequest = 0;
@@ -159,7 +161,7 @@ export function createLocalRoutingExperiment({
   let localBusy = false;
   let regionPanel = null;
   if (elements.regionalData) {
-    try { regionPanel = createLocalRegionPanel(elements.regionalData); }
+    try { regionPanel = createLocalRegionPanel(elements.regionalData, regionClient); }
     catch {
       elements.regionalData.status.textContent = "Local places/nature storage is unavailable. Local routing remains independent.";
       elements.regionalData.install.disabled = true;
