@@ -84,6 +84,9 @@ def test_bridge_uses_origin_checked_webkit_listener_without_javascript_interface
     assert "isMainFrame" in activity
     assert "System.identityHashCode(sourceView)" in activity
     assert "sourceOrigin.toString()" in activity
+    assert activity.index(
+        "if (message.type != WebMessageCompat.TYPE_STRING) return@addWebMessageListener"
+    ) < activity.index("val payload = message.data")
     assert "addJavascriptInterface" not in combined
     assert "startFields" in protocol and '"owner_token"' not in protocol
     replies = protocol[

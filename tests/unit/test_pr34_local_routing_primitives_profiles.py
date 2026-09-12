@@ -79,17 +79,18 @@ def test_pack_v1_v2_semantics_and_profile_aware_selection_are_explicit() -> None
 
 def test_multileg_route_is_graph_derived_bounded_and_preserves_identity() -> None:
     engine = (DEBUG_KOTLIN / "NativeRouteEngineFactory.kt").read_text()
+    geometry = (KOTLIN / "LocalRouteGeometry.kt").read_text()
     boundary = (KOTLIN / "NativeRouteEngine.kt").read_text()
     assert "request.points.map" in engine
     assert "RoutingWaypoint.Type.`break`" in engine
     assert "trip.legs.size != request.points.size - 1" in engine
     assert "joinLocalRouteLegGeometries" in engine
-    assert "geometry += leg.drop(1)" in engine
-    assert 'IllegalArgumentException("disconnected route legs")' in engine
+    assert "geometry += leg.drop(1)" in geometry
+    assert 'IllegalArgumentException("disconnected route legs")' in geometry
     assert "profile = request.profile" in engine
     assert "packId = selectedPack.packId" in engine
     assert "snappedPoints = joinedGeometry.snappedPoints" in engine
-    assert "MAX_LOCAL_ROUTE_VERTICES" in engine
+    assert "MAX_LOCAL_ROUTE_VERTICES" in geometry
     assert "MAX_LOCAL_ROUTE_REPLY_BYTES" in boundary
     assert "fetch(" not in engine
     assert "straight-line" not in engine.lower()

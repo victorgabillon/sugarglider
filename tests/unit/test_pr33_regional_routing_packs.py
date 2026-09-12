@@ -61,7 +61,8 @@ def test_debug_engine_selects_one_pack_and_keeps_one_current_actor() -> None:
     assert "private var current: CurrentActor<T>? = null" in registry
     assert "current = CurrentActor(key, created)" in registry
     assert "MutableMap" not in registry
-    assert ".withTileExtract(pack.tileArchive.absolutePath)" in engine
+    assert "localValhallaConfiguration(pack.tileArchive)" in engine
+    assert ".withTileExtract(tileArchive.absolutePath)" in engine
     assert "ValhallaProfilePolicies.forProfile(request.profile)" in engine
     assert "Executors" not in engine
 

@@ -44,8 +44,8 @@ def test_local_endpoints_and_closure_follow_pr35_but_interiors_follow_canonical(
     assert "maximum_snap_distance_m: threshold" in source
     native = (
         ROOT
-        / "android/app/src/debug/java/io/github/victorgabillon/sugarglider"
-        / "NativeRouteEngineFactory.kt"
+        / "android/app/src/main/java/io/github/victorgabillon/sugarglider"
+        / "LocalRouteGeometry.kt"
     ).read_text()
     assert "snappedPoints += leg.last()" in native
     assert "disconnected route legs" in native
@@ -230,9 +230,9 @@ def test_waypoint_rendering_has_its_own_layers_and_preserves_existing_overlays()
     assert "LOCAL_AUTO_TOUR_PREFIX" not in clearer
 
 
-def test_offline_module_is_precached_in_exactly_v25_and_harness_is_local() -> None:
+def test_offline_module_is_precached_in_exactly_v27_and_harness_is_local() -> None:
     worker = (STATIC / "service-worker.js").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v25`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v27`" in worker
     assert '"/static/local_waypoint_route.js"' in worker
     html = HARNESS.with_suffix(".html").read_text()
     harness = HARNESS.read_text()

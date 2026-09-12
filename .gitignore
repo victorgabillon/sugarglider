@@ -47,10 +47,12 @@ data/outings/*
 
 # Android local and generated files
 android/.gradle/
+android/.kotlin/
 android/**/build/
 android/local.properties
 *.apk
 *.aab
 *.jks
 *.keystore
+*signing.properties
 captures/

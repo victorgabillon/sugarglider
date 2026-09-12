@@ -96,6 +96,9 @@ internal enum class NativeRouteFailureCode(val wireValue: String) {
     ROUTING_FAILURE("routing_failure");
 }
 
+// The v2 wire names predate the native audit: initialization measures only the
+// Kotlin wrapper/configuration. Native 0.5.1 creates an actor inside every route
+// call, so routeMs includes that work; coldStart is not native cache evidence.
 internal data class NativeRouteMeasurements(
     val coldStart: Boolean,
     val engineInitializationMs: Long,
