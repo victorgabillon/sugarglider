@@ -271,6 +271,25 @@ library and is **not the V1 artifact**. Reports/logs:
 was used. Physical renderer/failure-path and final native-release checks remain
 open; no device result is inferred from these tests.
 
+## Integration with merged PR40
+
+Main `d129c22` is now integrated into this preparation branch. The cache-generation
+conflicts were resolved without dropping PR40's regional modules or PR44's
+truthful native-timing labels. Combined shell **v27** supersedes this branch's
+v24; the independent PR41 export draft uses v26 and needs a fresh generation when
+the two changes are eventually combined. Exact fingerprints and the complete
+module precache allowlist remain checked.
+
+`make check` passes on the combination: **1,024 tests / 16 existing integration
+tests deselected**, Ruff and strict mypy. All **187 scenarios across the ten
+PR26/27/32–38/40 browser harnesses pass**. Commands/logs are
+`make check > /tmp/sugarglider-pr44-pr40-integration-check.log` and
+`uv run --offline --with websockets python
+/tmp/sugarglider-pr44-pr40-integration-browser.py`, with its corresponding log.
+`git diff a10e835 -- android` is empty: the Android source/build configuration and
+latest AAB above are unchanged by this merge. Required physical release checks
+are still outstanding.
+
 ## Outstanding technical gates
 
 Production local planning and a useful installable region; final release origin

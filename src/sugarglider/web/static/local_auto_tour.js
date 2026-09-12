@@ -1,9 +1,11 @@
 import { PUBLIC_LOCAL_ROUTE_PROFILES } from "./local_routing.js";
+import { eligibleLocalPoi, unavailableNature } from "./local_region_data.js";
+import { containsPosition } from "./regional_manifest.js";
 
 const EARTH_RADIUS_M = 6_371_008.8;
 const REQUEST_FIELDS = new Set([
   "start", "target_distance_m", "tolerance_m", "candidate_count", "seed",
-  "profile", "direction_preference",
+  "profile", "direction_preference", "preferences",
 ]);
 const COORDINATE_FIELDS = new Set(["lat", "lon"]);
 const DIRECTIONS = Object.freeze(["any", "clockwise", "counterclockwise"]);
@@ -75,6 +77,7 @@ export class LocalAutoTourValidationError extends Error {
 }
 
 export function validateLocalAutoTourRequest(value) {
+  if (plainObject(value)) value = { preferences: { nature: "off", scenic: false, water: false, requested_poi_ids: [] }, ...value };
   if (!plainObject(value) || !exactFields(value, REQUEST_FIELDS)) {
     throw new LocalAutoTourValidationError("invalid_request_fields");
   }
@@ -106,6 +109,16 @@ export function validateLocalAutoTourRequest(value) {
   if (!DIRECTIONS.includes(value.direction_preference)) {
     throw new LocalAutoTourValidationError("invalid_direction_preference");
   }
+  const preferences = value.preferences;
+  if (!plainObject(preferences)
+      || !exactFields(preferences, new Set(["nature", "scenic", "water", "requested_poi_ids"]))
+      || !["off", "prefer"].includes(preferences.nature)
+      || typeof preferences.scenic !== "boolean" || typeof preferences.water !== "boolean"
+      || !Array.isArray(preferences.requested_poi_ids) || preferences.requested_poi_ids.length > 8
+      || preferences.requested_poi_ids.some((id) => typeof id !== "string" || !/^(node|way|relation)\/\d{1,16}$/u.test(id))
+      || new Set(preferences.requested_poi_ids).size !== preferences.requested_poi_ids.length) {
+    throw new LocalAutoTourValidationError("invalid_local_preferences");
+  }
   return deepFreeze({
     start: { lat: value.start.lat, lon: value.start.lon },
     target_distance_m: value.target_distance_m,
@@ -114,6 +127,7 @@ export function validateLocalAutoTourRequest(value) {
     seed: value.seed,
     profile: value.profile,
     direction_preference: value.direction_preference,
+    preferences: { ...preferences, requested_poi_ids: [...preferences.requested_poi_ids] },
   });
 }
 
@@ -235,6 +249,7 @@ export function rankLocalAutoTourCandidates(candidates, request) {
 
 export function createLocalAutoTourEngine({
   route,
+  getRegionData = async () => null,
   now = () => globalThis.performance?.now?.() ?? Date.now(),
   routeCallBudget = LOCAL_AUTO_TOUR_ROUTE_CALL_BUDGET,
 } = {}) {
@@ -260,7 +275,6 @@ export function createLocalAutoTourEngine({
 
   function invalidate() {
     generation += 1;
-    active = null;
   }
 
   async function runSearch(request, ownedGeneration) {
@@ -270,6 +284,9 @@ export function createLocalAutoTourEngine({
       rejected: new Map(),
       budgetExhausted: false,
       terminalFailure: false,
+      packId: null,
+      cache: new Map(),
+      cacheHits: 0,
     };
     const candidates = [];
     const skeletons = generateLocalAutoTourSkeletons(request);
@@ -280,7 +297,7 @@ export function createLocalAutoTourEngine({
         state.budgetExhausted = true;
         break;
       }
-      const candidate = await evaluateSkeleton(request, skeleton, state);
+      const candidate = await evaluateSkeleton(request, skeleton, state, ownedGeneration);
       if (ownedGeneration !== generation) return null;
       if (candidate !== null) retainDiverseCandidate(candidates, candidate, request, state);
       if (state.terminalFailure || candidates.length >= desiredPoolSize) break;
@@ -288,9 +305,33 @@ export function createLocalAutoTourEngine({
     if (state.routeCalls >= routeCallBudget && candidates.length < desiredPoolSize) {
       state.budgetExhausted = true;
     }
-    const ranked = rankLocalAutoTourCandidates(candidates, request)
+    const controlRouteCalls = state.routeCalls;
+    let regionData = null;
+    try { regionData = await getRegionData(state.packId); } catch { /* Explicit unavailable evidence below. */ }
+    if (ownedGeneration !== generation) return null;
+    if (regionData?.identity.routing_pack_id !== state.packId) regionData = null;
+    const enriched = [];
+    for (const candidate of candidates) {
+      if (ownedGeneration !== generation) return null;
+      enriched.push(await enrichCandidate(candidate, regionData));
+    }
+    const controls = rankLocalAutoTourCandidates(enriched, request);
+    const control = controls[0] ?? null;
+    const poiResults = await explorePois(request, control, regionData, state, ownedGeneration);
+    if (ownedGeneration !== generation) return null;
+    // Exact edge repetition/backtracking is unavailable from the current mobile
+    // wrapper. No POI reward may promote a detour over its no-POI control.
+    const ranked = controls
       .slice(0, request.candidate_count)
-      .map((candidate, index) => deepFreeze({ ...candidate, rank: index + 1 }));
+      .map((candidate, index) => deepFreeze({ ...candidate, rank: index + 1,
+        role: index === 0 ? "no_poi_control" : "alternative", poi_outcomes: candidatePoiOutcomes(candidate, poiResults.outcomes) }));
+    if (poiResults.candidates.length && request.candidate_count > 1) {
+      const selected = poiResults.candidates.slice(0, request.candidate_count - 1);
+      ranked.splice(1, ranked.length - 1, ...selected.map((candidate, index) => deepFreeze({
+        ...candidate, rank: index + 2, role: "poi_alternative", promotion_blocked_reason: "exact_repetition_backtracking_unavailable",
+        poi_outcomes: candidatePoiOutcomes(candidate, poiResults.outcomes),
+      })));
+    }
     const recommended = ranked[0] ?? null;
     const finishedAt = now();
     return deepFreeze({
@@ -307,15 +348,35 @@ export function createLocalAutoTourEngine({
       recommended_candidate_id: recommended?.candidate_id ?? null,
       route_call_count: state.routeCalls,
       route_call_budget: routeCallBudget,
-      budget_exhausted: state.budgetExhausted,
+      budget_exhausted: state.budgetExhausted || state.routeCalls >= routeCallBudget,
       rejected_attempt_counts: rejectionRecord(state.rejected),
       total_latency_ms: Math.max(0, Math.round(finishedAt - startedAt)),
-      warnings: RESULT_WARNINGS,
+      warnings: RESULT_WARNINGS.filter((warning) => (
+        warning !== "nature_analysis_unavailable" || !control?.nature_analysis.available
+      )).filter((warning) => warning !== "poi_optimization_unavailable" || !regionData),
+      preferences: request.preferences,
+      regional_data: regionData?.identity ?? null,
+      no_poi_control_candidate_id: control?.candidate_id ?? null,
+      no_poi_control: ranked[0] ?? null,
+      poi_outcomes: recommended?.poi_outcomes ?? poiResults.outcomes,
+      poi_search_outcomes: poiResults.outcomes,
+      preference_status: {
+        nature: request.preferences.nature === "off" ? "off" : control?.nature_analysis.available ? "scored_below_loop_quality" : "unavailable",
+        scenic: !request.preferences.scenic ? "off" : regionData ? "bounded_search_with_control_gate" : "unavailable",
+        water: !request.preferences.water ? "off" : regionData ? "verified_mapped_sources_only" : "unavailable",
+      },
+      phase_route_calls: { control: controlRouteCalls, poi: state.routeCalls - controlRouteCalls },
+      poi_route_call_budget: Math.min(6, Math.max(0, routeCallBudget - controlRouteCalls)),
+      cache: { hit_count: state.cacheHits, miss_count: state.routeCalls, entry_count: state.cache.size,
+        lookup_count: state.cacheHits + state.routeCalls, backend_call_count: state.routeCalls,
+        successful_entry_count: [...state.cache.values()].filter((reply) => reply?.type === "local_route_result").length,
+        failed_entry_count: [...state.cache.values()].filter((reply) => reply?.type !== "local_route_result").length },
     });
   }
 
-  async function evaluateSkeleton(request, skeleton, state) {
-    const initial = await routedAttempt(request, skeleton, state, null);
+  async function evaluateSkeleton(request, skeleton, state, ownedGeneration) {
+    const initial = await routedAttempt(request, skeleton, state, state.packId);
+    if (ownedGeneration !== generation) return null;
     if (initial === null || initial.failure !== null) return initial?.candidate ?? null;
     let best = initial.candidate;
     if (best.within_tolerance || state.routeCalls >= routeCallBudget) return best;
@@ -344,13 +405,19 @@ export function createLocalAutoTourEngine({
       state.budgetExhausted = true;
       return null;
     }
-    state.routeCalls += 1;
+    const key = JSON.stringify([request.profile, skeleton.points]);
     let reply = null;
-    try {
-      reply = await route({ points: skeleton.points, profile: request.profile });
-    } catch {
-      reject(state, "local_route_exception");
-      return { candidate: null, failure: "local_route_exception" };
+    if (state.cache.has(key)) {
+      state.cacheHits += 1;
+      reply = state.cache.get(key);
+    } else {
+      state.routeCalls += 1;
+      try {
+        reply = await route({ points: skeleton.points, profile: request.profile });
+      } catch {
+        reply = { type: "local_route_failure", code: "exception" };
+      }
+      state.cache.set(key, reply);
     }
     if (reply?.type === "local_route_failure") {
       const reason = `local_route_${reply.code ?? "invalid_reply"}`;
@@ -368,10 +435,104 @@ export function createLocalAutoTourEngine({
       reject(state, validation.reason);
       return { candidate: null, failure: validation.reason };
     }
+    state.packId ??= reply.pack_id;
     return {
       candidate: candidateFrom(reply, skeleton, request, validation.metrics),
       failure: null,
     };
+  }
+
+  async function enrichCandidate(candidate, data) {
+    let nature = unavailableNature(candidate.distance_m, "nature_index_unavailable");
+    try { if (data) nature = await data.analyzeNature(candidate); }
+    catch { nature = unavailableNature(candidate.distance_m, "nature_analysis_unavailable"); }
+    return deepFreeze({ ...candidate, nature_analysis: nature, selected_pois: [] });
+  }
+
+  function candidatePoiOutcomes(candidate, outcomes) {
+    const selected = new Set(candidate.selected_pois.map((poi) => poi.poi_id));
+    return outcomes.map((outcome) => selected.has(outcome.poi_id)
+      ? { poi_id: outcome.poi_id, status: "reached", candidate_id: candidate.candidate_id, reason: null }
+      : { poi_id: outcome.poi_id, status: "dropped", reason: outcome.status === "dropped" ? outcome.reason : "not_selected_for_this_candidate" });
+  }
+
+  async function explorePois(request, control, data, state, ownedGeneration) {
+    const preferences = request.preferences;
+    const outcomes = [];
+    const alternatives = [];
+    if (!preferences.scenic && !preferences.water && !preferences.requested_poi_ids.length) return { candidates: [], outcomes };
+    if (!data || !control) {
+      for (const id of preferences.requested_poi_ids) outcomes.push({ poi_id: id, status: "dropped", reason: data ? "no_valid_control" : "poi_index_unavailable" });
+      return { candidates: [], outcomes };
+    }
+    let query;
+    try { query = await data.queryPois({ center: request.start, radius_m: Math.min(60_000, request.target_distance_m / 2), limit: 64, requested_ids: preferences.requested_poi_ids }); }
+    catch {
+      for (const id of preferences.requested_poi_ids) outcomes.push({ poi_id: id, status: "dropped", reason: "poi_index_unavailable" });
+      return { candidates: [], outcomes };
+    }
+    const considered = new Map(query.requested.map(({ id, feature }) => [id, feature]));
+    for (const feature of query.features) {
+      if (preferences.scenic && feature.group === "scenic" || preferences.water && feature.group === "hydration") considered.set(feature.id, feature);
+    }
+    const limit = Math.min(routeCallBudget, state.routeCalls + 6);
+    for (const [id, feature] of considered) {
+      if (ownedGeneration !== generation) return { candidates: [], outcomes: [] };
+      let reason = eligibleLocalPoi(feature, data.identity.bounds);
+      if (reason === null && state.routeCalls >= limit) reason = "poi_route_budget_exhausted";
+      let retained = null;
+      if (reason === null) {
+        const approaches = feature.approach_candidates.filter((approach) => containsPosition(data.identity.bounds, [approach.coordinate.lon, approach.coordinate.lat]));
+        // Try at most two meaningful approaches per feature, sharing six calls
+        // across the entire POI lane. Coordinates remain proposals until routed.
+        for (const approach of approaches.slice(0, 2)) {
+          if (state.routeCalls >= limit || ownedGeneration !== generation) break;
+          const point = { lat: approach.coordinate.lat, lon: approach.coordinate.lon };
+          const positions = control.requested_points;
+          let insertion = 1;
+          let bestCost = Infinity;
+          for (let index = 1; index < positions.length; index += 1) {
+            const cost = haversineDistanceM(positions[index - 1], point) + haversineDistanceM(point, positions[index]) - haversineDistanceM(positions[index - 1], positions[index]);
+            if (cost < bestCost) { bestCost = cost; insertion = index; }
+          }
+          const points = [...positions.slice(0, insertion), point, ...positions.slice(insertion)];
+          const skeleton = { ...control.construction, points, skeleton_id: `${control.construction.skeleton_id}-poi-${approach.id}`,
+            direction: control.construction.requested_direction };
+          const attempt = await routedAttempt(request, skeleton, state, control.pack_id);
+          if (ownedGeneration !== generation) return { candidates: [], outcomes: [] };
+          if (!attempt?.candidate) { reason = attempt?.failure ?? "poi_route_budget_exhausted"; continue; }
+          const candidate = attempt.candidate;
+          const arrival = haversineDistanceM(point, candidate.snapped_points[insertion]);
+          const tolerance = feature.group === "hydration" ? 15 : 25;
+          if (arrival > tolerance) { reason = "poi_arrival_tolerance_exceeded"; continue; }
+          const fidelity = candidate.geometry_metrics;
+          const base = control.geometry_metrics;
+          if (control.within_tolerance && !candidate.within_tolerance
+              || fidelity.severe_out_and_back && !base.severe_out_and_back
+              || fidelity.degenerate || fidelity.sampled_self_crossing_count > base.sampled_self_crossing_count
+              || fidelity.geometry_penalty > base.geometry_penalty + 1e-9
+              || fidelity.gross_immediate_reversal_share > base.gross_immediate_reversal_share + 1e-9
+              || fidelity.sampled_outbound_return_proximity_share > base.sampled_outbound_return_proximity_share + 1e-9) {
+            reason = "poi_loop_quality_gate"; continue;
+          }
+          const enriched = await enrichCandidate(candidate, data);
+          const selected = { poi_id: id, name: feature.display_name, category: feature.category, potability: feature.potability,
+            status: "reached", semantic_coordinate: feature.coordinate, approach_coordinate: point,
+            routed_coordinate: candidate.snapped_points[insertion], arrival_distance_m: arrival,
+            arrival_tolerance_m: tolerance, approach_id: approach.id, visit_index: insertion };
+          retained = deepFreeze({ ...enriched, selected_pois: [selected], source_control_candidate_id: control.candidate_id });
+          reason = null;
+          break;
+        }
+      }
+      if (retained) alternatives.push(retained);
+      outcomes.push(retained ? { poi_id: id, status: "reached", candidate_id: retained.candidate_id, reason: null }
+        : { poi_id: id, status: "dropped", reason: reason ?? "poi_no_routed_approach" });
+    }
+    const selected = rankLocalAutoTourCandidates(alternatives, request).slice(0, Math.max(0, request.candidate_count - 1));
+    const selectedIds = new Set(selected.flatMap((candidate) => candidate.selected_pois.map((poi) => poi.poi_id)));
+    return { candidates: selected, outcomes: outcomes.map((outcome) => outcome.status === "reached" && !selectedIds.has(outcome.poi_id)
+      ? { poi_id: outcome.poi_id, status: "dropped", reason: "poi_portfolio_limit" } : outcome) };
   }
 
   return Object.freeze({ generate, invalidate });
@@ -379,7 +540,8 @@ export function createLocalAutoTourEngine({
 
 export function createLocalAutoTourExperiment({
   bridge,
-  engine = createLocalAutoTourEngine({ route: (input) => bridge.route(input) }),
+  getRegionData = async () => null,
+  engine = createLocalAutoTourEngine({ route: (input) => bridge.route(input), getRegionData }),
   getStart = () => null,
   getProfile = () => "hike",
   renderCandidates = () => {},
@@ -444,7 +606,8 @@ export function createLocalAutoTourExperiment({
         + `${recommended.candidate_id} · profile ${result.profile} · pack ${result.pack_id} · `
         + `target ${(result.target_distance_m / 1_000).toFixed(1)} km · `
         + `${result.route_call_count}/${result.route_call_budget} route calls · `
-        + `${result.total_latency_ms} ms total · exact edge repetition unavailable.`
+        + `${result.total_latency_ms} ms total · nature ${result.preference_status?.nature ?? "off"} · `
+        + `scenic ${result.preference_status?.scenic ?? "off"} · water ${result.preference_status?.water ?? "off"} · exact edge repetition unavailable.`
       );
       return result;
     }).catch((error) => {
@@ -457,9 +620,10 @@ export function createLocalAutoTourExperiment({
       elements.status.textContent = `Local Auto Tour failed explicitly (${code}).`;
       return null;
     }).finally(() => {
-      if (ownedEpoch !== epoch) return;
-      activePromise = null;
-      setBusy(false);
+      if (activePromise === operation) {
+        activePromise = null;
+        setBusy(false);
+      }
     });
     activePromise = operation;
     return operation;
@@ -474,6 +638,12 @@ export function createLocalAutoTourExperiment({
       seed: Number(elements.seedInput.value),
       profile: getProfile(),
       direction_preference: elements.directionSelect.value,
+      preferences: {
+        nature: elements.natureSelect?.value ?? "off",
+        scenic: elements.scenicInput?.checked ?? false,
+        water: elements.waterInput?.checked ?? false,
+        requested_poi_ids: (elements.requestedPoisInput?.value ?? "").split(",").map((value) => value.trim()).filter(Boolean),
+      },
     });
   }
 
@@ -491,8 +661,16 @@ export function createLocalAutoTourExperiment({
         + `${metrics.sampled_self_crossing_count} sampled crossings · `
         + `${Math.round(metrics.sampled_outbound_return_proximity_share * 100)}% `
         + `sampled outbound/return proximity`
+        + (candidate.nature_analysis?.available ? ` · nature ${candidate.nature_analysis.nature_score.toFixed(1)}/100 · woodland ${(candidate.nature_analysis.woodland.share * 100).toFixed(0)}% · unknown ${(candidate.nature_analysis.unknown_landcover.share * 100).toFixed(0)}%` : " · nature unavailable")
+        + (candidate.selected_pois?.length ? ` · reached ${candidate.selected_pois.map((poi) => poi.name).join(", ")} · recommendation blocked: exact repetition/backtracking unavailable` : " · no-POI control")
       );
       if (recommended) item.className = "recommended";
+      elements.results.append(item);
+    }
+    for (const outcome of result.poi_outcomes ?? []) {
+      if (outcome.status !== "dropped") continue;
+      const item = document.createElement("li");
+      item.textContent = `${outcome.poi_id}: dropped (${outcome.reason}).`;
       elements.results.append(item);
     }
   }
@@ -506,7 +684,8 @@ export function createLocalAutoTourExperiment({
       elements.candidateCountSelect,
       elements.seedInput,
       elements.directionSelect,
-    ]) {
+      elements.natureSelect, elements.scenicInput, elements.waterInput, elements.requestedPoisInput,
+    ].filter(Boolean)) {
       element.disabled = busy;
     }
     elements.button.setAttribute("aria-busy", String(busy));
@@ -516,11 +695,10 @@ export function createLocalAutoTourExperiment({
 
   function invalidate() {
     epoch += 1;
-    activePromise = null;
     engine.invalidate();
     clearCandidates();
     elements.results.replaceChildren();
-    setBusy(false);
+    if (activePromise === null) setBusy(false);
   }
 
   return Object.freeze({
@@ -571,6 +749,11 @@ function validateRoutedAttempt(reply, points, request, expectedPackId) {
         > GENERATED_CONTROL_SNAP_TOLERANCE_M) {
       return invalid("generated_control_snap_too_far");
     }
+  }
+  let vertex = 0;
+  for (const snap of reply.snapped_points) {
+    while (vertex < reply.geometry.length && (reply.geometry[vertex][0] !== snap.lon || reply.geometry[vertex][1] !== snap.lat)) vertex += 1;
+    if (vertex === reply.geometry.length) return invalid("snapped_point_missing_from_ordered_geometry");
   }
   let metrics;
   try {
@@ -649,6 +832,7 @@ function candidateRankKey(candidate, request) {
     Math.min(metrics.sampled_self_crossing_count, 8),
     directionMismatch ? 1 : 0,
     metrics.geometry_penalty,
+    request.preferences.nature === "prefer" && candidate.nature_analysis?.available ? -candidate.nature_analysis.nature_score : 0,
     candidate.target_error_m,
     candidate.candidate_id,
   ];

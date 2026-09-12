@@ -172,7 +172,12 @@ async function geometryGoldenAndRankingScenario() {
 }
 
 async function diversityAndUnavailableMetricsScenario() {
-  const fixed = fixedSquareAround(MARLY_LOCAL_AUTO_TOUR_FIXTURE.start, 1_000);
+  const request = { ...MARLY_LOCAL_AUTO_TOUR_FIXTURE, target_distance_m: 4_000,
+    tolerance_m: 1_000, candidate_count: 3 };
+  // The fake graph visits every proposal's snapped boundaries in order. Reusing
+  // that same graph line tests diversity without fabricating missing snap evidence.
+  const fixed = generateLocalAutoTourSkeletons(request).slice(0, 5)
+    .flatMap((skeleton) => skeleton.points.map(({ lon, lat }) => [lon, lat]));
   const engine = createLocalAutoTourEngine({
     route: async (input) => routedReply(input, {
       geometry: fixed,
@@ -180,12 +185,7 @@ async function diversityAndUnavailableMetricsScenario() {
     }),
     routeCallBudget: 5,
   });
-  const result = await engine.generate({
-    ...MARLY_LOCAL_AUTO_TOUR_FIXTURE,
-    target_distance_m: 4_000,
-    tolerance_m: 1_000,
-    candidate_count: 3,
-  });
+  const result = await engine.generate(request);
   equal(result.candidates.length, 1, "identical geometry is not fabricated as diverse");
   assert(result.rejected_attempt_counts.insufficient_geometry_diversity >= 1, "diversity rejection counted");
   equal(result.candidates[0].exact_edge_repetition, null, "exact repetition stays unavailable");
