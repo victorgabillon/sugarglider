@@ -88,9 +88,11 @@ service_worker_policy.js
 state.js
 styles.css
 trail_profile.js
-vendor/maplibre-gl-4.7.1/LICENSE.txt
-vendor/maplibre-gl-4.7.1/maplibre-gl.css
-vendor/maplibre-gl-4.7.1/maplibre-gl.js
+vendor/maplibre-gl-6.4.1/LICENSE.txt
+vendor/maplibre-gl-6.4.1/maplibre-gl-shared.mjs
+vendor/maplibre-gl-6.4.1/maplibre-gl-worker.mjs
+vendor/maplibre-gl-6.4.1/maplibre-gl.css
+vendor/maplibre-gl-6.4.1/maplibre-gl.mjs
 vendor/noble-hashes-2.4.0/LICENSE
 vendor/noble-hashes-2.4.0/_md.js
 vendor/noble-hashes-2.4.0/_u64.js

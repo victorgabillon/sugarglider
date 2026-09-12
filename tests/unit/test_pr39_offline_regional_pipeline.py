@@ -473,7 +473,7 @@ def test_make_cli_ignore_and_runtime_isolation() -> None:
         assert pin in map_builder
     assert provenance.valhalla_image in routing_builder
     worker = (ROOT / "src/sugarglider/web/static/service-worker.js").read_text()
-    assert "const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v40`;" in worker
+    assert "const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v41`;" in worker
     assert "offline_regions" not in worker
     for folder in (ROOT / "src/sugarglider/web", ROOT / "src/sugarglider/planning"):
         for path in folder.rglob("*.py"):

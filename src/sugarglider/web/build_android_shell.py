@@ -14,7 +14,7 @@ EXTRA_ASSETS = (
     "android_ui_config.json",
     "index.html",
     "manifest.webmanifest",
-    "vendor/maplibre-gl-4.7.1/LICENSE.txt",
+    "vendor/maplibre-gl-6.4.1/LICENSE.txt",
     "vendor/pmtiles-4.5.0/LICENSE.txt",
     "vendor/protomaps-basemaps-5.7.2/LICENSE.md",
     "fonts/Open Sans Semibold/LICENSE.txt",
