@@ -505,6 +505,9 @@ class MainActivity : Activity() {
                     System.identityHashCode(sourceView),
                 )
             ) return@addWebMessageListener
+            // getData() throws for ArrayBuffer messages. This control protocol
+            // accepts JSON strings only; reject other types before reading data.
+            if (message.type != WebMessageCompat.TYPE_STRING) return@addWebMessageListener
             val payload = message.data ?: return@addWebMessageListener
             val request = BridgeProtocol.parse(payload) ?: return@addWebMessageListener
             val channel = acceptBridgePage(request, replyProxy, sourceView) ?: return@addWebMessageListener

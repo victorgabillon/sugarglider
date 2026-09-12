@@ -1,10 +1,11 @@
 # PR44 release audit — in progress
 
 Audit started 2026-09-11 against main `5be5780`, before enabling the production
-local planner. This is a working evidence record, not a release approval. PR40
-physical acceptance, PR41 production integration and PR42 region installation
-remain dependencies. No signing key, developer account, domain or store submission
-has been created.
+local planner. This is a working evidence record, not a release approval. PR40's
+required physical acceptance subsequently passed and its GitHub PR #39 merged
+as `d129c22` on 2026-09-12. PR41 production integration and PR42 region installation
+remain dependencies. No permanent signing key, developer account, domain or store
+submission has been created.
 
 ## Current official requirements
 
@@ -166,7 +167,7 @@ the serializer on the test compile classpath, and the shell fingerprint check
 required a cache generation update. Both were corrected and all affected checks
 rerun. Native configuration and accurate timing still require physical validation.
 
-Latest preparation AAB, superseding the renderer-only hash above: **3,528,820
+Native-configuration preparation AAB, superseding the renderer-only hash above: **3,528,820
 bytes**, SHA-256 `5a1a8ff7b7e8054a72fc5d9aa0717505c6893bf26b1107df647208656e75c64f`,
 at the same ignored path. It is unsigned and contains no native library; it is
 not the V1 artifact. External signing logic is unchanged from the disposable test.
@@ -228,6 +229,47 @@ Final privacy-policy publisher/contact/URL, Data Safety selections, location/FGS
 declarations, a short demonstration script and the account-specific submission
 checklist remain pending. No analytics or advertising integration has been found
 in this initial source audit; the final dependency/network review is still due.
+
+## Bridge message type hardening — 2026-09-12
+
+The control listener previously called `message.data` on every message after its
+origin/frame checks. The pinned WebKit 1.15.0 implementation throws
+`IllegalStateException` if an ArrayBuffer uses that string accessor. Inspection
+with `javap -c -private` and a small Java probe against the actual cached library
+confirmed the failure; this is not an assumed nullable-payload behavior.
+The listener now rejects non-string types before reading data or parsing JSON.
+Exact origin, main frame, current WebView, page nonce and request-ledger checks
+remain authoritative. No binary/control fallback or new bridge authority is added.
+[WebMessageCompat accessor contract](https://developer.android.com/reference/androidx/webkit/WebMessageCompat)
+
+`make check` passes again: **1,013 tests / 16 existing integration tests
+deselected**, Ruff and strict mypy. The existing bridge architecture test now
+checks rejection before the accessor. Both Android variants were rerun:
+
+```sh
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ANDROID_HOME=/home/pompote/Android/Sdk \
+  ./gradlew --offline --no-daemon --no-configuration-cache --max-workers=1 \
+  '-Dorg.gradle.jvmargs=-Xmx1400m -XX:MaxMetaspaceSize=512m' \
+  -Pkotlin.compiler.execution.strategy=in-process \
+  testDebugUnitTest lintDebug testReleaseUnitTest lintRelease bundleRelease
+```
+
+The command ran inside `sugarglider-pr44-message-type-android.scope`, bounded at
+3 GiB / no swap / two CPUs. **PASS in 3 min 19 s:** 138 debug and 134 release
+JUnit tests, no errors/failures/skips. Both lint reports have zero errors/fatals;
+10 debug / 9 release warnings remain visible. Existing shared-web sources are
+unchanged, so the preceding 124-browser-scenario evidence is retained.
+
+Latest unsigned preparation AAB: **3,529,014 bytes**, SHA-256
+`c6d2cf35d1f591560e7d36c8911bbdc0faacc92619dd8734690d87ff6d4c7804`, at
+`/tmp/sugarglider-v1-pr44/android/app/build/outputs/bundle/release/app-release.aab`.
+It supersedes the 3,528,820-byte hash above. It still contains no native routing
+library and is **not the V1 artifact**. Reports/logs:
+`/tmp/sugarglider-pr44-message-type-{check,android}.log` and
+`/tmp/sugarglider-pr44-message-type-artifact.json`. The getter probe is
+`/tmp/SugargliderWebMessageTypeProbe.java`; no precise route or participant data
+was used. Physical renderer/failure-path and final native-release checks remain
+open; no device result is inferred from these tests.
 
 ## Outstanding technical gates
 
