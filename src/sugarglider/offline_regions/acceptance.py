@@ -94,6 +94,7 @@ def observe(
     digest = hashlib.sha256()
     size = 0
     captured = bytearray()
+    client.cookies.clear()  # Public hosting checks must not reuse server cookies.
     with client.stream(
         "GET",
         url,

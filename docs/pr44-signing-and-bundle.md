@@ -49,35 +49,27 @@ merged manifest, delivered APK alignment and runtime acceptance only after the
 final production implementation. An unsigned bundle cannot be uploaded as a
 signed release.
 
-## One-time user action
+## Existing-key handoff
 
-Use the existing app’s upload key. If it is unavailable, follow the existing
-Play Console upload-key recovery/reset procedure before considering a replacement.
-For a publisher-authorized new key, the publisher
-must explicitly choose to create and safeguard one. Run the following only after
-that decision, in a private directory outside every repository; `keytool` prompts
-for passwords and identity instead of putting them in shell arguments:
+The current V1 task authorizes preparation only. Reuse the existing app's upload
+key; do not create, rotate, copy or search private key contents. Actual signing
+waits for the publisher to supply the existing backup/configuration path. The
+earlier key-creation example is removed from this active handoff.
 
-```sh
-umask 077
-mkdir -p /approved/private/android-signing
-keytool -genkeypair -v -keystore /approved/private/android-signing/upload.jks -alias upload -keyalg RSA -keysize 3072 -validity 10000
-```
-
-The path is an operator-supplied placeholder. Do not overwrite an existing key.
-Keep encrypted recovery copies and the certificate fingerprint under the
-publisher's control. The upload key and Play App Signing key have different roles;
-review the current [Android signing guide](https://developer.android.com/studio/publish/app-signing)
-and Play Console instructions before enrollment. Do not send passwords or private
-key material through a chat, issue or pull request.
+Still needed: the absolute existing keystore path outside every checkout, its
+existing alias (not assumed to be `upload`), the absolute external signing-properties
+path, and the expected **public upload certificate SHA-256 fingerprint** from the
+publisher/Console. Passwords are supplied locally, never in chat, shell arguments,
+logs or committed files. Work must separately confirm that version code 2 is
+unused across the Play tracks before any later authorized upload.
 
 Create a permission-`0600` Java properties file outside the repository using a
 local editor or secret manager. It must contain exactly these four entries:
 
 ```properties
-storeFile=/approved/private/android-signing/upload.jks
+storeFile=/absolute/path/to/EXISTING-keystore.jks
 storePassword=REPLACE_LOCALLY
-keyAlias=upload
+keyAlias=EXISTING_ALIAS_FROM_PUBLISHER
 keyPassword=REPLACE_LOCALLY
 ```
 
@@ -97,21 +89,52 @@ dialog and location-sharing disclosure expose the link without discarding the
 current planner page. Without this variable, local privacy details remain
 available, but the required public-link gate is unfinished.
 
-## Signed release build
+## Signed release build, only after the existing setup is supplied
+
+The paths below are explicit placeholders to replace with the existing external
+configuration and verified public policy URL. Only the properties file's path is
+passed through the signing environment variable. The four properties are read by
+`android/app/build.gradle.kts`; no password environment variable or Gradle command
+line password input is required. This command has **not** been run in this pass.
 
 ```sh
-export SUGARGLIDER_ANDROID_SIGNING_PROPERTIES=/approved/private/android-signing/upload-signing.properties
-cd android
-./gradlew --no-daemon --no-configuration-cache bundleRelease
-jarsigner -verify -verbose -certs app/build/outputs/bundle/release/app-release.aab
-sha256sum app/build/outputs/bundle/release/app-release.aab
-stat -c '%s bytes' app/build/outputs/bundle/release/app-release.aab
+export SUGARGLIDER_ANDROID_SIGNING_PROPERTIES=/absolute/path/to/existing-signing.properties
+export SUGARGLIDER_ANDROID_PRIVACY_POLICY_URL=https://victorgabillon.github.io/sugarglider-regions/privacy/
+cd /home/pompote/oldata/victor/sugarglider-v1-code2/android
+env JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ANDROID_HOME=/home/pompote/Android/Sdk ANDROID_SDK_ROOT=/home/pompote/Android/Sdk ./gradlew --offline --no-daemon --no-configuration-cache --max-workers=1 -Pkotlin.compiler.execution.strategy=in-process -Dorg.gradle.jvmargs=-Xmx1400m testReleaseUnitTest lintRelease assembleRelease bundleRelease
 unset SUGARGLIDER_ANDROID_SIGNING_PROPERTIES
+unset SUGARGLIDER_ANDROID_PRIVACY_POLICY_URL
 ```
 
-Verify the signer's certificate fingerprint against the publisher's expected
-upload certificate. Bundle generation/signature verification alone does not prove
-Play eligibility: validate with a pinned official bundletool, inspect generated
-release APKs and run the full Fairphone acceptance matrix. The final ledger must
-identify the exact final artifact, signing status and all pending human submission
-actions. Keep artifacts outside Git.
+Verify the output without opening a keystore or supplying passwords:
+
+```sh
+/usr/lib/jvm/java-17-openjdk-amd64/bin/jarsigner -verify app/build/outputs/bundle/release/app-release.aab
+/usr/lib/jvm/java-17-openjdk-amd64/bin/keytool -printcert -jarfile app/build/outputs/bundle/release/app-release.aab
+/usr/lib/jvm/java-17-openjdk-amd64/bin/java -jar /home/pompote/oldata/victor/sugarglider-v1-artifacts/work-publication-code2/tools/bundletool-1.18.3.jar validate --bundle=app/build/outputs/bundle/release/app-release.aab
+sha256sum app/build/outputs/bundle/release/app-release.aab
+stat -c '%s bytes' app/build/outputs/bundle/release/app-release.aab
+```
+
+Require an actually verified JAR signature; an unsigned JAR is not a success even
+if a tool exits zero. Compare the public SHA-256 signer fingerprint with the
+publisher's expected **upload** certificate. Keep only public fingerprints in the
+handoff, not certificate subject details. The pinned bundletool SHA-256 is
+`a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29`.
+
+For a later delivered APK, inspect its distinct Android signature:
+
+```sh
+/home/pompote/Android/Sdk/build-tools/36.0.0/apksigner verify --verbose --print-certs /absolute/path/to/delivered.apk
+```
+
+Compare a Play-delivered APK with the expected **Play App Signing** certificate,
+which may differ from the upload certificate. Do not sideload an upload-key APK
+over the existing Play installation. Bundle/signature checks do not close physical
+acceptance or authorize upload. Preserve exact final source/artifact identity and
+pending gates in the ledger; keep artifacts outside Git.
+
+The integrated candidate is package `io.github.victorgabillon.sugarglider`,
+version code **2**, version name **1.0.0**. Its current validated AAB is unsigned;
+see [integration evidence](v1-integration-candidate.md). Work owns any later Play
+Console action, and no Play upload is authorized by this handoff.

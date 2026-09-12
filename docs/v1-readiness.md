@@ -713,3 +713,35 @@ Documentation follow-up validation: `make check` passes 1,055 tests / 16 existin
 integration deselections, Ruff and strict mypy; local document links and
 `git diff --check` pass. No application source, APK/AAB bytes or runtime behavior
 changes in this follow-up.
+
+## Local code 2 integration and exact Work publication preparation
+
+The user's resumed tasks A–D are prepared on local `integration/v1-code2`, from
+main `d129c22a808c0031c0bb09174ecbc5c22dfbda8d`. Fourteen conflict-free merges retain
+#41 then #43–#55 and their histories; obsolete independent #42 is excluded. The
+application integration is `680a52a222710ccec8376b150e0a59439adb7efa`; prepared
+publication source bytes are from `99ed28fd10781f5af880280bdea26a0075333b2c`.
+See [the integration record](v1-integration-candidate.md) for exact source/merge
+commits, artifact identities and validation evidence.
+
+Final `make check`: 1,099 tests pass / 16 existing integration deselections, Ruff
+and strict mypy pass. All 27 browser harnesses pass 480 cases. Both Android variants
+pass 196 unit tests each and lint; debug/release assembly, release bundle, official
+bundletool and all 103 packaged asset comparisons pass. Final edits after the
+application builds affect only publication/preflight tooling and documentation.
+
+**READY FOR WORK PUBLICATION**: the [single exact handoff](work-publication-handoff.md),
+unchanged regional ZIP/site, prepared data-repository source ZIP and guarded
+privacy template are preserved locally. Codex did not publish anything. The
+[final physical acceptance driver/checklist](v1-final-device-acceptance.md) is
+prepared but **not run**; mock preflight tests do not close device gates.
+
+Global V1 completion remains pending Work's hosted bytes and reviewed public policy,
+subsequent verified app catalog/privacy binding and rebuild, consumer-region/final
+release acceptance, existing-key signing inputs and current version-code confirmation.
+A physical update measurement additionally needs a second prepared region version.
+The optional social endpoint/operator settings and backup destination remain open
+if that optional service is to be deployed. Original PR gates still apply.
+Main, original checkout, protected untracked entries and stash remain untouched;
+no integration push, main merge/push, phone operation, key creation or Play upload
+occurred in this resumed pass.

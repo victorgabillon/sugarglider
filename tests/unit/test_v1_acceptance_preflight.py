@@ -53,6 +53,28 @@ def test_preflight_observes_exact_bytes_without_following_redirects() -> None:
     assert requests[0].headers["origin"] == ORIGIN
 
 
+def test_preflight_does_not_reuse_host_response_cookies() -> None:
+    requests: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            stream=httpx.ByteStream(CONTENT),
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Set-Cookie": "host_session=fixture; Path=/; Secure",
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+        for _ in range(2):
+            observe(client, URL, limit=len(CONTENT), expected=IDENTITY, cors=True)
+    assert len(requests) == 2
+    assert all("cookie" not in request.headers for request in requests)
+    assert all("authorization" not in request.headers for request in requests)
+
+
 @pytest.mark.parametrize(
     ("status", "headers", "body", "message"),
     [
