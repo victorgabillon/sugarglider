@@ -1,3 +1,4 @@
+import { syntheticRegionalReference } from "./regional_routing_fixture.js";
 import {
   createLocalRoutingBridge,
   createLocalRoutingExperiment,
@@ -17,7 +18,7 @@ export async function runPr34LocalRoutingProfilesHarness() {
   strictCapabilitiesAndProfilesScenario();
   scenarios.push("strict_profile_and_pack_capabilities");
   await strictMultiPointWireScenario();
-  scenarios.push("strict_v2_ordered_multi_point_wire");
+  scenarios.push("strict_v3_region_bound_ordered_multi_point_wire");
   await viaProfileIdentityScenario();
   scenarios.push("via_route_preserves_public_profile");
   await incompatiblePackWithoutFetchScenario();
@@ -60,7 +61,7 @@ async function strictMultiPointWireScenario() {
     pageNonce: NONCE,
     lifecycleTarget: null,
   });
-  const bridge = createLocalRoutingBridge({ transport });
+  const bridge = createLocalRoutingBridge({ transport, regionalReference: syntheticRegionalReference });
   const reply = await bridge.route({
     points: MARLY_VIA_SMOKE_TEST.points,
     profile: "gravel_bike",
@@ -68,9 +69,9 @@ async function strictMultiPointWireScenario() {
   equal(reply.profile, "gravel_bike", "route reply preserves selected public profile");
   const request = port.requests.find((value) => value.type === "local_route");
   equal(Object.keys(request).sort(), [
-    "points", "profile", "request_id", "route_version", "schema_version", "type",
-  ], "v2 request rejects legacy origin/destination shape");
-  equal(request.route_version, 2, "local route version is explicit");
+    "points", "profile", "regional_reference", "request_id", "route_version", "schema_version", "type",
+  ], "v3 request carries an explicit immutable region reference");
+  equal(request.route_version, 3, "local route version is explicit");
   equal(request.points, MARLY_VIA_SMOKE_TEST.points, "ordered via points preserved");
 }
 

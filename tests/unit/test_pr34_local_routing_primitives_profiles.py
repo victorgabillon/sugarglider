@@ -19,7 +19,7 @@ PROFILE_IDS = (
 def test_boundary_owns_six_strict_profiles_and_bounded_ordered_points() -> None:
     boundary = (KOTLIN / "NativeRouteEngine.kt").read_text()
     protocol = (KOTLIN / "BridgeProtocol.kt").read_text()
-    assert "LOCAL_ROUTE_REQUEST_VERSION = 2" in boundary
+    assert "LOCAL_ROUTE_REQUEST_VERSION = 3" in boundary
     assert "MIN_LOCAL_ROUTE_POINTS = 2" in boundary
     assert "MAX_LOCAL_ROUTE_POINTS = 16" in boundary
     for profile_id in PROFILE_IDS:
@@ -70,7 +70,9 @@ def test_pack_v1_v2_semantics_and_profile_aware_selection_are_explicit() -> None
     assert ".filter { it.supports(accessMode) }" in registry
     assert "RoutingPackSelection.NoGeographicCoverage" in registry
     assert "RoutingPackSelection.NoCompatibleAccessMode" in registry
-    assert "registry.select(request.points, request.profile.accessMode)" in engine
+    assert "repository.withPack(request.regionalReference)" in engine
+    assert "selectedPack.covers(request.points)" in engine
+    assert "selectedPack.supports(request.profile.accessMode)" in engine
     assert "NO_COVERING_ROUTING_PACK" in engine
     assert "NO_COMPATIBLE_ROUTING_PACK" in engine
 
@@ -116,7 +118,8 @@ def test_release_uses_shared_engine_and_bridge_security_is_unchanged() -> None:
     activity = (KOTLIN / "MainActivity.kt").read_text()
     transport = (STATIC / "native_bridge_transport.js").read_text()
     assert "enabled = true" in release
-    assert "registry.installedPacks()" in release
+    assert "reference?.let { repository.withPack(it)" in release
+    assert "RoutingPackRegistry" not in release
     assert "installedPacks.any { it.supports(profile.accessMode) }" in release
     assert "NativeRouteFailureCode.ROUTING_PACK_UNAVAILABLE" in release
     assert "localValhallaConfiguration(pack.tileArchive)" in release
@@ -137,7 +140,7 @@ def test_debug_ui_and_harness_cover_profiles_via_and_compatibility() -> None:
     for profile_id in PROFILE_IDS:
         assert f'"{profile_id}"' in source
         assert f'value="{profile_id}"' in index
-    assert "LOCAL_ROUTE_VERSION = 2" in source
+    assert "LOCAL_ROUTE_VERSION = 3" in source
     assert "MAX_ROUTE_POINTS = 16" in source
     assert "MARLY_VIA_SMOKE_TEST" in source
     assert 'id="local-routing-profile"' in index
@@ -145,7 +148,7 @@ def test_debug_ui_and_harness_cover_profiles_via_and_compatibility() -> None:
     assert "globalThis.fetch" not in source
     for scenario in (
         "strict_profile_and_pack_capabilities",
-        "strict_v2_ordered_multi_point_wire",
+        "strict_v3_region_bound_ordered_multi_point_wire",
         "via_route_preserves_public_profile",
         "incompatible_pack_failure_without_fetch",
     ):

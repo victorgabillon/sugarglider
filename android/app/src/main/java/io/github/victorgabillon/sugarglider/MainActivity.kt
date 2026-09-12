@@ -56,6 +56,7 @@ class MainActivity : Activity() {
     private var interruptedGpxSave = false
     private var pendingStart: PendingStart? = null
     private var pendingLocalRoute: PendingLocalRoute? = null
+    private var pendingLocalCapabilities: BridgeRequest.GetLocalRouteCapabilities? = null
     private var localRouteWorkerBusy = false
     private var pendingDeepLinkSlug: String? = null
     private var backInvokedCallback: OnBackInvokedCallback? = null
@@ -128,6 +129,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         pendingStart = null
         pendingLocalRoute = null
+        pendingLocalCapabilities = null
         localRouteExecutor.shutdownNow()
         gpxDocumentSaver.close()
         documentExecutor.shutdown()
@@ -538,8 +540,9 @@ class MainActivity : Activity() {
                 return@addWebMessageListener
             }
             if (!bridgeLedger.begin(request, payload)) return@addWebMessageListener
-            if (origin == BundledShellPolicy.ORIGIN && !BundledShellPolicy.acceptsRequest(request)) {
-                completeFailure(request, payload, channel, "sharing_unavailable")
+            if (!BundledShellPolicy.acceptsOrigin(request, origin)) {
+                completeFailure(request, payload, channel,
+                    if (origin == BundledShellPolicy.ORIGIN) "sharing_unavailable" else "local_planning_unavailable")
                 return@addWebMessageListener
             }
             when (request) {
@@ -574,12 +577,16 @@ class MainActivity : Activity() {
                         broadcastTerminalFailure(channel, it)
                     }
                 }
-                is BridgeRequest.GetLocalRouteCapabilities -> {
-                    val reply = BridgeProtocol.localRouteCapabilitiesReply(
-                        request.requestId,
-                        nativeRouteEngine.capabilities(),
-                    )
-                    completeBridgePayload(request, payload, channel, reply)
+                is BridgeRequest.GetLocalRouteCapabilities -> beginLocalCapabilities(request, payload, channel)
+                is BridgeRequest.RegionalWork -> {
+                    val status = application.regionalRoutingOperations.start(request.pageNonce, request.command)
+                    completeBridgePayload(request, payload, channel, RegionalRoutingProtocol.reply(request.requestId, status))
+                }
+                is BridgeRequest.RegionalStatus -> {
+                    val manager = application.regionalRoutingOperations
+                    val status = if (request.cancel) manager.cancel(request.pageNonce, request.operationId)
+                        else manager.status(request.pageNonce, request.operationId)
+                    completeBridgePayload(request, payload, channel, RegionalRoutingProtocol.reply(request.requestId, status))
                 }
                 is BridgeRequest.LocalRoute -> beginLocalRoute(
                     request,
@@ -649,6 +656,34 @@ class MainActivity : Activity() {
                         application.statusRepository.current(),
                     )
                 }
+            }
+        }
+    }
+
+    private fun beginLocalCapabilities(
+        request: BridgeRequest.GetLocalRouteCapabilities,
+        payload: String,
+        channel: BridgeChannel,
+    ) {
+        if (localRouteWorkerBusy) {
+            completeBridgePayload(request, payload, channel,
+                BridgeProtocol.localRouteFailure(request.requestId, NativeRouteFailureCode.ROUTING_BUSY))
+            return
+        }
+        pendingLocalCapabilities = request
+        localRouteWorkerBusy = true
+        localRouteExecutor.execute {
+            val reply = try {
+                BridgeProtocol.localRouteCapabilitiesReply(request.requestId,
+                    nativeRouteEngine.capabilities(request.regionalReference))
+            } catch (_: Exception) {
+                BridgeProtocol.localRouteFailure(request.requestId, NativeRouteFailureCode.ROUTING_PACK_UNAVAILABLE)
+            }
+            runOnUiThread {
+                localRouteWorkerBusy = false
+                if (pendingLocalCapabilities !== request) return@runOnUiThread
+                pendingLocalCapabilities = null
+                completeBridgePayload(request, payload, channel, reply)
             }
         }
     }
@@ -1039,12 +1074,14 @@ class MainActivity : Activity() {
     }
 
     private fun invalidateBridgePage() {
+        activeBridgeChannel?.let { application.regionalRoutingOperations.cancelOwner(it.pageNonce) }
         gpxDocumentSaver.invalidate()
         webGeolocationPermissions.invalidate()
         bridgeNavigationEpoch += 1
         activeBridgeChannel = null
         pendingStart = null
         pendingLocalRoute = null
+        pendingLocalCapabilities = null
     }
 
     private fun destroyWebView() {

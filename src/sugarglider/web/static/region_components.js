@@ -58,12 +58,21 @@ export async function createVersionedRegionComponents({
     return loadLocalRegionData(opened);
   }
 
+  async function verifyIndexes() {
+    const opened = await indexes.open(manifest.region_id);
+    requireData(opened.manifest.build_id === manifest.build_id, "regional_identity_mismatch");
+    for (const kind of ["pois", "nature"]) {
+      await verifyRegionalFile(opened.files[kind], manifest.components[kind].files[0]);
+    }
+    return true;
+  }
+
   async function installIndexes(urlText, options = {}) {
     const installed = await indexes.install(urlText, { ...options, regionalManifest: manifest });
     requireData(installed.build_id === manifest.build_id, "regional_identity_mismatch");
   }
 
-  return Object.freeze({ manifest, installMap, verifyMap, openMap, installIndexes, openIndexes });
+  return Object.freeze({ manifest, installMap, verifyMap, openMap, installIndexes, openIndexes, verifyIndexes });
 }
 
 function requireMapIdentity(map, region) {

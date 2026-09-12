@@ -56,7 +56,7 @@ def test_bundled_origin_and_bridge_scope_are_explicit() -> None:
     assert ANDROID_APP_ORIGIN in web
     assert 'const val HOST = "appassets.androidplatform.net"' in policy
     assert "savedInstanceState?.getBoolean(STATE_SHARING_SCREEN) == true" in activity
-    assert "!BundledShellPolicy.acceptsRequest(request)" in activity
+    assert "!BundledShellPolicy.acceptsOrigin(request, origin)" in activity
     assert (
         "if (origin == BundledShellPolicy.ORIGIN) NativeTrackingStatus.stopped()"
         in activity

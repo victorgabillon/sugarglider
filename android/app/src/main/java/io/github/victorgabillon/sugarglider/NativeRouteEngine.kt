@@ -1,6 +1,6 @@
 package io.github.victorgabillon.sugarglider
 
-internal const val LOCAL_ROUTE_REQUEST_VERSION = 2
+internal const val LOCAL_ROUTE_REQUEST_VERSION = 3
 internal const val MIN_LOCAL_ROUTE_POINTS = 2
 internal const val MAX_LOCAL_ROUTE_POINTS = 16
 internal const val MAX_LOCAL_ROUTE_VERTICES = 20_000
@@ -50,11 +50,12 @@ internal data class NativeRouteRequest(
     val requestId: String,
     val points: List<LocalRouteCoordinate>,
     val profile: LocalRouteProfile,
+    val regionalReference: RegionalRoutingPackReference,
 ) {
     fun isValid(): Boolean = version == LOCAL_ROUTE_REQUEST_VERSION &&
         requestId.isNotBlank() &&
         points.size in MIN_LOCAL_ROUTE_POINTS..MAX_LOCAL_ROUTE_POINTS &&
-        points.all(LocalRouteCoordinate::isValid)
+        points.all(LocalRouteCoordinate::isValid) && regionalReference.isValid()
 }
 
 internal data class NativeRoutingPackCapability(
@@ -96,7 +97,7 @@ internal enum class NativeRouteFailureCode(val wireValue: String) {
     ROUTING_FAILURE("routing_failure");
 }
 
-// Version-2 field names are stable. Initialization measures Kotlin wrapper
+// Measurement field names remain stable. Initialization measures Kotlin wrapper
 // preparation, not a retained JNI actor; route time includes per-call native
 // actor construction in valhalla-mobile 0.5.1.
 internal data class NativeRouteMeasurements(
@@ -136,7 +137,7 @@ internal sealed interface NativeRouteResult {
 }
 
 internal interface NativeRouteEngine {
-    fun capabilities(): NativeRouteCapabilities
+    fun capabilities(reference: RegionalRoutingPackReference?): NativeRouteCapabilities
 
     fun route(request: NativeRouteRequest): NativeRouteResult
 }

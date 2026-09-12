@@ -1,3 +1,4 @@
+import { syntheticRegionalReference } from "./regional_routing_fixture.js";
 import {
   createLocalRoutingBridge,
   createLocalRoutingExperiment,
@@ -59,7 +60,7 @@ async function sharedTransportScenario(clientOrder) {
     lifecycleTarget: null,
   });
   const outing = createNativeTrackingBridge({ transport, origin: ORIGIN });
-  const local = createLocalRoutingBridge({ transport });
+  const local = createLocalRoutingBridge({ transport, regionalReference: syntheticRegionalReference });
   const clients = clientOrder === "outing-first"
     ? [outing, local]
     : [local, outing];
@@ -131,7 +132,7 @@ async function unsolicitedTrackingWhileLocalRoutingScenario() {
     lifecycleTarget: null,
   });
   const outing = createNativeTrackingBridge({ transport, origin: ORIGIN });
-  const local = createLocalRoutingBridge({ transport });
+  const local = createLocalRoutingBridge({ transport, regionalReference: syntheticRegionalReference });
   const events = [];
   outing.subscribe((event) => events.push(event));
   await Promise.all([outing.initialize(), local.initialize()]);
@@ -202,7 +203,7 @@ async function marlySmokeTestScenario() {
     const requests = port.requests.filter((value) => value.type === "local_route");
     equal(requests.length, 2, "same smoke action can run twice");
     for (const request of requests) {
-      equal(request.route_version, 2, "strict local route wire version");
+      equal(request.route_version, 3, "strict local route wire version");
       equal(request.points, MARLY_OFFLINE_SMOKE_TEST.points, "fixed Marly points");
       equal(request.profile, "hike", "fixed public profile");
     }
@@ -296,7 +297,7 @@ async function validRouteScenario() {
     equal(backendFetches, 0, "bridge route makes no fetch");
     const request = port.requests.find((value) => value.type === "local_route");
     equal(Object.keys(request).sort(), [
-      "points", "profile", "request_id", "route_version", "schema_version", "type",
+      "points", "profile", "regional_reference", "request_id", "route_version", "schema_version", "type",
     ], "local request has strict non-secret fields");
     assert(!JSON.stringify(request).includes("participant"), "no outing authority");
   } finally {
@@ -490,7 +491,7 @@ function localBridgeFor(port, transportOptions = {}) {
     lifecycleTarget: null,
     ...transportOptions,
   });
-  return createLocalRoutingBridge({ transport });
+  return createLocalRoutingBridge({ transport, regionalReference: syntheticRegionalReference });
 }
 
 function helloReply(requestId) {

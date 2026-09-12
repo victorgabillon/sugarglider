@@ -1,17 +1,25 @@
 import { deepFreeze, evaluateLocalCandidateDraft, LocalCandidateEvaluationError } from "./local_candidate_evaluator.js";
 import { canonicalCoordinate } from "./local_plan_geometry.js";
+import { captureRegionalRoutingReference } from "./regional_routing_reference.js";
 
 const ROLE_ORDER = ["harmonious", "maximum_requested_coverage", "smooth_low_detour", "distance_focused"];
 
 // Both bounded searches supply retained immutable drafts. Canonical publication
 // evaluates each distinct native line once and gives the shared portfolio sole
 // ownership of public roles/ranks. It does not issue routing or region requests.
-export async function publishLocalPlan(request, search) {
+export async function publishLocalPlan(request, search, regionalReference = null) {
   if (!search || !Array.isArray(search.candidates) || search.candidates.length > 5
     || !search.search_diagnostics || search.profile !== request.routing_profile
     || search.type !== (request.kind === "auto_tour" ? "local_auto_tour_result" : "local_waypoint_route_result")) {
     throw new LocalCandidateEvaluationError("invalid_local_search_result");
   }
+  const reference = regionalReference === null ? null : captureRegionalRoutingReference(regionalReference);
+  if (reference && search.pack_id !== reference.pack_id
+    && !(search.candidates.length === 0 && search.pack_id === null)) {
+    throw new LocalCandidateEvaluationError("routing_pack_identity_changed");
+  }
+  const regionalVersion = reference ? deepFreeze({ region_id: reference.region_id, build_id: reference.build_id,
+    routing_pack_id: reference.pack_id }) : null;
   const evaluated = [], rejected = [];
   const sourceIds = new Map();
   for (const draft of search.candidates) {
@@ -19,7 +27,9 @@ export async function publishLocalPlan(request, search) {
       if (draft.pack_id !== search.pack_id) throw new LocalCandidateEvaluationError("routing_pack_identity_changed");
       const candidate = await evaluateLocalCandidateDraft(request, draft);
       sourceIds.set(draft.candidate_id, candidate.id);
-      evaluated.push(candidate);
+      evaluated.push(regionalVersion ? deepFreeze({ ...candidate, diagnostics: { ...candidate.diagnostics,
+        details: { ...candidate.diagnostics.details, local_routing: { ...candidate.diagnostics.details.local_routing,
+          regional_version: regionalVersion } } } }) : candidate);
     } catch (error) {
       if (!(error instanceof LocalCandidateEvaluationError) && error.code !== "invalid_local_candidate_enrichment") throw error;
       rejected.push({ source_candidate_id: draft.candidate_id, code: error.code });
@@ -48,6 +58,7 @@ export async function publishLocalPlan(request, search) {
     poi_outcomes: search.poi_outcomes ?? [],
     distinctness: "routed_geometry_only", exact_repetition_available: false,
   };
+  if (regionalVersion) diagnostics.details.local_planning.regional_version = regionalVersion;
   return deepFreeze({ schema_version: 1, kind: request.kind, topology: request.topology,
     routing_profile: request.routing_profile, effective_start: canonicalCoordinate(request.start),
     effective_end: canonicalCoordinate(request.topology === "loop" ? request.start : request.end),

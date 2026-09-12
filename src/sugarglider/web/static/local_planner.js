@@ -3,13 +3,22 @@ import { createLocalWaypointRouteEngine, validateLocalWaypointRouteRequest } fro
 import { createLocalPlanPublisher } from "./local_plan_client.js";
 import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
 import { deepFreeze } from "./local_candidate_evaluator.js";
+import { RegionalDataError } from "./regional_manifest.js";
 
 export class LocalPlannerError extends Error {
   constructor(code) {
     super({
       local_routing_unavailable: "On-device routing is unavailable in this app build.",
       routing_pack_unavailable: "Download a supported offline region before planning a route.",
-      no_covering_routing_pack: "No single installed region covers all the requested points. Move the points into one region or install a suitable region.",
+      no_covering_routing_pack: "The selected offline region does not cover all requested points. Choose another installed region or move the points.",
+      regional_required: "Download an offline region before planning a route.",
+      regional_selection_required: "Choose an installed offline region before planning a route.",
+      regional_install_incomplete: "This region is not fully installed. Open Offline regions to finish or remove the incomplete installation.",
+      regional_routing_unavailable: "Routing data for this region is unavailable. Open Offline regions to check the installation.",
+      regional_components_unavailable: "Some data for this region is unavailable. Open Offline regions to check the installation.",
+      regional_checksum_mismatch: "The installed region failed its integrity check. Open Offline regions to remove and reinstall it.",
+      regional_identity_mismatch: "The installed regional components do not match. Open Offline regions to check the installation.",
+      regional_storage_unavailable: "Offline storage is unavailable in this app session.",
       no_compatible_routing_pack: "No installed region supports the selected activity at these points.",
       no_route: "No connected route was found in the installed regional graph for these points.",
       routing_busy: "An on-device route calculation is still finishing. Try again shortly.",
@@ -33,10 +42,13 @@ export class LocalPlannerError extends Error {
 
 // The normal planner owns one mode search and one canonical publication per
 // request. Native failures never select the web API or another routing engine.
-export function createLocalPlanner({ bridge, getRegionData = async () => null,
+export function createLocalPlanner({ bridge, getRegionData = async () => null, withRegion = null,
   publisher = createLocalPlanPublisher(), lifecycleTarget = globalThis } = {}) {
-  const waypoint = createLocalWaypointRouteEngine({ route: (input) => bridge.route(input) });
-  const autoTour = createLocalAutoTourEngine({ route: (input) => bridge.route(input), getRegionData });
+  const enterRegion = withRegion ?? ((run) => run({ bridge, getRegionData, reference: null }));
+  let requestRegion = null;
+  const route = (input) => requestRegion.bridge.route(input);
+  const waypoint = createLocalWaypointRouteEngine({ route });
+  const autoTour = createLocalAutoTourEngine({ route, getRegionData: (packId) => requestRegion.getRegionData(packId) });
   let active = null, generation = 0;
   function generate(rawRequest, signal) {
     if (signal?.aborted) return Promise.reject(new DOMException("Planning cancelled.", "AbortError"));
@@ -53,7 +65,10 @@ export function createLocalPlanner({ bridge, getRegionData = async () => null,
     const ownedGeneration = ++generation;
     const abort = () => { if (generation === ownedGeneration) invalidate(); };
     signal?.addEventListener("abort", abort, { once: true });
-    const promise = search(request, modeRequest, ownedGeneration).finally(() => {
+    const promise = search(request, modeRequest, ownedGeneration).catch((error) => {
+      if (error instanceof RegionalDataError) throw new LocalPlannerError(error.code);
+      throw error;
+    }).finally(() => {
       signal?.removeEventListener("abort", abort);
       if (active?.generation === ownedGeneration) active = null;
     });
@@ -61,17 +76,23 @@ export function createLocalPlanner({ bridge, getRegionData = async () => null,
     return promise;
   }
   async function search(request, modeRequest, ownedGeneration) {
-    const capabilities = await bridge.capabilities();
-    requireCurrent(ownedGeneration);
-    if (!capabilities?.enabled) throw new LocalPlannerError("local_routing_unavailable");
-    if (!capabilities.installed_pack_count) throw new LocalPlannerError("routing_pack_unavailable");
-    if (!capabilities.supported_profile_ids.includes(request.routing_profile)) throw new LocalPlannerError("unsupported_profile");
-    const search = await (request.kind === "waypoint_route" ? waypoint : autoTour).generate(modeRequest);
-    requireCurrent(ownedGeneration);
-    if (!search) throw new DOMException("Planning cancelled.", "AbortError");
-    const result = await publisher.publish(request, search);
-    requireCurrent(ownedGeneration);
-    return result;
+    return enterRegion(async (region) => {
+      requireCurrent(ownedGeneration);
+      requestRegion = region;
+      try {
+        const capabilities = await region.bridge.capabilities();
+        requireCurrent(ownedGeneration);
+        if (!capabilities?.enabled) throw new LocalPlannerError("local_routing_unavailable");
+        if (!capabilities.installed_pack_count) throw new LocalPlannerError("routing_pack_unavailable");
+        if (!capabilities.supported_profile_ids.includes(request.routing_profile)) throw new LocalPlannerError("unsupported_profile");
+        const search = await (request.kind === "waypoint_route" ? waypoint : autoTour).generate(modeRequest);
+        requireCurrent(ownedGeneration);
+        if (!search) throw new DOMException("Planning cancelled.", "AbortError");
+        const result = await publisher.publish(request, search, region.reference ?? null);
+        requireCurrent(ownedGeneration);
+        return result;
+      } finally { if (requestRegion === region) requestRegion = null; }
+    });
   }
   function requireCurrent(ownedGeneration) {
     if (ownedGeneration !== generation) throw new DOMException("Planning cancelled.", "AbortError");
