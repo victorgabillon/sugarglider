@@ -25,6 +25,7 @@ import android.webkit.HttpAuthHandler
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
@@ -45,6 +46,7 @@ import java.util.concurrent.Executors
 class MainActivity : Activity() {
     private lateinit var application: SugargliderApplication
     private lateinit var nativeRouteEngine: NativeRouteEngine
+    private lateinit var bundledShellAssets: BundledShellAssets
     private var configuredOrigin: String? = null
     private var webView: WebView? = null
     private var activeBridgeChannel: BridgeChannel? = null
@@ -79,14 +81,13 @@ class MainActivity : Activity() {
         interruptedGpxSave = savedInstanceState?.getBoolean(STATE_GPX_SAVE_PENDING) == true
         application = getApplication() as SugargliderApplication
         nativeRouteEngine = NativeRouteEngineFactory.create(applicationContext)
+        bundledShellAssets = BundledShellAssets(applicationContext)
         application.statusRepository.addObserver(statusObserver)
         registerPredictiveBackCallback()
         pendingDeepLinkSlug = deepLinkSlug(intent)
-        val stored = getPreferences(MODE_PRIVATE).getString(PREFERENCE_SERVER_ORIGIN, null)
-        val validStored = stored?.let {
-            ServerOrigin.parse(it, BuildConfig.ALLOW_HTTP)?.normalized
-        }
-        if (validStored == null) showServerConfiguration() else openServer(validStored)
+        if (pendingDeepLinkSlug != null || savedInstanceState?.getBoolean(STATE_SHARING_SCREEN) == true) {
+            openSharingServer()
+        } else openPlanner()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -94,13 +95,15 @@ class MainActivity : Activity() {
         setIntent(intent)
         deepLinkSlug(intent)?.let {
             pendingDeepLinkSlug = it
-            loadConfiguredPage()
+            openSharingServer()
         }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         // Only an uncertainty flag survives recreation, never file bytes or URI.
         outState.putBoolean(STATE_GPX_SAVE_PENDING, interruptedGpxSave || gpxDocumentSaver.hasPendingWork())
+        // Restore only the UI mode, never a URL, capability, or participant identity.
+        outState.putBoolean(STATE_SHARING_SCREEN, configuredOrigin != null && configuredOrigin != BundledShellPolicy.ORIGIN)
         super.onSaveInstanceState(outState)
     }
 
@@ -252,8 +255,10 @@ class MainActivity : Activity() {
             setText(R.string.configure_open)
             setOnClickListener {
                 val origin = ServerOrigin.parse(input.text.toString(), BuildConfig.ALLOW_HTTP)
-                if (origin == null) {
-                    error.text = if (BuildConfig.ALLOW_HTTP) {
+                if (origin == null || BundledShellPolicy.ownsHost(origin.normalized)) {
+                    error.text = if (origin != null && BundledShellPolicy.ownsHost(origin.normalized)) {
+                        "This address belongs to the local planner. Enter a sharing server address."
+                    } else if (BuildConfig.ALLOW_HTTP) {
                         "Enter HTTPS, or debug HTTP on localhost or a private-LAN IP, with no path, credentials, query, or fragment."
                     } else {
                         "Release builds require HTTPS with no path, credentials, query, or fragment."
@@ -270,7 +275,23 @@ class MainActivity : Activity() {
         root.addView(input, fullWidthWrap())
         root.addView(error, fullWidthWrap())
         root.addView(open, fullWidthWrap())
+        root.addView(Button(this).apply {
+            setText(R.string.open_planner)
+            setOnClickListener { openPlanner() }
+        }, fullWidthWrap())
         setContentView(root)
+    }
+
+    private fun openPlanner() {
+        pendingDeepLinkSlug = null
+        openServer(BundledShellPolicy.ORIGIN)
+    }
+
+    private fun openSharingServer() {
+        val stored = getPreferences(MODE_PRIVATE).getString(PREFERENCE_SERVER_ORIGIN, null)
+        val origin = stored?.let { ServerOrigin.parse(it, BuildConfig.ALLOW_HTTP)?.normalized }
+            ?.takeUnless(BundledShellPolicy::ownsHost)
+        if (origin == null) showServerConfiguration() else openServer(origin)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -310,7 +331,7 @@ class MainActivity : Activity() {
             insets
         }
         serverChrome.addView(Button(this).apply {
-            setText(R.string.configure_server)
+            setText(if (origin == BundledShellPolicy.ORIGIN) R.string.open_sharing else R.string.planner_and_sharing)
             contentDescription = getString(R.string.configure_server_description)
             setTextColor(Color.WHITE)
             textSize = 13f
@@ -352,10 +373,12 @@ class MainActivity : Activity() {
     }
 
     private fun showServerMenu(origin: String) {
+        if (origin == BundledShellPolicy.ORIGIN) { openSharingServer(); return }
         AlertDialog.Builder(this)
             .setTitle(R.string.configure_server_title)
             .setMessage(origin)
             .setNegativeButton(android.R.string.cancel, null)
+            .setNeutralButton(R.string.open_planner) { _, _ -> openPlanner() }
             .setPositiveButton(R.string.configure_change) { _, _ -> requestServerChange() }
             .show()
     }
@@ -385,6 +408,9 @@ class MainActivity : Activity() {
     }
 
     private fun originIsolatingClient(origin: String): WebViewClient = object : WebViewClient() {
+        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+            if (origin == BundledShellPolicy.ORIGIN) bundledShellAssets.intercept(request.url, request.method) else null
+
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
             if (view === webView) {
                 dismissOutingLeaveDialog()
@@ -512,13 +538,18 @@ class MainActivity : Activity() {
                 return@addWebMessageListener
             }
             if (!bridgeLedger.begin(request, payload)) return@addWebMessageListener
+            if (origin == BundledShellPolicy.ORIGIN && !BundledShellPolicy.acceptsRequest(request)) {
+                completeFailure(request, payload, channel, "sharing_unavailable")
+                return@addWebMessageListener
+            }
             when (request) {
                 is BridgeRequest.Hello -> completeBridgeRequest(
                     request,
                     payload,
                     channel,
                     "hello_result",
-                    application.statusRepository.current(),
+                    if (origin == BundledShellPolicy.ORIGIN) NativeTrackingStatus.stopped()
+                    else application.statusRepository.current(),
                 )
                 is BridgeRequest.SaveGpx -> {
                     val prepared = document ?: return@addWebMessageListener
@@ -937,6 +968,7 @@ class MainActivity : Activity() {
     }
 
     private fun broadcastStatus(status: NativeTrackingStatus) {
+        if (configuredOrigin == BundledShellPolicy.ORIGIN) return
         val channel = activeBridgeChannel ?: return
         bridgeStatusCounter += 1
         postToBridge(
@@ -958,6 +990,7 @@ class MainActivity : Activity() {
         channel: BridgeChannel,
         event: NativeTerminalFailureEvent,
     ) {
+        if (configuredOrigin == BundledShellPolicy.ORIGIN) return
         bridgeStatusCounter += 1
         postToBridge(
             channel,
@@ -1138,6 +1171,7 @@ class MainActivity : Activity() {
     companion object {
         private const val PREFERENCE_SERVER_ORIGIN = "server_origin"
         private const val STATE_GPX_SAVE_PENDING = "gpx_save_pending"
+        private const val STATE_SHARING_SCREEN = "sharing_screen"
         private const val REQUEST_GPX_DOCUMENT = 41
         private const val REQUEST_TRACKING_PERMISSIONS = 27
         private const val REQUEST_WEB_GEOLOCATION_PERMISSION = 31

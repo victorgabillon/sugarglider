@@ -173,7 +173,9 @@ Validation after the native adapter:
   complete checks above were rerun. One initial command used an incorrect SDK
   path; the successful run uses `/home/pompote/Android/Sdk` and Java 17.
 
-Current preparation artifacts (outside Git):
+Export-preparation artifacts (subsequently rebuilt; current artifacts are in
+[the bundled-shell evidence](pr41-bundled-android-shell.md)):
+
 
 - Debug APK: `/home/pompote/oldata/victor/sugarglider/android/app/build/outputs/apk/debug/app-debug.apk`, 144,140,685 bytes, SHA-256
   `20341a5f4b382ee90807b07203e19c24ec31b11838b65218eef0ed7c1329408b`.

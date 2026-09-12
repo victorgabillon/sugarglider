@@ -32,7 +32,7 @@ PASS never means an author assessment alone. Superseded evidence stays identifie
 | Milestone | Status | Required success evidence |
 | --- | --- | --- |
 | PR40 local Auto Tour v2 / POI / nature | MERGED; REQUIRED PR40 CHECKS PASS | Validated local PR39 readers/storage; bounded deterministic search; real Fairphone nature/POI outcomes, repeat, native geometry and zero-network acceptance recorded below |
-| PR41 production Android local planner | NORMAL LOCAL GENERATE / CANONICAL GPX IMPLEMENTED; BUNDLED RELEASE / DEVICE GATES PENDING | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
+| PR41 production Android local planner | NORMAL LOCAL GENERATE / BUNDLED DEBUG UI PROVEN; RELEASE ROUTING / REGION GATES PENDING | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
 | PR42 region product | WESTERN PARTITION BUILT / VERIFIED; PRODUCT UI PENDING | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
 | PR43 tiny production service | CODE MERGED; LIVE HOSTING PENDING | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency; public hosting remains an external action |
 | PR44 Play release candidate | PREPARATION DRAFT; FINAL RELEASE GATES OPEN | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
@@ -249,7 +249,7 @@ real upload signing and all remaining final-release/device gates remain open.
 
 ## PR41 integration findings
 
-The current release starts with server-origin setup and has no bundled normal
+The initial release started with server-origin setup and had no bundled normal
 planner. Enabling its native factory alone cannot meet first-launch/offline
 requirements. Integration needs bundled shell assets with a stable trusted
 origin, normal Generate/candidate display, truthful unknown-detail coverage,
@@ -343,6 +343,26 @@ pass, and the final actual-page host check passes. All five CI checks passed
 This remains a debug APK with a setup origin and development packs. Bundled first
 launch, production routing, coordinated regional installation and the required
 release-equivalent matrix remain outstanding; no PR41 or V1 PASS is claimed.
+
+Bundled first launch is now implemented on dependent branch
+`feat/pr41-bundled-android-shell`: normal launch opens the shared APK assets at a
+fixed local HTTPS origin, with no server setup or service-worker dependency.
+The local bridge accepts planning/GPX only, has a neutral handshake and rejects
+tracking requests; optional sharing remains at its separate configured origin.
+The Fairphone passes first launch, upgrade, cold process restart, the explicit
+sharing/planner transition, both planning modes with hiking/cycling, outside
+coverage and real GPX Save/Cancel. Its new origin correctly has no copied
+map/POI/nature data; installed native routing archives remain independent.
+`make check` passes 1,031 tests / 16 existing integration deselections, 286 browser
+cases pass, and Android passes 149 debug / 144 release tests plus both lint checks
+and APK/AAB assembly. The 84 packaged assets match source bytes in both artifacts.
+[Bundled-shell evidence](pr41-bundled-android-shell.md) records exact boundaries,
+commands, measurements and current artifact hashes. The unsigned AAB is 10,908,285
+bytes, SHA-256 `1b1fc099a4c540d726040dc5611de51fd9035b42c1d66145bf9cc99886e8bd43`;
+production routing remains disabled, so it is not the V1 artifact. All five CI
+checks pass the preceding `af37a1f`; this new preparation requires its own CI.
+Release routing, the coordinated consumer region installer/useful-region phone
+acceptance and full release-equivalent PR41/44 gates remain open.
 
 ## External actions and blockers
 

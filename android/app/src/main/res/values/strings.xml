@@ -6,10 +6,12 @@
     <string name="notification_title">Sugarglider is sharing location</string>
     <string name="notification_open">Open app</string>
     <string name="notification_stop">Stop sharing</string>
-    <string name="configure_title">Connect Sugarglider</string>
-    <string name="configure_description">Enter the origin of a running Sugarglider server. Credentials and URL paths are not accepted.</string>
+    <string name="configure_title">Connect sharing</string>
+    <string name="configure_description">Sharing routes and outings is optional. Enter your Sugarglider sharing server address. The planner works with installed regions without this connection.</string>
+    <string name="open_planner">Back to planner</string>
+    <string name="open_sharing">Sharing</string>
+    <string name="planner_and_sharing">Planner and sharing</string>
     <string name="configure_open">Open server</string>
-    <string name="configure_server">Server</string>
     <string name="configure_server_title">Sugarglider server</string>
     <string name="configure_server_description">View or change the current Sugarglider server</string>
     <string name="configure_change">Change server</string>
