@@ -246,7 +246,9 @@ breaking result-schema change has been selected. Same-origin participant
 authority must remain isolated. Normal Generate and physical acceptance remain
 pending.
 
-The first implementation part, `feat/pr41-local-canonical-export`, now connects
+The first implementation part, `b6a097e` on `feat/pr41-local-canonical-export`,
+is GitHub draft [PR #43](https://github.com/victorgabillon/sugarglider/pull/43).
+It now connects
 normal Download GPX to local serialization of the existing canonical candidate,
 including a saved offline snapshot. It preserves exact track order/profile,
 revalidates strict selected-stop arrivals, omits dropped stops and extensions,
