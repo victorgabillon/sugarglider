@@ -219,10 +219,17 @@ and device transfer. CI now validates the release variant and unsigned bundle.
   visible dependency/update warnings. Native auxiliary/default paths are disabled,
   and debug timing labels describe wrapper setup/reuse accurately. Shell v24 on
   that branch must be reconciled with PR40's v25 on integration.
-- Latest unsigned preparation AAB: 3,528,820 bytes, SHA-256
-  `5a1a8ff7b7e8054a72fc5d9aa0717505c6893bf26b1107df647208656e75c64f`, under the
+- Message-type follow-up `a10e835` rejects binary bridge payloads before WebKit's
+  string accessor, preventing the pinned library's demonstrated exception. Exact
+  origin/frame/page ownership checks remain intact. `make check` passes (1,013),
+  as do 138 debug / 134 release JUnit tests, both lint checks and bundle assembly
+  in a 3 GiB / two-CPU scope (3 min 19 s). No new device PASS is claimed. Evidence:
+  `/tmp/sugarglider-pr44-message-type-{check,android}.log` and artifact report.
+- Latest unsigned preparation AAB: 3,529,014 bytes, SHA-256
+  `c6d2cf35d1f591560e7d36c8911bbdc0faacc92619dd8734690d87ff6d4c7804`, under the
   PR44 checkout's `android/app/build/outputs/bundle/release/app-release.aab`.
-  It supersedes the 3,528,250-byte and 3,528,837-byte preparation artifacts.
+  It supersedes the 3,528,250-byte, 3,528,837-byte and 3,528,820-byte
+  preparation artifacts.
   It contains no native routing library and is explicitly **not the V1 artifact**.
 - Existing debug arm64 ELF alignment and APK `zipalign -c -P 16 4` pass. Final
   native release/delivered-APK/16 KiB runtime verification is still required.
@@ -248,7 +255,7 @@ pending.
 
 The first implementation part, `b6a097e` on `feat/pr41-local-canonical-export`,
 is GitHub draft [PR #43](https://github.com/victorgabillon/sugarglider/pull/43).
-It now connects
+All five CI checks pass at evidence head `2ac8c0b`. It connects
 normal Download GPX to local serialization of the existing canonical candidate,
 including a saved offline snapshot. It preserves exact track order/profile,
 revalidates strict selected-stop arrivals, omits dropped stops and extensions,
