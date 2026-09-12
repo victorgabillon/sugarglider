@@ -199,7 +199,7 @@ def test_service_worker_precaches_runtime_but_never_map_archives() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     policy = (STATIC_DIRECTORY / "service_worker_policy.js").read_text()
     core = _core_assets(worker)
-    assert "`${SHELL_CACHE_PREFIX}v39`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v40`" in worker
     assert {
         "/static/vendor/pmtiles-4.5.0/pmtiles.js",
         "/static/vendor/protomaps-basemaps-5.7.2/basemaps.js",

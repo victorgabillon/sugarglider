@@ -1,5 +1,5 @@
 import { nativeBridgeTransport } from "./native_bridge_transport.js";
-import { RegionalDataError, freezeData, requireData } from "./regional_manifest.js";
+import { RegionalDataError, freezeData, requireData, requireFields, safeRegionalId, validSha256 } from "./regional_manifest.js";
 import { captureRegionalRoutingReference } from "./regional_routing_reference.js";
 
 const CODES = new Set([
@@ -35,7 +35,13 @@ export function createRegionalNativeClient({
   now = () => performance.now(),
 } = {}) {
   async function run(action, value, { manifestUrl, signal, onProgress = () => {} } = {}) {
-    const reference = captureRegionalRoutingReference(value);
+    const removesData = ["remove", "remove_version", "remove_region"].includes(action);
+    let reference;
+    if (action === "remove_version" || action === "remove_region") {
+      requireFields(value, action === "remove_version" ? ["region_id", "build_id"] : ["region_id"]);
+      requireData(safeRegionalId(value.region_id) && (action === "remove_region" || validSha256(value.build_id)), "invalid_regional_routing_reference");
+      reference = freezeData(structuredClone(value));
+    } else reference = captureRegionalRoutingReference(value);
     signal?.throwIfAborted();
     requireData(await transport.initialize().catch(() => false), "regional_native_unavailable");
     if (action === "install") requireData(typeof manifestUrl === "string" && manifestUrl.length > 0
@@ -43,7 +49,8 @@ export function createRegionalNativeClient({
     const operationId = randomId();
     requireData(/^[a-f0-9]{32}$/.test(operationId), "invalid_regional_operation");
     const owner = Object.freeze({ operationId });
-    const fields = { operation_id: operationId, regional_reference: reference };
+    const fields = action === "remove_region" ? { operation_id: operationId, region_id: reference.region_id }
+      : { operation_id: operationId, [action === "remove_version" ? "regional_version" : "regional_reference"]: reference };
     if (action === "install") fields.manifest_url = manifestUrl;
     const started = now();
     const progress = (status) => {
@@ -77,8 +84,8 @@ export function createRegionalNativeClient({
       throw new RegionalDataError("regional_native_outcome_uncertain");
     }
     if (reply.state === "failed") throw new RegionalDataError(reply.code);
-    requireData(reply.state === (action === "remove" ? "removed" : "ready"), "regional_native_outcome_uncertain");
-    if (action !== "remove") signal?.throwIfAborted();
+    requireData(reply.state === (removesData ? "removed" : "ready"), "regional_native_outcome_uncertain");
+    if (!removesData) signal?.throwIfAborted();
     progress(reply);
     return Object.freeze({ status: reply.state });
   }
@@ -87,5 +94,7 @@ export function createRegionalNativeClient({
     inspect: (reference, options) => run("inspect", reference, options),
     install: (reference, manifestUrl, options = {}) => run("install", reference, { ...options, manifestUrl }),
     remove: (reference, options) => run("remove", reference, options),
+    removeVersion: (version, options) => run("remove_version", version, options),
+    removeRegion: (regionId, options) => run("remove_region", { region_id: regionId }, options),
   });
 }

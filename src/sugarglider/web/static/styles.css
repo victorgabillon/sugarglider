@@ -592,3 +592,14 @@ footer { padding: .48rem 1rem; color: #d6e0da; background: var(--primary-action)
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+.offline-regions { margin: 1rem 0; border: 1px solid #becbc3; border-radius: 12px; background: #f8fbf8; }
+.offline-regions > summary { cursor: pointer; padding: 1rem; }
+.offline-regions > summary span { display: block; font-size: .9rem; margin-top: .25rem; color: #42574b; }
+.offline-regions-body { padding: 0 1rem 1rem; }
+.offline-regions-body > label { display: block; margin-bottom: .4rem; }
+.offline-regions-body > select { max-width: 100%; }
+.offline-region-list { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1rem; }
+.offline-region-card { padding: 1rem; border: 1px solid #becbc3; border-radius: 8px; background: white; overflow-wrap: anywhere; }
+.offline-region-card p { margin: .6rem 0; font-size: .9rem; }
+.offline-region-card button { margin: .25rem .25rem .25rem 0; max-width: 100%; white-space: normal; }

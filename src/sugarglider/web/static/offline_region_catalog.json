@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "regions": [
+    {
+      "region_id": "yvelines-ouest-parisien",
+      "display_name": "Yvelines et ouest parisien",
+      "description": "Western Île-de-France, including the Yvelines and western Paris area. Coverage follows the displayed rectangular bounds, not administrative borders.",
+      "build_id": "1bbf598d64f5d5cc987a60f9a4cb22318392d596ff88f3eb6b40cb70dceb4691",
+      "bounds": [1.445097, 48.38, 2.25, 49.1],
+      "download_bytes": 188366639,
+      "manifest_url": null
+    }
+  ]
+}

@@ -123,7 +123,8 @@ def test_normal_android_generate_uses_local_core_in_both_android_variants() -> N
     assert "renderLocalAutoTourCandidates" in map_source
     assert "? await localPlanner.generate(request, state.abortController.signal)" in app
     assert ": await generatePlan(request, state.abortController.signal)" in app
-    assert "const localPlanner = localRoutingBridge.nativeAvailable" in app
+    assert "const localPlanner = isBundledAndroidApp()" in app
+    assert "createLocalPlanner({ withRegion: withPlanningRegion })" in app
     assert "enabled = true" in release
 
 

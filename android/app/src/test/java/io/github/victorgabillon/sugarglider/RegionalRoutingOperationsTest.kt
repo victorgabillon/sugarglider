@@ -56,7 +56,7 @@ class RegionalRoutingOperationsTest {
             assertEquals("running", manager.status(owner, id).state)
             cleaned = true
             throw RegionalPackException(RegionalPackFailure.CANCELLED)
-        }, {})
+        }, {}, {}, {})
         manager.start(owner, RegionalRoutingCommand(id, RegionalRoutingAction.INSTALL, reference, "https://example.org/manifest.json"))
         queue.run()
         assertTrue(cleaned)
@@ -65,7 +65,7 @@ class RegionalRoutingOperationsTest {
 
     @Test fun reusedInstallReportsCompleteBytesAndUnexpectedFailuresAreSanitized() {
         val queue = QueueExecutor()
-        val manager = RegionalRoutingOperations(queue, { throw IllegalStateException("private source") }, { _, _, _, _ -> }, {})
+        val manager = RegionalRoutingOperations(queue, { throw IllegalStateException("private source") }, { _, _, _, _ -> }, {}, {}, {})
         manager.start(owner, RegionalRoutingCommand(id, RegionalRoutingAction.INSTALL, reference, "https://example.org/manifest.json"))
         queue.run()
         assertEquals(reference.archive.byteSize, manager.status(owner, id).receivedBytes)
@@ -82,7 +82,7 @@ class RegionalRoutingOperationsTest {
     @Test fun removalAcknowledgesItsDefiniteOutcomeDespiteLateCancellation() {
         val queue = QueueExecutor()
         lateinit var manager: RegionalRoutingOperations
-        manager = RegionalRoutingOperations(queue, {}, { _, _, _, _ -> }, { manager.cancelOwner(owner) })
+        manager = RegionalRoutingOperations(queue, {}, { _, _, _, _ -> }, { manager.cancelOwner(owner) }, {}, {})
         manager.start(owner, RegionalRoutingCommand(id, RegionalRoutingAction.REMOVE, reference))
         queue.run()
         assertEquals("removed", manager.status(owner, id).state)
@@ -121,8 +121,46 @@ class RegionalRoutingOperationsTest {
     private fun envelope(type: String) = JSONObject().put("schema_version", 1).put("request_id", "web-${"a".repeat(32)}-1")
         .put("type", type).put("operation_id", id)
 
+    @Test fun damagedMetadataRemovalUsesOnlyAnExplicitVersionIdentity() {
+        val queue = QueueExecutor()
+        val removed = mutableListOf<RegionalRoutingVersion>()
+        val manager = RegionalRoutingOperations(queue, { error("No inspection") }, { _, _, _, _ -> error("No download") },
+            { error("No fabricated reference") }, removed::add, {})
+        val version = JSONObject().put("region_id", reference.regionId).put("build_id", reference.buildId)
+        val envelope = envelope("regional_routing_remove_version").put("regional_version", version)
+        val request = BridgeProtocol.parse(envelope.toString()) as BridgeRequest.RegionalWork
+        assertFalse(BundledShellPolicy.acceptsOrigin(request, "https://sharing.example"))
+        assertEquals("running", manager.start(owner, request.command).state)
+        queue.run()
+        assertEquals("removed", manager.status(owner, id).state)
+        assertEquals(listOf(RegionalRoutingVersion(reference.regionId, reference.buildId)), removed)
+        assertNull(BridgeProtocol.parse(JSONObject(envelope.toString()).put("regional_reference", reference.toJson()).toString()))
+        for (invalid in listOf("../other", "a..b", "/private")) {
+            val bad = JSONObject(envelope.toString())
+            bad.getJSONObject("regional_version").put("region_id", invalid)
+            assertNull(BridgeProtocol.parse(bad.toString()))
+        }
+        version.put("participant_token", "private")
+        assertNull(BridgeProtocol.parse(envelope.toString()))
+    }
+
+    @Test fun wholeRegionRecoveryNeedsNoFabricatedVersionOrRoutingReference() {
+        val queue = QueueExecutor()
+        val removed = mutableListOf<String>()
+        val manager = RegionalRoutingOperations(queue, {}, { _, _, _, _ -> }, {}, {}, removed::add)
+        val envelope = envelope("regional_routing_remove_region").put("region_id", reference.regionId)
+        val request = BridgeProtocol.parse(envelope.toString()) as BridgeRequest.RegionalWork
+        assertFalse(BundledShellPolicy.acceptsOrigin(request, "https://sharing.example"))
+        assertEquals("running", manager.start(owner, request.command).state)
+        queue.run()
+        assertEquals("removed", manager.status(owner, id).state)
+        assertEquals(listOf(reference.regionId), removed)
+        assertNull(BridgeProtocol.parse(JSONObject(envelope.toString()).put("build_id", reference.buildId).toString()))
+        assertNull(BridgeProtocol.parse(envelope.put("region_id", "../other").toString()))
+    }
+
     private fun manager(executor: Executor, inspect: (RegionalRoutingPackReference) -> Unit = {}) =
-        RegionalRoutingOperations(executor, inspect, { _, _, _, _ -> }, {})
+        RegionalRoutingOperations(executor, inspect, { _, _, _, _ -> }, {}, {}, {})
 
     private class QueueExecutor : Executor {
         val work = mutableListOf<Runnable>()

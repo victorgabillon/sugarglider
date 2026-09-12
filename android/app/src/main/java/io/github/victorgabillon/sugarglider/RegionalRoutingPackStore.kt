@@ -199,6 +199,49 @@ internal class RegionalRoutingPackStore(
         region.delete() // Only succeeds after the region has become empty.
     }
 
+    fun removeVersion(version: RegionalRoutingVersion) {
+        requireCondition(version.isValid(), RegionalPackFailure.INVALID_REFERENCE)
+        mutate {
+            val region = confinedFile(root(), version.regionId)
+            if (!region.exists()) return@mutate
+            requireCondition(region.isDirectory, RegionalPackFailure.STORAGE_UNAVAILABLE)
+            val directory = confinedFile(region, version.buildId)
+            if (directory.exists()) {
+                requireCondition(directory.isDirectory, RegionalPackFailure.STORAGE_UNAVAILABLE)
+                requireRemovalTree(directory, 3, MAX_DIRECTORY_ENTRIES)
+                removeTree(directory)
+            }
+            region.delete() // Empty only; another immutable version is retained.
+        }
+    }
+
+    fun removeRegion(regionId: String) {
+        requireCondition(isRoutingPackId(regionId) && !regionId.contains(".."), RegionalPackFailure.INVALID_REFERENCE)
+        mutate {
+            val region = confinedFile(root(), regionId)
+            if (!region.exists()) return@mutate
+            requireCondition(region.isDirectory, RegionalPackFailure.STORAGE_UNAVAILABLE)
+            requireRemovalTree(region, 4, MAX_DIRECTORY_ENTRIES * MAX_VERSIONS + 1)
+            removeTree(region)
+        }
+    }
+
+    private fun requireRemovalTree(directory: File, depth: Int, maximum: Int) {
+        // Validate a bounded tree before any deletion. No symlink is followed.
+        var entries = 0
+        Files.walkFileTree(directory.toPath(), java.util.EnumSet.noneOf(java.nio.file.FileVisitOption::class.java), depth,
+            object : SimpleFileVisitor<Path>() {
+                override fun preVisitDirectory(path: Path, attributes: BasicFileAttributes): FileVisitResult {
+                    requireCondition(++entries <= maximum, RegionalPackFailure.STORAGE_LIMIT)
+                    return FileVisitResult.CONTINUE
+                }
+                override fun visitFile(path: Path, attributes: BasicFileAttributes): FileVisitResult {
+                    requireCondition(++entries <= maximum && !attributes.isDirectory, RegionalPackFailure.STORAGE_LIMIT)
+                    return FileVisitResult.CONTINUE
+                }
+            })
+    }
+
     private fun packDirectory(reference: RegionalRoutingPackReference, create: Boolean): File? {
         val root = root()
         var parent = root

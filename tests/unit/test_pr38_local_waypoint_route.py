@@ -169,7 +169,8 @@ def test_current_intent_and_native_generate_use_the_shared_production_engine() -
     assert "onCapabilities(capabilities)" in local
     assert "if (!capabilities.enabled) return false" in local
     assert ": await generatePlan(request, state.abortController.signal)" in app
-    assert "const localPlanner = localRoutingBridge.nativeAvailable" in app
+    assert "const localPlanner = isBundledAndroidApp()" in app
+    assert "createLocalPlanner({ withRegion: withPlanningRegion })" in app
     assert "enabled = true" in release
     for element in ("button", "status", "results"):
         assert f'id="local-waypoint-route-{element}"' in index
@@ -235,7 +236,7 @@ def test_waypoint_rendering_has_its_own_layers_and_preserves_existing_overlays()
 
 def test_offline_module_is_precached_in_exactly_v28_and_harness_is_local() -> None:
     worker = (STATIC / "service-worker.js").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v39`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v40`" in worker
     assert '"/static/local_waypoint_route.js"' in worker
     html = HARNESS.with_suffix(".html").read_text()
     harness = HARNESS.read_text()
