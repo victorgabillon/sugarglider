@@ -30,6 +30,9 @@ internal enum class RegionalPackFailure(val wireValue: String) {
     STORAGE_UNAVAILABLE("regional_storage_unavailable"),
     STORAGE_LIMIT("regional_storage_limit"),
     TRANSFER_FAILED("regional_transfer_failed"),
+    INVALID_SOURCE("invalid_regional_source"),
+    TRANSFER_TIMEOUT("regional_transfer_timeout"),
+    ENCODED_TRANSFER("regional_encoded_download"),
 }
 
 internal class RegionalPackException(val code: RegionalPackFailure) :
@@ -40,6 +43,7 @@ internal class RegionalPackException(val code: RegionalPackFailure) :
 // activation. The caller supplies a bounded, credential-free download stream.
 internal class RegionalRoutingPackStore(
     private val rootDirectory: File,
+    private val prepareArchive: (FileOutputStream, Long) -> Unit = { _, _ -> },
     private val availableBytes: () -> Long,
 ) {
     fun stage(
@@ -73,6 +77,9 @@ internal class RegionalRoutingPackStore(
                 writeFile(owned, MANIFEST, manifest)
                 val part = confinedFile(owned, "$ARCHIVE.part")
                 FileOutputStream(part).use { output ->
+                    prepareArchive(output, reference.archive.byteSize)
+                    output.channel.position(0)
+                    requireCondition(!cancelled(), RegionalPackFailure.CANCELLED)
                     archiveSource().use { input ->
                         val hash = MessageDigest.getInstance("SHA-256")
                         val buffer = ByteArray(READ_BYTES)

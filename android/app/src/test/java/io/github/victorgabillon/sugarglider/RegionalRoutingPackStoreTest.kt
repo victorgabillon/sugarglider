@@ -275,6 +275,34 @@ class RegionalRoutingPackStoreTest {
     }
 
     @Test
+    fun allocationRunsBeforeTransferAndPreallocatedBytesCannotHideAShortRead() {
+        var allocated = false
+        val reserved = RegionalRoutingPackStore(root, prepareArchive = { output, bytes ->
+            assertEquals(reference().archive.byteSize, bytes)
+            // Model allocateBytes extending the new file with zeros. Network
+            // accounting must still reject a short body despite its full size.
+            output.channel.position(bytes - 1)
+            output.write(0)
+            output.channel.position(0)
+            allocated = true
+        }, availableBytes = { Long.MAX_VALUE })
+        expect(RegionalPackFailure.SIZE_MISMATCH) {
+            reserved.stage(reference(), manifest, {
+                assertTrue(allocated)
+                ByteArrayInputStream(archive.copyOf(archive.size - 512))
+            })
+        }
+        assertFalse(directory(reference()).exists())
+        val failed = RegionalRoutingPackStore(root, prepareArchive = { _, _ ->
+            throw RegionalPackException(RegionalPackFailure.STORAGE_UNAVAILABLE)
+        }, availableBytes = { Long.MAX_VALUE })
+        expect(RegionalPackFailure.STORAGE_UNAVAILABLE) {
+            failed.stage(reference(), manifest, { error("Allocation failure must not open the network") })
+        }
+        assertFalse(directory(reference()).exists())
+    }
+
+    @Test
     fun symlinkCannotImportOrDeleteOutsideFiles() {
         val reference = reference()
         val outside = File(temporary, "outside").apply { mkdir() }
