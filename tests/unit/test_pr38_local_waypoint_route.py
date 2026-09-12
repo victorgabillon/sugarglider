@@ -44,7 +44,7 @@ def test_local_endpoints_and_closure_follow_pr35_but_interiors_follow_canonical(
     assert "maximum_snap_distance_m: threshold" in source
     native = (
         ROOT
-        / "android/app/src/debug/java/io/github/victorgabillon/sugarglider"
+        / "android/app/src/main/java/io/github/victorgabillon/sugarglider"
         / "NativeRouteEngineFactory.kt"
     ).read_text()
     assert "snappedPoints += leg.last()" in native
@@ -152,17 +152,17 @@ def test_lifecycle_retains_native_drain_and_request_identity_ownership() -> None
     assert "validateLocalWaypointRouteRequest(getRequest())" in source
 
 
-def test_current_intent_and_native_generate_keep_explicit_release_gate() -> None:
+def test_current_intent_and_native_generate_use_the_shared_production_engine() -> None:
     app = (STATIC / "app.js").read_text()
     local = (STATIC / "local_routing.js").read_text()
     index = (STATIC / "index.html").read_text()
     release = (
         ROOT
-        / "android/app/src/release/java/io/github/victorgabillon/sugarglider"
+        / "android/app/src/main/java/io/github/victorgabillon/sugarglider"
         / "NativeRouteEngineFactory.kt"
     ).read_text()
-    assert "getWaypointRequest: () => readLocalWaypointRouteRequest(state, byId)" in app
-    assert 'window.addEventListener("pagehide", invalidateLocalWaypointRoute)' in app
+    assert "readLocalWaypointRouteRequest" not in app
+    assert "invalidateLocalWaypointRoute" not in app
     assert "? await localPlanner.generate(request, state.abortController.signal)" in app
     assert "profileAvailable: Boolean(selectedProfileStatus()?.available)" in app
     assert "Server Generate remains unavailable" in app
@@ -170,7 +170,7 @@ def test_current_intent_and_native_generate_keep_explicit_release_gate() -> None
     assert "if (!capabilities.enabled) return false" in local
     assert ": await generatePlan(request, state.abortController.signal)" in app
     assert "const localPlanner = localRoutingBridge.nativeAvailable" in app
-    assert "enabled = false" in release
+    assert "enabled = true" in release
     for element in ("button", "status", "results"):
         assert f'id="local-waypoint-route-{element}"' in index
     assert "Route ordered planner points locally" in index
@@ -235,7 +235,7 @@ def test_waypoint_rendering_has_its_own_layers_and_preserves_existing_overlays()
 
 def test_offline_module_is_precached_in_exactly_v28_and_harness_is_local() -> None:
     worker = (STATIC / "service-worker.js").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v35`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v36`" in worker
     assert '"/static/local_waypoint_route.js"' in worker
     html = HARNESS.with_suffix(".html").read_text()
     harness = HARNESS.read_text()

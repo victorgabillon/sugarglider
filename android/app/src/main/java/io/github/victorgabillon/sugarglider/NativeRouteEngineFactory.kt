@@ -7,6 +7,8 @@ import com.valhalla.api.models.DirectionsOptions
 import com.valhalla.api.models.RouteRequest
 import com.valhalla.api.models.RoutingWaypoint
 import com.valhalla.config.ValhallaConfigBuilder
+import com.valhalla.config.models.AdditionalData
+import com.valhalla.config.models.ValhallaConfig
 import com.valhalla.valhalla.Valhalla
 import com.valhalla.valhalla.ValhallaException
 import com.valhalla.valhalla.ValhallaResponse
@@ -31,7 +33,7 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
     override fun capabilities(): NativeRouteCapabilities {
         val installedPacks = registry.installedPacks()
         return NativeRouteCapabilities(
-            enabled = BuildConfig.LOCAL_ROUTING_EXPERIMENT,
+            enabled = true,
             engine = ENGINE_ID,
             engineVersion = ENGINE_VERSION,
             packs = installedPacks.map { pack ->
@@ -147,9 +149,7 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
     private fun initializeActor(pack: RoutingPack): ValhallaActor {
         val before = processPssBytes()
         val started = SystemClock.elapsedRealtime()
-        val config = ValhallaConfigBuilder()
-            .withTileExtract(pack.tileArchive.absolutePath)
-            .build()
+        val config = localValhallaConfiguration(pack.tileArchive)
         val created = Valhalla(applicationContext, config)
         return ValhallaActor(
             valhalla = created,
@@ -178,6 +178,26 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
         private const val ENGINE_ID = "valhalla-mobile"
         private const val ENGINE_VERSION = "0.5.1/valhalla-3.6.3"
     }
+}
+
+internal fun localValhallaConfiguration(tileArchive: File): ValhallaConfig {
+    val config = ValhallaConfigBuilder()
+        .withTileExtract(tileArchive.absolutePath)
+        .withTileDir("")
+        .build()
+    return config.copy(
+        additionalData = AdditionalData(elevation = ""),
+        httpd = null,
+        statsd = null,
+        mjolnir = requireNotNull(config.mjolnir).copy(
+            admin = "",
+            landmarks = "",
+            timezone = "",
+            trafficExtract = null,
+            transitDir = "",
+            transitFeedsDir = "",
+        ),
+    )
 }
 
 private fun classifyValhallaFailure(message: String?): NativeRouteFailureCode =

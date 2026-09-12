@@ -32,7 +32,7 @@ PASS never means an author assessment alone. Superseded evidence stays identifie
 | Milestone | Status | Required success evidence |
 | --- | --- | --- |
 | PR40 local Auto Tour v2 / POI / nature | MERGED; REQUIRED PR40 CHECKS PASS | Validated local PR39 readers/storage; bounded deterministic search; real Fairphone nature/POI outcomes, repeat, native geometry and zero-network acceptance recorded below |
-| PR41 production Android local planner | NORMAL LOCAL GENERATE / BUNDLED DEBUG UI PROVEN; RELEASE ROUTING / REGION GATES PENDING | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
+| PR41 production Android local planner | SHARED RELEASE ROUTER PACKAGED; FINAL RELEASE / REGION GATES PENDING | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
 | PR42 region product | WESTERN PARTITION BUILT / VERIFIED; PRODUCT UI PENDING | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
 | PR43 tiny production service | CODE MERGED; LIVE HOSTING PENDING | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency; public hosting remains an external action |
 | PR44 Play release candidate | PREPARATION DRAFT; FINAL RELEASE GATES OPEN | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
@@ -360,9 +360,24 @@ and APK/AAB assembly. The 84 packaged assets match source bytes in both artifact
 commands, measurements and current artifact hashes. The unsigned AAB is 10,908,285
 bytes, SHA-256 `1b1fc099a4c540d726040dc5611de51fd9035b42c1d66145bf9cc99886e8bd43`;
 production routing remains disabled, so it is not the V1 artifact. All five CI
-checks pass the preceding `af37a1f`; this new preparation requires its own CI.
+checks pass `af37a1f` and bundled-shell head `5f43bce` on draft
+[PR #45](https://github.com/victorgabillon/sugarglider/pull/45).
 Release routing, the coordinated consumer region installer/useful-region phone
 acceptance and full release-equivalent PR41/44 gates remain open.
+
+The next dependent preparation, `feat/pr41-production-native-routing`, now compiles
+one shared production engine and profile policy in both variants. Configuration
+uses only the selected archive, with auxiliary/default paths disabled; wire timing
+fields are retained but described truthfully as wrapper/native-call measurements.
+Both variants pass the same 150 unit tests, and their ARM64 native libraries are
+byte-identical with 16 KiB ELF alignment. The normal app no longer binds the old
+experiment panel at either origin. Common-engine Fairphone normal Generate,
+repeats, exact canonical/map geometry, no planning API, explicit failures and
+native GPX Save/Cancel pass. These are still debug-APK development-pack runs.
+[Production native preparation](pr41-production-native-routing.md) records the
+configuration/source audit, bounded log inspection, final checks/artifacts and
+remaining release-equivalent/consumer-region gates. Earlier release-disabled
+artifacts above are superseded; no PR41 or V1 PASS is claimed.
 
 ## External actions and blockers
 

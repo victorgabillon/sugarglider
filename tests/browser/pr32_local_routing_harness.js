@@ -191,12 +191,12 @@ async function marlySmokeTestScenario() {
   try {
     await rig.experiment.bind();
     await rig.experiment.requestSmokeTest();
-    assert(rig.status.includes("Cold local Valhalla experiment"), "cold result labeled");
+    assert(rig.status.includes("wrapper prepared"), "cold result labeled");
     assert(rig.status.includes("4 vertices"), "vertex count shown");
     assert(rig.status.includes("0.5.1/valhalla-3.6.3"), "engine version shown");
-    assert(rig.status.includes("PSS before initialization"), "PSS metrics shown");
+    assert(rig.status.includes("PSS before wrapper setup"), "PSS metrics shown");
     await rig.experiment.requestSmokeTest();
-    assert(rig.status.includes("Warm local Valhalla experiment"), "warm result labeled");
+    assert(rig.status.includes("wrapper reused"), "warm result labeled");
     equal(plannerStateReads, 0, "smoke test ignores normal planner state");
     equal(backendFetches, 0, "smoke test makes no fetch");
     const requests = port.requests.filter((value) => value.type === "local_route");

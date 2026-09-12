@@ -123,7 +123,8 @@ with exact Python XML equality and zero new routing calls. The selected candidat
 is unchanged. SHA-256 is
 `2e8b12321ced15e0b04bac0c2b8011fdace6c8de5da59f10200fe5bf1b7db1c6`.
 
-Current artifacts, outside Git:
+Historical artifacts at `5f43bce`, outside Git (superseded by the
+[shared production engine](pr41-production-native-routing.md)):
 
 - Debug APK: `android/app/build/outputs/apk/debug/app-debug.apk`, **151,612,119 bytes**,
   SHA-256 `fdc6a6a86408b02cce6699e1fd224d6049309890adae1d8d2e9ff6de505be8fe`.
