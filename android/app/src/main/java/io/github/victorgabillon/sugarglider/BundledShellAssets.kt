@@ -41,7 +41,7 @@ internal class BundledShellAssets(context: Context) {
 
     private fun mimeType(path: String): String = when (path.substringAfterLast('.')) {
         "html" -> "text/html"
-        "js" -> "application/javascript"
+        "js", "mjs" -> "application/javascript"
         "css" -> "text/css"
         "json" -> "application/json"
         "webmanifest" -> "application/manifest+json"

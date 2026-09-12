@@ -9,7 +9,7 @@ from pathlib import Path
 from sugarglider.web.routes import STATIC_DIRECTORY
 
 ROOT = Path(__file__).resolve().parents[2]
-VENDOR = STATIC_DIRECTORY / "vendor" / "maplibre-gl-4.7.1"
+VENDOR = STATIC_DIRECTORY / "vendor" / "maplibre-gl-6.4.1"
 PWA_MODULES = (
     "offline_snapshots.js",
     "outing_durable_session.js",
@@ -41,22 +41,29 @@ def _core_assets(worker: str) -> set[str]:
 
 
 def test_exact_maplibre_distribution_and_deterministic_icons() -> None:
-    assert {path.name for path in VENDOR.iterdir() if path.is_file()} == {
-        "LICENSE.txt",
-        "README.md",
-        "maplibre-gl.css",
-        "maplibre-gl.js",
+    expected = {
+        "maplibre-gl.mjs": (
+            "97e8b9a39ab8b823d6a0caf9c312237262bc9138a6162d9e29606f5f8d24127d"
+        ),
+        "maplibre-gl-shared.mjs": (
+            "fcf4d81450df235da0aea74897cc23926774b5228d38ae1de6a7d701c5905785"
+        ),
+        "maplibre-gl-worker.mjs": (
+            "ce4957017fe705ac2f9ebef206cca966d08d8621756c39326a78cf09757e7d75"
+        ),
+        "maplibre-gl.css": (
+            "8e2dbbab312dc57656fbb76e9fa5308c75c9d7c7ba5808a7d55bcdb64cc813fa"
+        ),
+        "LICENSE.txt": (
+            "ee5fc05a0677eaf69601d2c7db0d9ecd6cc27c3abc1d0733bc9ed34707cf8ef2"
+        ),
     }
-    assert _sha256(VENDOR / "maplibre-gl.js") == (
-        "be9633c4d870e26fb37f1cfe5c5a77181667114003ea16207ac7850d8da8add1"
-    )
-    assert _sha256(VENDOR / "maplibre-gl.css") == (
-        "576b085fdd9487a65a19215328c1e086c07ce5bf6da09b666b3806d3d008dae9"
-    )
-    assert _sha256(VENDOR / "LICENSE.txt") == (
-        "ee5fc05a0677eaf69601d2c7db0d9ecd6cc27c3abc1d0733bc9ed34707cf8ef2"
-    )
-    assert "maplibre-gl@4.7.1" in (VENDOR / "README.md").read_text()
+    assert {path.name for path in VENDOR.iterdir() if path.is_file()} == {
+        *expected,
+        "README.md",
+    }
+    assert {name: _sha256(VENDOR / name) for name in expected} == expected
+    assert "maplibre-gl@6.4.1" in (VENDOR / "README.md").read_text()
     icons = STATIC_DIRECTORY / "pwa"
     assert _png_dimensions(icons / "icon-192.png") == (192, 192)
     assert _png_dimensions(icons / "icon-512.png") == (512, 512)
@@ -150,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v40_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v41_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v40"
+    assert generation.group(1) == "v41"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -223,13 +230,13 @@ def test_shared_shell_generation_tracks_v40_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "636a406b7f541fc88df8df0afd406e0accbc5eec0076976626db441c5847e8d2"
+            "47c31ee3e3673bbcefae8c0f2faf83dee81aa648e48c9703e60315ab3daa7a7f"
         ),
         "app.js": ("5fc0a7f5c09941702b98fc42673240a8a64d1a653c01eb87febdba247653051b"),
         "state.js": (
             "de724c096dd193347bdbdb9a424e873902ead40b30d48a339925da4d9aa58abd"
         ),
-        "map.js": ("3f4441a3b4b73c969d5a52e0810bbbffce7a9d3567dcd55110fdb3016e622316"),
+        "map.js": ("e7f38b7fa68c47d4b5a429d7561ca2a52dafd59a274bf6774061ec3c6ae944c8"),
         "styles.css": (
             "11026a66bc90cc66deb477e8d3602b9ebd65f72ed59990bd570b8a7eb9d37e4d"
         ),
@@ -293,8 +300,12 @@ def test_precache_covers_index_and_static_module_graph() -> None:
     core = _core_assets(worker)
     index = (STATIC_DIRECTORY / "index.html").read_text()
     assert "unpkg.com" not in index
-    assert "/static/vendor/maplibre-gl-4.7.1/maplibre-gl.js" in index
-    assert "/static/vendor/maplibre-gl-4.7.1/maplibre-gl.css" in index
+    assert '<script defer src="/static/vendor/maplibre-gl' not in index
+    assert (
+        'from "./vendor/maplibre-gl-6.4.1/maplibre-gl.mjs"'
+        in (STATIC_DIRECTORY / "map.js").read_text()
+    )
+    assert "/static/vendor/maplibre-gl-6.4.1/maplibre-gl.css" in index
     nonessential = {
         "/static/brand/sugarglider-banner.png",
         "/static/brand/sugarglider-flying-map.png",
@@ -310,7 +321,7 @@ def test_precache_covers_index_and_static_module_graph() -> None:
             continue
         visited.add(name)
         source = (STATIC_DIRECTORY / name).read_text()
-        for relative in re.findall(r'from "\./([^"]+\.js)"', source):
+        for relative in re.findall(r'from\s*["\']\./([^"\']+\.m?js)["\']', source):
             dependency = (Path(name).parent / relative).as_posix()
             if dependency not in visited:
                 pending.append(dependency)
@@ -324,8 +335,10 @@ def test_precache_covers_index_and_static_module_graph() -> None:
         ]
     )
     assert {
-        "/static/vendor/maplibre-gl-4.7.1/maplibre-gl.js",
-        "/static/vendor/maplibre-gl-4.7.1/maplibre-gl.css",
+        "/static/vendor/maplibre-gl-6.4.1/maplibre-gl.mjs",
+        "/static/vendor/maplibre-gl-6.4.1/maplibre-gl-shared.mjs",
+        "/static/vendor/maplibre-gl-6.4.1/maplibre-gl-worker.mjs",
+        "/static/vendor/maplibre-gl-6.4.1/maplibre-gl.css",
         "/static/pwa/icon-192.png",
         "/static/pwa/icon-512.png",
     } <= core

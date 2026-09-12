@@ -1,3 +1,4 @@
+import * as packagedMapLibre from "./vendor/maplibre-gl-6.4.1/maplibre-gl.mjs";
 import {
   createMapPackStore,
 } from "./map_pack_store.js";
@@ -42,7 +43,7 @@ export function offlineMapBootstrapForConfig(config) {
 
 export function createOfflineMapRuntime({
   store = createMapPackStore(),
-  maplibregl = globalThis.maplibregl,
+  maplibregl = packagedMapLibre,
   browserWindow = globalThis.window,
   elements = {},
   confirmRemoval = (message) => globalThis.confirm?.(message) ?? false,

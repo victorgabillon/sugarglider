@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MapLibre attribution security and module-worker regression</title>
+  <link rel="stylesheet" href="../../src/sugarglider/web/static/vendor/maplibre-gl-6.4.1/maplibre-gl.css">
+</head>
+<body>
+  <div id="map" style="width: 480px; height: 360px;"></div>
+  <pre id="result" data-status="running">Running…</pre>
+  <script type="module">
+    import * as maplibre from "../../src/sugarglider/web/static/vendor/maplibre-gl-6.4.1/maplibre-gl.mjs";
+    import { runMapLibreSecurityHarness } from "./pr44_maplibre_security_harness.js";
+    const result = document.querySelector("#result");
+    try {
+      result.textContent = JSON.stringify(await runMapLibreSecurityHarness(maplibre));
+      result.dataset.status = "passed";
+    } catch (error) {
+      result.textContent = error.stack ?? String(error);
+      result.dataset.status = "failed";
+    }
+  </script>
+</body>
+</html>
