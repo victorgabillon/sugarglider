@@ -745,3 +745,24 @@ if that optional service is to be deployed. Original PR gates still apply.
 Main, original checkout, protected untracked entries and stash remain untouched;
 no integration push, main merge/push, phone operation, key creation or Play upload
 occurred in this resumed pass.
+
+## Published Yvelines configuration: hosting blocker superseded
+
+Work subsequently published the exact regional bytes and reviewed policy. Codex's
+September 13 public preflight passes every runtime file's size/hash and direct
+HTTPS/CORS/identity-encoding contract. The old 404/awaiting-publication blocker is
+superseded. See [the publication record](v1-published-region-acceptance.md) for
+exact identities, host timings and the explicitly non-blocking `.nojekyll`
+omission from the custom Pages artifact.
+
+The verified 591-byte public catalog is now bundled unchanged, the shared shell
+cache is v43, and Android defaults to the approved public privacy URL. No regional
+data or public deployment was changed. Engineering build validation and real
+Fairphone acceptance are the next gates; host verification does not close device
+acceptance. The initial device enumeration is empty, and reconnection has been
+requested while independent work continues.
+
+The user reports the original upload key/recovery file located in their private
+Library. No new key, key inspection/transfer, real signing, Play upload or main
+merge is part of this acceptance pass. The source must pass the physical and final
+validation gates before it is frozen for code 2 / version 1.0.0.

@@ -60,9 +60,9 @@ val externalSigning = externalSigningPath?.let { path ->
     properties
 }
 
-// This public URL is separate from signing secrets and must be approved before upload.
+// Publisher-approved public URL; independent from the external upload-key secrets.
 val publicPrivacyPolicy = providers.environmentVariable("SUGARGLIDER_ANDROID_PRIVACY_POLICY_URL")
-    .orElse("").get()
+    .orElse("https://victorgabillon.github.io/sugarglider-regions/privacy/").get()
 if (publicPrivacyPolicy.isNotEmpty()) {
     val uri = runCatching { URI(publicPrivacyPolicy) }.getOrNull()
     require(publicPrivacyPolicy.length <= 2_048 && uri != null && uri.scheme == "https" &&

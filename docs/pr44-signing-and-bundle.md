@@ -82,12 +82,15 @@ cache when handling signing credentials.
 
 ## Public privacy policy
 
-Set `SUGARGLIDER_ANDROID_PRIVACY_POLICY_URL` to the publisher-approved active HTTPS
-policy page when building the final upload. It must have no credentials, query
-or fragment. It is public configuration, not a signing secret. The native Privacy
-dialog and location-sharing disclosure expose the link without discarding the
-current planner page. Without this variable, local privacy details remain
-available, but the required public-link gate is unfinished.
+The publisher-approved page is now live at
+`https://victorgabillon.github.io/sugarglider-regions/privacy/` and is the Android
+build's default. Codex verified its published size/hash; see
+[publication acceptance](v1-published-region-acceptance.md).
+`SUGARGLIDER_ANDROID_PRIVACY_POLICY_URL` remains a public override for a separately
+approved HTTPS policy, with no credentials, query or fragment. It is independent
+of signing secrets. The native Privacy dialog and location-sharing disclosure
+expose the link without discarding the current planner page. The earlier missing
+public-policy-host gate is superseded; final device/link acceptance remains open.
 
 ## Signed release build, only after the existing setup is supplied
 
