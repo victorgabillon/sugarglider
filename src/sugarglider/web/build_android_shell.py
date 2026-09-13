@@ -12,6 +12,10 @@ ANDROID_APP_ORIGIN = "https://appassets.androidplatform.net"
 STATIC = Path(__file__).parent / "static"
 EXTRA_ASSETS = (
     "android_ui_config.json",
+    # Lazy HTML artwork is optional for the browser PWA cache, but Android's
+    # bundled origin can serve only packaged files and has no network fallback.
+    "brand/sugarglider-banner.png",
+    "brand/sugarglider-flying-map.png",
     "index.html",
     "manifest.webmanifest",
     "vendor/maplibre-gl-6.4.1/LICENSE.txt",

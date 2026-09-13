@@ -1,6 +1,7 @@
 """The packaged shell contains public, current assets with canonical defaults."""
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -30,6 +31,16 @@ def test_android_shell_allowlist_matches_current_shared_runtime() -> None:
         assert not path.endswith((".gpx", ".pmtiles", ".sqlite", ".tar", ".gz"))
         if path.endswith(".pbf"):
             assert path.startswith("fonts/Open Sans Semibold/")
+
+
+def test_bundled_html_images_are_available_without_network_fallback() -> None:
+    html = (STATIC / "index.html").read_text()
+    image_paths = {
+        path.removeprefix("/static/")
+        for path in re.findall(r'<img\b[^>]*\bsrc="(/static/[^"\n]+)"', html)
+    }
+    assert image_paths
+    assert image_paths <= set(render_android_shell_assets().splitlines())
 
 
 def test_bundled_config_is_canonical_public_and_ignores_host_environment(

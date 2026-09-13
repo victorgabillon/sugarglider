@@ -11,7 +11,9 @@ brand/profile-badges/forest.png
 brand/profile-badges/mask.png
 brand/profile-badges/orange.png
 brand/profile-badges/tomato.png
+brand/sugarglider-banner.png
 brand/sugarglider-compact-icon.png
+brand/sugarglider-flying-map.png
 brand/sugarglider-map-pin.png
 brand/sugarglider-water-pin.png
 canonical_numbers.js
