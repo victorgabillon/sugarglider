@@ -14,8 +14,9 @@ The complete acceptance brief is the V1 Goal supplied on 2026-09-11. Each milest
 needs concrete automated and (where specified) physical evidence before merge.
 PASS never means an author assessment alone. Superseded evidence stays identified.
 
-The [first-pass handoff report](v1-first-pass-report.md) is the current concise
-entry point for implemented behavior, artifacts, physical evidence and deferred
+The [Fairphone production acceptance](v1-fairphone-production-acceptance.md)
+is the current physical-gate record. The [first-pass handoff report](v1-first-pass-report.md)
+remains an earlier entry point for implemented behavior, artifacts, physical evidence and deferred
 questions. The chronological evidence below is retained. No Play publication is
 authorized; global readiness remains blocked on the explicit remaining gates.
 
@@ -38,7 +39,7 @@ authorized; global readiness remains blocked on the explicit remaining gates.
 | --- | --- | --- |
 | PR40 local Auto Tour v2 / POI / nature | MERGED; REQUIRED PR40 CHECKS PASS | Validated local PR39 readers/storage; bounded deterministic search; real Fairphone nature/POI outcomes, repeat, native geometry and zero-network acceptance recorded below |
 | PR41 production Android local planner | SHARED RELEASE ROUTER PACKAGED; FINAL RELEASE / REGION GATES PENDING | Normal release-equivalent Generate for Waypoint Route and Auto Tour; canonical display/export objects; pedestrian/bicycle device runs; no backend call; uncovered-region failure |
-| PR42 region product | UI / COMMITTED REGIONAL PLANNER IMPLEMENTED; DISTRIBUTION / PHYSICAL GATES OPEN | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
+| PR42 region product | PUBLIC DISTRIBUTION / FAIRPHONE PRODUCTION GATE PASS; UNMERGED | Static catalog; verified failure-safe install/update/remove UI; useful measured region; fresh Fairphone install, restart, map, planning, cancellation and removal |
 | PR43 tiny production service | CODE MERGED; LIVE HOSTING PENDING | Reproducible HTTPS/SQLite social-only deployment, limits, backups/recovery, graceful offline behavior; no routing dependency; public hosting remains an external action |
 | PR44 Play release candidate | HARDENING / PATCHED DEPENDENCIES / VALIDATED UNSIGNED AAB; FINAL RELEASE GATES OPEN | Current official policy audit; release tests/lint/AAB; secret-safe external signing; permission/privacy/store documents; physical lifecycle/permissions/export matrix |
 
@@ -782,3 +783,25 @@ connection is required for real public-host production-region acceptance.** No
 physical row, phone storage/timing measurement or accepted-source freeze is
 claimed. Signing remains deliberately deferred until that gate passes; the
 previous Work-publication blocker is superseded.
+
+## Fairphone production-region gate passed — supersedes missing-device blocker
+
+**PRODUCTION_REGION_ACCEPTANCE_PASS** on application `11c6495`. The actual public
+Yvelines download, exact stored hashes, map, six profiles, hiking/cycling Auto Tour,
+local POI/nature, deterministic repeat, GPX Save/Cancel, process lifecycle, outside
+coverage and cancellation/interruption/removal/reinstall gates pass. See the
+[full matrix and measurements](v1-fairphone-production-acceptance.md). The prior
+missing-device/404 blockers are superseded. Only one region version is published,
+so a physical update is not available; automated update-preservation gates remain.
+
+Two demonstrated defects were fixed: browser HTTP compression handling preserves
+exact archive integrity (`48c9441`, shell v44), and the Android allowlist now includes
+two unchanged lazy HTML illustrations (`11c6495`, 105 assets). Pre-freeze checks
+pass 1,100 Python tests plus Ruff/mypy and 47 affected browser scenarios.
+
+Full release validation is rerun against the resulting documentation freeze; its
+exact commit/tree, artifact hashes and outcome are recorded in the external
+`fairphone-acceptance-2026-09-13/final-validation.json` receipt. Signing with the
+located original key and a subsequent Play-delivered update test remain pending.
+No main merge, integration push, Play upload or public deployment is authorized
+by this record. Protected original checkout entries and stash remain untouched.
