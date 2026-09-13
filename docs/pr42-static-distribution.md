@@ -95,9 +95,19 @@ current major tags. No workflow in the application repository is activated.
 
 - Exact public HTTPS paths; no authentication, cookies, signed query strings,
   redirect chains, mutable `latest` paths or secret-bearing URLs.
-- Successful downloads return 200 and the stored bytes. Set Content-Length to
-  the exact file size when provided. Do not dynamically compress or transform
-  files, especially the already gzip-compressed POI/nature indexes.
+- Successful downloads return 200 and the exact stored bytes after HTTP decoding.
+  With identity encoding, Content-Length must match the stored file size. Prefer
+  identity encoding, especially for the already gzip-compressed POI/nature
+  indexes; never transform the file contents.
+- Browsers control Accept-Encoding and automatically decode HTTP compression.
+  Their Content-Length may describe the compressed transfer, while CORS hides
+  Content-Encoding. Map installation therefore bounds the decoded stream to the
+  manifest size and verifies its exact size, SHA-256 and PMTiles structure before
+  completion. Neither transport header establishes file integrity. This corrects
+  the initial identity-only map-header assumption, which rejected the published
+  Pages map on Fairphone; it does not change regional bytes or integrity criteria.
+  See the [Fetch HTTP decoding algorithm](https://fetch.spec.whatwg.org/#http-network-fetch)
+  and [CORS response-header filtering](https://fetch.spec.whatwg.org/#cors-filtered-response).
 - Web components permit credential-free CORS GET from
   `https://appassets.androidplatform.net` (or public `*`). Expose Content-Length
   and Content-Encoding for diagnostics where the host supports it. The browser

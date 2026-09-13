@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v43_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v44_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v43"
+    assert generation.group(1) == "v44"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (

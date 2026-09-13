@@ -50,6 +50,10 @@ export async function runPr36OfflineMapsHarness() {
   scenarios.push("regional_checksum_verified_before_map_activation");
   await scenarioRegionalCorruption();
   scenarios.push("regional_checksum_failure_never_activates_map");
+  await scenarioDecodedArchiveTransport();
+  scenarios.push("http_decoded_map_bytes_verify_with_visible_or_cors_hidden_encoding");
+  await scenarioDecodedArchiveFailure();
+  scenarios.push("decoded_map_size_hash_and_cancellation_failures_never_activate");
   await scenarioRegionalDescriptorFailure();
   scenarios.push("regional_descriptor_and_size_failure_before_archive_download");
   scenarioInstallUrlSecurity();
@@ -248,6 +252,51 @@ async function scenarioRegionalDescriptorFailure() {
   equal((await store.listInstalledPacks()).length, 0, "no partial activation");
 }
 
+async function scenarioDecodedArchiveTransport() {
+  const archive = new Uint8Array([1, 2, 3, 4, 5]);
+  const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", archive)),
+    (byte) => byte.toString(16).padStart(2, "0")).join("");
+  // Fetch exposes decoded bytes, but Content-Length describes the HTTP-coded
+  // body. CORS may hide Content-Encoding while still exposing Content-Length.
+  for (const headers of [{ "Content-Length": "25", "Content-Encoding": "gzip" },
+    { "Content-Length": "25" }, { "Content-Length": "3" }]) {
+    const store = createTestStore({ storageManager: createMemoryStorageManager(), archive,
+      archiveHeaders: headers, archiveChunks: 2 });
+    await store.installPack("https://packs.test/marly/manifest.json", {
+      expectedArchive: { byte_size: archive.length, sha256: digest },
+    });
+    equal((await store.listInstalledPacks()).length, 1, "exact decoded bytes activate");
+    const opened = await store.openPackSource("marly-map-dev-v1");
+    bytesEqual(new Uint8Array((await opened.source.getBytes(0, archive.length)).data),
+      [...archive], "stored archive remains byte-identical");
+  }
+}
+
+async function scenarioDecodedArchiveFailure() {
+  const archive = new Uint8Array([1, 2, 3, 4, 5]);
+  const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", archive)),
+    (byte) => byte.toString(16).padStart(2, "0")).join("");
+  for (const [downloadedArchive, code, cancel] of [
+    [archive.slice(0, 4), "map_pack_install_failed", false],
+    [new Uint8Array([1, 2, 3, 4, 5, 6]), "map_pack_install_failed", false],
+    [new Uint8Array([1, 2, 3, 4, 6]), "regional_checksum_mismatch", false],
+    [archive, "map_pack_download_cancelled", true],
+  ]) {
+    const fetchLog = [], controller = new AbortController();
+    const store = createTestStore({ storageManager: createMemoryStorageManager(), archive,
+      downloadedArchive, archiveHeaders: { "Content-Length": "25" }, archiveChunks: 2, fetchLog });
+    await rejectsCode(() => store.installPack("https://packs.test/marly/manifest.json", {
+      expectedArchive: { byte_size: archive.length, sha256: digest },
+      signal: controller.signal,
+      onProgress: () => { if (cancel) controller.abort(); },
+    }), code);
+    const scan = await store.scanInstalledPacks();
+    equal(scan.packs.length, 0, "invalid or cancelled decoded bytes never activate");
+    equal(scan.partial_pack_ids.length, 0, "owned partial archive removed");
+    equal(fetchLog.length, 2, "no automatic retry");
+  }
+}
+
 function scenarioInstallUrlSecurity() {
   const production = { href: "https://app.test/" };
   equal(validateMapPackInstallUrl("https://packs.test/manifest.json", production).protocol, "https:", "HTTPS accepted");
@@ -438,7 +487,8 @@ function scenarioNoRemoteStyleAssets() {
   assert(!source.includes("protomaps.github.io/basemaps-assets"), "no remote style assets");
 }
 
-function createTestStore({ storageManager, archive, fetchLog = [], archiveChunks = 1 }) {
+function createTestStore({ storageManager, archive, fetchLog = [], archiveChunks = 1,
+  downloadedArchive = archive, archiveHeaders = { "Content-Length": String(archive.length) } }) {
   const pack = manifest("marly-map-dev-v1", MARLY_BOUNDS, archive.length);
   const manifestUrl = "https://packs.test/marly/manifest.json";
   const archiveUrl = "https://packs.test/marly/basemap.pmtiles";
@@ -446,8 +496,8 @@ function createTestStore({ storageManager, archive, fetchLog = [], archiveChunks
     fetchLog.push({ url, options });
     if (url === manifestUrl) return new Response(JSON.stringify(pack));
     if (url === archiveUrl) {
-      return new Response(chunkedStream(archive, archiveChunks), {
-        headers: { "Content-Length": String(archive.length) },
+      return new Response(chunkedStream(downloadedArchive, archiveChunks), {
+        headers: archiveHeaders,
       });
     }
     return new Response("missing", { status: 404 });

@@ -296,7 +296,10 @@ export class MapPackStore {
         fetchOptions(operation.controller.signal),
       );
       validateFetchResponse(response, archiveUrl, "archive");
-      validateArchiveHeaders(response, manifest.byte_size);
+      // Fetch decodes HTTP content codings before exposing the body. Its
+      // Content-Length can describe compressed bytes while CORS hides the
+      // Content-Encoding header. Bound and verify the actual archive bytes;
+      // transport headers cannot establish their size or integrity.
       const bytesWritten = await streamArchive({
         response,
         writable,
@@ -494,19 +497,6 @@ function validateFetchResponse(response, expectedUrl, kind) {
     const finalUrl = validateMapPackInstallUrl(response.url, { href: expectedUrl.href });
     if (finalUrl.href !== expectedUrl.href) {
       throw new MapPackStoreError("map_pack_install_failed", `Map-pack ${kind} redirected unexpectedly.`);
-    }
-  }
-}
-
-function validateArchiveHeaders(response, expectedBytes) {
-  const encoding = response.headers?.get?.("Content-Encoding");
-  if (encoding && encoding.toLowerCase() !== "identity") {
-    throw new MapPackStoreError("map_pack_install_failed", "PMTiles archive must not use content encoding.");
-  }
-  const length = response.headers?.get?.("Content-Length");
-  if (length !== null && length !== undefined && length !== "") {
-    if (!/^\d+$/u.test(length) || Number(length) !== expectedBytes) {
-      throw new MapPackStoreError("map_pack_install_failed", "Archive Content-Length differs from its manifest.");
     }
   }
 }
