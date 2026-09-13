@@ -1,5 +1,10 @@
 # PR44 — production Android release hardening (in progress)
 
+This preserves the original hardening-stage evidence. Later MapLibre/security and
+publication findings supersede its historical blockers; use the
+[current publication/acceptance record](v1-published-region-acceptance.md) and
+[V1 ledger](v1-readiness.md) for the current state.
+
 This integration follows product `b568418` / draft PR #51 and static publication
 `9ed8dbe` / draft PR #52; both pass all five CI checks. It selectively integrates
 the earlier PR44 preparation from `2ab30b8` without restoring disabled release

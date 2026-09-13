@@ -766,3 +766,19 @@ The user reports the original upload key/recovery file located in their private
 Library. No new key, key inspection/transfer, real signing, Play upload or main
 merge is part of this acceptance pass. The source must pass the physical and final
 validation gates before it is frozen for code 2 / version 1.0.0.
+
+The configured application is committed as
+`32f515a91f5259f1bf0d1f440a38ebb80f399641`. Pre-acceptance validation passes 1,099
+Python tests, 480 browser cases, 196 native tests per variant, both lints and
+APK/AAB assembly, official bundletool, exact 103-asset/native-library comparisons,
+release permission/configuration checks and 16 KiB binary/package alignment.
+The new unsigned AAB is 47,496,488 bytes, SHA-256
+`f7aa862691544b414a921015e51e3f4658848be5639adba936bff052873cb5a6`.
+Artifacts and complete evidence are preserved in
+`/home/pompote/oldata/victor/sugarglider-v1-artifacts/published-yvelines-2026-09-13/`.
+
+The Fairphone remained absent from ADB for this pass. **V1_BLOCKED: Fairphone USB
+connection is required for real public-host production-region acceptance.** No
+physical row, phone storage/timing measurement or accepted-source freeze is
+claimed. Signing remains deliberately deferred until that gate passes; the
+previous Work-publication blocker is superseded.

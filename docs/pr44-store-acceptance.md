@@ -1,5 +1,12 @@
 # Android V1 submission and device acceptance
 
+September 13 update: Work has published the approved Yvelines distribution and
+privacy policy. Codex independently verified every runtime file's hosted bytes
+and configured the app with that catalog/policy. The original upload key has been
+located in the user's private Library. Earlier hosting/identity/key-location
+questions below are historical; local key configuration is still deferred until
+acceptance passes. See [current publication and device evidence](v1-published-region-acceptance.md).
+
 Working release checklist, 2026-09-12. This is not a submission or a claim of
 Google approval. The existing Play application ID is
 `io.github.victorgabillon.sugarglider`; do not create a replacement app or install
@@ -75,7 +82,7 @@ the consumer operation itself must be available through normal release UI.
 
 | Scenario | Required evidence | Current status |
 | --- | --- | --- |
-| Fresh consumer-region install | Real Download action, four integrity checks, activation, measured duration/storage | Device unlocked/authorized; pending approved static host |
+| Fresh consumer-region install | Real Download action, four integrity checks, activation, measured duration/storage | Public host verified; September 13 ADB list is empty, awaiting Fairphone connection |
 | Normal local planning | Waypoint + Auto Tour, pedestrian + bicycle, selected production region, deterministic repeat, no routing API | Earlier Marly debug/shared-engine evidence only; final region/build pending |
 | Six profiles | Public selection/capability identity; real reachable requests or truthful failures for each | Shared-engine automated coverage; final regional device cases pending |
 | Offline restart | Installed map/POI/nature, routes and GPX after restart with backend inaccessible | Pending final region; do not change hotspot/radios |
@@ -99,9 +106,10 @@ application. Browser simulations and unit tests cannot close physical rows.
 
 The [first-pass report](v1-first-pass-report.md) consolidates source/artifact
 identities, physical limits, review history and every deferred publisher question.
-The user has requested that these decisions wait until after this pass and has
-explicitly prohibited Play publication. The unsigned build and signing/deployment
-procedures are prepared; no upload or public endpoint is claimed.
+The user has explicitly prohibited Play publication. Work's public distribution
+and privacy deployment is now verified; no Play upload or final physical PASS is
+claimed. The original upload key remains untouched until the accepted source and
+final validation gates pass.
 
 ## Current policy dates
 
