@@ -16,6 +16,7 @@ import { createRegionalMapStore } from "./regional_map_store.js";
 import { createRegionProduct } from "./region_product.js";
 import { createRegionScreen, regionFailureMessage } from "./region_screen.js";
 import { requireData } from "./regional_manifest.js";
+import { createPlannerProfilePreference, initialLocalPlannerProfile } from "./planner_profile.js";
 import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
 import { addLocalWaypointProfileOptions } from "./local_waypoint_route.js";
 import { initializeOfflineMaps } from "./offline_map.js";
@@ -48,6 +49,7 @@ import {
   applyOfflineCopyRefresh,
   clearOfflineSnapshotStatus,
   initializePwaRuntime,
+  pwaRuntime,
   loadOfflineSnapshot,
   markOfflineSnapshot,
   offlineMapConfig,
@@ -79,6 +81,8 @@ let sharedLocalRegionClient = null;
 let installerRegionClient = null;
 let selectedRegionId = null;
 let regionScreen = null;
+let plannerProfilePreference = null;
+let localAvailabilityStatusText = null;
 let offlineMaps = null;
 let regionPlanningError = "regional_checking";
 const regionVersions = createRegionVersionStore();
@@ -370,6 +374,9 @@ function renderRoutingProfiles({ preserveUnavailableSelection = false } = {}) {
       available: Boolean(localRouteCapabilities?.enabled && localRouteCapabilities.supported_profile_ids.includes(profile.id)),
       warnings: [] })) };
   }
+  if (localPlanner) {
+    state.routingProfile = initialLocalPlannerProfile(state.routingProfile, state.routingProfileCatalog.profiles);
+  }
   const select = byId("profile");
   select.replaceChildren();
   const groups = new Map([
@@ -435,7 +442,10 @@ function updateProfileDescription() {
   }
   const status = selectedProfileStatus(byId("profile").value);
   if (localPlanner) {
-    byId("profile-description").textContent = status?.available
+    byId("profile-description").textContent = regionPlanningError === "regional_checking"
+      ? "Checking the installed region’s activity profiles…"
+      : !status ? "Choose an available activity after the region is ready."
+      : status.available
       ? "Uses this device’s installed region. Activity preferences depend on mapped OpenStreetMap data; elevation is unavailable."
       : "Install a compatible offline region to use this activity on your device.";
     return;
@@ -1724,6 +1734,7 @@ function wireCompromiseActions(candidate) {
 }
 
 function renderStatus() {
+  if (localPlanner) updateProfileDescription();
   const running = ["running", "reversing"].includes(state.request.status);
   const readOnly = isImmutableSnapshotDisplay();
   const open = isOpenPlan();
@@ -1756,7 +1767,10 @@ function renderStatus() {
       byId("request-status").textContent = placementGuidance;
     } else if (!availability.enabled) {
       byId("request-status").textContent = availability.reason;
+    } else if (localPlanner && byId("request-status").textContent === localAvailabilityStatusText) {
+      byId("request-status").textContent = "Ready to generate.";
     }
+    if (localPlanner) localAvailabilityStatusText = placementGuidance || (!availability.enabled ? availability.reason : null);
   }
 }
 
@@ -2630,6 +2644,11 @@ function bindEvents() {
   byId("route-form").addEventListener("change", (event) => {
     if (event.target.id.startsWith("hard-")) return;
     updateOptionsFromControls();
+    if (event.target.id === "profile" && plannerProfilePreference) {
+      void plannerProfilePreference.remember(state.routingProfile).then((persisted) => {
+        if (!persisted) reportOptionalStorageFailure();
+      });
+    }
     invalidateAndRender();
   });
   document.querySelectorAll('input[name="planning-mode"]').forEach((input) => {
@@ -3000,6 +3019,10 @@ async function start() {
     });
     const currentOutingSlug = outingSlug();
     const currentSharedRouteSlug = sharedRouteSlug();
+    if (localPlanner && !currentOutingSlug && !currentSharedRouteSlug) {
+      plannerProfilePreference = createPlannerProfilePreference((await pwaRuntime()).store);
+      state.routingProfile = await plannerProfilePreference.restore();
+    }
     await initializeTrailProfile({
       requireSetup: !currentOutingSlug && !currentSharedRouteSlug,
     });

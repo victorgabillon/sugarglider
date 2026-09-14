@@ -65,6 +65,7 @@ outing_tracking.js
 outing_view.js
 outings.js
 planner_location.js
+planner_profile.js
 public_profile_metadata.js
 pwa/icon-192.png
 pwa/icon-512.png
