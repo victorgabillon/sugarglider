@@ -1,3 +1,4 @@
+import * as packagedMapLibre from "./vendor/maplibre-gl-6.4.1/maplibre-gl.mjs";
 import {
   createMapPackStore,
 } from "./map_pack_store.js";
@@ -42,10 +43,11 @@ export function offlineMapBootstrapForConfig(config) {
 
 export function createOfflineMapRuntime({
   store = createMapPackStore(),
-  maplibregl = globalThis.maplibregl,
+  maplibregl = packagedMapLibre,
   browserWindow = globalThis.window,
   elements = {},
   confirmRemoval = (message) => globalThis.confirm?.(message) ?? false,
+  onStatus = () => {},
 } = {}) {
   let initialized = false;
   let capability = null;
@@ -213,9 +215,10 @@ export function createOfflineMapRuntime({
     return null;
   }
 
-  async function refresh() {
+  async function refresh({ reopen = false } = {}) {
     if (!capability?.opfs_supported) return snapshot();
     scan = await store.scanInstalledPacks();
+    if (reopen) { activePack = null; activeSource = null; }
     mapEpoch += 1;
     if (currentMap) await applyForCurrentCenter();
     else if (scan.invalid_pack_ids.length) {
@@ -338,6 +341,7 @@ export function createOfflineMapRuntime({
   }
 
   function render() {
+    try { onStatus(snapshot()); } catch { /* Presentation must not change map availability. */ }
     if (elements.support) {
       elements.support.textContent = capability?.opfs_supported
         ? `OPFS random-access storage supported${capability.persisted === true ? " and persisted" : ""}.`

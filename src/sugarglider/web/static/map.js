@@ -1,3 +1,4 @@
+import * as maplibregl from "./vendor/maplibre-gl-6.4.1/maplibre-gl.mjs";
 import { gpxFeatureCollection } from "./gpx.js";
 import {
   AVATAR_KEYS,
@@ -174,23 +175,19 @@ export function initialMapStyle(config, bootstrap = offlineMapBootstrapForConfig
 
 export function initializeMap(config, handlers) {
   resetMapInstance();
-  if (!window.maplibregl) {
-    handlers.onError("The packaged MapLibre runtime could not load.");
-    return false;
-  }
   try {
-    map = new window.maplibregl.Map({
+    map = new maplibregl.Map({
       container: "map",
       center: config.initial_center,
       zoom: config.initial_zoom,
       style: initialMapStyle(config),
-      attributionControl: true,
+      attributionControl: { customAttribution: config.tile_attribution },
     });
   } catch {
     handlers.onError("MapLibre loaded, but this browser could not initialize WebGL. Route controls remain available.");
     return false;
   }
-  map.addControl(new window.maplibregl.NavigationControl(), "top-left");
+  map.addControl(new maplibregl.NavigationControl(), "top-left");
   map.on("load", async () => {
     const loadedMap = map;
     try {
@@ -755,7 +752,7 @@ function poiPopupContent(feature) {
 
 function showPoiPopup(feature) {
   poiPopup?.remove();
-  poiPopup = new window.maplibregl.Popup({ offset: 24, closeButton: true })
+  poiPopup = new maplibregl.Popup({ offset: 24, closeButton: true })
     .setLngLat([feature.coordinate.lon, feature.coordinate.lat])
     .setDOMContent(poiPopupContent(feature))
     .addTo(map);
@@ -1109,7 +1106,7 @@ function requestedPlacePopupContent(feature) {
 function showRequestedPlacePopup(feature, reveal = false) {
   requestedPlacePopup?.remove();
   requestedPlacePopupId = feature.id;
-  requestedPlacePopup = new window.maplibregl.Popup({
+  requestedPlacePopup = new maplibregl.Popup({
     offset: 22,
     anchor: "bottom",
     closeButton: true,
@@ -1954,7 +1951,7 @@ function showSpurPopup(spur, markerKind, coordinate) {
   caution.className = "context-note";
   caution.textContent = "Candidate for route refinement. No alternative exit has been tested yet.";
   content.append(heading, description, caution);
-  spurPopup = new window.maplibregl.Popup({ offset: 14, closeButton: true })
+  spurPopup = new maplibregl.Popup({ offset: 14, closeButton: true })
     .setLngLat(coordinate)
     .setDOMContent(content)
     .addTo(map);
@@ -2242,7 +2239,7 @@ export function renderHardEndpoints(start, end, handlers = {}) {
       event.stopPropagation();
       handlers.onActivate?.(kind);
     });
-    const marker = new window.maplibregl.Marker({
+    const marker = new maplibregl.Marker({
       element,
       draggable: false,
       anchor: "bottom",
@@ -2434,7 +2431,7 @@ export function renderRequiredMarkers(points, visits, selectedIndex, popupIndex,
     const selected = sourceIndex === selectedIndex;
     const start = firstIsStart && orderIndex === 0;
     const element = requiredMarkerElement(point, sourceIndex, orderIndex + 1, selected, start, disabled);
-    const marker = new window.maplibregl.Marker({
+    const marker = new maplibregl.Marker({
       element,
       draggable: !disabled,
       anchor: "bottom",
@@ -2445,7 +2442,7 @@ export function renderRequiredMarkers(points, visits, selectedIndex, popupIndex,
     // MapLibre assigns a generic root label while attaching a marker. Restore the
     // point-specific accessible name after attachment.
     element.setAttribute("aria-label", element.dataset.accessibleLabel);
-    const popup = new window.maplibregl.Popup({
+    const popup = new maplibregl.Popup({
       offset: [0, start ? -58 : -48],
       closeButton: true,
       focusAfterOpen: false,
@@ -2485,11 +2482,11 @@ export function renderOptionalMarkers(points) {
   if (!map) return;
   clearMarkers(optionalMarkers);
   points.forEach((point) => {
-    const marker = new window.maplibregl.Marker({
+    const marker = new maplibregl.Marker({
       element: simpleMarkerElement("optional", "Generated routing point"),
     })
       .setLngLat([point.lon, point.lat])
-      .setPopup(new window.maplibregl.Popup({ offset: 12 }).setText("Generated routing point"))
+      .setPopup(new maplibregl.Popup({ offset: 12 }).setText("Generated routing point"))
       .addTo(map);
     optionalMarkers.push(marker);
   });
@@ -2518,11 +2515,11 @@ export function renderImportedGpx(imported) {
     paint: { "line-color": "#276f92", "line-width": 4, "line-opacity": .88, "line-dasharray": [1.2, 1] },
   });
   imported.waypoints.forEach((waypoint) => {
-    const marker = new window.maplibregl.Marker({
+    const marker = new maplibregl.Marker({
       element: simpleMarkerElement("waypoint", `Imported GPX waypoint: ${waypoint.name}`),
     })
       .setLngLat(waypoint.coordinate)
-      .setPopup(new window.maplibregl.Popup({ offset: 12 }).setText(waypoint.name))
+      .setPopup(new maplibregl.Popup({ offset: 12 }).setText(waypoint.name))
       .addTo(map);
     waypointMarkers.push(marker);
   });
@@ -2538,7 +2535,7 @@ export function fitCoordinates(coordinates) {
   if (!valid.length) return;
   const bounds = valid.reduce(
     (result, coordinate) => result.extend(coordinate),
-    new window.maplibregl.LngLatBounds(valid[0], valid[0]),
+    new maplibregl.LngLatBounds(valid[0], valid[0]),
   );
   map.fitBounds(bounds, {
     padding: 70,

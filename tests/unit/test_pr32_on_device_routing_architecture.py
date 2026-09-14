@@ -27,35 +27,31 @@ def test_debug_packaging_installs_beside_unchanged_release_app() -> None:
     assert f"am force-stop {release_id}\n" not in docs
 
 
-def test_valhalla_is_pinned_debug_arm64_only_and_release_is_disabled() -> None:
+def test_valhalla_is_pinned_arm64_with_one_shared_production_implementation() -> None:
     build = (ANDROID / "build.gradle.kts").read_text()
-    debug = (
-        ANDROID
-        / "src/debug/java/io/github/victorgabillon/sugarglider"
-        / "NativeRouteEngineFactory.kt"
-    ).read_text()
-    release = (
-        ANDROID
-        / "src/release/java/io/github/victorgabillon/sugarglider"
-        / "NativeRouteEngineFactory.kt"
-    ).read_text()
+    engine = (KOTLIN / "NativeRouteEngineFactory.kt").read_text()
+    policy = (KOTLIN / "ValhallaProfilePolicy.kt").read_text()
     registry = (KOTLIN / "RoutingPackRegistry.kt").read_text()
-    assert 'debugImplementation("io.github.rallista:valhalla-mobile:0.5.1")' in build
-    assert 'ndk.abiFilters += "arm64-v8a"' in build
-    assert 'buildConfigField("boolean", "LOCAL_ROUTING_EXPERIMENT", "true")' in build
-    assert 'buildConfigField("boolean", "LOCAL_ROUTING_EXPERIMENT", "false")' in build
-    policy = (
-        ANDROID
-        / "src/debug/java/io/github/victorgabillon/sugarglider"
-        / "ValhallaProfilePolicy.kt"
-    ).read_text()
+    assert 'implementation("io.github.rallista:valhalla-mobile:0.5.1")' in build
+    assert 'ndk.abiFilters += "arm64-v8a"' in build.split("buildTypes", 1)[0]
+    assert "LOCAL_ROUTING_EXPERIMENT" not in build + engine
+    assert "enabled = true" in engine
+    for variant in ("debug", "release"):
+        assert not (
+            ANDROID
+            / f"src/{variant}/java/io/github/victorgabillon/sugarglider"
+            / "NativeRouteEngineFactory.kt"
+        ).exists()
     assert "CostingModel.pedestrian" in policy
-    assert 'ENGINE_VERSION = "0.5.1/valhalla-3.6.3"' in debug
-    assert '"routing-packs"' in debug
-    assert ".withTileExtract(pack.tileArchive.absolutePath)" in debug
+    assert 'ENGINE_VERSION = "0.5.1/valhalla-3.6.3"' in engine
+    assert '"routing-packs"' not in engine
+    assert "regionalRoutingRepository" in engine
+    assert "localValhallaConfiguration(pack.tileArchive)" in engine
+    assert ".withTileExtract(tileArchive.absolutePath)" in engine
+    assert '.withTileDir("")' in engine
+    assert "httpd = null" in engine and "statsd = null" in engine
+    assert 'AdditionalData(elevation = "")' in engine
     assert 'ROUTING_PACK_ENGINE_VERSION = "3.6.3"' in registry
-    assert "enabled = false" in release
-    assert "com.valhalla" not in release
 
 
 def test_native_boundary_is_bounded_explicit_and_has_no_fallback() -> None:
@@ -103,7 +99,7 @@ def test_experiment_is_isolated_private_and_never_replaces_generate() -> None:
     assert "Run Marly offline smoke test" in index
     assert "Local routing experiment" in index
     assert "Debug Android only" in index
-    assert "createLocalRoutingExperiment" in app
+    assert "createLocalRoutingExperiment" not in app
     assert "state.points.map" in app
     assert "renderLocalExperimentalRoute" in map_source
     assert "globalThis.sugargliderNative ?? null" in transport
@@ -202,7 +198,7 @@ def test_pr32_browser_harness_covers_required_failure_and_ownership_cases() -> N
 
 def test_pr32_shell_generation_precaches_local_bridge() -> None:
     worker = (STATIC / "service-worker.js").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v25`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v44`" in worker
     assert '"/static/native_bridge_transport.js"' in worker
     assert '"/static/local_routing.js"' in worker
     assert '"/static/local_auto_tour.js"' in worker

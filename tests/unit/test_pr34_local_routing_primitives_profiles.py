@@ -5,8 +5,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ANDROID = ROOT / "android/app"
 KOTLIN = ANDROID / "src/main/java/io/github/victorgabillon/sugarglider"
-DEBUG_KOTLIN = ANDROID / "src/debug/java/io/github/victorgabillon/sugarglider"
-RELEASE_KOTLIN = ANDROID / "src/release/java/io/github/victorgabillon/sugarglider"
 STATIC = ROOT / "src/sugarglider/web/static"
 PROFILE_IDS = (
     "trail_run",
@@ -21,7 +19,7 @@ PROFILE_IDS = (
 def test_boundary_owns_six_strict_profiles_and_bounded_ordered_points() -> None:
     boundary = (KOTLIN / "NativeRouteEngine.kt").read_text()
     protocol = (KOTLIN / "BridgeProtocol.kt").read_text()
-    assert "LOCAL_ROUTE_REQUEST_VERSION = 2" in boundary
+    assert "LOCAL_ROUTE_REQUEST_VERSION = 3" in boundary
     assert "MIN_LOCAL_ROUTE_POINTS = 2" in boundary
     assert "MAX_LOCAL_ROUTE_POINTS = 16" in boundary
     for profile_id in PROFILE_IDS:
@@ -41,7 +39,7 @@ def test_boundary_owns_six_strict_profiles_and_bounded_ordered_points() -> None:
 
 
 def test_typed_profile_policies_are_complete_and_not_aliases() -> None:
-    policy = (DEBUG_KOTLIN / "ValhallaProfilePolicy.kt").read_text()
+    policy = (KOTLIN / "ValhallaProfilePolicy.kt").read_text()
     for enum_name in (
         "TRAIL_RUN",
         "HIKE",
@@ -62,7 +60,7 @@ def test_typed_profile_policies_are_complete_and_not_aliases() -> None:
 
 def test_pack_v1_v2_semantics_and_profile_aware_selection_are_explicit() -> None:
     registry = (KOTLIN / "RoutingPackRegistry.kt").read_text()
-    engine = (DEBUG_KOTLIN / "NativeRouteEngineFactory.kt").read_text()
+    engine = (KOTLIN / "NativeRouteEngineFactory.kt").read_text()
     assert "ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1 = 1" in registry
     assert "ROUTING_PACK_MANIFEST_SCHEMA_VERSION = 2" in registry
     assert 'MANIFEST_V2_FIELDS = MANIFEST_V1_FIELDS + "access_modes"' in registry
@@ -72,13 +70,15 @@ def test_pack_v1_v2_semantics_and_profile_aware_selection_are_explicit() -> None
     assert ".filter { it.supports(accessMode) }" in registry
     assert "RoutingPackSelection.NoGeographicCoverage" in registry
     assert "RoutingPackSelection.NoCompatibleAccessMode" in registry
-    assert "registry.select(request.points, request.profile.accessMode)" in engine
+    assert "repository.withPack(request.regionalReference)" in engine
+    assert "selectedPack.covers(request.points)" in engine
+    assert "selectedPack.supports(request.profile.accessMode)" in engine
     assert "NO_COVERING_ROUTING_PACK" in engine
     assert "NO_COMPATIBLE_ROUTING_PACK" in engine
 
 
 def test_multileg_route_is_graph_derived_bounded_and_preserves_identity() -> None:
-    engine = (DEBUG_KOTLIN / "NativeRouteEngineFactory.kt").read_text()
+    engine = (KOTLIN / "NativeRouteEngineFactory.kt").read_text()
     boundary = (KOTLIN / "NativeRouteEngine.kt").read_text()
     assert "request.points.map" in engine
     assert "RoutingWaypoint.Type.`break`" in engine
@@ -113,15 +113,16 @@ def test_capabilities_and_results_are_truthful_and_path_free() -> None:
     assert 'NO_COMPATIBLE_ROUTING_PACK("no_compatible_routing_pack")' in boundary
 
 
-def test_release_stays_unavailable_and_shared_bridge_security_is_unchanged() -> None:
-    release = (RELEASE_KOTLIN / "NativeRouteEngineFactory.kt").read_text()
+def test_release_uses_shared_engine_and_bridge_security_is_unchanged() -> None:
+    release = (KOTLIN / "NativeRouteEngineFactory.kt").read_text()
     activity = (KOTLIN / "MainActivity.kt").read_text()
     transport = (STATIC / "native_bridge_transport.js").read_text()
-    assert "enabled = false" in release
-    assert "packs = emptyList()" in release
-    assert "supportedProfiles = emptyList()" in release
+    assert "enabled = true" in release
+    assert "reference?.let { repository.withPack(it)" in release
+    assert "RoutingPackRegistry" not in release
+    assert "installedPacks.any { it.supports(profile.accessMode) }" in release
     assert "NativeRouteFailureCode.ROUTING_PACK_UNAVAILABLE" in release
-    assert "com.valhalla" not in release
+    assert "localValhallaConfiguration(pack.tileArchive)" in release
     combined = activity + release
     assert "addJavascriptInterface" not in combined
     assert "sourceOrigin.toString()," in activity
@@ -139,7 +140,7 @@ def test_debug_ui_and_harness_cover_profiles_via_and_compatibility() -> None:
     for profile_id in PROFILE_IDS:
         assert f'"{profile_id}"' in source
         assert f'value="{profile_id}"' in index
-    assert "LOCAL_ROUTE_VERSION = 2" in source
+    assert "LOCAL_ROUTE_VERSION = 3" in source
     assert "MAX_ROUTE_POINTS = 16" in source
     assert "MARLY_VIA_SMOKE_TEST" in source
     assert 'id="local-routing-profile"' in index
@@ -147,7 +148,7 @@ def test_debug_ui_and_harness_cover_profiles_via_and_compatibility() -> None:
     assert "globalThis.fetch" not in source
     for scenario in (
         "strict_profile_and_pack_capabilities",
-        "strict_v2_ordered_multi_point_wire",
+        "strict_v3_region_bound_ordered_multi_point_wire",
         "via_route_preserves_public_profile",
         "incompatible_pack_failure_without_fetch",
     ):

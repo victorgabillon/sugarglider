@@ -13,6 +13,7 @@ import android.os.SystemClock
 import java.net.CookieHandler
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArraySet
+import java.util.concurrent.Executors
 
 internal class NativeStatusRepository {
     fun interface Observer {
@@ -156,6 +157,25 @@ class SugargliderApplication : Application() {
     internal lateinit var secureStore: AndroidSecureStateStore
         private set
     internal val statusRepository = NativeStatusRepository()
+    internal val regionalPackStore by lazy { createRegionalRoutingPackStore(this) }
+    internal val regionalRoutingRepository by lazy {
+        RegionalRoutingRepository({ regionalPackStore.open(it) }, { regionalPackStore.remove(it) },
+            { regionalPackStore.removeVersion(it) }, { regionalPackStore.removeRegion(it) })
+    }
+    internal val regionalRoutingOperations by lazy {
+        RegionalRoutingOperations(
+            Executors.newSingleThreadExecutor(),
+            inspect = { reference -> regionalRoutingRepository.withPack(reference) { Unit } },
+            install = { reference, url, cancelled, progress ->
+                RegionalRoutingDownloader(regionalPackStore, allowDevelopmentHttp = BuildConfig.ALLOW_HTTP)
+                    .install(reference, url, cancelled, progress)
+                Unit
+            },
+            remove = { reference -> regionalRoutingRepository.remove(reference) },
+            removeVersion = { version -> regionalRoutingRepository.removeVersion(version) },
+            removeRegion = { regionId -> regionalRoutingRepository.removeRegion(regionId) },
+        )
+    }
 
     override fun onCreate() {
         super.onCreate()

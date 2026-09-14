@@ -1,0 +1,34 @@
+{
+  "auto_tour_max_hard_waypoints": 6,
+  "auto_tour_max_preferred_pois": 8,
+  "auto_tour_scenic_corridor_radius_m": 600.0,
+  "auto_tour_water_corridor_radius_m": 350.0,
+  "default_planning_mode": "auto_tour",
+  "initial_center": [
+    2.1,
+    48.87
+  ],
+  "initial_zoom": 11.0,
+  "loop_geometry_preference_values": [
+    "off",
+    "prefer"
+  ],
+  "max_required_points": 30,
+  "nature_index_available": false,
+  "nature_preference_values": [
+    "off",
+    "prefer"
+  ],
+  "nature_water_buffer_m": 100.0,
+  "outing_live_expire_after_seconds": 3600,
+  "outing_live_positions_available": false,
+  "outing_live_stale_after_seconds": 120,
+  "outing_max_participants": 8,
+  "outings_available": false,
+  "poi_default_limit": 500,
+  "poi_index_available": false,
+  "poi_max_limit": 1000,
+  "saved_routes_available": false,
+  "tile_attribution": "\u00a9 OpenStreetMap contributors",
+  "tile_url_template": "https://appassets.androidplatform.net/unavailable-tiles/{z}/{x}/{y}.png"
+}

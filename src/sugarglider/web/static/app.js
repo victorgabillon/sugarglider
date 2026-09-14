@@ -1,11 +1,23 @@
-import { ApiError, exportPlanCandidate, generatePlan, getConfig, getPoiStatus, getRoutingProfiles, reversePlan, searchPois, visualizeRoute } from "./api.js";
+import { ApiError, generatePlan, getConfig, getPoiStatus, getRoutingProfiles, reversePlan, searchPois, visualizeRoute } from "./api.js";
+import { createLocalGpxExporter } from "./local_gpx_client.js";
+import { isBundledAndroidApp } from "./android_app.js";
+import { createGpxFileSaver } from "./native_gpx_save.js";
 import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
-import { clearLocalExperimentalRoute, clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderLocalAutoTourCandidates, renderLocalExperimentalRoute, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
-import { createLocalRoutingExperiment } from "./local_routing.js";
-import { clearLocalWaypointRouteCandidates, renderLocalWaypointRouteCandidates } from "./map.js";
-import { addLocalWaypointProfileOptions, readLocalWaypointRouteRequest } from "./local_waypoint_route.js";
+import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
+import { createLocalRoutingBridge } from "./local_routing.js";
+import { createLocalPlanner, LocalPlannerError } from "./local_planner.js";
+import { createLocalRegionClient } from "./local_region_client.js";
+import { createRegionVersionStore } from "./region_versions.js";
+import { createRegionalNativeClient } from "./regional_native.js";
+import { createRegionalPlanningContext } from "./regional_planning.js";
+import { createRegionalMapStore } from "./regional_map_store.js";
+import { createRegionProduct } from "./region_product.js";
+import { createRegionScreen, regionFailureMessage } from "./region_screen.js";
+import { requireData } from "./regional_manifest.js";
+import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
+import { addLocalWaypointProfileOptions } from "./local_waypoint_route.js";
 import { initializeOfflineMaps } from "./offline_map.js";
 import {
   centerPlannerCurrentLocation,
@@ -51,7 +63,7 @@ import {
   renderOfflineCopyControls,
   renderPwaStatus,
 } from "./pwa_view.js";
-import { createSavedRoute, deleteSavedRoute, downloadSavedRouteGpx, getSavedRoute, savedRouteShareUrl, shareSavedRoute, sharedRouteSlug } from "./saved_routes.js";
+import { createSavedRoute, deleteSavedRoute, getSavedRoute, savedRouteShareUrl, shareSavedRoute, sharedRouteSlug } from "./saved_routes.js";
 import { applyImplicitEndpointMapClick, assignRouteEndpoint, currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, generationAvailability, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, readPlannerOptionsFromControls, renderEndpointTopologyControls, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, setRouteTopology, state, switchPlanningMode } from "./state.js";
 import {
   initializeTrailProfile,
@@ -60,6 +72,36 @@ import {
 } from "./trail_profile.js";
 
 const byId = (id) => document.getElementById(id);
+const localGpxExporter = createLocalGpxExporter();
+const gpxFileSaver = createGpxFileSaver();
+const localRoutingBridge = createLocalRoutingBridge();
+let sharedLocalRegionClient = null;
+let installerRegionClient = null;
+let selectedRegionId = null;
+let regionScreen = null;
+let offlineMaps = null;
+let regionPlanningError = "regional_checking";
+const regionVersions = createRegionVersionStore();
+const nativeRegions = createRegionalNativeClient();
+function localRegionClient() {
+  sharedLocalRegionClient ??= createLocalRegionClient();
+  return sharedLocalRegionClient;
+}
+const withPlanningRegion = createRegionalPlanningContext({ versions: regionVersions, bridge: localRoutingBridge,
+  selectedRegionId: () => selectedRegionId,
+  regionClient: { loadVersion: (...args) => localRegionClient().loadVersion(...args) },
+  inspectNative: async (reference) => {
+    // The route worker can inspect an installed archive while the independent
+    // regional worker downloads an inactive replacement.
+    const capabilities = await localRoutingBridge.forRegion(reference).capabilities();
+    requireData(capabilities?.enabled && capabilities.installed_pack_ids.length === 1
+      && capabilities.installed_pack_ids[0] === reference.pack_id, "regional_routing_unavailable");
+    return { status: "ready", capabilities };
+  } });
+const localPlanner = isBundledAndroidApp()
+  ? createLocalPlanner({ withRegion: withPlanningRegion }) : null;
+localGpxExporter.prepare();
+let pendingGpxExport = null;
 let elapsedTimer = null;
 let mapReady = false;
 let poiDebounceTimer = null;
@@ -79,7 +121,6 @@ const HYDRATION_CATEGORIES = ["drinking_water", "fountain", "water_tap"];
 
 const GENERATION_SUGGESTION = "Use Auto Tour for approximate places, or remove or move the exact waypoint.";
 let lastExactFailure = null;
-let invalidateLocalWaypointRoute = () => {};
 let localRouteCapabilities = null;
 
 function showError(message, details = "", code = "", context = "", suggestion = "") {
@@ -324,6 +365,11 @@ function updateControlsFromOptions() {
 }
 
 function renderRoutingProfiles({ preserveUnavailableSelection = false } = {}) {
+  if (localPlanner) {
+    state.routingProfileCatalog = { profiles: Object.values(PUBLIC_PROFILE_METADATA).map((profile) => ({ profile,
+      available: Boolean(localRouteCapabilities?.enabled && localRouteCapabilities.supported_profile_ids.includes(profile.id)),
+      warnings: [] })) };
+  }
   const select = byId("profile");
   select.replaceChildren();
   const groups = new Map([
@@ -349,9 +395,9 @@ function renderRoutingProfiles({ preserveUnavailableSelection = false } = {}) {
     });
     select.append(group);
   }
-  const localProfiles = addLocalWaypointProfileOptions(select, localRouteCapabilities);
+  const localProfiles = localPlanner ? [] : addLocalWaypointProfileOptions(select, localRouteCapabilities);
   const selected = selectedProfileStatus();
-  if (!selected?.available && !preserveUnavailableSelection && !localProfiles.includes(state.routingProfile)) {
+  if (!selected?.available && !localPlanner && !preserveUnavailableSelection && !localProfiles.includes(state.routingProfile)) {
     state.routingProfile = state.routingProfileCatalog.profiles.find(
       (status) => status.available,
     )?.profile.id ?? null;
@@ -388,6 +434,12 @@ function updateProfileDescription() {
     return;
   }
   const status = selectedProfileStatus(byId("profile").value);
+  if (localPlanner) {
+    byId("profile-description").textContent = status?.available
+      ? "Uses this device’s installed region. Activity preferences depend on mapped OpenStreetMap data; elevation is unavailable."
+      : "Install a compatible offline region to use this activity on your device.";
+    return;
+  }
   if (!status?.available && localRouteCapabilities?.enabled
       && localRouteCapabilities.supported_profile_ids.includes(byId("profile").value)) {
     byId("profile-description").textContent = "Experimental local Valhalla profile only. Server Generate remains unavailable; no GraphHopper profile parity is claimed.";
@@ -676,6 +728,13 @@ function pointValidation() {
 }
 
 function currentGenerationAvailability() {
+  if (localPlanner && regionPlanningError) return { enabled: false, reason: regionFailureMessage(regionPlanningError) };
+  if (localPlanner && !localRouteCapabilities?.enabled) return {
+    enabled: false, reason: "On-device routing is unavailable in this app build.",
+  };
+  if (localPlanner && !localRouteCapabilities.installed_pack_count) return {
+    enabled: false, reason: "Download a supported offline region before planning a route.",
+  };
   const endpoints = activeEndpoints();
   return generationAvailability({
     planningMode: state.planningMode,
@@ -709,7 +768,7 @@ function activeMapPlacementGuidance() {
 }
 
 function invalidateAndRender() {
-  invalidateLocalWaypointRoute();
+  localPlanner?.invalidate();
   saveActivePoints();
   if (state.request.status === "running") {
     state.abortController?.abort();
@@ -1052,15 +1111,15 @@ function autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare
     ["Reached discovered stops", formatCount(discoveredSelected)],
     ["Distance", formatDistance(candidate.route.summary.distance_m)],
     ["Target difference", targetDifferenceLabel],
-    ["Immediate backtracking", formatDistance(candidate.diagnostics.immediate_backtracking_m)],
+    ["Immediate backtracking", backtrackShare(analysis) === null ? "Unknown" : formatDistance(candidate.diagnostics.immediate_backtracking_m)],
   ].map(([label, value]) => `<span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong>`).join("");
-  return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate)}</div><p class="candidate-construction">${escapeHtml(friendlyLabel(candidate.diagnostics.details.construction ?? result.kind))}</p><div class="candidate-key-metrics">${metrics}</div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${metricBar("Outbound/return proximity", analysis.loop_geometry?.outbound_return_proximity.share ?? null, "backtrack", analysis.loop_geometry ? formatPercent(analysis.loop_geometry.outbound_return_proximity.share) : "not evaluated")}${metricBar("Mapped nature", analysis.nature ? analysis.nature.nature_score / 100 : null, "nature", analysis.nature ? `${analysis.nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(analysis.loop_geometry)}`;
+  return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate)}</div><p class="candidate-construction">${escapeHtml(friendlyLabel(candidate.diagnostics.details.construction ?? result.kind))}</p><div class="candidate-key-metrics">${metrics}</div>${metricBar("Total repetition", repetitionShare(analysis), "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", backtrackShare(analysis), "backtrack", formatPercent(analysis.immediate_backtrack.share))}${metricBar("Outbound/return proximity", analysis.loop_geometry?.outbound_return_proximity.share ?? null, "backtrack", analysis.loop_geometry ? formatPercent(analysis.loop_geometry.outbound_return_proximity.share) : "not evaluated")}${metricBar("Mapped nature", analysis.nature ? analysis.nature.nature_score / 100 : null, "nature", analysis.nature ? `${analysis.nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(analysis.loop_geometry)}`;
 }
 
 function candidateChoiceSummary(candidate, analysis, selected) {
   const quality = primaryQualityMetric(analysis);
   const nature = analysis.nature;
-  const repeated = analysis.repetition.repeated_distance.share;
+  const repeated = repetitionShare(analysis);
   const metric = (label, value) => `<span><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong></span>`;
   const badges = [
     `<span class="badge">${escapeHtml(profileDisplayName(candidate.routing_profile))}</span>`,
@@ -1076,6 +1135,17 @@ function metricBar(label, share, className, displayValue) {
   }
   const percentage = Math.max(0, Math.min(100, Number(share) * 100));
   return `<div class="bar-metric ${className}"><div class="bar-heading"><span>${escapeHtml(label)}</span><strong>${escapeHtml(displayValue)}</strong></div><div class="metric-track" role="img" aria-label="${escapeHtml(`${label}: ${displayValue}`)}"><div class="metric-fill" style="--metric-value:${percentage.toFixed(3)}%"></div></div></div>`;
+}
+
+// Display only availability/coverage supplied by the canonical analysis.
+function repetitionShare(analysis) {
+  return analysis.repetition.available ? analysis.repetition.repeated_distance.share : null;
+}
+function backtrackShare(analysis) {
+  return analysis.backtrack_edge_id_coverage.share > 0 ? analysis.immediate_backtrack.share : null;
+}
+function detailShare(analysis, metric, detail) {
+  return analysis.detail_breakdowns?.[detail]?.coverage_share > 0 ? analysis[metric].share : null;
 }
 
 function primaryQualityMetric(analysis) {
@@ -1290,7 +1360,7 @@ function renderCandidatesPanel() {
 
     const detailMarkup = state.planningMode === "auto_tour"
       ? autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare) + structuralAlternativeSummary(candidate) + spurCardSummary(analysis.spurs)
-      : (() => { const quality = primaryQualityMetric(analysis); return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.diagnostics.details.construction ?? "route"))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.diagnostics.target_error_m)}</strong><span>Other repetition</span><strong>${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}</strong><span>Major road</span><strong>${formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", analysis.repetition.repeated_distance.share, "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", analysis.immediate_backtrack.share, "backtrack", formatPercent(analysis.immediate_backtrack.share))}${quality ? metricBar(quality[0], quality[1], "trail", quality[1] == null ? "not evaluated" : formatPercent(quality[1])) : ""}${metricBar("Paved", analysis.paved.share, "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}${structuralAlternativeSummary(candidate)}${spurCardSummary(analysis.spurs)}`; })();
+      : (() => { const quality = primaryQualityMetric(analysis); return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.diagnostics.details.construction ?? "route"))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.diagnostics.target_error_m)}</strong><span>Other repetition</span><strong>${repetitionShare(analysis) === null || backtrackShare(analysis) === null ? "Unknown" : `${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}`}</strong><span>Major road</span><strong>${detailShare(analysis, "major_road", "road_class") === null ? "Unknown" : formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", repetitionShare(analysis), "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", backtrackShare(analysis), "backtrack", formatPercent(analysis.immediate_backtrack.share))}${quality ? metricBar(quality[0], quality[1], "trail", quality[1] == null ? "not evaluated" : formatPercent(quality[1])) : ""}${metricBar("Paved", detailShare(analysis, "paved", "surface"), "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}${structuralAlternativeSummary(candidate)}${spurCardSummary(analysis.spurs)}`; })();
     const routeDetails = document.createElement("details");
     routeDetails.className = "candidate-route-details";
     const routeDetailsSummary = document.createElement("summary");
@@ -1335,6 +1405,9 @@ function section(title, rows) {
 }
 
 function routeShapeIssuesSection(analysis, candidate) {
+  if (!analysis.spurs || analysis.spurs.warnings?.includes("spur_analysis_unavailable")) {
+    return '<section class="route-shape-issues"><h3>Route shape issues</h3><p>Excursion analysis is unknown because routed edge identity is unavailable.</p></section>';
+  }
   const spurAnalysis = analysis.spurs ?? {
     spurs: [],
     spur_count: 0,
@@ -1499,10 +1572,10 @@ function renderMetrics() {
   const busy = ["running", "reversing"].includes(state.request.status);
   const readOnly = isImmutableSnapshotDisplay();
   const savingUnavailable = !state.config?.saved_routes_available;
-  byId("download-gpx").disabled = !candidate
-    || busy
-    || serverFeaturesUnavailable();
-  byId("reverse-route").disabled = readOnly || !candidate || busy || Boolean(state.importedGpx && !state.generationResult);
+  byId("download-gpx").disabled = !candidate || busy || pendingGpxExport !== null;
+  byId("download-gpx").setAttribute("aria-busy", String(pendingGpxExport !== null));
+  byId("reverse-route").disabled = readOnly || !candidate || busy || Boolean(localPlanner) || Boolean(state.importedGpx && !state.generationResult);
+  byId("reverse-route").title = localPlanner ? "On-device route reversal is not available yet. Edit the ordered points and generate a new route." : "";
   byId("save-route").disabled = savingUnavailable || readOnly || !candidate || busy;
   byId("save-route").classList.toggle("hidden", savingUnavailable || readOnly || !candidate);
   byId("save-route-selected").disabled = savingUnavailable || readOnly || !candidate || busy;
@@ -1538,15 +1611,15 @@ function renderCanonicalMetrics(candidate, result) {
       ["Distance", formatDistance(candidate.route.summary.distance_m)],
       ["Target error", formatDistance(candidate.diagnostics.target_error_m)],
       ["Within tolerance", candidate.diagnostics.within_tolerance ? "Yes" : "No"],
-      ["Safety eligible", candidate.diagnostics.safety_eligible ? "Yes" : "No"],
+      ["Planning constraints met", candidate.diagnostics.safety_eligible ? "Yes" : "No"],
       ["Reached / approximated / dropped", `${candidate.reached_stops.length} / ${candidate.approximated_stops.length} / ${candidate.dropped_stops.length}`],
     ])
     + constraintItinerary(candidate)
     + section("Route quality", [
-      ["Total repetition", `${formatDistance(analysis.repetition.repeated_distance.distance_m)} · ${formatPercent(analysis.repetition.repeated_distance.share)}`],
-      ["Immediate backtracking", `${formatDistance(analysis.immediate_backtrack.distance_m)} · ${formatPercent(analysis.immediate_backtrack.share)}`],
-      ["Paved", formatPercent(analysis.paved.share)],
-      ["Major roads", formatPercent(analysis.major_road.share)],
+      ["Total repetition", repetitionShare(analysis) === null ? "Unknown" : `${formatDistance(analysis.repetition.repeated_distance.distance_m)} · ${formatPercent(analysis.repetition.repeated_distance.share)}`],
+      ["Immediate backtracking", backtrackShare(analysis) === null ? "Unknown" : `${formatDistance(analysis.immediate_backtrack.distance_m)} · ${formatPercent(analysis.immediate_backtrack.share)}`],
+      ["Paved", detailShare(analysis, "paved", "surface") === null ? "Unknown" : formatPercent(analysis.paved.share)],
+      ["Major roads", detailShare(analysis, "major_road", "road_class") === null ? "Unknown" : formatPercent(analysis.major_road.share)],
     ])
     + routeShapeIssuesSection(analysis, candidate)
     + activityQualitySection(analysis)
@@ -1695,6 +1768,7 @@ function renderEmptyState() {
 }
 
 function render() {
+  regionScreen?.render();
   renderModeControls();
   renderPoiEditor();
   renderCandidatesPanel();
@@ -1727,6 +1801,14 @@ async function selectCandidate(candidateId) {
   render();
   const candidate = selectedCandidate();
   if (!candidate) return;
+  if (candidate.diagnostics.details.local_routing?.engine === "valhalla-mobile") {
+    // The canonical result already supplies the exact routed line. Native edge
+    // classifications are unavailable, so there is no extra highlight projection.
+    // Keep the normal candidate line and direction arrows; never ask a server to
+    // infer repetition or nature sections for a local route.
+    renderVisualization(null, false);
+    return;
+  }
   try {
     let visualization = state.visualizationCache.get(candidateId);
     if (!visualization) {
@@ -1786,7 +1868,9 @@ async function generate() {
   }, 1000);
   render();
   try {
-    const result = await generatePlan(request, state.abortController.signal);
+    const result = localPlanner
+      ? await localPlanner.generate(request, state.abortController.signal)
+      : await generatePlan(request, state.abortController.signal);
     if (state.request.id !== id) return;
     state.generationResult = result;
     state.generationSourceRequest = request;
@@ -1820,6 +1904,10 @@ async function generate() {
 }
 
 async function reverseSelectedRoute() {
+  if (localPlanner) {
+    showError("On-device route reversal is not available yet. Edit the ordered points and generate a new route.");
+    return;
+  }
   const sourceCandidate = selectedCandidate();
   const sourceRequest = state.generationSourceRequest;
   if (
@@ -1965,6 +2053,22 @@ function safeGenerationDiagnostics(result) {
 }
 
 function showNoCandidateError(result) {
+  const localFailure = result.search_diagnostics.details.local_planning?.failure_code;
+  if (localFailure) {
+    const error = new LocalPlannerError(localFailure);
+    const attempt = result.search_diagnostics.details.local_planning.rejected_attempts?.find((item) => item.code === localFailure);
+    const details = attempt?.details;
+    const source = state.generationSourceRequest;
+    const pointName = details?.waypoint_id
+      ? (source?.waypoints ?? source?.hard_waypoints ?? []).find((point) => point.id === details.waypoint_id)?.name ?? "Exact waypoint"
+      : details?.position === 0 ? source?.start?.name || "Start" : source?.end?.name || "End";
+    const measured = Number.isFinite(details?.snap_distance_m) && Number.isFinite(details?.maximum_snap_distance_m)
+      ? `${pointName} snapped ${details.snap_distance_m.toFixed(1)} m away; the permitted limit is ${details.maximum_snap_distance_m.toFixed(0)} m. `
+      : "";
+    showError(error.message, safeGenerationDiagnostics(result), error.code,
+      `${measured}Your requested points and settings are unchanged.`, "Review the points, activity and installed region before trying again.");
+    return;
+  }
   showError(
     "No route candidate could satisfy the current hard constraints.",
     safeGenerationDiagnostics(result),
@@ -1975,6 +2079,11 @@ function showNoCandidateError(result) {
 }
 
 function handleGenerationError(error) {
+  if (error instanceof LocalPlannerError) {
+    showError(error.message, "", error.code, "Your requested points and settings are unchanged.",
+      "Review the request and installed regional data before trying again.");
+    return;
+  }
   if (error instanceof ApiError) {
     const context = error.code === "exact_waypoint_not_reached"
       ? exactWaypointContext(error.metadata)
@@ -2258,20 +2367,36 @@ async function importGpx(file) {
 
 async function downloadSelected() {
   const candidate = selectedCandidate();
-  if (!candidate || serverFeaturesUnavailable()) return;
+  if (!candidate || pendingGpxExport || ["running", "reversing"].includes(state.request.status)) return;
+  const operation = {};
+  pendingGpxExport = operation;
+  renderMetrics();
+  byId("request-status").textContent = "Preparing GPX…";
   try {
-    const { blob, filename } = isSavedRouteSnapshotDisplay()
-      ? await downloadSavedRouteGpx(state.savedRouteSnapshot.slug)
-      : await exportPlanCandidate(candidate);
+    const prepared = await localGpxExporter.exportCandidate(candidate);
+    byId("request-status").textContent = "Choose where to save the GPX file…";
+    const result = await gpxFileSaver.save(prepared);
+    if (result.status === "cancelled") {
+      byId("request-status").textContent = "GPX save cancelled. Your route is unchanged.";
+      return;
+    }
+    if (result.status === "saved") {
+      byId("request-status").textContent = "GPX file saved.";
+      return;
+    }
+    const { blob, filename } = result;
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
     link.download = filename;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
-    byId("request-status").textContent = `${filename} downloaded without rerunning generation.`;
+    byId("request-status").textContent = `${filename} prepared from the selected route.`;
   } catch (error) {
-    handleError(error, "GPX export failed.");
+    if (error.name !== "AbortError") handleError(error, "GPX export failed.");
+  } finally {
+    if (pendingGpxExport === operation) pendingGpxExport = null;
+    renderMetrics();
   }
 }
 
@@ -2811,6 +2936,7 @@ async function persistSavedRouteNetworkData(loaded, isCurrent) {
 async function retryCurrentConnection() {
   if (state.outingDisplay) return retryCurrentOutingConnection();
   if (state.savedRouteSnapshotDisplay) return retrySavedRouteConnection();
+  if (isBundledAndroidApp()) { window.location.reload(); return true; }
   try {
     const [config, catalog] = await Promise.all([
       getConfig(),
@@ -2835,6 +2961,32 @@ async function retryCurrentConnection() {
   }
 }
 
+async function initializeRegionScreen() {
+  const product = createRegionProduct({ versions: regionVersions, native: nativeRegions,
+    installerClient: {
+      installVersion: (...args) => { installerRegionClient ??= createLocalRegionClient(); return installerRegionClient.installVersion(...args); },
+      cancelInstall: () => installerRegionClient?.cancelInstall(),
+    } });
+  regionScreen = createRegionScreen({ versions: regionVersions, product, withRegion: withPlanningRegion,
+    selectedRegionId: () => selectedRegionId,
+    selectRegion: (id) => {
+      if (selectedRegionId === id) return;
+      selectedRegionId = id;
+      if (mapReady && !isImmutableSnapshotDisplay()) invalidateAndRender();
+    },
+    isPlanning: () => state.request.status === "running",
+    viewRegion: ([west, south, east, north]) => fitCoordinates([[west, south], [east, north]]),
+    onReady: (capabilities, code) => {
+      localRouteCapabilities = capabilities; regionPlanningError = code;
+      if (mapReady && !isImmutableSnapshotDisplay()) { renderRoutingProfiles({ preserveUnavailableSelection: true }); render(); }
+    },
+    onMapChange: async () => { if (offlineMaps) regionScreen.mapState(await offlineMaps.refresh({ reopen: true })); },
+    elements: { container: byId("offline-regions"), selector: byId("planning-region"), list: byId("regional-list"),
+      status: byId("regional-status"), mapStatus: byId("regional-map-status"), cancel: byId("regional-cancel"), refresh: byId("regional-refresh") },
+  });
+  await regionScreen.initialize();
+}
+
 async function start() {
   decorateIcons();
   try {
@@ -2852,8 +3004,11 @@ async function start() {
       requireSetup: !currentOutingSlug && !currentSharedRouteSlug,
     });
     try {
-      await initializeOfflineMaps({
-        elements: {
+      if (localPlanner) byId("offline-maps").classList.add("hidden");
+      offlineMaps = await initializeOfflineMaps({
+        ...(localPlanner ? { store: createRegionalMapStore({ versions: regionVersions, selectedRegionId: () => selectedRegionId }),
+          onStatus: (snapshot) => regionScreen?.mapState(snapshot) } : {}),
+        elements: localPlanner ? {} : {
           container: byId("offline-maps"),
           support: byId("offline-map-storage-support"),
           status: byId("offline-map-pack-status"),
@@ -2890,70 +3045,6 @@ async function start() {
     }
     bindEvents();
     const sharedSlug = currentSharedRouteSlug;
-    if (!sharedSlug) {
-      const localRoutingExperiment = createLocalRoutingExperiment({
-        onCapabilities: (capabilities) => {
-          localRouteCapabilities = capabilities;
-          if (state.routingProfileCatalog && !isImmutableSnapshotDisplay()) {
-            renderRoutingProfiles({ preserveUnavailableSelection: true });
-          }
-        },
-        getPoints: () => state.points.map(({ lat, lon }) => ({ lat, lon })),
-        renderRoute: (geometry) => {
-          renderLocalExperimentalRoute(geometry);
-          fitCoordinates(geometry);
-        },
-        clearRoute: clearLocalExperimentalRoute,
-        getWaypointRequest: () => readLocalWaypointRouteRequest(state, byId),
-        renderWaypointCandidates: (candidates, recommendedCandidateId) => {
-          renderLocalWaypointRouteCandidates(candidates, recommendedCandidateId);
-          fitCoordinates(candidates.flatMap((candidate) => candidate.geometry));
-        },
-        clearWaypointCandidates: clearLocalWaypointRouteCandidates,
-        renderAutoTourCandidates: (candidates, recommendedCandidateId) => {
-          renderLocalAutoTourCandidates(candidates, recommendedCandidateId);
-          fitCoordinates(candidates.flatMap((candidate) => candidate.geometry));
-        },
-        elements: {
-          container: byId("local-routing-experiment"),
-          button: byId("local-routing-button"),
-          smokeButton: byId("local-routing-smoke-button"),
-          parisSmokeButton: byId("local-routing-paris-smoke-button"),
-          viaSmokeButton: byId("local-routing-via-smoke-button"),
-          crossPackButton: byId("local-routing-cross-pack-button"),
-          profileSelect: byId("local-routing-profile"),
-          status: byId("local-routing-status"),
-          regionalData: {
-            url: byId("local-region-data-url"), install: byId("local-region-data-install"),
-            cancel: byId("local-region-data-cancel"), status: byId("local-region-data-status"),
-            regions: byId("local-region-data-regions"),
-          },
-          waypointRoute: {
-            button: byId("local-waypoint-route-button"),
-            status: byId("local-waypoint-route-status"),
-            results: byId("local-waypoint-route-results"),
-          },
-          autoTour: {
-            button: byId("local-auto-tour-button"),
-            smokeButton: byId("local-auto-tour-smoke-button"),
-            targetDistanceInput: byId("local-auto-tour-target-km"),
-            toleranceInput: byId("local-auto-tour-tolerance-km"),
-            candidateCountSelect: byId("local-auto-tour-candidate-count"),
-            seedInput: byId("local-auto-tour-seed"),
-            directionSelect: byId("local-auto-tour-direction"),
-            natureSelect: byId("local-auto-tour-nature"),
-            scenicInput: byId("local-auto-tour-scenic"),
-            waterInput: byId("local-auto-tour-water"),
-            requestedPoisInput: byId("local-auto-tour-requested-pois"),
-            status: byId("local-auto-tour-status"),
-            results: byId("local-auto-tour-results"),
-          },
-        },
-      });
-      invalidateLocalWaypointRoute = localRoutingExperiment.invalidateLocalWaypointRoute;
-      window.addEventListener("pagehide", invalidateLocalWaypointRoute);
-      void localRoutingExperiment.bind();
-    }
     let sharedSnapshot = null;
     if (sharedSlug) {
       sharedSnapshot = await loadSavedRoutePage(sharedSlug);
@@ -2961,8 +3052,9 @@ async function start() {
       try {
         [state.config, state.routingProfileCatalog] = await Promise.all([
           getConfig(),
-          getRoutingProfiles(),
+          localPlanner ? Promise.resolve({ profiles: [] }) : getRoutingProfiles(),
         ]);
+        if (isBundledAndroidApp()) state.config = { ...state.config, offline_mode: true };
         clearOfflineSnapshotStatus();
         const persisted = await settleOptionalPersistence([
           () => storePublicConfig(state.config),
@@ -2985,25 +3077,31 @@ async function start() {
       displaySavedRoute(sharedSnapshot);
       renderSnapshotProfileIdentity(sharedSnapshot.candidate.routing_profile);
     } else {
+      if (localPlanner) {
+        await initializeRegionScreen();
+      }
       renderRoutingProfiles();
       try {
-        if (state.networkStatus === "offline") throw new TypeError();
+        if (localPlanner || state.networkStatus === "offline") throw new TypeError();
         state.poiIndexStatus = await getPoiStatus();
       } catch {
         state.poiIndexStatus = { available: false, feature_count: null };
       }
     }
-    const natureAvailable = Boolean(state.config.nature_index_available);
+    const natureAvailable = Boolean(localPlanner || state.config.nature_index_available);
     const preferOption = byId("nature-preference").querySelector('option[value="prefer"]');
     preferOption.disabled = !natureAvailable;
     if (!natureAvailable && !sharedSnapshot) state.options.naturePreference = "off";
     updateControlsFromOptions();
-    byId("nature-availability").textContent = natureAvailable
+    byId("nature-availability").textContent = localPlanner
+      ? "Auto Tour uses installed regional nature data. Missing data and uncovered sections remain unknown."
+      : natureAvailable
       ? `Local OSM nature index available. Water proximity uses ${state.config.nature_water_buffer_m} m.`
       : "Local OSM nature index unavailable. Prefer mapped nature is disabled; routing still works.";
-    byId("show-nature").disabled = !natureAvailable;
-    state.showNatureContext = natureAvailable;
-    byId("show-nature").checked = natureAvailable;
+    byId("show-nature").disabled = !natureAvailable || Boolean(localPlanner);
+    byId("show-nature").title = localPlanner ? "Local nature totals appear in route details; map coloring is unavailable." : "";
+    state.showNatureContext = natureAvailable && !localPlanner;
+    byId("show-nature").checked = state.showNatureContext;
     const poiAvailable = Boolean(
       state.config.poi_index_available && state.poiIndexStatus?.available,
     );
@@ -3129,7 +3227,8 @@ async function start() {
       }
     } else if (state.networkStatus === "offline") {
       byId("request-status").textContent = (
-        "Sugarglider is offline. The application shell is ready; reconnect to plan a route."
+        localPlanner ? "Planning uses installed data on this device. Sharing needs a connection."
+          : "Sugarglider is offline. The application shell is ready; reconnect to plan a route."
       );
     }
   } catch (error) {

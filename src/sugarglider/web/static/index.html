@@ -8,10 +8,9 @@
     <title>Sugarglider — natural trail loop planner</title>
     <link rel="icon" type="image/png" href="/static/brand/sugarglider-compact-icon.png">
     <link rel="manifest" href="/manifest.webmanifest">
-    <!-- Official maplibre-gl@4.7.1 distribution, BSD-3-Clause: https://maplibre.org/ -->
-    <link rel="stylesheet" href="/static/vendor/maplibre-gl-4.7.1/maplibre-gl.css">
+    <!-- Official maplibre-gl@6.4.1 distribution, BSD-3-Clause: https://maplibre.org/ -->
+    <link rel="stylesheet" href="/static/vendor/maplibre-gl-6.4.1/maplibre-gl.css">
     <link rel="stylesheet" href="/static/styles.css">
-    <script defer src="/static/vendor/maplibre-gl-4.7.1/maplibre-gl.js"></script>
     <script defer src="/static/vendor/pmtiles-4.5.0/pmtiles.js"></script>
     <script type="module" src="/static/app.js"></script>
   </head>
@@ -112,6 +111,21 @@
         </div>
       </div>
     </section>
+    <details id="offline-regions" class="offline-regions hidden">
+      <summary><strong>Offline regions</strong><span>Maps, routing, places and nature on this device</span></summary>
+      <div class="offline-regions-body">
+        <label for="planning-region">Region for this plan</label>
+        <select id="planning-region"><option value="">Choose an installed region</option></select>
+        <p id="regional-status" role="status" aria-live="polite">Checking regional data…</p>
+        <p id="regional-map-status" role="status">No offline map is selected.</p>
+        <div class="button-row">
+          <button id="regional-refresh" type="button" class="button secondary">Check regions</button>
+          <button id="regional-cancel" type="button" class="button secondary hidden">Cancel download</button>
+        </div>
+        <ul id="regional-list" class="offline-region-list"></ul>
+        <p class="help">Keep the app open while downloading. A region becomes available after all four components pass verification. Updates keep the installed version until the replacement is ready.</p>
+      </div>
+    </details>
     <section id="saved-route-panel" class="notice saved-route hidden" role="status" aria-labelledby="saved-route-title">
       <div class="notice-mark" aria-hidden="true">↗</div>
       <div class="notice-copy">

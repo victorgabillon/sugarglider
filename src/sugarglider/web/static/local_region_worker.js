@@ -1,4 +1,5 @@
 import { createLocalRegionStore, loadLocalRegionData } from "./local_region_store.js";
+import { createVersionedRegionComponents } from "./region_components.js";
 
 const store = createLocalRegionStore();
 let data = null;
@@ -23,6 +24,17 @@ self.onmessage = ({ data: message }) => {
           data = null;
           break;
         }
+        case "install_version": {
+          if (ownedInstallGeneration !== installGeneration) throw new DOMException("Cancelled", "AbortError");
+          pendingInstall = new AbortController();
+          try {
+            const scoped = await createVersionedRegionComponents(message.value);
+            await scoped.installIndexes(message.value.url, { signal: pendingInstall.signal });
+            result = scoped.manifest;
+          } finally { pendingInstall = null; }
+          // Staging must not replace an already loaded committed analysis session.
+          break;
+        }
         case "remove":
           await store.remove(message.value.region_id);
           data = null;
@@ -31,6 +43,17 @@ self.onmessage = ({ data: message }) => {
         case "load": {
           const opened = await store.open(message.value.region_id);
           if (data?.identity.build_id !== opened.manifest.build_id) data = await loadLocalRegionData(opened);
+          result = data.identity;
+          break;
+        }
+        case "load_version": {
+          // The caller owns the region lease while this directory is in use.
+          // Do not reacquire its lock from this worker and deadlock the caller.
+          const scoped = await createVersionedRegionComponents(message.value);
+          if (data?.identity.build_id !== scoped.manifest.build_id) {
+            data = null; // The caller's commit lease excludes an older planning request.
+            data = await scoped.openIndexes();
+          } else await scoped.verifyIndexes();
           result = data.identity;
           break;
         }

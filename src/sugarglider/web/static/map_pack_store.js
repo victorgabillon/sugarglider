@@ -9,6 +9,8 @@ import {
   OpfsPmtilesSource,
   validateOpfsPmtilesArchive,
 } from "./opfs_pmtiles_source.js";
+import { regionalFileIntegrity, verifyRegionalFile } from "./regional_integrity.js";
+import { parseRegionalManifest, requireData, verifyRegionalBytes } from "./regional_manifest.js";
 
 export const MAP_PACK_DIRECTORY = "sugarglider-map-packs";
 const CAPABILITY_PROBE_PREFIX = ".opfs-capability-probe-";
@@ -173,7 +175,13 @@ export class MapPackStore {
     });
   }
 
-  async installPack(manifestUrl, { signal, onProgress } = {}) {
+  async installPack(manifestUrl, { signal, onProgress, expectedArchive = null, regionalManifest = null } = {}) {
+    // PR42's coordinator supplies the verified top-level regional descriptor.
+    // Standalone PR36 manifests have no checksum field and retain that limitation.
+    const suppliedIntegrity = expectedArchive === null ? null : regionalFileIntegrity(expectedArchive);
+    const region = regionalManifest === null ? null : await parseRegionalManifest(JSON.stringify(regionalManifest));
+    const integrity = region ? regionalFileIntegrity(region.components.map.files[1]) : suppliedIntegrity;
+    requireData(!region || !suppliedIntegrity || JSON.stringify(suppliedIntegrity) === JSON.stringify(integrity), "regional_identity_mismatch");
     if (typeof this.fetchRequest !== "function") {
       throw new MapPackStoreError("map_pack_install_failed", "Pack download is unavailable.");
     }
@@ -185,7 +193,13 @@ export class MapPackStore {
       MAXIMUM_MAP_PACK_MANIFEST_BYTES,
       signal,
     );
+    if (region) await verifyRegionalBytes(new TextEncoder().encode(manifestText), region.components.map.files[0]);
     const manifest = parseMapPackManifestJson(manifestText);
+    if (region) requireData(manifest.pack_id === region.components.map.component_id
+      && manifest.bounds.every((value, index) => value === region.bounds[index]), "regional_identity_mismatch");
+    if (integrity && integrity.byte_size !== manifest.byte_size) {
+      throw new MapPackStoreError("regional_size_mismatch", "Regional and map archive sizes differ.");
+    }
     if (this.activeInstalls.has(manifest.pack_id)) {
       throw new MapPackStoreError(
         "map_pack_install_in_progress",
@@ -206,6 +220,8 @@ export class MapPackStore {
       manifestUrl: safeManifestUrl,
       operation,
       onProgress,
+      integrity,
+      originalManifestText: region ? manifestText : null,
     });
     this.activeInstalls.set(manifest.pack_id, operation);
     try {
@@ -248,7 +264,7 @@ export class MapPackStore {
     return optionalBoolean(() => this.storageManager.persist());
   }
 
-  async finishInstall({ manifest, manifestUrl, operation, onProgress }) {
+  async finishInstall({ manifest, manifestUrl, operation, onProgress, integrity, originalManifestText }) {
     const root = await this.mapPackRoot();
     let ownsDirectory = false;
     let writable = null;
@@ -280,7 +296,10 @@ export class MapPackStore {
         fetchOptions(operation.controller.signal),
       );
       validateFetchResponse(response, archiveUrl, "archive");
-      validateArchiveHeaders(response, manifest.byte_size);
+      // Fetch decodes HTTP content codings before exposing the body. Its
+      // Content-Length can describe compressed bytes while CORS hides the
+      // Content-Encoding header. Bound and verify the actual archive bytes;
+      // transport headers cannot establish their size or integrity.
       const bytesWritten = await streamArchive({
         response,
         writable,
@@ -296,6 +315,12 @@ export class MapPackStore {
         );
       }
       this.requireCurrentInstall(manifest.pack_id, operation);
+      if (integrity) {
+        await verifyRegionalFile(await archiveHandle.getFile(), integrity, {
+          signal: operation.controller.signal,
+        });
+        this.requireCurrentInstall(manifest.pack_id, operation);
+      }
       const source = this.sourceFactory({
         fileHandle: archiveHandle,
         key: `sugarglider-map-pack/${manifest.pack_id}/${manifest.build_id}`,
@@ -305,7 +330,7 @@ export class MapPackStore {
       this.requireCurrentInstall(manifest.pack_id, operation);
       const manifestHandle = await directory.getFileHandle("manifest.json", { create: true });
       const manifestWriter = await manifestHandle.createWritable();
-      await manifestWriter.write(serializeMapPackManifest(manifest));
+      await manifestWriter.write(originalManifestText ?? serializeMapPackManifest(manifest));
       await manifestWriter.close();
       this.requireCurrentInstall(manifest.pack_id, operation);
       return manifest;
@@ -327,7 +352,8 @@ export class MapPackStore {
       if (operation.controller.signal.aborted || error?.name === "AbortError") {
         throw new MapPackStoreError("map_pack_download_cancelled", "Map-pack installation was cancelled.");
       }
-      if (error instanceof MapPackStoreError || error?.code === "map_pack_invalid") throw error;
+      if (error instanceof MapPackStoreError || error?.code === "map_pack_invalid"
+        || ["regional_size_mismatch", "regional_checksum_mismatch", "regional_read_failed"].includes(error?.code)) throw error;
       throw new MapPackStoreError(
         "map_pack_install_failed",
         `Map-pack installation failed: ${safeErrorMessage(error)}`,
@@ -360,7 +386,7 @@ export class MapPackStore {
       const archiveHandle = await directory.getFileHandle(MAP_PACK_ARCHIVE_FILENAME);
       const archiveFile = await archiveHandle.getFile();
       if (archiveFile.size !== manifest.byte_size) throw new Error("archive size mismatch");
-      return Object.freeze({ manifest, archiveHandle });
+      return Object.freeze({ manifest, manifestHandle, archiveHandle });
     } catch (error) {
       if (error instanceof MapPackStoreError) throw error;
       throw new MapPackStoreError(
@@ -471,19 +497,6 @@ function validateFetchResponse(response, expectedUrl, kind) {
     const finalUrl = validateMapPackInstallUrl(response.url, { href: expectedUrl.href });
     if (finalUrl.href !== expectedUrl.href) {
       throw new MapPackStoreError("map_pack_install_failed", `Map-pack ${kind} redirected unexpectedly.`);
-    }
-  }
-}
-
-function validateArchiveHeaders(response, expectedBytes) {
-  const encoding = response.headers?.get?.("Content-Encoding");
-  if (encoding && encoding.toLowerCase() !== "identity") {
-    throw new MapPackStoreError("map_pack_install_failed", "PMTiles archive must not use content encoding.");
-  }
-  const length = response.headers?.get?.("Content-Length");
-  if (length !== null && length !== undefined && length !== "") {
-    if (!/^\d+$/u.test(length) || Number(length) !== expectedBytes) {
-      throw new MapPackStoreError("map_pack_install_failed", "Archive Content-Length differs from its manifest.");
     }
   }
 }

@@ -7,6 +7,7 @@ import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.location.LocationManager
@@ -22,18 +23,23 @@ import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
 import android.webkit.GeolocationPermissions
 import android.webkit.HttpAuthHandler
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.JavaScriptReplyProxy
 import androidx.webkit.WebMessageCompat
@@ -45,20 +51,29 @@ import java.util.concurrent.Executors
 class MainActivity : Activity() {
     private lateinit var application: SugargliderApplication
     private lateinit var nativeRouteEngine: NativeRouteEngine
+    private lateinit var bundledShellAssets: BundledShellAssets
     private var configuredOrigin: String? = null
     private var webView: WebView? = null
     private var activeBridgeChannel: BridgeChannel? = null
     private var bridgeNavigationEpoch = 0L
     private var bridgeStatusCounter = 0L
     private var activityVisible = false
+    private var interruptedGpxSave = false
     private var pendingStart: PendingStart? = null
     private var pendingLocalRoute: PendingLocalRoute? = null
+    private var pendingLocalCapabilities: BridgeRequest.GetLocalRouteCapabilities? = null
     private var localRouteWorkerBusy = false
     private var pendingDeepLinkSlug: String? = null
     private var backInvokedCallback: OnBackInvokedCallback? = null
     private var outingLeaveDialog: AlertDialog? = null
     private val bridgeLedger = BridgeRequestLedger()
     private val localRouteExecutor = Executors.newSingleThreadExecutor()
+    private val documentExecutor = Executors.newSingleThreadExecutor()
+    private val gpxDocumentSaver = GpxDocumentSaver(
+        showPicker = ::showGpxDocumentPicker,
+        execute = { work -> documentExecutor.execute(work) },
+        dispatch = { work -> runOnUiThread(work) },
+    )
     private val webGeolocationPermissions = WebGeolocationPermissionCoordinator()
     private val statusObserver = NativeStatusRepository.Observer { status, terminalFailure ->
         runOnUiThread {
@@ -69,16 +84,16 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        interruptedGpxSave = savedInstanceState?.getBoolean(STATE_GPX_SAVE_PENDING) == true
         application = getApplication() as SugargliderApplication
         nativeRouteEngine = NativeRouteEngineFactory.create(applicationContext)
+        bundledShellAssets = BundledShellAssets(applicationContext)
         application.statusRepository.addObserver(statusObserver)
         registerPredictiveBackCallback()
         pendingDeepLinkSlug = deepLinkSlug(intent)
-        val stored = getPreferences(MODE_PRIVATE).getString(PREFERENCE_SERVER_ORIGIN, null)
-        val validStored = stored?.let {
-            ServerOrigin.parse(it, BuildConfig.ALLOW_HTTP)?.normalized
-        }
-        if (validStored == null) showServerConfiguration() else openServer(validStored)
+        if (pendingDeepLinkSlug != null || savedInstanceState?.getBoolean(STATE_SHARING_SCREEN) == true) {
+            openSharingServer()
+        } else openPlanner()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -86,13 +101,29 @@ class MainActivity : Activity() {
         setIntent(intent)
         deepLinkSlug(intent)?.let {
             pendingDeepLinkSlug = it
-            loadConfiguredPage()
+            openSharingServer()
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        // Only an uncertainty flag survives recreation, never file bytes or URI.
+        outState.putBoolean(STATE_GPX_SAVE_PENDING, interruptedGpxSave || gpxDocumentSaver.hasPendingWork())
+        // Restore only the UI mode, never a URL, capability, or participant identity.
+        outState.putBoolean(STATE_SHARING_SCREEN, configuredOrigin != null && configuredOrigin != BundledShellPolicy.ORIGIN)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onResume() {
         super.onResume()
         activityVisible = true
+        if (interruptedGpxSave) {
+            interruptedGpxSave = false
+            AlertDialog.Builder(this)
+                .setTitle("Check your GPX file")
+                .setMessage("The app restarted during a GPX save. If you selected a file, check it before saving again.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
     }
 
     override fun onPause() {
@@ -100,15 +131,52 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Retain the live page and its in-memory authority across size changes.
+        // Never serialize WebView state, reload, reroute, or restart sharing here.
+        webView?.invalidate()
+        ViewCompat.requestApplyInsets(window.decorView)
+    }
+
     override fun onDestroy() {
         pendingStart = null
         pendingLocalRoute = null
+        pendingLocalCapabilities = null
         localRouteExecutor.shutdownNow()
+        gpxDocumentSaver.close()
+        documentExecutor.shutdown()
         dismissOutingLeaveDialog()
         unregisterPredictiveBackCallback()
         application.statusRepository.removeObserver(statusObserver)
         destroyWebView()
         super.onDestroy()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun showGpxDocumentPicker(filename: String) {
+        startActivityForResult(
+            Intent(Intent.ACTION_CREATE_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType(GpxDocumentProtocol.MIME_TYPE)
+                .putExtra(Intent.EXTRA_TITLE, filename),
+            REQUEST_GPX_DOCUMENT,
+        )
+    }
+
+    @Deprecated("Activity result API for the existing platform Activity")
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_GPX_DOCUMENT) return
+        if (resultCode != RESULT_OK) { gpxDocumentSaver.selected(null); return }
+        val uri = data?.data
+        gpxDocumentSaver.selected {
+            // Only the explicit picker result grants access; never persist its URI
+            // or permission, or delete a possibly existing user file on failure.
+            require(uri?.scheme == "content")
+            contentResolver.openOutputStream(requireNotNull(uri), "wt")
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -171,6 +239,7 @@ class MainActivity : Activity() {
     private fun showServerConfiguration() {
         destroyWebView()
         configuredOrigin = null
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true
         val padding = dp(24)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -202,8 +271,10 @@ class MainActivity : Activity() {
             setText(R.string.configure_open)
             setOnClickListener {
                 val origin = ServerOrigin.parse(input.text.toString(), BuildConfig.ALLOW_HTTP)
-                if (origin == null) {
-                    error.text = if (BuildConfig.ALLOW_HTTP) {
+                if (origin == null || BundledShellPolicy.ownsHost(origin.normalized)) {
+                    error.text = if (origin != null && BundledShellPolicy.ownsHost(origin.normalized)) {
+                        "This address belongs to the local planner. Enter a sharing server address."
+                    } else if (BuildConfig.ALLOW_HTTP) {
                         "Enter HTTPS, or debug HTTP on localhost or a private-LAN IP, with no path, credentials, query, or fragment."
                     } else {
                         "Release builds require HTTPS with no path, credentials, query, or fragment."
@@ -220,13 +291,31 @@ class MainActivity : Activity() {
         root.addView(input, fullWidthWrap())
         root.addView(error, fullWidthWrap())
         root.addView(open, fullWidthWrap())
+        root.addView(Button(this).apply {
+            setText(R.string.open_planner)
+            setOnClickListener { openPlanner() }
+        }, fullWidthWrap())
         setContentView(root)
+    }
+
+    private fun openPlanner() {
+        pendingDeepLinkSlug = null
+        openServer(BundledShellPolicy.ORIGIN)
+    }
+
+    private fun openSharingServer() {
+        val stored = getPreferences(MODE_PRIVATE).getString(PREFERENCE_SERVER_ORIGIN, null)
+        val origin = stored?.let { ServerOrigin.parse(it, BuildConfig.ALLOW_HTTP)?.normalized }
+            ?.takeUnless(BundledShellPolicy::ownsHost)
+        if (origin == null) showServerConfiguration() else openServer(origin)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun openServer(origin: String) {
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         destroyWebView()
         configuredOrigin = origin
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(getColor(R.color.brand_cream))
@@ -251,16 +340,22 @@ class MainActivity : Activity() {
                 WindowInsetsCompat.Type.systemBars() or
                     WindowInsetsCompat.Type.displayCutout(),
             )
+            root.setPadding(
+                systemBars.left,
+                0,
+                systemBars.right,
+                maxOf(systemBars.bottom, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom),
+            )
             view.setPadding(
                 chromeStartPadding,
                 systemBars.top + chromeTopPadding,
-                systemBars.right + chromeEndPadding,
+                chromeEndPadding,
                 chromeBottomPadding,
             )
             insets
         }
         serverChrome.addView(Button(this).apply {
-            setText(R.string.configure_server)
+            setText(if (origin == BundledShellPolicy.ORIGIN) R.string.open_sharing else R.string.planner_and_sharing)
             contentDescription = getString(R.string.configure_server_description)
             setTextColor(Color.WHITE)
             textSize = 13f
@@ -270,6 +365,17 @@ class MainActivity : Activity() {
             setPadding(dp(12), 0, dp(12), 0)
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener { showServerMenu(origin) }
+        })
+        serverChrome.addView(Button(this).apply {
+            setText(R.string.privacy_title)
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            isAllCaps = false
+            minWidth = 0
+            minHeight = dp(40)
+            setPadding(dp(12), 0, dp(12), 0)
+            setBackgroundColor(Color.TRANSPARENT)
+            setOnClickListener { showPrivacyDetails() }
         })
         root.addView(serverChrome, fullWidthWrap())
         val created = WebView(this)
@@ -301,11 +407,32 @@ class MainActivity : Activity() {
         loadConfiguredPage()
     }
 
+    private fun showPrivacyDetails() {
+        val content = TextView(this).apply {
+            setText(R.string.privacy_description)
+            textSize = 16f
+            setPadding(dp(20), dp(12), dp(20), dp(12))
+        }
+        val scroll = ScrollView(this).apply { addView(content) }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.privacy_title)
+            .setView(scroll)
+            .setPositiveButton(R.string.privacy_close, null)
+        if (BuildConfig.PRIVACY_POLICY_URL.isNotEmpty()) {
+            dialog.setNeutralButton(R.string.privacy_online) { _, _ ->
+                openExternal(BuildConfig.PRIVACY_POLICY_URL.toUri())
+            }
+        }
+        dialog.show()
+    }
+
     private fun showServerMenu(origin: String) {
+        if (origin == BundledShellPolicy.ORIGIN) { openSharingServer(); return }
         AlertDialog.Builder(this)
             .setTitle(R.string.configure_server_title)
             .setMessage(origin)
             .setNegativeButton(android.R.string.cancel, null)
+            .setNeutralButton(R.string.open_planner) { _, _ -> openPlanner() }
             .setPositiveButton(R.string.configure_change) { _, _ -> requestServerChange() }
             .show()
     }
@@ -335,6 +462,28 @@ class MainActivity : Activity() {
     }
 
     private fun originIsolatingClient(origin: String): WebViewClient = object : WebViewClient() {
+        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+            if (origin == BundledShellPolicy.ORIGIN) bundledShellAssets.intercept(request.url, request.method) else null
+
+        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            val wasCurrent = view === webView
+            val pendingDocument = wasCurrent && gpxDocumentSaver.hasPendingWork()
+            if (wasCurrent) {
+                dismissOutingLeaveDialog()
+                // Its renderer no longer exists: discard its permission callback without invoking it.
+                webGeolocationPermissions.discard()
+                invalidateBridgePage()
+                webView = null
+            }
+            // Only dispose the affected instance. A late callback must not close a newer page.
+            (view.parent as? ViewGroup)?.removeView(view)
+            view.destroy()
+            if (wasCurrent && !isFinishing && !isDestroyed) {
+                showRendererRecovery(origin, bridgeNavigationEpoch, pendingDocument)
+            }
+            return true
+        }
+
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
             if (view === webView) {
                 dismissOutingLeaveDialog()
@@ -370,6 +519,53 @@ class MainActivity : Activity() {
         ) {
             handler.cancel()
         }
+    }
+
+    private fun showRendererRecovery(origin: String, epoch: Long, pendingDocument: Boolean) {
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true
+        val padding = dp(24)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(padding, padding, padding, padding)
+            setBackgroundColor(getColor(R.color.brand_cream))
+        }
+        val message = TextView(this).apply {
+            text = if (pendingDocument) {
+                getString(
+                    R.string.page_recovery_with_gpx,
+                    getString(R.string.page_recovery_description),
+                    getString(R.string.page_recovery_gpx),
+                )
+            } else getString(R.string.page_recovery_description)
+            textSize = 16f
+            setTextColor(getColor(R.color.brand_green))
+            setPadding(0, 0, 0, dp(16))
+        }
+        root.addView(message, fullWidthWrap())
+        fun ownsRecovery(): Boolean = webView == null && configuredOrigin == origin &&
+            bridgeNavigationEpoch == epoch && !isFinishing && !isDestroyed
+        root.addView(Button(this).apply {
+            setText(R.string.page_recovery_open)
+            setOnClickListener {
+                if (ownsRecovery()) openServer(origin)
+            }
+        }, fullWidthWrap())
+        if (application.statusRepository.current().isNativeBusy()) {
+            root.addView(Button(this).apply {
+                setText(R.string.notification_stop)
+                setOnClickListener {
+                    if (ownsRecovery() && activityVisible) {
+                        startService(
+                            Intent(this@MainActivity, LocationSharingService::class.java)
+                                .setAction(LocationSharingService.ACTION_STOP),
+                        )
+                        message.setText(R.string.page_recovery_stopping)
+                    }
+                }
+            }, fullWidthWrap())
+        }
+        setContentView(root)
     }
 
     private fun foregroundGeolocationClient(created: WebView): WebChromeClient = object :
@@ -445,22 +641,48 @@ class MainActivity : Activity() {
                     System.identityHashCode(sourceView),
                 )
             ) return@addWebMessageListener
-            val payload = message.data ?: return@addWebMessageListener
-            val request = BridgeProtocol.parse(payload) ?: return@addWebMessageListener
+            val document = if (message.type == WebMessageCompat.TYPE_ARRAY_BUFFER) {
+                if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER)) {
+                    return@addWebMessageListener
+                }
+                GpxDocumentProtocol.parse(message.arrayBuffer) ?: return@addWebMessageListener
+            } else null
+            val payload = if (document != null) document.ledgerPayload else {
+                if (message.type != WebMessageCompat.TYPE_STRING) return@addWebMessageListener
+                message.data ?: return@addWebMessageListener
+            }
+            val request = document?.request ?: BridgeProtocol.parse(payload) ?: return@addWebMessageListener
             val channel = acceptBridgePage(request, replyProxy, sourceView) ?: return@addWebMessageListener
             bridgeLedger.lookup(request, payload)?.let {
                 replyProxy.postMessage(it)
                 return@addWebMessageListener
             }
             if (!bridgeLedger.begin(request, payload)) return@addWebMessageListener
+            if (!BundledShellPolicy.acceptsOrigin(request, origin)) {
+                completeFailure(request, payload, channel,
+                    if (origin == BundledShellPolicy.ORIGIN) "sharing_unavailable" else "local_planning_unavailable")
+                return@addWebMessageListener
+            }
             when (request) {
                 is BridgeRequest.Hello -> completeBridgeRequest(
                     request,
                     payload,
                     channel,
                     "hello_result",
-                    application.statusRepository.current(),
+                    if (origin == BundledShellPolicy.ORIGIN) NativeTrackingStatus.stopped()
+                    else application.statusRepository.current(),
                 )
+                is BridgeRequest.SaveGpx -> {
+                    val prepared = document ?: return@addWebMessageListener
+                    val finish: (GpxSaveStatus) -> Unit = { status ->
+                        completeBridgePayload(
+                            request, payload, channel,
+                            GpxDocumentProtocol.reply(request.requestId, status),
+                        )
+                    }
+                    if (!activityVisible) finish(GpxSaveStatus.UNAVAILABLE)
+                    else gpxDocumentSaver.begin(prepared, finish)
+                }
                 is BridgeRequest.GetStatus -> {
                     completeBridgeRequest(
                         request,
@@ -473,12 +695,16 @@ class MainActivity : Activity() {
                         broadcastTerminalFailure(channel, it)
                     }
                 }
-                is BridgeRequest.GetLocalRouteCapabilities -> {
-                    val reply = BridgeProtocol.localRouteCapabilitiesReply(
-                        request.requestId,
-                        nativeRouteEngine.capabilities(),
-                    )
-                    completeBridgePayload(request, payload, channel, reply)
+                is BridgeRequest.GetLocalRouteCapabilities -> beginLocalCapabilities(request, payload, channel)
+                is BridgeRequest.RegionalWork -> {
+                    val status = application.regionalRoutingOperations.start(request.pageNonce, request.command)
+                    completeBridgePayload(request, payload, channel, RegionalRoutingProtocol.reply(request.requestId, status))
+                }
+                is BridgeRequest.RegionalStatus -> {
+                    val manager = application.regionalRoutingOperations
+                    val status = if (request.cancel) manager.cancel(request.pageNonce, request.operationId)
+                        else manager.status(request.pageNonce, request.operationId)
+                    completeBridgePayload(request, payload, channel, RegionalRoutingProtocol.reply(request.requestId, status))
                 }
                 is BridgeRequest.LocalRoute -> beginLocalRoute(
                     request,
@@ -548,6 +774,34 @@ class MainActivity : Activity() {
                         application.statusRepository.current(),
                     )
                 }
+            }
+        }
+    }
+
+    private fun beginLocalCapabilities(
+        request: BridgeRequest.GetLocalRouteCapabilities,
+        payload: String,
+        channel: BridgeChannel,
+    ) {
+        if (localRouteWorkerBusy) {
+            completeBridgePayload(request, payload, channel,
+                BridgeProtocol.localRouteFailure(request.requestId, NativeRouteFailureCode.ROUTING_BUSY))
+            return
+        }
+        pendingLocalCapabilities = request
+        localRouteWorkerBusy = true
+        localRouteExecutor.execute {
+            val reply = try {
+                BridgeProtocol.localRouteCapabilitiesReply(request.requestId,
+                    nativeRouteEngine.capabilities(request.regionalReference))
+            } catch (_: Exception) {
+                BridgeProtocol.localRouteFailure(request.requestId, NativeRouteFailureCode.ROUTING_PACK_UNAVAILABLE)
+            }
+            runOnUiThread {
+                localRouteWorkerBusy = false
+                if (pendingLocalCapabilities !== request) return@runOnUiThread
+                pendingLocalCapabilities = null
+                completeBridgePayload(request, payload, channel, reply)
             }
         }
     }
@@ -691,14 +945,22 @@ class MainActivity : Activity() {
         }
         val operation = PendingStart(request, payload, channel)
         pendingStart = operation
-        AlertDialog.Builder(this)
+        val disclosure = AlertDialog.Builder(this)
             .setTitle("Share precise location with the screen off?")
             .setMessage(DISCLOSURE)
             .setNegativeButton("Cancel") { _, _ ->
                 finishPendingStart(operation, "permission_denied")
             }.setPositiveButton("Continue") { _, _ -> requestTrackingPermissions(operation) }
+            .setNeutralButton(R.string.privacy_title, null)
             .setOnCancelListener { finishPendingStart(operation, "permission_denied") }
-            .show()
+            .create()
+        disclosure.setOnShowListener {
+            // Reading privacy details does not dismiss disclosure or grant Start.
+            disclosure.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                if (pendingStart === operation && activityVisible) showPrivacyDetails()
+            }
+        }
+        disclosure.show()
     }
 
     private fun requestTrackingPermissions(operation: PendingStart) {
@@ -867,6 +1129,7 @@ class MainActivity : Activity() {
     }
 
     private fun broadcastStatus(status: NativeTrackingStatus) {
+        if (configuredOrigin == BundledShellPolicy.ORIGIN) return
         val channel = activeBridgeChannel ?: return
         bridgeStatusCounter += 1
         postToBridge(
@@ -888,6 +1151,7 @@ class MainActivity : Activity() {
         channel: BridgeChannel,
         event: NativeTerminalFailureEvent,
     ) {
+        if (configuredOrigin == BundledShellPolicy.ORIGIN) return
         bridgeStatusCounter += 1
         postToBridge(
             channel,
@@ -936,11 +1200,14 @@ class MainActivity : Activity() {
     }
 
     private fun invalidateBridgePage() {
+        activeBridgeChannel?.let { application.regionalRoutingOperations.cancelOwner(it.pageNonce) }
+        gpxDocumentSaver.invalidate()
         webGeolocationPermissions.invalidate()
         bridgeNavigationEpoch += 1
         activeBridgeChannel = null
         pendingStart = null
         pendingLocalRoute = null
+        pendingLocalCapabilities = null
     }
 
     private fun destroyWebView() {
@@ -1066,10 +1333,13 @@ class MainActivity : Activity() {
 
     companion object {
         private const val PREFERENCE_SERVER_ORIGIN = "server_origin"
+        private const val STATE_GPX_SAVE_PENDING = "gpx_save_pending"
+        private const val STATE_SHARING_SCREEN = "sharing_screen"
+        private const val REQUEST_GPX_DOCUMENT = 41
         private const val REQUEST_TRACKING_PERMISSIONS = 27
         private const val REQUEST_WEB_GEOLOCATION_PERMISSION = 31
         private const val DEBUG_DEFAULT_ORIGIN = "http://10.0.2.2:8000"
         private const val DISCLOSURE =
-            "Sugarglider will continuously access precise location during this active sharing session, including while the app is minimized or the screen is locked. Anyone holding the unlisted outing link can see the current position. Only the latest current position is retained, not a historical track. A persistent notification is displayed, and you can stop at any time from the app or notification. If server clearing is uncertain, the last position may remain visible until expiry."
+            "Sugarglider will continuously access and send precise location during this active sharing session, including while the app is minimized or the screen is locked. Anyone holding the unlisted outing link can see your position. The server stores your current position and briefly retains recent updates so viewers can reconnect. This does not create an activity track. A persistent notification is displayed, and you can stop at any time from the app or notification. If server clearing is uncertain, the last position may remain visible until expiry."
     }
 }

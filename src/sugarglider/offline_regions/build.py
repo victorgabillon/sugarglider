@@ -3,6 +3,7 @@
 import os
 import platform
 import subprocess
+import sys
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from importlib.metadata import version
@@ -11,7 +12,6 @@ from typing import Protocol
 
 import osmium
 
-from sugarglider.nature.build import build_nature_index
 from sugarglider.offline_regions.map_manifest import file_sha256
 from sugarglider.offline_regions.models import (
     Component,
@@ -28,7 +28,6 @@ from sugarglider.offline_regions.models import (
 )
 from sugarglider.offline_regions.validation import load_spec, verify_region
 from sugarglider.osm_build_bounds import require_header_coverage
-from sugarglider.pois.build import build_poi_index
 
 
 class CommandRunner(Protocol):
@@ -93,8 +92,24 @@ def build_components(
         ),
         environment,
     )
-    build_poi_index(source, directory / "pois/index.json.gz", bounds=spec.bounds)
-    build_nature_index(source, directory / "nature/index.json.gz", bounds=spec.bounds)
+    # OSM parsing and geometry construction retain large native/Python heaps.
+    # A fresh process per index releases those heaps before the next phase and
+    # final verification, while inheriting the caller's resource limits.
+    for component in ("pois", "nature"):
+        runner(
+            (
+                sys.executable,
+                "-m",
+                f"sugarglider.{component}.build",
+                "--osm-pbf",
+                str(source),
+                "--output",
+                str(directory / component / "index.json.gz"),
+                "--bounds",
+                *(str(value) for value in spec.bounds),
+            ),
+            environment,
+        )
 
 
 type ComponentBuilder = Callable[[Path, RegionSpec, Path, Path], None]

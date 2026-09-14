@@ -53,12 +53,18 @@ def test_search_uses_only_pr34_routes_with_one_correction_and_strict_budget() ->
     local = (STATIC / "local_routing.js").read_text()
     transport = (STATIC / "native_bridge_transport.js").read_text()
     assert "LOCAL_AUTO_TOUR_ROUTE_CALL_BUDGET = 24" in source
-    assert "state.routeCalls += 1" in source
-    assert "state.routeCalls >= routeCallBudget" in source
+    context = (STATIC / "local_planning_context.js").read_text()
+    assert "state.context.totalUsed >= routeCallBudget" in source
+    assert "totalLimit: routeCallBudget" in source
+    assert "state.context.requestRoute(skeleton.points, phase)" in source
+    assert "used >= totalLimit || phaseUsage[phase] >= limits[phase]" in context
+    assert context.index("used += 1") < context.index(
+        "route({ profile, points: coordinates })"
+    )
+    assert "await route(" not in source
     assert "MIN_CORRECTION_FACTOR = 0.7" in source
     assert "MAX_CORRECTION_FACTOR = 1.3" in source
     assert "skeleton.correction_step + 1" in source
-    assert "route({ points: skeleton.points, profile: request.profile })" in source
     assert 'from "./local_routing.js"' in source
     assert 'from "./native_bridge_transport.js"' not in source
     assert "createLocalAutoTourExperiment" in local
@@ -91,13 +97,13 @@ def test_hard_validation_ranking_and_unavailable_metrics_are_truthful() -> None:
         assert marker in source
 
 
-def test_ui_is_debug_separate_and_normal_generate_remains_server_backed() -> None:
+def test_normal_android_generate_uses_local_core_in_both_android_variants() -> None:
     index = (STATIC / "index.html").read_text()
     app = (STATIC / "app.js").read_text()
     map_source = (STATIC / "map.js").read_text()
     release = (
         ROOT
-        / "android/app/src/release/java/io/github/victorgabillon/sugarglider"
+        / "android/app/src/main/java/io/github/victorgabillon/sugarglider"
         / "NativeRouteEngineFactory.kt"
     ).read_text()
     for element_id in (
@@ -113,13 +119,13 @@ def test_ui_is_debug_separate_and_normal_generate_remains_server_backed() -> Non
     ):
         assert f'id="{element_id}"' in index
     assert "Loop-only and bounded, with optional installed places/nature" in index
-    assert "renderLocalAutoTourCandidates" in app
+    assert "renderLocalAutoTourCandidates" not in app
     assert "renderLocalAutoTourCandidates" in map_source
-    assert (
-        "const result = await generatePlan(request, state.abortController.signal)"
-        in app
-    )
-    assert "enabled = false" in release
+    assert "? await localPlanner.generate(request, state.abortController.signal)" in app
+    assert ": await generatePlan(request, state.abortController.signal)" in app
+    assert "const localPlanner = isBundledAndroidApp()" in app
+    assert "createLocalPlanner({ withRegion: withPlanningRegion })" in app
+    assert "enabled = true" in release
 
 
 def test_concurrency_harness_covers_single_flight_staleness_and_no_fallback() -> None:

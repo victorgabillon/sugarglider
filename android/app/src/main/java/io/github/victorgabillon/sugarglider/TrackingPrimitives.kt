@@ -179,6 +179,7 @@ internal object SafeText {
         "different_participant_active",
         "start_in_progress",
         "stop_in_progress",
+        "sharing_unavailable",
         -> value
         else -> "native_tracking_failure"
     }

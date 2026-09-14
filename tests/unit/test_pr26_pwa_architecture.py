@@ -9,7 +9,7 @@ from pathlib import Path
 from sugarglider.web.routes import STATIC_DIRECTORY
 
 ROOT = Path(__file__).resolve().parents[2]
-VENDOR = STATIC_DIRECTORY / "vendor" / "maplibre-gl-4.7.1"
+VENDOR = STATIC_DIRECTORY / "vendor" / "maplibre-gl-6.4.1"
 PWA_MODULES = (
     "offline_snapshots.js",
     "outing_durable_session.js",
@@ -41,22 +41,29 @@ def _core_assets(worker: str) -> set[str]:
 
 
 def test_exact_maplibre_distribution_and_deterministic_icons() -> None:
-    assert {path.name for path in VENDOR.iterdir() if path.is_file()} == {
-        "LICENSE.txt",
-        "README.md",
-        "maplibre-gl.css",
-        "maplibre-gl.js",
+    expected = {
+        "maplibre-gl.mjs": (
+            "97e8b9a39ab8b823d6a0caf9c312237262bc9138a6162d9e29606f5f8d24127d"
+        ),
+        "maplibre-gl-shared.mjs": (
+            "fcf4d81450df235da0aea74897cc23926774b5228d38ae1de6a7d701c5905785"
+        ),
+        "maplibre-gl-worker.mjs": (
+            "ce4957017fe705ac2f9ebef206cca966d08d8621756c39326a78cf09757e7d75"
+        ),
+        "maplibre-gl.css": (
+            "8e2dbbab312dc57656fbb76e9fa5308c75c9d7c7ba5808a7d55bcdb64cc813fa"
+        ),
+        "LICENSE.txt": (
+            "ee5fc05a0677eaf69601d2c7db0d9ecd6cc27c3abc1d0733bc9ed34707cf8ef2"
+        ),
     }
-    assert _sha256(VENDOR / "maplibre-gl.js") == (
-        "be9633c4d870e26fb37f1cfe5c5a77181667114003ea16207ac7850d8da8add1"
-    )
-    assert _sha256(VENDOR / "maplibre-gl.css") == (
-        "576b085fdd9487a65a19215328c1e086c07ce5bf6da09b666b3806d3d008dae9"
-    )
-    assert _sha256(VENDOR / "LICENSE.txt") == (
-        "ee5fc05a0677eaf69601d2c7db0d9ecd6cc27c3abc1d0733bc9ed34707cf8ef2"
-    )
-    assert "maplibre-gl@4.7.1" in (VENDOR / "README.md").read_text()
+    assert {path.name for path in VENDOR.iterdir() if path.is_file()} == {
+        *expected,
+        "README.md",
+    }
+    assert {name: _sha256(VENDOR / name) for name in expected} == expected
+    assert "maplibre-gl@6.4.1" in (VENDOR / "README.md").read_text()
     icons = STATIC_DIRECTORY / "pwa"
     assert _png_dimensions(icons / "icon-192.png") == (192, 192)
     assert _png_dimensions(icons / "icon-512.png") == (512, 512)
@@ -150,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v25_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v44_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v25"
+    assert generation.group(1) == "v44"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -169,6 +176,16 @@ def test_shared_shell_generation_tracks_v25_cached_assets() -> None:
             "planner_location.js",
             "local_routing.js",
             "local_auto_tour.js",
+            "local_planning_context.js",
+            "local_planner.js",
+            "canonical_numbers.js",
+            "local_analysis_templates.js",
+            "local_plan_geometry.js",
+            "local_candidate_enrichment.js",
+            "local_candidate_evaluator.js",
+            "local_plan_publisher.js",
+            "local_plan_worker.js",
+            "local_plan_client.js",
             "local_waypoint_route.js",
             "regional_manifest.js",
             "local_region_client.js",
@@ -177,51 +194,103 @@ def test_shared_shell_generation_tracks_v25_cached_assets() -> None:
             "local_region_worker.js",
             "local_region_panel.js",
             "native_bridge_transport.js",
+            "api.js",
+            "local_gpx_export.js",
+            "local_gpx_client.js",
+            "local_gpx_worker.js",
+            "native_gpx_save.js",
+            "public_profile_metadata.js",
         )
     } == {
-        "index.html": (
-            "d8bd089da5d98b2a618765498c4220f096cb671c2b43618f5c5347696b1382d2"
+        "local_planner.js": (
+            "a2ea147a2cf3d987d38ac1f3b3980112984db3c3577ab8e171b6a9f53caaa20f"
         ),
-        "app.js": ("3ee27fb3a3ae60f65c9de8095af5ea7e2740a24248bc26f08bd901de4b887d81"),
+        "canonical_numbers.js": (
+            "0c45121c5e89d9dcbd23c126740a7f3760e8c31f9683d8206b70c6d253e65a26"
+        ),
+        "local_analysis_templates.js": (
+            "6036c6d7fcf55a97514d29a57caba72e43f522ef9e811d60548886fe8f126e01"
+        ),
+        "local_plan_geometry.js": (
+            "f48a33644581705ac0ba22a4c49625d4623850281dcca76d873f5c190dbe3f3a"
+        ),
+        "local_candidate_enrichment.js": (
+            "2d71476066aa440bdebb28c26b1d0eac2b62c37dd1275b0ef8448aee3e7c2ef5"
+        ),
+        "local_candidate_evaluator.js": (
+            "2b56af7f998db9a2d174670847608ed394de24b40fbed2c84e2242f1037b2788"
+        ),
+        "local_plan_publisher.js": (
+            "4a7162832605f171f32158370b9bc80e606075fbeca78dd2a6b0019118911f30"
+        ),
+        "local_plan_worker.js": (
+            "3ca9645f88dbe2ff9f57e63190d04d2a5bcbdec017e072850bed0fa0ac1f7eb8"
+        ),
+        "local_plan_client.js": (
+            "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
+        ),
+        "index.html": (
+            "47c31ee3e3673bbcefae8c0f2faf83dee81aa648e48c9703e60315ab3daa7a7f"
+        ),
+        "app.js": ("5fc0a7f5c09941702b98fc42673240a8a64d1a653c01eb87febdba247653051b"),
         "state.js": (
             "de724c096dd193347bdbdb9a424e873902ead40b30d48a339925da4d9aa58abd"
         ),
-        "map.js": ("b4d91e4264b1ab0373b84aff6ebce61b36fa01127936533da005752b79545c84"),
+        "map.js": ("e7f38b7fa68c47d4b5a429d7561ca2a52dafd59a274bf6774061ec3c6ae944c8"),
         "styles.css": (
-            "ae7274097a2d77be36f587156edf07c4f69dd4a158da63e177ecd64fcb0c7ca5"
+            "11026a66bc90cc66deb477e8d3602b9ebd65f72ed59990bd570b8a7eb9d37e4d"
         ),
         "planner_location.js": (
             "ce28891c92263c084e33dd5ae9ad906a31e527253aeb321539599711e4500b9c"
         ),
         "local_routing.js": (
-            "9fc987bf70bbf6cc91cfadb2b40929e79d712eeb1c5fa030ec7836113a59a832"
+            "364b36d2750d24fd4b9e56b4cc8004fb98623eb26e3b0239749dbe6504a54a3b"
+        ),
+        "local_planning_context.js": (
+            "4daf16dd06654c1d4b857fd2b4497b87821c64aac9de0c73675b0b3a59add519"
         ),
         "local_auto_tour.js": (
-            "71f5eef85b4d9a61bb4434ee2bc79378fae5aa1ac48fca87c7836a00d18998f6"
+            "2b4c13d1ca70538c28e766937756bc2bece5a852ec8880a06330e2b8cf71fc54"
         ),
         "local_waypoint_route.js": (
-            "5ba767ccd5578579129f117dcef7408cb5e3e79901b008ce6416a775816952f4"
+            "45f94090ef1cf08fb405243cc610f366bc370c8dcc1ed12f7e929d6b0e271a8b"
         ),
         "regional_manifest.js": (
             "f062cff8451b1a8039de394856654e07c0533f55ccfb82e25aa0e3f814e94787"
         ),
         "local_region_client.js": (
-            "622efdb8348be2a9e12e294b162e5c6afcdda1de0dc7287b9e130cf4c64bbeca"
+            "f034f2e2d05335d2f3b8384144f095708f1544fef93322819645265a6e7076ac"
         ),
         "local_region_data.js": (
-            "0eda7dc859029650730d614bc096458533e12c486eda359affbd5b2e4c3e4af1"
+            "81d76b750de4aba6ea5e701ae2a5319ae4fd9221073b06fc472f86148828f6bb"
         ),
         "local_region_store.js": (
-            "0f4209027099d30e33a0b63bb8764db0596fb6942f35357988360ea518a2ddcb"
+            "1d031f544b27c0c38ef37efd68b2d9d107843af4bbb8e12fe7c87428bab78eb5"
         ),
         "local_region_worker.js": (
-            "2db7aab7b00f98cd980c186016245eaebb1217014d0fb4052bb22021ca862298"
+            "a463b22af5ef1f68b9199d9b1177df84ae7feb64fd4c41224e88bc14c63dfd11"
         ),
         "local_region_panel.js": (
             "43c5119cb1cf5ed4249dc00ae8a7d30741dd78b307a9305f31ee6a3988c456f6"
         ),
         "native_bridge_transport.js": (
-            "f601ec9b54b063ce3687fd6f51404818157fa731e860dd87ea6c84656d1528b4"
+            "485c4690f4b6c35a15c9800f1c7a7bb771814fe47d59fb419df5efe372e3b754"
+        ),
+        "api.js": ("2844e8cc44afc78de06e3ce24ff7e6040ce16c189fd84122b790404cdf76c297"),
+        "local_gpx_export.js": (
+            "edc7678c70a860e014aab54af907d6ebd953894e7f4eba0dff83372903eecfd1"
+        ),
+        "public_profile_metadata.js": (
+            "2077a93dd9291b556d2cf5ebe29c317aeda3f96b356722a3fd069ff8963f41fa"
+        ),
+        "local_gpx_client.js": (
+            "607a89cea494125a4fea99e717751f7f69a4c7d76a5325d6fceeef3f50b8d511"
+        ),
+        "native_gpx_save.js": (
+            "63364ea3184de7c77903393b699d689b69f2996204b5f114b27173404e899d24"
+        ),
+        "local_gpx_worker.js": (
+            "ad4769fc03bb5e205d4bcd4e9833256f96fe7931fa0cc53e9bc4cb5ca90bc0b2"
         ),
     }
 
@@ -231,8 +300,12 @@ def test_precache_covers_index_and_static_module_graph() -> None:
     core = _core_assets(worker)
     index = (STATIC_DIRECTORY / "index.html").read_text()
     assert "unpkg.com" not in index
-    assert "/static/vendor/maplibre-gl-4.7.1/maplibre-gl.js" in index
-    assert "/static/vendor/maplibre-gl-4.7.1/maplibre-gl.css" in index
+    assert '<script defer src="/static/vendor/maplibre-gl' not in index
+    assert (
+        'from "./vendor/maplibre-gl-6.4.1/maplibre-gl.mjs"'
+        in (STATIC_DIRECTORY / "map.js").read_text()
+    )
+    assert "/static/vendor/maplibre-gl-6.4.1/maplibre-gl.css" in index
     nonessential = {
         "/static/brand/sugarglider-banner.png",
         "/static/brand/sugarglider-flying-map.png",
@@ -248,11 +321,10 @@ def test_precache_covers_index_and_static_module_graph() -> None:
             continue
         visited.add(name)
         source = (STATIC_DIRECTORY / name).read_text()
-        pending.extend(
-            match
-            for match in re.findall(r'from "\./([^"]+\.js)"', source)
-            if match not in visited
-        )
+        for relative in re.findall(r'from\s*["\']\./([^"\']+\.m?js)["\']', source):
+            dependency = (Path(name).parent / relative).as_posix()
+            if dependency not in visited:
+                pending.append(dependency)
     assert {f"/static/{name}" for name in visited} <= core
     assert (
         "ROOT_SHELL"
@@ -263,13 +335,22 @@ def test_precache_covers_index_and_static_module_graph() -> None:
         ]
     )
     assert {
-        "/static/vendor/maplibre-gl-4.7.1/maplibre-gl.js",
-        "/static/vendor/maplibre-gl-4.7.1/maplibre-gl.css",
+        "/static/vendor/maplibre-gl-6.4.1/maplibre-gl.mjs",
+        "/static/vendor/maplibre-gl-6.4.1/maplibre-gl-shared.mjs",
+        "/static/vendor/maplibre-gl-6.4.1/maplibre-gl-worker.mjs",
+        "/static/vendor/maplibre-gl-6.4.1/maplibre-gl.css",
         "/static/pwa/icon-192.png",
         "/static/pwa/icon-512.png",
     } <= core
     assert not any(path.startswith(("/v1/", "/v2/", "/o/", "/r/")) for path in core)
-    assert not any(path.endswith((".pmtiles", ".pbf")) for path in core)
+    packaged_glyphs = {
+        "/static/fonts/Open%20Sans%20Semibold/0-255.pbf",
+        "/static/fonts/Open%20Sans%20Semibold/256-511.pbf",
+        "/static/fonts/Open%20Sans%20Semibold/8192-8447.pbf",
+    }
+    assert {path for path in core if path.endswith(".pbf")} == packaged_glyphs
+    assert not any(path.endswith(".pmtiles") for path in core)
+    assert "CORE_ASSETS.includes(new URL(request.url).pathname)" in worker
 
 
 def test_browser_persistence_ownership_is_narrow() -> None:

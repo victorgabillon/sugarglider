@@ -73,8 +73,10 @@ def test_exact_pmtiles_and_protomaps_distributions_are_vendored() -> None:
 def test_manifest_templates_are_strict_and_map_packs_are_ignored() -> None:
     templates = sorted((ROOT / "map-packs").glob("*.template.json"))
     assert [path.name for path in templates] == [
+        "ile-de-france-map-v1.template.json",
         "marly-map-dev-v1.template.json",
         "paris-map-dev-v1.template.json",
+        "yvelines-ouest-parisien-map-v1.template.json",
     ]
     for path in templates:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -199,7 +201,7 @@ def test_service_worker_precaches_runtime_but_never_map_archives() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     policy = (STATIC_DIRECTORY / "service_worker_policy.js").read_text()
     core = _core_assets(worker)
-    assert "`${SHELL_CACHE_PREFIX}v25`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v44`" in worker
     assert {
         "/static/vendor/pmtiles-4.5.0/pmtiles.js",
         "/static/vendor/protomaps-basemaps-5.7.2/basemaps.js",
@@ -223,7 +225,7 @@ def test_build_pipeline_and_browser_harness_are_bounded() -> None:
     assert "--maxzoom=15" in build
     assert "write_pr36_map_pack_manifest.py" in build
     assert "Output already exists; remove it explicitly" in build
-    assert harness.count('scenarios.push("') == 17
+    assert harness.count('scenarios.push("') == 22
     assert "real_opfs_create_write_slice_read_delete" in harness
     assert "interrupted_install_never_becomes_active" in harness
     assert "region_switch_removes_stale_source_and_keeps_overlays" in harness

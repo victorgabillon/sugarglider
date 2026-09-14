@@ -6,24 +6,35 @@ import {
 } from "/static/service_worker_policy.js";
 
 const SHELL_CACHE_PREFIX = "sugarglider-shell-";
-const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v25`;
+const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v44`;
 const ROOT_SHELL = "/";
 const shellCache = createCurrentCacheAccess(caches, SHELL_CACHE);
 
 const CORE_ASSETS = Object.freeze([
   ROOT_SHELL,
   "/static/styles.css",
-  "/static/vendor/maplibre-gl-4.7.1/maplibre-gl.css",
-  "/static/vendor/maplibre-gl-4.7.1/maplibre-gl.js",
+  "/static/vendor/maplibre-gl-6.4.1/maplibre-gl.css",
+  "/static/vendor/maplibre-gl-6.4.1/maplibre-gl.mjs",
+  "/static/vendor/maplibre-gl-6.4.1/maplibre-gl-shared.mjs",
+  "/static/vendor/maplibre-gl-6.4.1/maplibre-gl-worker.mjs",
   "/static/vendor/pmtiles-4.5.0/pmtiles.js",
   "/static/vendor/protomaps-basemaps-5.7.2/basemaps.js",
   "/static/app.js",
+  "/static/android_app.js",
   "/static/avatar.js",
   "/static/api.js",
   "/static/format.js",
   "/static/gpx.js",
+  "/static/local_gpx_export.js",
+  "/static/local_gpx_client.js",
+  "/static/native_gpx_save.js",
+  "/static/local_gpx_worker.js",
+  "/static/public_profile_metadata.js",
   "/static/icons.js",
   "/static/map.js",
+  "/static/fonts/Open%20Sans%20Semibold/0-255.pbf",
+  "/static/fonts/Open%20Sans%20Semibold/256-511.pbf",
+  "/static/fonts/Open%20Sans%20Semibold/8192-8447.pbf",
   "/static/map_pack_manifest.js",
   "/static/map_pack_store.js",
   "/static/opfs_pmtiles_source.js",
@@ -39,8 +50,34 @@ const CORE_ASSETS = Object.freeze([
   "/static/outing_native_bridge.js",
   "/static/local_routing.js",
   "/static/local_auto_tour.js",
+  "/static/local_planning_context.js",
+  "/static/local_planner.js",
+  "/static/canonical_numbers.js",
+  "/static/local_analysis_templates.js",
+  "/static/local_plan_geometry.js",
+  "/static/local_candidate_enrichment.js",
+  "/static/local_candidate_evaluator.js",
+  "/static/local_plan_publisher.js",
+  "/static/local_plan_worker.js",
+  "/static/local_plan_client.js",
   "/static/local_waypoint_route.js",
   "/static/regional_manifest.js",
+  "/static/regional_integrity.js",
+  "/static/region_versions.js",
+  "/static/region_components.js",
+  "/static/regional_routing_reference.js",
+  "/static/regional_native.js",
+  "/static/regional_planning.js",
+  "/static/regional_distribution.js",
+  "/static/regional_map_store.js",
+  "/static/region_product.js",
+  "/static/region_catalog.js",
+  "/static/region_screen.js",
+  "/static/offline_region_catalog.json",
+  "/static/vendor/noble-hashes-2.4.0/sha2.js",
+  "/static/vendor/noble-hashes-2.4.0/_md.js",
+  "/static/vendor/noble-hashes-2.4.0/_u64.js",
+  "/static/vendor/noble-hashes-2.4.0/utils.js",
   "/static/local_region_data.js",
   "/static/local_region_store.js",
   "/static/local_region_worker.js",
@@ -128,7 +165,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(navigationResponse(request));
     return;
   }
-  if (classification === "static") {
+  if (classification === "static" && CORE_ASSETS.includes(new URL(request.url).pathname)) {
     event.respondWith(staticResponse(request));
   }
 });

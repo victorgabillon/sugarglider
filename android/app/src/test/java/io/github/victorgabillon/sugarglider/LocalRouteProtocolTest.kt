@@ -19,10 +19,11 @@ class LocalRouteProtocolTest {
         assertEquals(2, request.points.size)
         assertEquals(LocalRouteCoordinate(48.8715, 2.0965), request.points.first())
         assertTrue(request.isValid())
+        assertEquals(syntheticRegionalRoutingReference(), request.regionalReference)
     }
 
     @Test
-    fun coordinateBoundsProfileWhitelistAndStrictV2ShapeAreEnforced() {
+    fun coordinateBoundsProfileWhitelistAndStrictV3ShapeAreEnforced() {
         val invalidCoordinate = BridgeProtocol.parse(
             localRoutePayload(
                 points = listOf(coordinate(90.0001, 2.0), coordinate(48.0, 2.1)),
@@ -86,6 +87,33 @@ class LocalRouteProtocolTest {
             ),
         ) as BridgeRequest.LocalRoute
         assertEquals(3, via.routeRequest.points.size)
+    }
+
+    @Test
+    fun everyRouteRequiresAnExactVersionReferenceAndLegacyV2CannotFallBack() {
+        for (changed in listOf(
+            JSONObject(localRoutePayload()).put("route_version", 2),
+            JSONObject(localRoutePayload()).put("regional_reference", JSONObject.NULL),
+            JSONObject(localRoutePayload()).put("regional_reference", syntheticRegionalRoutingReference().toJson().put("build_id", "old")),
+        )) {
+            val rejected = BridgeProtocol.parse(changed.toString()) as BridgeRequest.RejectedLocalRoute
+            assertEquals(NativeRouteFailureCode.INVALID_REQUEST, rejected.code)
+        }
+        val absent = JSONObject(localRoutePayload()).apply { remove("regional_reference") }
+        assertNull(BridgeProtocol.parse(absent.toString()))
+    }
+
+    @Test
+    fun capabilityProbeExplicitlyNamesItsRegionOrTheNoRegionState() {
+        val payload = JSONObject().put("schema_version", 1).put("request_id", requestId())
+            .put("type", "get_local_route_capabilities").put("regional_reference", JSONObject.NULL)
+        val empty = BridgeProtocol.parse(payload.toString()) as BridgeRequest.GetLocalRouteCapabilities
+        assertNull(empty.regionalReference)
+        payload.put("regional_reference", syntheticRegionalRoutingReference().toJson())
+        val selected = BridgeProtocol.parse(payload.toString()) as BridgeRequest.GetLocalRouteCapabilities
+        assertEquals(syntheticRegionalRoutingReference(), selected.regionalReference)
+        payload.remove("regional_reference")
+        assertNull(BridgeProtocol.parse(payload.toString()))
     }
 
     @Test
@@ -211,34 +239,6 @@ class LocalRouteProtocolTest {
         assertNull(ledger.lookup(secondPageRequest, secondPagePayload))
     }
 
-    @Test
-    fun polyline6DecoderRejectsMalformedAndDecodesGraphShape() {
-        val decoded = decodePolyline6("_izlhA~rlgdF_{geC~ywl@_kwzCn`{nI")
-        assertEquals(3, decoded.size)
-        assertEquals(38.5, decoded[0].latitude, 0.000001)
-        assertEquals(-120.2, decoded[0].longitude, 0.000001)
-        assertTrue(runCatching { decodePolyline6("") }.isFailure)
-        assertTrue(runCatching { decodePolyline6("_") }.isFailure)
-    }
-
-    @Test
-    fun multiLegGeometryDeduplicatesOnlyTheSharedGraphBoundary() {
-        val a = LocalRouteCoordinate(48.0, 2.0)
-        val b = LocalRouteCoordinate(48.1, 2.1)
-        val c = LocalRouteCoordinate(48.2, 2.2)
-        val d = LocalRouteCoordinate(48.3, 2.3)
-        val joined = joinLocalRouteLegGeometries(
-            listOf(listOf(a, b, c), listOf(c, d)),
-        )
-        assertEquals(listOf(a, b, c, d), joined.geometry)
-        assertEquals(listOf(a, c, d), joined.snappedPoints)
-        assertTrue(
-            runCatching {
-                joinLocalRouteLegGeometries(listOf(listOf(a, b), listOf(c, d)))
-            }.isFailure,
-        )
-    }
-
     private fun success(): NativeRouteResult.Success = NativeRouteResult.Success(
         profile = LocalRouteProfile.HIKE,
         engine = "valhalla-mobile",
@@ -279,6 +279,7 @@ class LocalRouteProtocolTest {
         .put("route_version", LOCAL_ROUTE_REQUEST_VERSION)
         .put("profile", profile)
         .put("points", JSONArray(points))
+        .put("regional_reference", syntheticRegionalRoutingReference().toJson())
         .toString()
 
     private fun coordinate(latitude: Double, longitude: Double): JSONObject = JSONObject()

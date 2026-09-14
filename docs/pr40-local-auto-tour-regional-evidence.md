@@ -255,9 +255,11 @@ the corresponding drivers/logs, and the original display value in
 `/tmp/sugarglider-pr40-phone-display.json`. No generated routes or screenshots
 are committed. The temporary stay-awake setting was commanded back to original
 value `0` after testing; its readback was not retained before disconnection.
-On 2026-09-12 ADB reports no device, no owned forwarding remains, and neither
-temporary server port has a listener. Recheck the display setting and public
-staging-file removal when the phone next connects; retain the private old-pack backup.
+The earlier disconnected/unconfirmed-cleanup note is superseded: after the
+phone reconnected on 2026-09-12, readback confirmed value `0`, both public staging
+files absent, no ADB forward/reverse entries, and the private old-pack backup
+still present. All five checks are recorded in
+`/tmp/sugarglider-pr40-cleanup-verified.json`. No radio settings were changed.
 
 Limitations and earlier failure: the first setup used definite HTTP 404 replies
 for optional metadata, which prevented map initialization. Its route/nature run
