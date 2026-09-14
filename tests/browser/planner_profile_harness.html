@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Planner activity preference guards</title>
+<pre id="result">running</pre>
+<script type="module">
+  const result = document.getElementById("result");
+  try {
+    const { runPlannerProfileHarness } = await import("./planner_profile_harness.js");
+    result.textContent = JSON.stringify(await runPlannerProfileHarness());
+    result.dataset.status = "passed";
+  } catch (error) {
+    result.textContent = error.stack ?? String(error);
+    result.dataset.status = "failed";
+  }
+</script>
+</html>

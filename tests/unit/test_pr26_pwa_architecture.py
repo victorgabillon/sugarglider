@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v44_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v45_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v44"
+    assert generation.group(1) == "v45"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -174,6 +174,7 @@ def test_shared_shell_generation_tracks_v44_cached_assets() -> None:
             "map.js",
             "styles.css",
             "planner_location.js",
+            "planner_profile.js",
             "local_routing.js",
             "local_auto_tour.js",
             "local_planning_context.js",
@@ -230,15 +231,18 @@ def test_shared_shell_generation_tracks_v44_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "47c31ee3e3673bbcefae8c0f2faf83dee81aa648e48c9703e60315ab3daa7a7f"
+            "d269f40fe11edd94d1d0dec5f2f02d6594fb64c59e8ce27db81e57eb414331dd"
         ),
-        "app.js": ("5fc0a7f5c09941702b98fc42673240a8a64d1a653c01eb87febdba247653051b"),
+        "app.js": ("795e7f2ca87ddc8e94fce80110a9c9d1d1e38bea3ab36bb6d179fd96a772f9ae"),
         "state.js": (
             "de724c096dd193347bdbdb9a424e873902ead40b30d48a339925da4d9aa58abd"
         ),
         "map.js": ("e7f38b7fa68c47d4b5a429d7561ca2a52dafd59a274bf6774061ec3c6ae944c8"),
         "styles.css": (
             "11026a66bc90cc66deb477e8d3602b9ebd65f72ed59990bd570b8a7eb9d37e4d"
+        ),
+        "planner_profile.js": (
+            "4183a1318f3aa49df52ca0a46329caaa4f6eee1bec1b49612c446562b1b0030a"
         ),
         "planner_location.js": (
             "ce28891c92263c084e33dd5ae9ad906a31e527253aeb321539599711e4500b9c"
