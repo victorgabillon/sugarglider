@@ -180,10 +180,11 @@ class SugargliderApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         CookieHandler.setDefault(null)
-        secureStore = AndroidSecureStateStore(this)
-        // A record can survive only to protect the active foreground service's latest
-        // sample. A newly created process never treats it as permission to resume.
-        secureStore.clearAll()
+        if (V1ReleasePolicy.sharingEnabled) {
+            secureStore = AndroidSecureStateStore(this)
+            // A newly created process never treats a stored record as permission to resume.
+            secureStore.clearAll()
+        }
     }
 }
 
