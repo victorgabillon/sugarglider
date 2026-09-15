@@ -25,9 +25,7 @@ def test_android_project_is_pinned_and_targets_api_36() -> None:
         assert forbidden not in build + root_build
 
 
-def test_manifest_has_only_expected_permissions_and_nonexported_location_service() -> (
-    None
-):
+def test_local_only_manifest_retains_only_planner_permissions() -> None:
     root = ET.parse(APP / "AndroidManifest.xml").getroot()
     permissions = {
         node.attrib[ANDROID_NAME]
@@ -38,17 +36,10 @@ def test_manifest_has_only_expected_permissions_and_nonexported_location_service
         "android.permission.INTERNET",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_LOCATION",
-        "android.permission.POST_NOTIFICATIONS",
     }
     application = root.find("application")
     assert application is not None
-    service = application.find("service")
-    assert service is not None
-    android = "{http://schemas.android.com/apk/res/android}"
-    assert service.attrib[f"{android}exported"] == "false"
-    assert service.attrib[f"{android}foregroundServiceType"] == "location"
+    assert not application.findall("service")
     text = (APP / "AndroidManifest.xml").read_text()
     assert "ACCESS_BACKGROUND_LOCATION" not in text
     assert "BOOT_COMPLETED" not in text

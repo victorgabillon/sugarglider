@@ -1,6 +1,7 @@
 package io.github.victorgabillon.sugarglider
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -27,6 +28,7 @@ class LocationSharingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        if (!V1ReleasePolicy.sharingEnabled) { stopSelf(); return }
         application = getApplication() as SugargliderApplication
         scheduler = ExecutorTaskScheduler()
         createNotificationChannel()
@@ -57,6 +59,7 @@ class LocationSharingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!V1ReleasePolicy.sharingEnabled) { stopSelf(); return START_NOT_STICKY }
         when (intent?.action) {
             ACTION_START -> {
                 startIdGuard.recordStart(startId)
@@ -77,6 +80,7 @@ class LocationSharingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        if (!V1ReleasePolicy.sharingEnabled) { super.onDestroy(); return }
         if (!destroyed) {
             destroyed = true
             engine.destroy()
@@ -169,8 +173,14 @@ class LocationSharingService : Service() {
             .build()
     }
 
+    // Future implementation only: code 4 has no service registration or notification
+    // permission, and onCreate/onStartCommand fail closed before this can run.
+    @SuppressLint("NotificationPermission")
     private fun updateNotification(status: NativeTrackingStatus) {
         if (!foregroundStarted) return
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
         getSystemService(NotificationManager::class.java).notify(
             NOTIFICATION_ID,
             notification(status),
