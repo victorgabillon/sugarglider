@@ -91,7 +91,8 @@ class MainActivity : Activity() {
         application.statusRepository.addObserver(statusObserver)
         registerPredictiveBackCallback()
         pendingDeepLinkSlug = deepLinkSlug(intent)
-        if (pendingDeepLinkSlug != null || savedInstanceState?.getBoolean(STATE_SHARING_SCREEN) == true) {
+        if (V1ReleasePolicy.sharingEnabled &&
+            (pendingDeepLinkSlug != null || savedInstanceState?.getBoolean(STATE_SHARING_SCREEN) == true)) {
             openSharingServer()
         } else openPlanner()
     }
@@ -237,6 +238,7 @@ class MainActivity : Activity() {
     }
 
     private fun showServerConfiguration() {
+        if (!V1ReleasePolicy.sharingEnabled) { openPlanner(); return }
         destroyWebView()
         configuredOrigin = null
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true
@@ -304,6 +306,7 @@ class MainActivity : Activity() {
     }
 
     private fun openSharingServer() {
+        if (!V1ReleasePolicy.sharingEnabled) { openPlanner(); return }
         val stored = getPreferences(MODE_PRIVATE).getString(PREFERENCE_SERVER_ORIGIN, null)
         val origin = stored?.let { ServerOrigin.parse(it, BuildConfig.ALLOW_HTTP)?.normalized }
             ?.takeUnless(BundledShellPolicy::ownsHost)
@@ -312,6 +315,7 @@ class MainActivity : Activity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun openServer(origin: String) {
+        if (!V1ReleasePolicy.allowsOrigin(origin)) { openPlanner(); return }
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         destroyWebView()
         configuredOrigin = origin
@@ -354,7 +358,7 @@ class MainActivity : Activity() {
             )
             insets
         }
-        serverChrome.addView(Button(this).apply {
+        if (V1ReleasePolicy.sharingEnabled) serverChrome.addView(Button(this).apply {
             setText(if (origin == BundledShellPolicy.ORIGIN) R.string.open_sharing else R.string.planner_and_sharing)
             contentDescription = getString(R.string.configure_server_description)
             setTextColor(Color.WHITE)
@@ -658,7 +662,7 @@ class MainActivity : Activity() {
                 return@addWebMessageListener
             }
             if (!bridgeLedger.begin(request, payload)) return@addWebMessageListener
-            if (!BundledShellPolicy.acceptsOrigin(request, origin)) {
+            if (!V1ReleasePolicy.acceptsBridge(request, origin)) {
                 completeFailure(request, payload, channel,
                     if (origin == BundledShellPolicy.ORIGIN) "sharing_unavailable" else "local_planning_unavailable")
                 return@addWebMessageListener
@@ -1225,6 +1229,7 @@ class MainActivity : Activity() {
     }
 
     private fun deepLinkSlug(intent: Intent?): String? {
+        if (!V1ReleasePolicy.sharingEnabled) return null
         val data = intent?.data ?: return null
         if (data.scheme != "sugarglider" || data.host != "o") return null
         val segments = data.pathSegments
