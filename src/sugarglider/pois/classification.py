@@ -1,4 +1,4 @@
-"""Exact deterministic classification of supported scenic and hydration OSM tags."""
+"""Exact deterministic classification of local mapped places."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -14,7 +14,7 @@ from sugarglider.pois.models import (
     ScenicConfidence,
 )
 
-CLASSIFIER_VERSION: Literal["1"] = "1"
+CLASSIFIER_VERSION: Literal["2"] = "2"
 
 SCENIC_CATEGORY_PRIORITY: tuple[PoiCategory, ...] = (
     "viewpoint",
@@ -29,6 +29,7 @@ POI_CATEGORY_PRIORITY: tuple[PoiCategory, ...] = (
     *SCENIC_CATEGORY_PRIORITY,
     "fountain",
     "water_tap",
+    "ice_cream",
 )
 
 FALLBACK_NAMES: dict[PoiCategory, str] = {
@@ -41,6 +42,7 @@ FALLBACK_NAMES: dict[PoiCategory, str] = {
     "drinking_water": "Drinking water",
     "fountain": "Fountain — potability unknown",
     "water_tap": "Water tap — potability unknown",
+    "ice_cream": "Ice cream",
 }
 
 PUBLIC_TAG_KEYS = frozenset(
@@ -61,6 +63,13 @@ PUBLIC_TAG_KEYS = frozenset(
         "indoor",
         "bottle",
         "operator",
+        "shop",
+        "cuisine",
+        "addr:housenumber",
+        "addr:street",
+        "addr:place",
+        "addr:postcode",
+        "addr:city",
     }
 )
 
@@ -112,6 +121,18 @@ def classify_osm_tags(tags: Mapping[str, str]) -> PoiClassification | None:
         if hydration is not None and hydration[1] == "verified"
         else (*scenic, *hydration_categories)
     )
+    # Dedicated shops/parlours and cafés with an exclusive ice-cream cuisine.
+    # Mixed café menus and a conflicting shop category are not dedication.
+    if (
+        normalized.get("amenity") == "ice_cream"
+        or normalized.get("shop") == "ice_cream"
+        or (
+            normalized.get("amenity") == "cafe"
+            and normalized.get("cuisine") == "ice_cream"
+            and normalized.get("shop", "") in {"", "ice_cream"}
+        )
+    ):
+        categories = (*categories, "ice_cream")
     if not categories:
         return None
     category = categories[0]
@@ -126,7 +147,9 @@ def classify_osm_tags(tags: Mapping[str, str]) -> PoiClassification | None:
         else "none"
     )
     group: PoiGroup = (
-        "hydration"
+        "refreshment"
+        if category == "ice_cream"
+        else "hydration"
         if category in {"drinking_water", "fountain", "water_tap"}
         else "scenic"
     )

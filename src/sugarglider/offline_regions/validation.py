@@ -196,6 +196,8 @@ def validate_components(directory: Path, manifest: RegionalManifest) -> None:
     nature = NatureIndexDocument.model_validate_json(
         gzip.decompress((directory / "nature/index.json.gz").read_bytes())
     )
+    if pois.metadata.classifier_version != manifest.tools.poi_classifier:
+        raise ValueError("POI classifier does not match regional toolchain")
     for metadata in (pois.metadata, nature.metadata):
         if metadata.bounding_box != manifest.bounds or (
             metadata.source_basename != manifest.source.basename

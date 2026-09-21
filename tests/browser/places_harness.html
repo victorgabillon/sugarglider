@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Places presentation and local discovery tests</title>
+<link rel="stylesheet" href="/static/vendor/maplibre-gl-6.4.1/maplibre-gl.css">
+<link rel="stylesheet" href="/static/styles.css">
+<style>#map { width:100%; height:70vh; } #result { white-space:pre-wrap; }</style>
+<div id="map"></div><pre id="result">running</pre>
+<script src="/static/vendor/pmtiles-4.5.0/pmtiles.js"></script>
+<script type="module">
+import { runPlacesHarness } from './places_harness.js';
+try {
+  const cases = await runPlacesHarness();
+  document.querySelector('#result').dataset.status = 'passed';
+  document.querySelector('#result').textContent = JSON.stringify(cases);
+} catch(error) {
+  document.querySelector('#result').dataset.status = 'failed';
+  document.querySelector('#result').textContent = error.stack;
+}
+</script>
+</html>

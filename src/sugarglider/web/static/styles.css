@@ -362,6 +362,23 @@ input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d;
 .place-popup p strong { display: inline; color: #394940; font-size: inherit; }
 .place-popup .place-explanation { margin-top: .45rem; padding-top: .4rem; border-top: 1px solid var(--border); font-weight: 750; }
 .place-popup .popup-warning { color: #805014; font-weight: 750; }
+.map-panel:has(.place-detail-popup) .map-empty-state { display: none; }
+.place-detail-popup { z-index: 7; }
+.place-detail-popup .maplibregl-popup-content { border: 1px solid #e6c7d3; border-radius: 16px; background: #fffdf7; }
+.place-detail-popup .maplibregl-popup-close-button { width: 44px; height: 44px; border-radius: 0 16px 0 12px; color: #633347; font-size: 24px; }
+.place-details { width: min(310px, calc(100vw - 40px)); padding: 16px; color: var(--text); font-size: 13px; line-height: 1.45; }
+.place-details-heading { display: flex; align-items: center; gap: 12px; padding-right: 22px; }
+.place-details-heading img { flex: 0 0 72px; width: 72px; height: 108px; object-fit: contain; }
+.place-details-heading h3 { margin: 4px 0; font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; }
+.place-details .place-category { margin: 0; color: #9a315e; font-size: 12px; font-weight: 750; }
+.place-details p { margin: 8px 0; overflow-wrap: anywhere; }
+.place-details .place-address { color: #435346; }
+.place-details .place-center { min-height: 44px; margin-top: 4px; padding: 8px 12px; font-size: 13px; }
+.place-details .place-data-note { color: var(--muted-text); margin-bottom: 0; font-size: 11px; }
+@media (max-width: 600px) {
+  .place-details { max-height: 38dvh; overflow-y: auto; padding: 12px; }
+  .place-details-heading img { flex-basis: 56px; width: 56px; height: 84px; }
+}
 .requested-place-popup { min-width: 210px; max-width: 285px; }
 .requested-place-popup h3 { margin: 0 0 .35rem; color: var(--primary-action); font-size: .86rem; overflow-wrap: anywhere; }
 .requested-place-popup p strong { display: inline; color: #394940; font-size: inherit; }

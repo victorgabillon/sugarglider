@@ -10,7 +10,10 @@ const MAX_ANALYSIS_OPERATIONS = 4_000_000;
 export const LOCAL_NATURE_WEIGHTS = Object.freeze({ woodland: 1, open_natural: 0.85, agriculture: 0.3,
   park_or_protected: 0.2, near_water: 0.15, urban: -1, unknown: -0.1 });
 const PRIMARY_CLASSES = Object.freeze(["urban", "water", "woodland", "open_natural", "agriculture"]);
-const CATEGORIES = Object.freeze(["viewpoint", "castle", "ruins", "archaeological_site", "observation_tower", "tourism_attraction", "drinking_water", "fountain", "water_tap"]);
+const CATEGORIES = Object.freeze(["viewpoint", "castle", "ruins", "archaeological_site", "observation_tower", "tourism_attraction", "drinking_water", "fountain", "water_tap", "ice_cream"]);
+const GROUPS = Object.freeze(["scenic", "hydration", "refreshment"]);
+const groupForCategory = (category) => category === "ice_cream" ? "refreshment"
+  : ["drinking_water", "fountain", "water_tap"].includes(category) ? "hydration" : "scenic";
 const ACCESS = Object.freeze(["public", "unknown", "private", "restricted"]);
 const POTABILITY = Object.freeze(["verified", "unknown", "non_potable", "not_applicable"]);
 const APPROACH_KINDS = Object.freeze(["exact_feature", "drinking_water_source", "viewpoint_location", "mapped_entrance", "mapped_gate", "public_path_boundary", "nearby_public_path", "user_override", "strict_graph_snap"]);
@@ -72,6 +75,7 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
     poi_component_id: pois === null ? null : manifest.components.pois.component_id,
     nature_component_id: nature === null ? null : manifest.components.nature.component_id,
     poi_count: poiFeatures.length,
+    poi_classifier_version: pois?.metadata.classifier_version ?? null,
     nature_count: natureItems.length,
   });
 
@@ -84,11 +88,39 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
     const bounds = [p[0] - radius_m, p[1] - radius_m, p[0] + radius_m, p[1] + radius_m];
     const matches = queryTree(poiTree, bounds).map(({ feature }) => feature)
       .filter((feature) => containsPosition(manifest.bounds, [feature.coordinate.lon, feature.coordinate.lat])
+        && feature.group !== "refreshment"
         && metricDistance(p, project([feature.coordinate.lon, feature.coordinate.lat])) <= radius_m)
       .sort((left, right) => metricDistance(p, project([left.coordinate.lon, left.coordinate.lat]))
         - metricDistance(p, project([right.coordinate.lon, right.coordinate.lat])) || compareText(left.id, right.id));
     const requested = requested_ids.map((id) => ({ id, feature: byId.get(id) ?? null }));
     return freezeData({ available: pois !== null, requested, features: matches.slice(0, limit), truncated: matches.length > limit, identity });
+  }
+
+  function searchPois(query) {
+    const { bbox, groups = GROUPS, categories = CATEGORIES, potability = ["verified", "unknown"],
+      access = ["public", "unknown"], include_private = false, limit = 200 } = query ?? {};
+    const values = (value, allowed) => Array.isArray(value) && value.every((item) => allowed.includes(item))
+      && new Set(value).size === value.length;
+    requireData(bbox && [bbox.west, bbox.south, bbox.east, bbox.north].every(Number.isFinite)
+      && -180 <= bbox.west && bbox.west < bbox.east && bbox.east <= 180
+      && -90 <= bbox.south && bbox.south < bbox.north && bbox.north <= 90
+      && values(groups, GROUPS) && values(categories, CATEGORIES)
+      && values(potability, ["verified", "unknown", "non_potable"]) && values(access, ACCESS)
+      && typeof include_private === "boolean" && Number.isSafeInteger(limit) && limit >= 1 && limit <= 500,
+    "invalid_local_place_query");
+    const bounds = [...project([bbox.west, bbox.south]), ...project([bbox.east, bbox.north])];
+    const matches = queryTree(poiTree, bounds).map(({ feature }) => feature)
+      .filter((feature) => containsPosition(manifest.bounds, [feature.coordinate.lon, feature.coordinate.lat])
+        && groups.includes(feature.group) && categories.includes(feature.category)
+        && access.includes(feature.access_status) && (include_private || feature.access_status !== "private")
+        && (feature.potability !== "non_potable" || potability.includes("non_potable"))
+        && (feature.group !== "hydration" || potability.includes(feature.potability)))
+      .sort((a, b) => compareText(a.group, b.group) || compareText(a.category, b.category)
+        || compareText(a.display_name.normalize("NFKC").toLowerCase(), b.display_name.normalize("NFKC").toLowerCase())
+        || compareText(a.id, b.id));
+    return freezeData({ available: pois !== null, features: matches.slice(0, limit), total_matching: matches.length,
+      returned_count: Math.min(limit, matches.length), truncated: matches.length > limit,
+      warnings: matches.length > limit ? ["poi_results_truncated"] : [], identity });
   }
 
   function analyzeNature(candidate) {
@@ -166,7 +198,7 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
     });
   }
 
-  return Object.freeze({ identity, queryPois, analyzeNature });
+  return Object.freeze({ identity, queryPois, searchPois, analyzeNature });
 }
 
 export function unavailableNature(distance, reason, operations = null) {
@@ -179,6 +211,7 @@ export function unavailableNature(distance, reason, operations = null) {
 
 export function eligibleLocalPoi(feature, bounds) {
   if (!feature) return "poi_not_found";
+  if (feature.group === "refreshment") return "poi_category_display_only";
   if (["private", "restricted"].includes(feature.access_status)) return "poi_access_restricted";
   if (feature.potability === "non_potable") return "poi_non_potable";
   if (feature.group === "hydration" && feature.potability !== "verified") return "poi_potability_unverified";
@@ -202,7 +235,9 @@ function validatePoiDocument(document, manifest) {
   validateDocument(document, manifest, 2, ["format_version", "source_basename", "source_size_bytes", "feature_count", "category_counts", "potability_counts", "access_counts", "approach_counts", "bounding_box", "skipped_invalid_count", "build_configuration", "classifier_version"]);
   requireFields(document.metadata.build_configuration, ["classifier_version", "geometry_policy", "identity_policy", "include_non_potable"]);
   const config = document.metadata.build_configuration;
-  requireData(document.metadata.classifier_version === "1" && config.classifier_version === "1"
+  requireData(["1", "2"].includes(document.metadata.classifier_version)
+    && config.classifier_version === document.metadata.classifier_version
+    && config.classifier_version === manifest.tools.poi_classifier
     && config.geometry_policy === "semantic-point_with-bounded-public-approaches" && config.identity_policy === "osm-type-and-id"
     && typeof config.include_non_potable === "boolean" && nonnegative(document.metadata.skipped_invalid_count, true));
   let previous = "";
@@ -218,7 +253,7 @@ function validatePoiDocument(document, manifest) {
       && sortedStrings(feature.warnings) && Array.isArray(feature.secondary_categories)
       && feature.secondary_categories.every((category) => CATEGORIES.includes(category) && category !== feature.category)
       && new Set(feature.secondary_categories).size === feature.secondary_categories.length
-      && feature.group === (CATEGORIES.indexOf(feature.category) >= 6 ? "hydration" : "scenic")
+      && feature.group === groupForCategory(feature.category)
       && Array.isArray(feature.tags) && feature.tags.length <= 100
       && Array.isArray(feature.approach_candidates) && feature.approach_candidates.length <= 8);
     previous = feature.id;

@@ -9,6 +9,7 @@ import {
 } from "./avatar.js";
 import { liveFreshness } from "./outing_live_state.js";
 import { requestedPlaceIdentifier } from "./state.js";
+import { createPlaceDetails, ICE_CREAM_ART_URL, ICE_CREAM_ICON_SVG, placePresentation } from "./place_presentation.js";
 import {
   attachOfflineBasemap,
   detachOfflineBasemap,
@@ -111,6 +112,7 @@ const DIRECTION_FOREGROUND_LAYERS = [
 ];
 
 const POI_ICON_SVGS = {
+  "poi-ice-cream": ICE_CREAM_ICON_SVG,
   "poi-viewpoint": '<path d="M6 36 20 14l8 12 6-8 8 18Z" fill="#fff"/><path d="m13 30 7-11 7 11" fill="none" stroke="#214b3b" stroke-width="3"/>',
   "poi-historic": '<path d="M9 17h6v-5h6v5h6v-5h6v5h6v22H9Z" fill="#fff"/><path d="M18 39V28h12v11M9 21h30" fill="none" stroke="#6d4a2d" stroke-width="3"/>',
   "poi-tower": '<path d="M19 10h10l-2 7 7 22H14l7-22Z" fill="#fff"/><path d="M16 24h16M13 39h22" fill="none" stroke="#3c5268" stroke-width="3"/>',
@@ -132,6 +134,10 @@ let poiPreferHandler = null;
 let preferredPoiIds = new Set();
 let poiById = new Map();
 let poiPopup = null;
+let poiPopupId = null;
+let poiDeselectHandler = null;
+let selectedPoiId = null;
+let visitedPoiIds = new Set();
 let requestedPlaceActivateHandler = null;
 let requestedPlaceById = new Map();
 let requestedPlacePopup = null;
@@ -215,7 +221,11 @@ export function initializeMap(config, handlers) {
     handlers.onViewportChange?.(currentViewportBounds());
   });
   map.on("moveend", () => {
+    if (ready) updatePoiSources();
     if (ready) handlers.onViewportChange?.(currentViewportBounds());
+  });
+  map.getCanvas().addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && poiPopup) dismissPoi();
   });
   for (const eventName of ["dragstart", "zoomstart", "rotatestart", "pitchstart"]) {
     map.on(eventName, (event) => {
@@ -262,16 +272,21 @@ export function initializeMap(config, handlers) {
       }
       return;
     }
-    const poiLayers = [POI_SELECTED_MARKER_LAYER, POI_MARKER_LAYER]
+    const poiLayers = [POI_SELECTED_MARKER_LAYER, POI_MARKER_LAYER, POI_SELECTED_LABEL_LAYER, POI_LABEL_LAYER]
       .filter((id) => map.getLayer(id));
+    const hitRadius = window.matchMedia("(pointer: coarse)").matches ? 22 : 4;
+    const hitArea = [[event.point.x - hitRadius, event.point.y - hitRadius],
+      [event.point.x + hitRadius, event.point.y + hitRadius]];
     const poi = poiLayers.length
-      ? map.queryRenderedFeatures(event.point, { layers: poiLayers })[0]
+      ? map.queryRenderedFeatures(hitArea, { layers: poiLayers }).sort((a, b) => {
+        const distance = (feature) => map.project(feature.geometry.coordinates).dist(event.point);
+        return distance(a) - distance(b) || String(a.properties.poi_id).localeCompare(String(b.properties.poi_id));
+      })[0]
       : null;
     if (poi?.properties?.poi_id) {
       const feature = poiById.get(poi.properties.poi_id);
       if (feature) {
         poiActivateHandler?.(feature.id);
-        showPoiPopup(feature);
       }
       return;
     }
@@ -317,7 +332,7 @@ export function initializeMap(config, handlers) {
         REQUESTED_MARKER_LAYER,
         REQUESTED_MASCOT_LAYER,
       ].filter((id) => map.getLayer(id)),
-      ...[POI_SELECTED_MARKER_LAYER, POI_MARKER_LAYER, POI_CLUSTER_LAYER]
+      ...[POI_SELECTED_MARKER_LAYER, POI_MARKER_LAYER, POI_CLUSTER_LAYER, POI_LABEL_LAYER, POI_SELECTED_LABEL_LAYER]
         .filter((id) => map.getLayer(id)),
       ...[SPUR_TURNAROUND_LAYER, SPUR_BRANCH_LAYER]
         .filter((id) => map.getLayer(id)),
@@ -349,10 +364,11 @@ function resetMapInstance() {
   waypointMarkers = [];
   plannerLocationPositionCount = 0;
   plannerLocationAccuracyCount = 0;
-  poiPopup?.remove();
+  removePoiPopup();
   requestedPlacePopup?.remove();
   spurPopup?.remove();
   poiPopup = null;
+  poiById = new Map(); selectedPoiId = null; visitedPoiIds = new Set();
   requestedPlacePopup = null;
   spurPopup = null;
   if (map) {
@@ -474,6 +490,13 @@ function loadRasterImage(url) {
 }
 
 async function installPoiImages() {
+  if (!map.hasImage("poi-ice-cream-selected")) {
+    const original = await loadRasterImage(ICE_CREAM_ART_URL);
+    // Downsample only the in-memory sprite, preserving the canonical PNG bytes.
+    const sprite = await createImageBitmap(original, { resizeWidth: 112, resizeHeight: 168, resizeQuality: "high" });
+    map.addImage("poi-ice-cream-selected", sprite, { pixelRatio: 3 });
+    sprite.close();
+  }
   if (!map.hasImage("requested-sugarglider")) {
     map.addImage("requested-sugarglider", await loadRasterImage(REQUIRED_PIN_URL), {
       pixelRatio: 32,
@@ -562,10 +585,10 @@ function ensurePoiLayers() {
     type: "circle",
     source: POI_SELECTED_SOURCE,
     paint: {
-      "circle-radius": 19,
+      "circle-radius": ["case", ["==", ["get", "category"], "ice_cream"], 8, 19],
       "circle-color": "#fff",
       "circle-opacity": .8,
-      "circle-stroke-color": "#d9582b",
+      "circle-stroke-color": ["case", ["==", ["get", "category"], "ice_cream"], "#a52e61", "#d9582b"],
       "circle-stroke-width": 4,
     },
   });
@@ -589,19 +612,31 @@ function ensurePoiLayers() {
     filter: ["!", ["has", "point_count"]],
     layout: {
       "icon-image": ["get", "icon_name"],
-      "icon-size": ["interpolate", ["linear"], ["zoom"], 8, .75, 14, 1],
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 8, .75, 14,
+        ["case", ["==", ["get", "category"], "ice_cream"], 1.08, 1]],
       "icon-allow-overlap": false,
       "icon-padding": 2,
-      "symbol-sort-key": ["case", ["get", "selected"], 0, 1],
+      "symbol-sort-key": ["get", "priority"],
+      // Keep the compact icon and its optional name in one collision placement.
+      "text-field": ["case", ["all", ["==", ["get", "category"], "ice_cream"], ["get", "show_label"]], ["get", "display_name"], ""],
+      "text-font": ["Open Sans Semibold"],
+      "text-size": 11,
+      "text-anchor": "top",
+      "text-offset": [0, 1.7],
+      "text-max-width": 13,
+      "text-optional": true,
     },
+    paint: { "text-color": "#71354e", "text-halo-color": "#fffef9", "text-halo-width": 2 },
   });
   addPoiLayer({
     id: POI_SELECTED_MARKER_LAYER,
     type: "symbol",
     source: POI_SELECTED_SOURCE,
     layout: {
-      "icon-image": ["get", "icon_name"],
-      "icon-size": 1.08,
+      "icon-image": ["get", "selected_icon"],
+      "icon-size": ["case", ["==", ["get", "category"], "ice_cream"], 1, 1.08],
+      "icon-anchor": ["case", ["==", ["get", "category"], "ice_cream"], "bottom", "center"],
+      "icon-offset": ["case", ["==", ["get", "category"], "ice_cream"], ["literal", [0, 6]], ["literal", [0, 0]]],
       "icon-allow-overlap": true,
       "icon-ignore-placement": true,
     },
@@ -611,7 +646,8 @@ function ensurePoiLayers() {
     type: "symbol",
     source: POI_SOURCE,
     minzoom: 13,
-    filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "selected"], false]],
+    filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "selected"], false],
+      ["!=", ["get", "category"], "ice_cream"], ["==", ["get", "show_label"], true]],
     layout: {
       "text-field": ["get", "display_name"],
       "text-font": ["Open Sans Semibold"],
@@ -642,16 +678,6 @@ function ensurePoiLayers() {
   });
 }
 
-function poiIcon(feature) {
-  if (feature.potability === "verified") return "poi-water-verified";
-  if (feature.potability === "unknown") return "poi-water-unknown";
-  if (feature.potability === "non_potable") return "poi-water-nonpotable";
-  if (feature.category === "viewpoint") return "poi-viewpoint";
-  if (feature.category === "observation_tower") return "poi-tower";
-  if (feature.category === "tourism_attraction") return "poi-attraction";
-  return "poi-historic";
-}
-
 function poiCollection(features, selectedId, visitedIds = new Set()) {
   return {
     type: "FeatureCollection",
@@ -665,7 +691,11 @@ function poiCollection(features, selectedId, visitedIds = new Set()) {
       properties: {
         poi_id: feature.id,
         display_name: feature.display_name,
-        icon_name: poiIcon(feature),
+        category: feature.category,
+        icon_name: placePresentation(feature).icon,
+        selected_icon: placePresentation(feature).richImage ? "poi-ice-cream-selected" : placePresentation(feature).icon,
+        priority: placePresentation(feature).priority,
+        show_label: map.getZoom() >= placePresentation(feature).labelZoom,
         selected: feature.id === selectedId,
         visited: visitedIds.has(feature.id),
       },
@@ -689,6 +719,12 @@ function popupRow(content, label, value, prominent = false) {
 }
 
 function poiPopupContent(feature) {
+  if (placePresentation(feature).richImage) {
+    return createPlaceDetails(feature, { onCenter: (place) => map.easeTo({
+      center: [place.coordinate.lon, place.coordinate.lat],
+      offset: [0, 100], duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 300,
+    }) });
+  }
   const content = document.createElement("div");
   content.className = "point-popup place-popup";
   const heading = document.createElement("h3");
@@ -751,11 +787,55 @@ function poiPopupContent(feature) {
 }
 
 function showPoiPopup(feature) {
-  poiPopup?.remove();
-  poiPopup = new maplibregl.Popup({ offset: 24, closeButton: true })
+  removePoiPopup();
+  const popup = new maplibregl.Popup({ offset: feature.category === "ice_cream" ? 52 : 24,
+    ...(feature.category === "ice_cream" ? { anchor: "bottom" } : {}),
+    closeButton: true, maxWidth: "320px", className: feature.category === "ice_cream" ? "place-detail-popup" : "" })
     .setLngLat([feature.coordinate.lon, feature.coordinate.lat])
     .setDOMContent(poiPopupContent(feature))
     .addTo(map);
+  poiPopup = popup;
+  poiPopupId = feature.id;
+  popup.on("close", () => {
+    if (poiPopup !== popup) return;
+    poiPopup = null; poiPopupId = null;
+    poiDeselectHandler?.();
+    map.getCanvas().focus({ preventScroll: true });
+  });
+  popup.getElement().addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { event.stopPropagation(); dismissPoi(); }
+  });
+  if (feature.category === "ice_cream") {
+    // Keep the whole card inside the map, leaving its bottom controls/attribution clear.
+    const card = popup.getElement().getBoundingClientRect();
+    const viewport = map.getCanvas().getBoundingClientRect();
+    const shiftX = Math.max(0, viewport.left + 12 - card.left)
+      - Math.max(0, card.right - viewport.right + 12);
+    const shiftY = Math.max(0, viewport.top + 12 - card.top)
+      - Math.max(0, card.bottom - viewport.bottom + 60);
+    if (shiftX || shiftY) map.panBy([-shiftX, -shiftY], { duration: 0 });
+  }
+}
+
+function removePoiPopup() {
+  const previous = poiPopup;
+  poiPopup = null; poiPopupId = null;
+  previous?.remove();
+}
+
+function dismissPoi() {
+  removePoiPopup();
+  poiDeselectHandler?.();
+  map.getCanvas().focus({ preventScroll: true });
+}
+
+function updatePoiSources() {
+  if (!map?.getSource(POI_SOURCE)) return;
+  const features = [...poiById.values()];
+  const zoom = map.getZoom();
+  map.getSource(POI_SOURCE).setData(poiCollection(features.filter((feature) =>
+    feature.id !== selectedPoiId && zoom >= placePresentation(feature).minZoom), null, visitedPoiIds));
+  map.getSource(POI_SELECTED_SOURCE).setData(selectedPoiCollection(features, selectedPoiId, visitedPoiIds));
 }
 
 function backendRequestedPlace(stop) {
@@ -1284,16 +1364,16 @@ export function renderPois(features, selectedId, onSelect, options = {}) {
   ensurePoiLayers();
   poiById = new Map(features.map((feature) => [feature.id, feature]));
   poiActivateHandler = onSelect;
+  poiDeselectHandler = options.onDeselect ?? (() => onSelect(null));
   poiPreferHandler = options.onPrefer ?? null;
   preferredPoiIds = new Set(options.preferredIds ?? []);
-  const visitedIds = new Set(options.visitedIds ?? []);
-  map.getSource(POI_SOURCE).setData(
-    poiCollection(features.filter((feature) => feature.id !== selectedId), null, visitedIds),
-  );
-  map.getSource(POI_SELECTED_SOURCE).setData(selectedPoiCollection(features, selectedId, visitedIds));
+  selectedPoiId = selectedId;
+  visitedPoiIds = new Set(options.visitedIds ?? []);
+  updatePoiSources();
   if (selectedId === null || !poiById.has(selectedId)) {
-    poiPopup?.remove();
-    poiPopup = null;
+    removePoiPopup();
+  } else if (poiPopupId !== selectedId) {
+    showPoiPopup(poiById.get(selectedId));
   }
   moveRequiredLabelsToTop();
   positionDirectionLayer();
@@ -1307,6 +1387,22 @@ export function currentViewportBounds() {
     south: bounds.getSouth(),
     east: bounds.getEast(),
     north: bounds.getNorth(),
+  };
+}
+
+export function placeMapDiagnostics() {
+  const rendered = (layer) => ready && map?.getLayer(layer)
+    ? [...new Set(map.queryRenderedFeatures(undefined, { layers: [layer] }).map((feature) => feature.properties.poi_id).filter(Boolean))] : [];
+  return {
+    selectedId: selectedPoiId, popupId: poiPopupId,
+    markerIds: rendered(POI_MARKER_LAYER), selectedMarkerIds: rendered(POI_SELECTED_MARKER_LAYER),
+    labelIds: rendered(POI_LABEL_LAYER),
+    iceCreamIconLoaded: Boolean(map?.hasImage("poi-ice-cream")),
+    iceCreamArtworkLoaded: Boolean(map?.hasImage("poi-ice-cream-selected")),
+    positions: [...poiById.values()].map((feature) => {
+      const point = map.project([feature.coordinate.lon, feature.coordinate.lat]);
+      return { id: feature.id, point: [point.x, point.y] };
+    }),
   };
 }
 

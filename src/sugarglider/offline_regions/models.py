@@ -142,7 +142,7 @@ class Toolchain(StrictModel):
         "ghcr.io/valhalla/valhalla:3.6.3"
     )
     poi_index_schema: Literal[2] = 2
-    poi_classifier: Literal["1"] = "1"
+    poi_classifier: Literal["1", "2"] = "2"
     nature_index_schema: Literal[1] = 1
     python_version: str
     osmium_version: str

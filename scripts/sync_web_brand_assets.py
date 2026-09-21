@@ -10,6 +10,7 @@ BRAND_ASSET_FILENAMES: tuple[str, ...] = (
     "sugarglider-flying-map.png",
     "sugarglider-map-pin.png",
     "sugarglider-water-pin.png",
+    "sugarglider-ice-cream-pin.png",
 )
 PROFILE_BADGE_FILENAMES: tuple[str, ...] = (
     "blue.png",

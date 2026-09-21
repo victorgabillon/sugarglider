@@ -115,10 +115,12 @@ export const state = {
   showDroppedRequestedRadii: false,
   poiFeatures: [],
   selectedPoiId: null,
+  selectedPoiFeature: null,
   poiIndexStatus: null,
   poiRequest: { status: "idle", id: 0 },
   poiAbortController: null,
   poiFilters: {
+    iceCream: true,
     scenic: true,
     verifiedWater: true,
     unknownWater: false,

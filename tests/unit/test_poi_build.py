@@ -9,6 +9,7 @@ from shapely.geometry import Point, Polygon
 
 from sugarglider.pois.build import _validated_position, build_poi_index
 from sugarglider.pois.errors import PoiIndexBuildError
+from sugarglider.pois.index import load_poi_index
 from sugarglider.pois.models import PoiIndexDocument
 
 OSM_XML = """\
@@ -148,6 +149,51 @@ def test_builder_output_is_byte_deterministic_and_path_independent(
 
     assert first.read_bytes() == second.read_bytes()
     assert str(tmp_path).encode() not in gzip.decompress(first.read_bytes())
+
+
+def test_region_crossing_geometry_does_not_emit_outside_semantic_points(
+    tmp_path: Path,
+) -> None:
+    source = _source(tmp_path)
+    full = tmp_path / "full.json.gz"
+    bounded = tmp_path / "bounded.json.gz"
+    build_poi_index(source, full)
+    build_poi_index(source, bounded, bounds=(2.0, 48.0, 2.011, 48.1))
+    document = PoiIndexDocument.model_validate_json(gzip.decompress(full.read_bytes()))
+    original = {feature.id: feature for feature in document.features}
+    assert {"way/20", "way/21", "relation/40"} <= original.keys()
+    # All three geometries intersect this thin region, but their semantic
+    # points lie outside. Do not invent replacement points at its edge.
+    region = load_poi_index(bounded)
+    assert region.metadata.feature_count == 1
+    retained = PoiIndexDocument.model_validate_json(
+        gzip.decompress(bounded.read_bytes())
+    )
+    assert retained.features == (original["node/1"],)
+
+
+def test_region_crossing_entrance_is_omitted_without_moving_the_place(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "entrance.osm"
+    source.write_text("""<osm version="0.6">
+<bounds minlat="48" minlon="2" maxlat="48.1" maxlon="2.1"/>
+<node id="1" lat="48.01" lon="2.01"/>
+<node id="2" lat="48.01" lon="2.03"><tag k="entrance" v="main"/></node>
+<node id="3" lat="48.03" lon="2.03"/>
+<node id="4" lat="48.03" lon="2.01"/>
+<way id="10"><nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="1"/>
+<tag k="historic" v="castle"/></way></osm>""")
+    full = tmp_path / "full.json.gz"
+    bounded = tmp_path / "bounded.json.gz"
+    build_poi_index(source, full)
+    build_poi_index(source, bounded, bounds=(2.0, 48.0, 2.025, 48.1))
+    original = PoiIndexDocument.model_validate_json(gzip.decompress(full.read_bytes()))
+    region = PoiIndexDocument.model_validate_json(gzip.decompress(bounded.read_bytes()))
+    assert len(original.features[0].approach_candidates) == 1
+    assert region.features[0].coordinate == original.features[0].coordinate
+    assert region.features[0].approach_candidates == ()
+    assert load_poi_index(bounded).metadata.feature_count == 1
 
 
 def test_builder_rejects_missing_unsupported_and_invalid_positions(

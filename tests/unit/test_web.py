@@ -42,6 +42,7 @@ BRAND_ASSET_FILENAMES = (
     "sugarglider-flying-map.png",
     "sugarglider-map-pin.png",
     "sugarglider-water-pin.png",
+    "sugarglider-ice-cream-pin.png",
 )
 PROFILE_BADGE_FILENAMES = (
     "blue.png",

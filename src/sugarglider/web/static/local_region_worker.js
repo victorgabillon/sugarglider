@@ -58,9 +58,12 @@ self.onmessage = ({ data: message }) => {
           break;
         }
         case "query_pois":
+        case "search_pois":
         case "analyze_nature":
           if (!data || data.identity.build_id !== message.value.build_id) throw new Error("regional_data_changed");
-          result = message.type === "query_pois" ? data.queryPois(message.value.query) : data.analyzeNature(message.value.candidate);
+          result = message.type === "query_pois" ? data.queryPois(message.value.query)
+            : message.type === "search_pois" ? data.searchPois(message.value.query)
+            : data.analyzeNature(message.value.candidate);
           break;
         default: throw new Error("invalid_regional_operation");
       }
