@@ -42,6 +42,7 @@ export function createLocalRegionClient({
   function session(identity) {
     return Object.freeze({ identity,
       queryPois: (query) => request("query_pois", { build_id: identity.build_id, query }),
+      searchPois: (query) => request("search_pois", { build_id: identity.build_id, query }),
       analyzeNature: (candidate) => request("analyze_nature", { build_id: identity.build_id,
         candidate: { geometry: candidate.geometry, distance_m: candidate.distance_m, pack_id: candidate.pack_id } }),
     });

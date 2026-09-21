@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v45_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v46_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v45"
+    assert generation.group(1) == "v46"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -172,6 +172,8 @@ def test_shared_shell_generation_tracks_v45_cached_assets() -> None:
             "app.js",
             "state.js",
             "map.js",
+            "place_presentation.js",
+            "local_places.js",
             "styles.css",
             "planner_location.js",
             "planner_profile.js",
@@ -203,6 +205,12 @@ def test_shared_shell_generation_tracks_v45_cached_assets() -> None:
             "public_profile_metadata.js",
         )
     } == {
+        "place_presentation.js": (
+            "e246706ff8260c188cbbebc7fc5ab31657168893cbf0542ef59135d5749613e3"
+        ),
+        "local_places.js": (
+            "7c5297aa221f4b6795e3fa968b7523713d7c76b0a0a420a868141a81a303ab08"
+        ),
         "local_planner.js": (
             "a2ea147a2cf3d987d38ac1f3b3980112984db3c3577ab8e171b6a9f53caaa20f"
         ),
@@ -231,15 +239,15 @@ def test_shared_shell_generation_tracks_v45_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "d269f40fe11edd94d1d0dec5f2f02d6594fb64c59e8ce27db81e57eb414331dd"
+            "58a9f44428b9afc6aa71889dc3c133e993338b5f4bc13a6cbb887250cc465311"
         ),
-        "app.js": ("795e7f2ca87ddc8e94fce80110a9c9d1d1e38bea3ab36bb6d179fd96a772f9ae"),
+        "app.js": ("692117976ff350074df24f0efd87630ec57385ad8983a90fc2e981f2ae4a9617"),
         "state.js": (
-            "de724c096dd193347bdbdb9a424e873902ead40b30d48a339925da4d9aa58abd"
+            "34347ae0256e236f0465855be121a8c56a337a69095dda0e08f1cedf45ae7039"
         ),
-        "map.js": ("e7f38b7fa68c47d4b5a429d7561ca2a52dafd59a274bf6774061ec3c6ae944c8"),
+        "map.js": ("13fe4bb7f4bf25783899fac94df139a156fdfd640523e6ea6c4bf3055ded90d3"),
         "styles.css": (
-            "11026a66bc90cc66deb477e8d3602b9ebd65f72ed59990bd570b8a7eb9d37e4d"
+            "1a0054292427bb27001cc885e4af51149180b081fd0b98ab473afee9f5782d36"
         ),
         "planner_profile.js": (
             "4183a1318f3aa49df52ca0a46329caaa4f6eee1bec1b49612c446562b1b0030a"
@@ -260,19 +268,19 @@ def test_shared_shell_generation_tracks_v45_cached_assets() -> None:
             "45f94090ef1cf08fb405243cc610f366bc370c8dcc1ed12f7e929d6b0e271a8b"
         ),
         "regional_manifest.js": (
-            "f062cff8451b1a8039de394856654e07c0533f55ccfb82e25aa0e3f814e94787"
+            "50dcb3ec6a87cd3382dfc25d6b70b525191d6c8b310132901eb34cbd7f686efc"
         ),
         "local_region_client.js": (
-            "f034f2e2d05335d2f3b8384144f095708f1544fef93322819645265a6e7076ac"
+            "c111e281c60d0d0b4525c1f240641dca15888877e188467bba1416c4ae73ad5a"
         ),
         "local_region_data.js": (
-            "81d76b750de4aba6ea5e701ae2a5319ae4fd9221073b06fc472f86148828f6bb"
+            "26a24c30d024a6d383e46eb3f90cc02246bab479851caa384c2b7ea2890b2c8a"
         ),
         "local_region_store.js": (
             "1d031f544b27c0c38ef37efd68b2d9d107843af4bbb8e12fe7c87428bab78eb5"
         ),
         "local_region_worker.js": (
-            "a463b22af5ef1f68b9199d9b1177df84ae7feb64fd4c41224e88bc14c63dfd11"
+            "65301905a7ad60dfa0bd9d19ace0006051092eb5cf4dba16f98a58bd2013e239"
         ),
         "local_region_panel.js": (
             "43c5119cb1cf5ed4249dc00ae8a7d30741dd78b307a9305f31ee6a3988c456f6"

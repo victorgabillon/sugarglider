@@ -7,6 +7,11 @@
 - `sugarglider-app-icon.png` — installed application icon
 - `sugarglider-flying-map.png` — welcome, empty-state and generation illustration
 - `sugarglider-map-pin.png` — required-POI and route-start map marker
+- `sugarglider-ice-cream-pin.png` — selected ice-cream place and detail artwork;
+  supplied transparent RGBA source, 1024×1536, used without conversion or cropping.
+  SHA-256: `79bc80cc0e3bbed28c1fafcec4b752901b563dc36a112c900683b7fd3254f427`.
+  Ordinary ice-cream places use the compact code-native cone icon in
+  `place_presentation.js`; the illustration is reserved for selection.
 
 ## Usage
 

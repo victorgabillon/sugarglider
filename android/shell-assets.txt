@@ -14,6 +14,7 @@ brand/profile-badges/tomato.png
 brand/sugarglider-banner.png
 brand/sugarglider-compact-icon.png
 brand/sugarglider-flying-map.png
+brand/sugarglider-ice-cream-pin.png
 brand/sugarglider-map-pin.png
 brand/sugarglider-water-pin.png
 canonical_numbers.js
@@ -32,6 +33,7 @@ local_candidate_evaluator.js
 local_gpx_client.js
 local_gpx_export.js
 local_gpx_worker.js
+local_places.js
 local_plan_client.js
 local_plan_geometry.js
 local_plan_publisher.js
@@ -64,6 +66,7 @@ outing_native_bridge.js
 outing_tracking.js
 outing_view.js
 outings.js
+place_presentation.js
 planner_location.js
 planner_profile.js
 public_profile_metadata.js

@@ -254,3 +254,72 @@ def test_unicode_name_and_stable_public_subset_are_preserved() -> None:
         ("operator", "Ville de Marly-le-Roi"),
         ("tourism", "viewpoint"),
     )
+
+
+@pytest.mark.parametrize(
+    "tags",
+    [
+        {"amenity": "ice_cream"},
+        {"shop": "ice_cream"},
+        {"amenity": "cafe", "cuisine": "ice_cream"},
+        {"amenity": "cafe", "cuisine": "coffee_shop; ice_cream;crepe"},
+        {"amenity": "ice_cream", "shop": "ice_cream"},
+    ],
+)
+def test_explicit_ice_cream_tags_are_display_only_refreshments(
+    tags: dict[str, str],
+) -> None:
+    result = classify_osm_tags(tags)
+    assert result is not None
+    assert result.category == "ice_cream"
+    assert result.group == "refreshment"
+    assert result.display_name == "Ice cream"
+    assert result.name_source == "category_fallback"
+    assert result.potability == "not_applicable"
+    assert result.scenic_confidence == "none"
+    assert result.secondary_categories == ()
+
+
+@pytest.mark.parametrize(
+    "tags",
+    [
+        {"name": "Ice Cream Palace"},
+        {"shop": "supermarket", "ice_cream": "yes"},
+        {"cuisine": "ice_cream"},
+        {"amenity": "cafe", "cuisine": "ice_cream_cake"},
+        {"amenity": "restaurant", "cuisine": "burger;ice_cream"},
+        {"amenity": "fast_food", "cuisine": "ice_cream"},
+        {"disused:amenity": "ice_cream"},
+        {"shop": "frozen_food"},
+    ],
+)
+def test_ice_cream_is_not_inferred_from_names_or_general_sales(
+    tags: dict[str, str],
+) -> None:
+    assert classify_osm_tags(tags) is None
+
+
+def test_ice_cream_preserves_address_access_and_existing_category_precedence() -> None:
+    tags = {
+        "amenity": "ice_cream",
+        "name": "Glacier des 2 Portes",
+        "addr:housenumber": "3",
+        "addr:street": "Rue des Deux Portes",
+        "addr:city": "Versailles",
+        "opening_hours": "Tu-Su 12:00-18:00",
+        "access": "private",
+        "website": "https://example.invalid",
+    }
+    result = classify_osm_tags(tags)
+    assert result is not None
+    assert result.display_name == tags["name"]
+    assert result.access_status == "private"
+    assert result.warnings == ("access_private",)
+    assert dict(result.tags) == {
+        key: value for key, value in tags.items() if key != "website"
+    }
+    combined = classify_osm_tags({**tags, "tourism": "viewpoint"})
+    assert combined is not None
+    assert combined.category == "viewpoint"
+    assert combined.group == "scenic"
+    assert combined.secondary_categories == ("ice_cream",)

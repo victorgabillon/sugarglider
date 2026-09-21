@@ -1,4 +1,5 @@
 import { ApiError, generatePlan, getConfig, getPoiStatus, getRoutingProfiles, reversePlan, searchPois, visualizeRoute } from "./api.js";
+import { createLocalPlaceSearch } from "./local_places.js";
 import { createLocalGpxExporter } from "./local_gpx_client.js";
 import { isBundledAndroidApp } from "./android_app.js";
 import { createGpxFileSaver } from "./native_gpx_save.js";
@@ -91,6 +92,9 @@ function localRegionClient() {
   sharedLocalRegionClient ??= createLocalRegionClient();
   return sharedLocalRegionClient;
 }
+const searchLocalPlaces = createLocalPlaceSearch({ versions: regionVersions,
+  regionClient: { loadVersion: (...args) => localRegionClient().loadVersion(...args) },
+  selectedRegionId: () => selectedRegionId });
 const withPlanningRegion = createRegionalPlanningContext({ versions: regionVersions, bridge: localRoutingBridge,
   selectedRegionId: () => selectedRegionId,
   regionClient: { loadVersion: (...args) => localRegionClient().loadVersion(...args) },
@@ -155,6 +159,7 @@ function showMapError(message) {
 
 function updatePoiFiltersFromControls() {
   state.poiFilters = {
+    iceCream: byId("place-ice-cream").checked,
     scenic: byId("place-scenic").checked,
     verifiedWater: byId("place-verified-water").checked,
     unknownWater: byId("place-unknown-water").checked,
@@ -168,6 +173,7 @@ function updatePoiFiltersFromControls() {
 function poiCategoriesAndPotability() {
   const categories = [];
   const potability = [];
+  if (state.poiFilters.iceCream) categories.push("ice_cream");
   if (state.poiFilters.scenic) categories.push(...PRIMARY_SCENIC_CATEGORIES);
   if (state.poiFilters.broadAttractions) categories.push("tourism_attraction");
   if (state.poiFilters.verifiedWater) {
@@ -203,6 +209,7 @@ function normalizedViewportBounds(bounds) {
 function clearPoiFeatures(status) {
   state.poiFeatures = [];
   state.selectedPoiId = null;
+  state.selectedPoiFeature = null;
   byId("places-count").textContent = "";
   byId("places-status").textContent = status;
   if (mapReady) renderPois([], null, selectPoi, poiRenderOptions());
@@ -212,6 +219,7 @@ function poiRequestBody(bounds) {
   const filters = poiCategoriesAndPotability();
   if (!filters.categories.length) return null;
   const groups = [];
+  if (filters.categories.includes("ice_cream")) groups.push("refreshment");
   if (filters.categories.some((category) => PRIMARY_SCENIC_CATEGORIES.includes(category) || category === "tourism_attraction")) {
     groups.push("scenic");
   }
@@ -228,18 +236,25 @@ function poiRequestBody(bounds) {
     potability: filters.potability,
     access,
     include_private: state.poiFilters.includePrivate,
-    limit: Math.min(state.config.poi_default_limit, state.config.poi_max_limit),
+    limit: Math.min(200, state.config.poi_default_limit, state.config.poi_max_limit),
   };
 }
 
 function selectPoi(id, { revealMap = false } = {}) {
   const visitFeatures = (selectedCandidate()?.poi_visits ?? []).map((visit) => visit.poi);
   const allFeatures = [...new Map(
-    [...state.poiFeatures, ...visitFeatures].map((feature) => [feature.id, feature]),
+    [...state.poiFeatures, ...visitFeatures, ...(state.selectedPoiFeature ? [state.selectedPoiFeature] : [])].map((feature) => [feature.id, feature]),
   ).values()];
+  if (id === null) {
+    state.selectedPoiId = null;
+    state.selectedPoiFeature = null;
+    renderPois(allFeatures, null, selectPoi, poiRenderOptions());
+    return;
+  }
   const feature = allFeatures.find((value) => value.id === id);
   if (!feature) return;
   state.selectedPoiId = id;
+  state.selectedPoiFeature = feature;
   renderPois(allFeatures, state.selectedPoiId, selectPoi, poiRenderOptions());
   if (revealMap) {
     focusCoordinate([feature.coordinate.lon, feature.coordinate.lat]);
@@ -252,6 +267,7 @@ function selectedVisitedPoiIds() {
 
 function poiRenderOptions() {
   return {
+    onDeselect: () => selectPoi(null),
     onPrefer: preferPoi,
     preferredIds: state.autoTour.preferredPoiIds,
     visitedIds: selectedVisitedPoiIds(),
@@ -291,14 +307,14 @@ async function fetchViewportPois(id, bounds) {
   state.poiRequest = { status: "loading", id };
   byId("places-status").textContent = "Loading mapped places for this viewport…";
   try {
-    const response = await searchPois(request, controller.signal);
+    const response = await (localPlanner ? searchLocalPlaces : searchPois)(request, controller.signal);
     if (state.poiRequest.id !== id) return;
     state.poiFeatures = response.features;
-    if (!state.poiFeatures.some((feature) => feature.id === state.selectedPoiId)) {
-      state.selectedPoiId = null;
-    }
+    const retained = state.selectedPoiFeature;
+    const visibleFeatures = retained && !state.poiFeatures.some((feature) => feature.id === retained.id)
+      ? [...state.poiFeatures, retained] : state.poiFeatures;
     state.poiRequest = { status: "success", id };
-    renderPois(state.poiFeatures, state.selectedPoiId, selectPoi, poiRenderOptions());
+    renderPois(visibleFeatures, state.selectedPoiId, selectPoi, poiRenderOptions());
     byId("places-count").textContent = String(response.returned_count);
     if (!response.available) {
       byId("places-status").textContent = "POI index unavailable. Routing still works.";
@@ -308,6 +324,9 @@ async function fetchViewportPois(id, bounds) {
       byId("places-status").textContent = `Showing ${response.returned_count} of ${response.total_matching} matches — zoom in to narrow the viewport.`;
     } else {
       byId("places-status").textContent = `${response.returned_count} mapped place${response.returned_count === 1 ? "" : "s"} in this viewport.`;
+    }
+    if (state.poiFilters.iceCream && response.identity?.poi_classifier_version === "1") {
+      byId("places-status").textContent += " This installed region does not include ice-cream places yet.";
     }
   } catch (error) {
     if (state.poiRequest.id !== id || error.name === "AbortError") return;
@@ -1041,7 +1060,8 @@ function renderMapData() {
     state.showNatureContext,
   );
   renderSpurs(candidate);
-  const allFeatures = state.poiFeatures;
+  const allFeatures = [...new Map([...state.poiFeatures,
+    ...(state.selectedPoiFeature ? [state.selectedPoiFeature] : [])].map((feature) => [feature.id, feature])).values()];
   renderPois(allFeatures, state.selectedPoiId, selectPoi, poiRenderOptions());
   const constraintPlaces = state.planningMode === "auto_tour"
     ? state.autoTour.requestedPlaces
@@ -2750,6 +2770,7 @@ function bindEvents() {
     renderMapData();
   });
   byId("places-filters").addEventListener("change", () => {
+    selectPoi(null);
     updatePoiFiltersFromControls();
     schedulePoiRefresh();
   });
@@ -2991,12 +3012,27 @@ async function initializeRegionScreen() {
     selectRegion: (id) => {
       if (selectedRegionId === id) return;
       selectedRegionId = id;
+      state.poiAbortController?.abort();
+      state.poiRequest = { status: "idle", id: state.poiRequest.id + 1 };
+      clearPoiFeatures("Checking places in the selected region…");
       if (mapReady && !isImmutableSnapshotDisplay()) invalidateAndRender();
     },
     isPlanning: () => state.request.status === "running",
     viewRegion: ([west, south, east, north]) => fitCoordinates([[west, south], [east, north]]),
     onReady: (capabilities, code) => {
       localRouteCapabilities = capabilities; regionPlanningError = code;
+      if (state.config) {
+        const available = Boolean(capabilities && !code);
+        state.config.poi_index_available = available;
+        state.poiIndexStatus = { available, feature_count: null };
+        byId("places-filters").querySelectorAll("input").forEach((input) => { input.disabled = !available; });
+        if (available && mapReady) schedulePoiRefresh();
+        if (!available) {
+          state.poiAbortController?.abort();
+          state.poiRequest = { status: "idle", id: state.poiRequest.id + 1 };
+          clearPoiFeatures("Choose a ready installed region to browse places.");
+        }
+      }
       if (mapReady && !isImmutableSnapshotDisplay()) { renderRoutingProfiles({ preserveUnavailableSelection: true }); render(); }
     },
     onMapChange: async () => { if (offlineMaps) regionScreen.mapState(await offlineMaps.refresh({ reopen: true })); },
@@ -3105,8 +3141,10 @@ async function start() {
       }
       renderRoutingProfiles();
       try {
-        if (localPlanner || state.networkStatus === "offline") throw new TypeError();
-        state.poiIndexStatus = await getPoiStatus();
+        if (!localPlanner) {
+          if (state.networkStatus === "offline") throw new TypeError();
+          state.poiIndexStatus = await getPoiStatus();
+        }
       } catch {
         state.poiIndexStatus = { available: false, feature_count: null };
       }

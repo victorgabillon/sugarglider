@@ -46,7 +46,8 @@ export async function parseRegionalManifest(text) {
     && (source.source_url === null || boundedText(source.source_url, 2048)
       && /^https?:\/\/[^\s]+$/u.test(source.source_url)), "invalid_regional_source");
   requireFields(value.tools, [...Object.keys(TOOLS), "python_version", "osmium_version", "shapely_version"]);
-  requireData(Object.entries(TOOLS).every(([key, expected]) => value.tools[key] === expected)
+  requireData(Object.entries(TOOLS).every(([key, expected]) => key === "poi_classifier"
+    ? ["1", "2"].includes(value.tools[key]) : value.tools[key] === expected)
     && ["python_version", "osmium_version", "shapely_version"].every((key) => boundedText(value.tools[key], 80)),
   "unsupported_regional_toolchain");
   requireFields(value.components, Object.keys(FILES));

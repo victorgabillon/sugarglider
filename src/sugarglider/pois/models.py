@@ -17,8 +17,9 @@ type PoiCategory = Literal[
     "drinking_water",
     "fountain",
     "water_tap",
+    "ice_cream",
 ]
-type PoiGroup = Literal["scenic", "hydration"]
+type PoiGroup = Literal["scenic", "hydration", "refreshment"]
 type ScenicConfidence = Literal["primary", "broad", "none"]
 type Potability = Literal["verified", "unknown", "non_potable", "not_applicable"]
 type PoiPotabilityFilter = Literal["verified", "unknown", "non_potable"]
@@ -137,7 +138,9 @@ class PoiFeature(ImmutableModel):
         if self.access_status in {"private", "restricted"} and self.approach_candidates:
             raise ValueError("private or restricted features cannot publish approaches")
         expected_group: PoiGroup = (
-            "hydration"
+            "refreshment"
+            if self.category == "ice_cream"
+            else "hydration"
             if self.category in {"drinking_water", "fountain", "water_tap"}
             else "scenic"
         )
@@ -149,7 +152,7 @@ class PoiFeature(ImmutableModel):
 class PoiBuildConfiguration(ImmutableModel):
     """Stable builder choices recorded inside deterministic index bytes."""
 
-    classifier_version: Literal["1"] = "1"
+    classifier_version: Literal["1", "2"] = "2"
     geometry_policy: Literal["semantic-point_with-bounded-public-approaches"] = (
         "semantic-point_with-bounded-public-approaches"
     )
@@ -173,10 +176,12 @@ class PoiIndexMetadata(ImmutableModel):
     bounding_box: Wgs84BoundingBox
     skipped_invalid_count: Annotated[int, Field(ge=0)]
     build_configuration: PoiBuildConfiguration = PoiBuildConfiguration()
-    classifier_version: Literal["1"] = "1"
+    classifier_version: Literal["1", "2"] = "2"
 
     @model_validator(mode="after")
     def validate_bounds(self) -> Self:
+        if self.classifier_version != self.build_configuration.classifier_version:
+            raise ValueError("POI classifier versions must match")
         west, south, east, north = self.bounding_box
         if not all(isfinite(value) for value in self.bounding_box):
             raise ValueError("POI index bounding box must be finite")
@@ -248,7 +253,7 @@ class PoiBoundingBox(ImmutableModel):
 
 class PoiSearchRequest(ImmutableModel):
     bbox: PoiBoundingBox
-    groups: tuple[PoiGroup, ...] = ("scenic", "hydration")
+    groups: tuple[PoiGroup, ...] = ("scenic", "hydration", "refreshment")
     categories: tuple[PoiCategory, ...] | None = None
     potability: tuple[PoiPotabilityFilter, ...] = ("verified", "unknown")
     access: tuple[AccessStatus, ...] = ("public", "restricted", "unknown")

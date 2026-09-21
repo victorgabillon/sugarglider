@@ -6,7 +6,7 @@ import {
 } from "/static/service_worker_policy.js";
 
 const SHELL_CACHE_PREFIX = "sugarglider-shell-";
-const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v45`;
+const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v46`;
 const ROOT_SHELL = "/";
 const shellCache = createCurrentCacheAccess(caches, SHELL_CACHE);
 
@@ -33,6 +33,9 @@ const CORE_ASSETS = Object.freeze([
   "/static/public_profile_metadata.js",
   "/static/icons.js",
   "/static/map.js",
+  "/static/place_presentation.js",
+  "/static/local_places.js",
+  "/static/brand/sugarglider-ice-cream-pin.png",
   "/static/fonts/Open%20Sans%20Semibold/0-255.pbf",
   "/static/fonts/Open%20Sans%20Semibold/256-511.pbf",
   "/static/fonts/Open%20Sans%20Semibold/8192-8447.pbf",
