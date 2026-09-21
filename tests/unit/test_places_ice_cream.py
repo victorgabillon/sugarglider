@@ -17,7 +17,7 @@ XML = """<osm version="0.6">
 <tag k="name" v="Glacier &amp; été"/><tag k="addr:street" v="Rue des Glaces"/></node>
 <node id="2" lat="48.2" lon="2.2"><tag k="shop" v="ice_cream"/></node>
 <node id="3" lat="48.3" lon="2.3"><tag k="amenity" v="cafe"/>
-<tag k="cuisine" v="coffee_shop;ice_cream"/><tag k="access" v="private"/></node>
+<tag k="cuisine" v="ice_cream"/><tag k="access" v="private"/></node>
 <node id="4" lat="48.4" lon="2.4"><tag k="tourism" v="viewpoint"/></node>
 <node id="5" lat="48.5" lon="2.5"><tag k="amenity" v="drinking_water"/></node>
 <node id="6" lat="48.6" lon="2.6"/><node id="7" lat="48.6" lon="2.7"/>

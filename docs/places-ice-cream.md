@@ -10,16 +10,20 @@ preferences and nature analysis retain their semantics.
 
 - `amenity=ice_cream`
 - `shop=ice_cream`
-- `amenity=cafe` with an exact `ice_cream` token in semicolon-separated `cuisine`
+- `amenity=cafe` with exactly `cuisine=ice_cream` and no conflicting `shop` tag
 
 Names, `ice_cream=yes`, frozen-food shops, and restaurant/fast-food cuisine tags
-alone do not qualify. Existing scenic/hydration primary-category precedence is
+alone do not qualify. Mixed café menus and cafés tagged as another shop type
+(such as `shop=coffee`) do not qualify. The actual source includes sandwich/ice-cream
+cafés and a coffee shop with an ice-cream cuisine tag; these are not sufficient
+evidence of dedicated ice-cream businesses. Existing scenic/hydration primary-category precedence is
 preserved. The new primary category is `ice_cream`, group `refreshment`.
 Classification retains mapped house number, street/place, postcode and city;
 websites, phone numbers and general descriptions remain outside the public subset.
 
 The [OSM ice-cream documentation](https://wiki.openstreetmap.org/wiki/Tag:amenity%3Dice_cream)
-describes the amenity, shop and café combinations. Tests use tiny synthetic OSM
+provides background for the amenity, shop and café tags. The classifier intentionally
+uses a conservative subset grounded in the regional source audit. Tests use tiny synthetic OSM
 XML; runtime discovery never parses PBFs or queries a hosted POI service.
 
 Index format remains 2. New builds declare classifier 2 in both index metadata
@@ -30,10 +34,16 @@ previously installed immutable index.
 
 The audited published Yvelines index has 2,153 scenic/hydration records and zero
 ice-cream records. A read-only audit of its configured source found 12 qualifying
-ice-cream nodes inside the regional bounds. Validation used a separate source
-excerpt and the existing basemap. **No production region was rebuilt, modified or
-published in this change. A later regional data update is required to make these
-places available to existing installations.**
+ice-cream nodes inside the regional bounds. Phase 2 validates a separately built full test region from that PBF. Its source
+replication timestamp is 2026-07-15T20:21:10Z. This is not a claim of current business
+status. **The production region remains unchanged and unpublished by this work.
+A separately authorized regional data update is required for existing installations.**
+
+The full-region audit also exposed an existing bounds inconsistency: intersecting
+ways/relations could emit semantic points or entrances outside index coverage.
+The builder now excludes outside semantic points and outside approach candidates,
+without clamping or changing coordinates; the Python loader can consume the complete
+index. Existing in-coverage categories and identities retain their behavior.
 
 ## Shared application path
 
@@ -87,6 +97,8 @@ canonical artwork.
 Audit, size experiments, real-data renderer and full-page screenshots, and logs
 are outside Git under
 `/home/pompote/oldata/victor/sugarglider-v1-artifacts/places-ice-cream-2026-09-21/`.
+Phase 2 evidence and unpublished test artifacts are under
+`/home/pompote/oldata/victor/sugarglider-v1-artifacts/places-ice-cream-real-data-2026-09-21/`.
 The evidence distinguishes source-derived audit fixtures from the unchanged
 published region and browser emulation from physical Android device validation.
 

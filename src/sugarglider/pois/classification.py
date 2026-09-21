@@ -121,15 +121,15 @@ def classify_osm_tags(tags: Mapping[str, str]) -> PoiClassification | None:
         if hydration is not None and hydration[1] == "verified"
         else (*scenic, *hydration_categories)
     )
-    # Dedicated shops/parlours and explicitly tagged ice-cream cafés only.
-    # Do not infer this from a business name or general ice_cream=yes sales.
+    # Dedicated shops/parlours and cafés with an exclusive ice-cream cuisine.
+    # Mixed café menus and a conflicting shop category are not dedication.
     if (
         normalized.get("amenity") == "ice_cream"
         or normalized.get("shop") == "ice_cream"
         or (
             normalized.get("amenity") == "cafe"
-            and "ice_cream"
-            in {value.strip() for value in normalized.get("cuisine", "").split(";")}
+            and normalized.get("cuisine") == "ice_cream"
+            and normalized.get("shop", "") in {"", "ice_cream"}
         )
     ):
         categories = (*categories, "ice_cream")

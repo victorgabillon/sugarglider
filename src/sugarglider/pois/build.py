@@ -211,6 +211,8 @@ def build_poi_index(
                     coordinate = _metric_representative_coordinate(
                         metric_geometry, projection
                     )
+                    if bounds is not None and not _within_bounds(coordinate, bounds):
+                        continue
                     feature = _feature("way", entity.id, coordinate, classification)
                     _insert_feature(
                         features,
@@ -240,6 +242,8 @@ def build_poi_index(
                     if not isinstance(geometry, (Polygon, MultiPolygon)):
                         raise ValueError("relation area is not polygonal")
                     coordinate = _polygon_coordinate(geometry, projection)
+                    if bounds is not None and not _within_bounds(coordinate, bounds):
+                        continue
                     relation_metric_geometry = _project_polygonal(geometry, projection)
                     if region_geometry is not None and not (
                         relation_metric_geometry.intersects(region_geometry)
@@ -294,6 +298,21 @@ def build_poi_index(
                 )
             }
         )
+    if bounds is not None:
+        # A crossing geometry may have an entrance outside installed coverage.
+        # Preserve exact semantic/approach coordinates; never clamp them inward.
+        features = {
+            key: feature.model_copy(
+                update={
+                    "approach_candidates": tuple(
+                        approach
+                        for approach in feature.approach_candidates
+                        if _within_bounds(approach.coordinate, bounds)
+                    )
+                }
+            )
+            for key, feature in features.items()
+        }
     ordered = tuple(features[key] for key in sorted(features))
     bounds = bounds if bounds is not None else _document_bounds(ordered, header_box)
     category_counts = _feature_counts(ordered, "category")
@@ -776,6 +795,11 @@ def _projection_for_header(box: osmium.osm.Box) -> LocalMetricProjection:
         (box.bottom_left.lat + box.top_right.lat) / 2 if box.valid() else 0.0
     )
     return LocalMetricProjection(reference_latitude)
+
+
+def _within_bounds(coordinate: Coordinate, bounds: Wgs84BoundingBox) -> bool:
+    west, south, east, north = bounds
+    return west <= coordinate.lon <= east and south <= coordinate.lat <= north
 
 
 def _document_bounds(
