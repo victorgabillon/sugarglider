@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>UI 2 workspace harness</title>
+  <pre id="result">running</pre>
+  <script type="module">
+    import { runShellHarness } from "./ui2_shell_harness.js";
+    const result = document.getElementById("result");
+    window.addEventListener("unhandledrejection", (event) => {
+      result.dataset.status = "failed";
+      result.textContent = String(event.reason);
+    });
+    try {
+      const scenarios = await runShellHarness();
+      if (result.dataset.status !== "failed") {
+        result.dataset.status = "passed";
+        result.textContent = JSON.stringify(scenarios);
+      }
+    } catch (error) {
+      result.dataset.status = "failed";
+      result.textContent = error.stack ?? String(error);
+    }
+  </script>
+</html>

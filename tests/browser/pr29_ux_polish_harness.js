@@ -92,8 +92,8 @@ function shellScenario(frame, width) {
   const layers = document.querySelector(".map-tools");
   const advanced = document.querySelector(".route-advanced");
   assert(byId(document, "generate-top").parentElement === nav, "Generate stays top-level");
-  assert(byId(document, "save-route").parentElement === nav, "Save stays contextual and top-level");
-  assert(document.querySelector("label[for='gpx-file']").parentElement === nav, "GPX import stays top-level");
+  assert(byId(document, "save-route").closest(".header-tools") === tools, "Save remains available under Tools");
+  assert(byId(document, "import-gpx").closest(".header-tools") === tools, "GPX import remains available under Tools");
   assert(byId(document, "export-plan").closest(".header-tools") === tools, "JSON export moves under Tools");
   assert(byId(document, "request-file").closest(".header-tools") === tools, "JSON import moves under Tools");
   assert(!tools.open && !layers.open && !advanced.open, "secondary controls start collapsed");

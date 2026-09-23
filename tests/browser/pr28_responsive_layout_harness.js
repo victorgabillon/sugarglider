@@ -133,7 +133,7 @@ function plannerScenario(frame, width) {
   if (width <= PHONE_MAX) {
     document.querySelector(".header-tools").open = true;
     const generate = byId(document, "generate-top").getBoundingClientRect();
-    const importGpx = document.querySelector("label[for='gpx-file']").getBoundingClientRect();
+    const importGpx = byId(document, "import-gpx").getBoundingClientRect();
     const save = byId(document, "save-route").getBoundingClientRect();
     const utility = byId(document, "export-plan").getBoundingClientRect();
     assert(generate.top < utility.top, `Generate precedes utilities at ${width}px`);
