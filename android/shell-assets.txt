@@ -111,3 +111,4 @@ vendor/pmtiles-4.5.0/LICENSE.txt
 vendor/pmtiles-4.5.0/pmtiles.js
 vendor/protomaps-basemaps-5.7.2/LICENSE.md
 vendor/protomaps-basemaps-5.7.2/basemaps.js
+waypoint_editor.js

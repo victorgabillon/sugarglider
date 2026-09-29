@@ -1,3 +1,4 @@
+import { renderWaypointEditor } from "./waypoint_editor.js";
 import { renderRouteChoices, emptyResultsMarkup } from "./route_results.js";
 import { initializeAppShell } from "./app_shell.js";
 import { ApiError, generatePlan, getConfig, getPoiStatus, getRoutingProfiles, reversePlan, searchPois, visualizeRoute } from "./api.js";
@@ -538,6 +539,7 @@ function updateEndpointControls() {
   if (endpoints.routeTopology === "loop" && state.endpointSetMode === "end") {
     state.endpointSetMode = null;
   }
+  if (endpoints.routeTopology === "loop" && state.selectedEndpointKind === "end") state.selectedEndpointKind = null;
   byId("route-topology").value = endpoints.routeTopology;
   for (const kind of ["start", "end"]) {
     const point = endpoints[kind];
@@ -558,9 +560,7 @@ function updateEndpointControls() {
   const orderSelect = byId("point-order-mode");
   if (state.planningMode === "waypoint_route") {
     const optimized = orderSelect.querySelector('option[data-optimized="true"]');
-    optimized.textContent = topology === "point_to_point"
-      ? "Optimize interior waypoints"
-      : "Optimize loop waypoints";
+    optimized.textContent = "Let Sugarglider order the stops";
     orderSelect.value = state.options.waypointOrder;
   }
 }
@@ -715,9 +715,21 @@ function renderModeControls() {
   if (pointsEditor.dataset.mode !== state.planningMode) {
     pointsEditor.open = !auto;
     if (auto) byId("route-form").after(pointsEditor);
-    else byId("route-form").querySelector(".generate-actions").before(pointsEditor);
+    else byId("connect-end").before(pointsEditor);
+    const shape = byId("route-shape-field"), end = byId("hard-end-control"), loop = byId("loop-end-explanation"), order = byId("waypoint-order-field");
+    if (auto) {
+      byId("endpoint-options-anchor").append(shape, loop, end);
+      byId("advanced-order-anchor").append(order);
+    } else {
+      byId("connect-shape").append(shape);
+      byId("connect-order").append(order);
+      byId("connect-end").append(loop, end);
+    }
     pointsEditor.dataset.mode = state.planningMode;
   }
+  byId("connect-shape").classList.toggle("hidden", auto);
+  byId("connect-end").classList.toggle("hidden", auto);
+  byId("clear-points").textContent = auto ? "Clear all" : "Clear route points";
   byId("generate").textContent = "Generate";
   byId("generate-top").textContent = "Generate";
   byId("places-explanation").textContent = auto
@@ -725,6 +737,9 @@ function renderModeControls() {
     : "Discovery only: shown places never alter mandatory points, generation, ranking, or GPX output.";
   updateEndpointControls();
   const start = activeEndpoints().start;
+  const end = activeEndpoints().end;
+  byId("plan-end-summary").textContent = end ? end.name || "End selected" : "Choose End on the map";
+  byId("clear-hard-end").hidden = !end;
   byId("plan-start-summary").textContent = start
     ? `${start.name || "Start"} · ${Number(start.lat).toFixed(5)}, ${Number(start.lon).toFixed(5)}`
     : "Choose Start on the map";
@@ -809,7 +824,8 @@ function activeMapPlacementGuidance() {
   if (state.endpointSetMode) {
     return `Click the map to set your ${state.endpointSetMode} point.`;
   }
-  if (state.addPointMode) return "Click the map to add a required point.";
+  if (state.movingPointIndex !== null) return `Choose a new position for ${pointDisplayName(state.points[state.movingPointIndex], state.movingPointIndex)}. Other points stay unchanged.`;
+  if (state.addPointMode) return state.planningMode === "waypoint_route" ? "Tap an empty map position to add one stop." : "Click the map to add a required point.";
   return "";
 }
 
@@ -877,13 +893,64 @@ function updatePoiSelection(scrollSelected = false) {
 
 function selectPoint(index, { scrollSelected = false, requestPopup = false } = {}) {
   if (!Number.isInteger(index) || index < 0 || index >= state.points.length) return;
+  clearPointPlacement();
+  state.selectedEndpointKind = null;
   state.selectedPointIndex = index;
   if (requestPopup) state.pendingPointPopupIndex = index;
-  updatePoiSelection(scrollSelected);
+  if (state.planningMode === "waypoint_route") renderPoiEditor();
+  else updatePoiSelection(scrollSelected);
   renderMapData();
+  updateEndpointControls();
+  renderStatus();
+  if (scrollSelected) appShell?.reveal(".poi-row.selected");
+  const point = state.points[index];
+  keepCoordinateVisible([point.lon, point.lat]);
+}
+
+function clearPointPlacement() {
+  state.addPointMode = false;
+  state.endpointSetMode = null;
+  state.movingPointIndex = null;
+  state.settingRequestedApproachId = null;
+}
+
+function selectEndpoint(kind) {
+  clearPointPlacement();
+  state.selectedEndpointKind = kind;
+  state.selectedPointIndex = null;
+  render();
+  appShell?.reveal(`#hard-${kind}-control`);
+  const point = activeEndpoints()[kind];
+  if (point) keepCoordinateVisible([point.lon, point.lat]);
+}
+
+function beginPointMove(index) {
+  clearPointPlacement();
+  state.selectedPointIndex = index;
+  state.selectedEndpointKind = null;
+  state.movingPointIndex = index;
+  renderStatus();
+  appShell?.show("map", { focus: true });
 }
 
 function renderPoiEditor() {
+  if (state.planningMode !== "waypoint_route") return renderLegacyPoiEditor();
+  renderWaypointEditor({
+    list: byId("poi-list"), points: state.points, selectedIndex: state.selectedPointIndex,
+    visitOrders: candidateVisitOrders(),
+    onSelect: (index) => selectPoint(index),
+    onChange: (index, field, value) => {
+      clearPointPlacement();
+      state.points[index] = { ...state.points[index], [field]: value };
+      invalidateAndRender();
+    },
+    onMove: movePoint, onRemove: removePoint, onPlace: beginPointMove,
+  });
+  byId("poi-count").textContent = `${state.points.length} stop${state.points.length === 1 ? "" : "s"}`;
+  byId("poi-validation").textContent = pointValidation();
+}
+
+function renderLegacyPoiEditor() {
   const list = byId("poi-list");
   const visitOrders = candidateVisitOrders();
   list.replaceChildren();
@@ -996,14 +1063,17 @@ function renderPoiEditor() {
 
 function movePoint(from, to) {
   if (to < 0 || to >= state.points.length) return;
+  clearPointPlacement();
   const selectedPoint = state.selectedPointIndex === null ? null : state.points[state.selectedPointIndex];
   const [point] = state.points.splice(from, 1);
   state.points.splice(to, 0, point);
   state.selectedPointIndex = selectedPoint ? state.points.indexOf(selectedPoint) : null;
   invalidateAndRender();
+  byId("poi-list").querySelector(".poi-row.selected .point-select")?.focus({ preventScroll: true });
 }
 
 function removePoint(index) {
+  clearPointPlacement();
   if (state.planningMode === "auto_tour" && state.autoTour.start && index === 0) {
     saveActivePoints();
     state.autoTour.start = null;
@@ -1020,6 +1090,7 @@ function removePoint(index) {
     state.selectedPointIndex = state.points.length ? Math.min(index, state.points.length - 1) : null;
   }
   invalidateAndRender();
+  (byId("poi-list").querySelector(".poi-row.selected .point-select") ?? byId("add-point-mode")).focus({ preventScroll: true });
 }
 
 function renderMapData() {
@@ -1047,6 +1118,8 @@ function renderMapData() {
       || ["running", "reversing"].includes(state.request.status),
     {
       onDrag: (index, coordinate) => {
+        clearPointPlacement();
+        state.selectedEndpointKind = null;
         state.points[index] = { ...state.points[index], ...coordinate };
         state.selectedPointIndex = index;
         invalidateAndRender();
@@ -1056,12 +1129,13 @@ function renderMapData() {
         requestPopup: true,
       }),
     },
-    !(state.planningMode === "waypoint_route" && state.waypointEndpoints.start),
+    state.planningMode === "auto_tour",
   );
   const endpoints = activeEndpoints();
   renderHardEndpoints(
     state.planningMode === "auto_tour" ? null : endpoints.start,
     endpoints.end,
+    { onActivate: selectEndpoint, selectedKind: state.selectedEndpointKind },
   );
   renderOptionalMarkers(candidate?.optional_points ?? []);
   renderImportedGpx(state.importedGpx);
@@ -1082,13 +1156,13 @@ function renderMapData() {
   renderPois(allFeatures, state.selectedPoiId, selectPoi, poiRenderOptions());
   const constraintPlaces = state.planningMode === "auto_tour"
     ? state.autoTour.requestedPlaces
-    : state.points.filter((point) => point.constraintStrength !== "exact").map((point, index) => ({
+    : state.points.flatMap((point, index) => (point.constraintStrength ?? "exact") === "exact" ? [] : [{
       id: point.id ?? `route-waypoint-${index + 1}`,
       name: point.name,
       coordinate: { lat: point.lat, lon: point.lon },
       importance: "must_visit",
       accessSearchRadiusM: point.accessSearchRadiusM ?? 500,
-    }));
+    }]);
   const constraintVisits = [
     ...(candidate?.reached_stops ?? []),
     ...(candidate?.approximated_stops ?? []),
@@ -1097,14 +1171,16 @@ function renderMapData() {
   renderRequestedPlaceMarkers(
     constraintPlaces,
     constraintVisits,
-    state.selectedRequestedPlaceId,
+    state.planningMode === "auto_tour" ? state.selectedRequestedPlaceId
+      : state.selectedPointIndex === null ? null
+        : state.points[state.selectedPointIndex]?.id ?? `route-waypoint-${state.selectedPointIndex + 1}`,
     state.showDroppedRequestedRadii,
     (id) => {
       if (state.planningMode === "auto_tour") {
         selectRequestedPlace(id, { scrollList: true });
       } else {
-        const point = constraintPlaces.find((value) => value.id === id);
-        if (point) focusCoordinate([point.coordinate.lon, point.coordinate.lat]);
+        const index = state.points.findIndex((point, index) => (point.id ?? `route-waypoint-${index + 1}`) === id);
+        if (index >= 0) selectPoint(index, { scrollSelected: true, requestPopup: true });
       }
     },
     requestedPopupId,
@@ -1628,6 +1704,12 @@ function renderStatus() {
     ? "Reversing route…"
     : open ? "Planning your route…" : "Planning your loop…";
   const availability = currentGenerationAvailability();
+  const guidance = activeMapPlacementGuidance();
+  byId("map-edit-notice").classList.toggle("hidden", !guidance || running || readOnly);
+  byId("map-edit-guidance").textContent = guidance;
+  byId("add-point-mode").setAttribute("aria-pressed", String(state.addPointMode));
+  byId("add-point-mode").lastChild.textContent = state.addPointMode ? " Cancel adding" : state.planningMode === "waypoint_route" ? " Add stop on map" : " Add on map";
+  for (const kind of ["start", "end"]) byId(`hard-${kind}-control`).classList.toggle("selected-endpoint", state.selectedEndpointKind === kind);
   // Derive copy from the same authorities as Generate, never a second readiness store.
   const profile = selectedProfileStatus();
   byId("planning-readiness").textContent = localPlanner
@@ -1650,7 +1732,7 @@ function renderStatus() {
   byId("generation-state").classList.toggle("hidden", !running);
   document
     .querySelectorAll("#route-form input, #route-form select, #poi-list input, #poi-list button, #add-point-mode, #clear-points, input[name='planning-mode']")
-    .forEach((control) => { control.disabled = running || readOnly; });
+    .forEach((control) => { control.disabled = running || readOnly || control.dataset.boundaryDisabled === "true"; });
   renderEndpointTopologyControls(
     byId("hard-end-control"),
     byId("loop-end-explanation"),
@@ -1679,7 +1761,10 @@ function renderEmptyState() {
   const hasWork = state.points.length > 0
     || state.importedGpx
     || currentDisplayedCandidates().length > 0;
-  byId("planner-empty").classList.toggle("hidden", Boolean(hasWork));
+  byId("planner-empty").classList.toggle("hidden", Boolean(hasWork || activeEndpoints().start || activeMapPlacementGuidance()));
+  byId("planner-empty").querySelector("p").textContent = state.planningMode === "waypoint_route"
+    ? "Open Plan to choose Start and add stops. Ordinary map taps only explore."
+    : "Tap or click the map to choose your starting point.";
 }
 
 function render() {
@@ -2169,6 +2254,8 @@ function normalizeImportedRequest(value, { requireKnownProfile = true } = {}) {
 
 function applyCanonicalRequestState(value, options = {}) {
   const imported = normalizeImportedRequest(value, options);
+  clearPointPlacement();
+  state.selectedEndpointKind = null;
   state.planningMode = imported.canonical.kind;
   state.routingProfile = imported.canonical.routing_profile;
   document.querySelectorAll('input[name="planning-mode"]').forEach((input) => {
@@ -2500,6 +2587,8 @@ function failedExactPoint() {
 function updateFailedExactPoint(action) {
   const target = failedExactPoint();
   if (!target) return;
+  clearPointPlacement();
+  state.selectedEndpointKind = null;
   const point = target.collection[target.index];
   if (["nearest", "best_effort"].includes(action)) {
     point.constraintStrength = "best_effort";
@@ -2532,7 +2621,8 @@ function updateFailedExactPoint(action) {
     state.selectedPointIndex = state.planningMode === "auto_tour"
       ? target.index + 1
       : target.index;
-    state.addPointMode = true;
+    state.movingPointIndex = state.selectedPointIndex;
+    state.addPointMode = false;
   }
   if (state.planningMode === "auto_tour") {
     state.points = [state.autoTour.start, ...state.autoTour.hardPoints].filter(Boolean);
@@ -2542,9 +2632,11 @@ function updateFailedExactPoint(action) {
   setEditableRequestStatus(action === "move"
     ? "Drag the selected waypoint or place it on the map, then generate again."
     : "Constraint updated. Generate again to apply it.");
+  if (action === "move") appShell?.show("map", { focus: true });
 }
 
 function bindEvents() {
+  byId("cancel-point-placement").addEventListener("click", () => { clearPointPlacement(); render(); appShell?.show("plan", { focus: true }); });
   byId("dismiss-error").addEventListener("click", hideError);
   byId("error-use-nearest").addEventListener("click", () => updateFailedExactPoint("nearest"));
   byId("error-best-effort").addEventListener("click", () => updateFailedExactPoint("best_effort"));
@@ -2556,7 +2648,7 @@ function bindEvents() {
   byId("cancel").addEventListener("click", () => state.abortController?.abort());
   byId("clear-results").addEventListener("click", invalidateAndRender);
   byId("route-form").addEventListener("change", (event) => {
-    if (event.target.id.startsWith("hard-") || event.target.closest("#planning-points")) return;
+    if (event.target.id.startsWith("hard-") || (event.target.closest("#planning-points") && event.target.id !== "point-order-mode")) return;
     updateOptionsFromControls();
     if (event.target.id === "profile" && plannerProfilePreference) {
       void plannerProfilePreference.remember(state.routingProfile).then((persisted) => {
@@ -2579,7 +2671,12 @@ function bindEvents() {
       byId(`hard-${kind}-${suffix}`).addEventListener("change", () => {
         const point = endpointFromControls(kind);
         if (byId(`hard-${kind}-enabled`).checked && !point) return;
+        clearPointPlacement();
         assignActiveEndpoint(kind, point);
+        if (state.planningMode === "waypoint_route") {
+          state.selectedEndpointKind = point ? kind : null;
+          state.selectedPointIndex = null;
+        }
         state.selectedPointIndex = kind === "start" && point && state.planningMode === "auto_tour"
           ? 0
           : state.selectedPointIndex;
@@ -2587,8 +2684,11 @@ function bindEvents() {
       });
     }
     byId(`set-hard-${kind}`).addEventListener("click", () => {
-      state.endpointSetMode = state.endpointSetMode === kind ? null : kind;
-      state.addPointMode = false;
+      const active = state.endpointSetMode === kind;
+      clearPointPlacement();
+      state.endpointSetMode = active ? null : kind;
+      state.selectedEndpointKind = kind;
+      state.selectedPointIndex = null;
       byId(`set-hard-${kind}`).textContent = state.endpointSetMode === kind
         ? `Click map for ${kind}`
         : "Set on map";
@@ -2597,6 +2697,7 @@ function bindEvents() {
     });
     byId(`clear-hard-${kind}`).addEventListener("click", () => {
       assignActiveEndpoint(kind, null);
+      if (state.selectedEndpointKind === kind) state.selectedEndpointKind = null;
       if (state.endpointSetMode === kind) state.endpointSetMode = null;
       invalidateAndRender();
     });
@@ -2616,7 +2717,9 @@ function bindEvents() {
     render();
   });
   byId("add-point-mode").addEventListener("click", () => {
-    state.addPointMode = !state.addPointMode;
+    const active = state.addPointMode;
+    clearPointPlacement();
+    state.addPointMode = !active;
     byId("add-point-mode").setAttribute("aria-pressed", String(state.addPointMode));
     byId("add-point-mode").lastChild.textContent = state.addPointMode ? " Click map once…" : " Add on map";
     if (state.addPointMode) appShell?.show("map", { focus: true });
@@ -2634,6 +2737,7 @@ function bindEvents() {
   });
   byId("clear-points").addEventListener("click", () => {
     if (state.points.length > 1 && !window.confirm("Remove all mandatory points and generated results?")) return;
+    clearPointPlacement();
     state.points = [];
     if (state.planningMode === "auto_tour") {
       state.autoTour.start = null;
@@ -2645,6 +2749,7 @@ function bindEvents() {
       state.waypointEndpoints.start = null;
       state.waypointEndpoints.end = null;
     }
+    state.selectedEndpointKind = null;
     state.selectedPointIndex = null;
     state.pendingPointPopupIndex = null;
     invalidateAndRender();
@@ -2947,7 +3052,7 @@ async function start() {
     const endpoints = activeEndpoints();
     const point = state.endpointSetMode === "end" ? endpoints.end
       : state.endpointSetMode === "start" ? endpoints.start
-      : state.points[state.selectedPointIndex] ?? endpoints.start;
+      : state.selectedEndpointKind ? endpoints[state.selectedEndpointKind] : state.points[state.selectedPointIndex] ?? endpoints.start;
     if (point) keepCoordinateVisible([point.lon, point.lat]);
   } });
   byId("plan-regions").addEventListener("click", () => {
@@ -3104,7 +3209,7 @@ async function start() {
       onViewportChange: schedulePoiRefresh,
       onUserMapInteraction: () => plannerLocation?.manualMapInteraction(),
       onMapClick: (coordinate) => {
-        if (isSavedRouteSnapshotDisplay()) return;
+        if (isImmutableSnapshotDisplay() || ["running", "reversing"].includes(state.request.status)) return;
         if (state.settingRequestedApproachId) {
           const place = state.autoTour.requestedPlaces.find((value, index) => (
             (value.id ?? requestedPlaceIdentifier(value, index))
@@ -3131,6 +3236,16 @@ async function start() {
           setEditableRequestStatus(
             `${kind === "start" ? "Start" : "End"} point set from map.`,
           );
+          if (state.planningMode === "waypoint_route") appShell?.reveal(`#hard-${kind}-control`);
+          return;
+        }
+        if (state.movingPointIndex !== null) {
+          const index = state.movingPointIndex;
+          if (state.points[index]) state.points[index] = { ...state.points[index], ...coordinate };
+          clearPointPlacement();
+          invalidateAndRender();
+          appShell?.reveal(".poi-row.selected");
+          setEditableRequestStatus("Stop moved. Generate again to use the new position.");
           return;
         }
         if (state.addPointMode) {
@@ -3159,15 +3274,18 @@ async function start() {
           } else {
             state.points.push(point);
           }
+          state.selectedEndpointKind = null;
           state.selectedPointIndex = state.points.length - 1;
           state.addPointMode = false;
           byId("add-point-mode").setAttribute("aria-pressed", "false");
           byId("add-point-mode").lastChild.textContent = " Add on map";
           invalidateAndRender();
           setEditableRequestStatus("Required point set from map.");
+          if (state.planningMode === "waypoint_route") appShell?.reveal(".poi-row.selected");
           return;
         }
 
+        if (state.planningMode === "waypoint_route") return;
         const implicitEndpointKind = applyImplicitEndpointMapClick({
           endpoints: activeEndpoints(),
           coordinate,

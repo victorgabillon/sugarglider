@@ -1,0 +1,6 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>UI2 waypoint editing</title><pre id="result">running</pre><script type="module">
+import { runWaypointHarness } from './ui2_waypoints_harness.js';
+const result = document.getElementById('result');
+try { result.textContent = JSON.stringify(await runWaypointHarness()); result.dataset.status = 'passed'; }
+catch (error) { result.textContent = error.stack; result.dataset.status = 'failed'; }
+</script></html>

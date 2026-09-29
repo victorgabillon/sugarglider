@@ -2339,6 +2339,8 @@ export function renderHardEndpoints(start, end, handlers = {}) {
   for (const [kind, point] of [["start", start], ["end", end]]) {
     if (!validCoordinate(point)) continue;
     const element = endpointMarkerElement(kind, point);
+    element.classList.toggle("selected", handlers.selectedKind === kind);
+    element.setAttribute("aria-pressed", String(handlers.selectedKind === kind));
     element.addEventListener("click", (event) => {
       event.stopPropagation();
       handlers.onActivate?.(kind);
@@ -2397,7 +2399,11 @@ function popupContent(point, sourceIndex, visitOrder, start) {
   const original = document.createElement("p");
   const originalIndex = Number.isInteger(point.originalIndex) ? point.originalIndex : sourceIndex;
   original.textContent = `Original request point ${originalIndex + 1}`;
-  content.append(original);
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = "Request details";
+  details.append(summary, original);
+  content.append(details);
   return content;
 }
 

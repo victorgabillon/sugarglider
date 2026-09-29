@@ -220,6 +220,7 @@
         <form id="route-form" novalidate>
           <label class="plan-activity">Activity<select id="profile" aria-describedby="profile-description"></select></label>
           <label class="plan-distance">Distance (km)<input id="target-distance" type="number" min="1" max="200" step="0.1" value="20" required></label>
+          <div id="connect-shape" class="hidden"></div>
           <section class="endpoint-controls" aria-label="Route endpoints">
               <fieldset class="endpoint-control" id="hard-start-control">
                 <legend>Start</legend>
@@ -235,6 +236,7 @@
                 </details>
               </fieldset>
           </section>
+        <div id="connect-end" class="hidden"></div>
         <div class="generate-actions">
           <button id="generate" class="button primary wide" type="button" data-icon="generate" aria-describedby="request-status" disabled>Generate</button>
           <button id="cancel" class="button danger hidden" type="button" data-icon="cancel">Cancel</button>
@@ -257,17 +259,21 @@
             <label>Distance priority<select id="distance-priority"><option value="flexible" selected>Flexible — places and coherence first</option><option value="balanced">Balanced</option><option value="strict">Strict — tolerance first</option></select></label>
             <label>Maximum distance (optional) <span>km</span><input id="maximum-distance" type="number" min="0.1" max="200" step="0.1" placeholder="Server safety maximum"></label>
             <p class="field-help">Flexible and balanced tolerance allow compromises. An explicit maximum is binding for balanced and strict requests; strict also requires a maximum. Unsupported settings are reported without changing your choices.</p>
-            <label>Route shape<select id="route-topology"><option value="loop">Loop</option><option value="point_to_point">Point to point</option></select></label>
+            <div id="endpoint-options-anchor"><label id="route-shape-field">Finish<select id="route-topology"><option value="loop">Return to Start (Loop)</option><option value="point_to_point">At a different End</option></select></label>
               <p id="loop-end-explanation" class="field-help endpoint-explanation" role="status">End is the start for loop routes.</p>
               <fieldset class="endpoint-control hidden" id="hard-end-control" aria-hidden="true" hidden disabled>
-                <legend><label><input id="hard-end-enabled" type="checkbox"> Hard end</label></legend>
+                <legend>End</legend>
+                <p id="plan-end-summary" class="field-help">Choose End on the map</p>
+                <details class="end-details"><summary>Edit End coordinates</summary>
+                <label><input id="hard-end-enabled" type="checkbox"> Use this End</label>
                 <label>Name<input id="hard-end-name" maxlength="200" placeholder="Hard end"></label>
                 <div class="field-pair">
                   <label>Latitude<input id="hard-end-lat" type="number" min="-90" max="90" step="0.000001" placeholder="Optional"></label>
                   <label>Longitude<input id="hard-end-lon" type="number" min="-180" max="180" step="0.000001" placeholder="Optional"></label>
                 </div>
+                </details>
                 <div class="button-row"><button id="set-hard-end" class="button secondary" type="button">Set on map</button><button id="clear-hard-end" class="text-button" type="button">Clear</button></div>
-              </fieldset>
+              </fieldset></div>
             <section id="auto-tour-fields" class="mode-fields" aria-label="Route discovery preferences">
               <p class="auto-tour-explanation">Shape the suggested route with optional preferences. Mapped places and nature depend on available regional data.</p>
               <label>Direction<select id="direction-preference"><option value="any">Any</option><option value="clockwise">Clockwise</option><option value="counterclockwise">Counter-clockwise</option></select></label>
@@ -283,7 +289,7 @@
             </section>
             <details class="places-advanced route-advanced">
               <summary>Advanced route preferences</summary>
-              <label id="waypoint-order-field">Waypoint order<select id="point-order-mode"><option value="fixed">Fixed input order</option><option value="optimize" data-optimized="true">Optimize loop waypoints</option></select></label>
+              <div id="advanced-order-anchor"><label id="waypoint-order-field">Visit order<select id="point-order-mode"><option value="fixed">Keep this order</option><option value="optimize" data-optimized="true">Let Sugarglider order the stops</option></select></label></div>
               <label>Path selection<select id="path-selection-mode"><option value="shortest">Natural shortest paths</option><option value="low_overlap">Low-overlap alternatives</option></select></label>
               <label>Loop shape<select id="loop-geometry-preference"><option value="off">Off</option><option value="prefer">Prefer balanced loops</option></select></label>
               <p class="field-help">Prefers compact, directionally balanced loops with fewer close parallel corridors. Distance, backtracking and repetition remain more important.</p>
@@ -326,6 +332,7 @@
             <p id="requested-place-empty" class="field-help">In Auto Tour mode, imported request points after the start appear here instead of becoming exact waypoints.</p>
             <ul id="requested-place-list"></ul>
           </section>
+          <div id="connect-order"></div>
           <p id="poi-validation" class="validation" role="status"></p>
           <div id="poi-list" class="poi-list" role="list" aria-label="Ordered required points"></div>
           <div class="button-row">
@@ -345,6 +352,7 @@
       <section class="map-panel" aria-labelledby="map-title">
         <h2 id="map-title" class="visually-hidden">Interactive route map</h2>
         <div id="map" role="application" aria-label="Interactive trail route map"></div>
+        <div id="map-edit-notice" class="map-edit-notice hidden" role="status"><p id="map-edit-guidance"></p><button id="cancel-point-placement" class="button secondary" type="button">Cancel</button></div>
         <button id="planner-location-control" class="planner-location-control hidden" type="button" aria-label="Show my location" aria-pressed="false" aria-busy="false" aria-describedby="planner-location-status" title="Show my location">
           <img src="/static/brand/gps-recenter-default.png" width="40" height="40" alt="">
         </button>

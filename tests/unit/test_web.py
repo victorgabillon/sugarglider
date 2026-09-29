@@ -583,7 +583,7 @@ def test_planner_endpoint_browser_harness_covers_all_mode_topology_cases() -> No
         "point_to_point_later_click_preserves_endpoints",
         "explicit_endpoint_mode_can_replace_endpoint",
         "explicit_waypoint_and_poi_modes_suppress_implicit_endpoints",
-        "implicit_placement_is_shared_by_both_planning_modes",
+        "endpoint_helper_supports_both_draft_shapes",
     ):
         assert f'scenarios.push("{scenario}")' in harness
     assert "assignRouteEndpoint" in harness
