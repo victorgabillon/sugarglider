@@ -48,10 +48,18 @@ def test_pr29_shell_keeps_primary_actions_outside_secondary_disclosures() -> Non
     assert '<details class="map-tools"' in html
     assert "<summary>Layers</summary>" in html
     assert '<details class="metrics-disclosure">' in html
-    assert "<summary>Technical route metrics</summary>" in html
+    assert "<summary>Route details</summary>" in html
     application = (STATIC / "app.js").read_text()
     assert 'byId("save-route").classList.toggle("hidden"' in application
-    assert 'selector.addEventListener("click", () => selectCandidate' in application
+    results = (STATIC / "route_results.js").read_text()
+    assert 'button.addEventListener("click", () => onSelect(candidate.id))' in results
+    assert (
+        "renderRouteChoices(container, candidates, state.selectedSignature"
+        in application
+    )
+    assert html.index('id="download-gpx"') < html.index(
+        '<details class="metrics-disclosure">'
+    )
     outing_view = (STATIC / "outing_view.js").read_text()
     for label in (
         "Not currently sharing",

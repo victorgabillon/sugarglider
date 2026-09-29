@@ -97,7 +97,6 @@
       <div class="notice-mark" aria-hidden="true">!</div>
       <div class="notice-copy">
         <h2 id="error-title">Something needs attention</h2>
-        <p id="error-code" class="error-code hidden"></p>
         <p id="error-message"></p>
         <p id="error-context" class="error-context hidden"></p>
         <p id="error-suggestion" class="error-suggestion hidden"></p>
@@ -108,7 +107,7 @@
           <button id="error-move-waypoint" class="button secondary" type="button">Move exact waypoint</button>
           <button id="error-remove-waypoint" class="button secondary" type="button">Remove waypoint</button>
         </div>
-        <details><summary>Technical details</summary><pre id="error-details"></pre></details>
+        <details><summary>Technical details</summary><p id="error-code" class="error-code hidden"></p><pre id="error-details"></pre></details>
       </div>
       <button id="dismiss-error" class="icon-button" type="button" data-icon="close" aria-label="Dismiss error" title="Dismiss error"></button>
     </section>
@@ -548,22 +547,30 @@
 
       <div class="results-panel" id="results-panel">
         <section class="candidate-strip" aria-labelledby="candidates-title">
-          <div class="section-heading"><div><p class="eyebrow">Compare</p><h2 id="candidates-title" tabindex="-1">Candidate routes</h2></div><span id="search-summary"></span></div>
-          <div id="candidate-list" class="candidate-list"><p class="empty-copy">Returned routes will appear here in ranked order.</p></div>
+          <div class="section-heading"><div><p class="eyebrow">Routes</p><h2 id="candidates-title" tabindex="-1">Routes</h2></div></div>
+          <p id="search-summary" class="context-note" aria-live="polite"></p>
+          <div id="candidate-list" class="candidate-list"></div>
+          <button id="results-back-to-plan" class="button primary" type="button">Return to Plan</button>
         </section>
 
-        <aside class="panel metrics" aria-labelledby="metrics-title">
-          <div class="panel-heading"><div><p class="eyebrow">Inspect</p><h2 id="metrics-title">Candidate details</h2></div></div>
-          <div id="metrics-empty" class="metrics-empty"><p>Select a generated candidate to inspect exact route, trail, repetition, and mapped-nature metrics.</p></div>
+        <aside id="selected-route-panel" class="panel metrics hidden" aria-labelledby="metrics-title">
+          <div class="panel-heading"><div><h2 id="metrics-title">Selected route</h2><p id="selected-route-context" class="context-note"></p></div></div>
+          <div id="metrics-empty" class="metrics-empty hidden"></div>
+          <div class="export-primary">
+            <button id="download-gpx" class="button primary wide" type="button" data-icon="download" disabled>Export GPX</button>
+            <p id="export-status" class="context-note" role="status"></p>
+          </div>
           <details class="metrics-disclosure">
-            <summary>Technical route metrics</summary>
+            <summary>Route details</summary>
             <div id="metrics-content" class="hidden"></div>
           </details>
-          <div class="export-actions">
-            <button id="reverse-route" class="button secondary wide" type="button" disabled>Reverse direction</button>
-            <button id="save-route-selected" class="button secondary wide" type="button" disabled>Save selected route</button>
-            <button id="download-gpx" class="button primary wide" type="button" data-icon="download" disabled>Download selected GPX</button>
-          </div>
+          <details class="route-other-actions">
+            <summary>More route actions</summary>
+            <div class="export-actions">
+              <button id="reverse-route" class="button secondary wide" type="button" disabled>Reverse direction</button>
+              <button id="save-route-selected" class="button secondary wide" type="button" disabled>Save selected route</button>
+            </div>
+          </details>
         </aside>
       </div>
     </main>

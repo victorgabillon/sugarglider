@@ -62,6 +62,7 @@ export const state = {
     loopGeometryPreference: "off",
   },
   generationResult: null,
+  resultsInvalidated: false, // Presentation notice only; never stores a candidate.
   generationSourceRequest: null,
   savedRouteSnapshot: null,
   savedRouteSnapshotDisplay: false,
@@ -308,6 +309,7 @@ export function switchPlanningMode(mode) {
 }
 
 export function invalidateCandidates() {
+  if (state.generationResult || state.forkedSavedCandidate) state.resultsInvalidated = true;
   state.generationResult = null;
   state.generationSourceRequest = null;
   state.forkedSavedCandidate = null;
