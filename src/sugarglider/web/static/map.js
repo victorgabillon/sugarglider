@@ -1,3 +1,4 @@
+import { keepMapCoordinateVisible } from "./map_viewport.js";
 import * as maplibregl from "./vendor/maplibre-gl-6.4.1/maplibre-gl.mjs";
 import { gpxFeatureCollection } from "./gpx.js";
 import {
@@ -2650,3 +2651,8 @@ export function focusCoordinate(coordinate) {
 }
 
 export function resizeMap() { map?.resize(); }
+
+// Called only after a Plan layout resize, never from render or map movement.
+export function keepCoordinateVisible(coordinate) {
+  return keepMapCoordinateVisible(map, coordinate);
+}

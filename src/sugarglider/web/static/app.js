@@ -7,7 +7,7 @@ import { createGpxFileSaver } from "./native_gpx_save.js";
 import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
-import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap } from "./map.js";
+import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap, keepCoordinateVisible } from "./map.js";
 import { createLocalRoutingBridge } from "./local_routing.js";
 import { createLocalPlanner, LocalPlannerError } from "./local_planner.js";
 import { createLocalRegionClient } from "./local_region_client.js";
@@ -129,7 +129,7 @@ const PRIMARY_SCENIC_CATEGORIES = [
 ];
 const HYDRATION_CATEGORIES = ["drinking_water", "fountain", "water_tap"];
 
-const GENERATION_SUGGESTION = "Use Auto Tour for approximate places, or remove or move the exact waypoint.";
+const GENERATION_SUGGESTION = "Use Suggest a route for approximate places, or remove or move the exact waypoint.";
 let lastExactFailure = null;
 let localRouteCapabilities = null;
 
@@ -354,11 +354,13 @@ function schedulePoiRefresh(bounds = currentViewportBounds()) {
 function updateOptionsFromControls() {
   state.routingProfile = byId("profile").value;
   state.options = readPlannerOptionsFromControls(byId);
-  state.autoTour.directionPreference = byId("direction-preference").value;
-  state.autoTour.distancePriority = state.options.distancePriority;
-  state.autoTour.maximumDistanceKm = state.options.maximumDistanceKm;
-  state.autoTour.scenicPreference = byId("scenic-preference").value;
-  state.autoTour.drinkingWaterPreference = byId("water-preference").value;
+  if (state.planningMode === "auto_tour") {
+    state.autoTour.directionPreference = byId("direction-preference").value;
+    state.autoTour.distancePriority = state.options.distancePriority;
+    state.autoTour.maximumDistanceKm = state.options.maximumDistanceKm;
+    state.autoTour.scenicPreference = byId("scenic-preference").value;
+    state.autoTour.drinkingWaterPreference = byId("water-preference").value;
+  }
   const routeTopology = byId("route-topology").value;
   setRouteTopology(activeEndpoints(), routeTopology);
   if (routeTopology === "loop" && state.endpointSetMode === "end") {
@@ -381,9 +383,8 @@ function updateControlsFromOptions() {
   byId("direction-preference").value = state.autoTour.directionPreference;
   byId("distance-priority").value = state.options.distancePriority
     ?? state.autoTour.distancePriority;
-  byId("maximum-distance").value = state.options.maximumDistanceKm
-    ?? state.autoTour.maximumDistanceKm
-    ?? "";
+  // Null is an intentional blank maximum in this draft, not a fallback request.
+  byId("maximum-distance").value = state.options.maximumDistanceKm ?? "";
   byId("scenic-preference").value = state.autoTour.scenicPreference;
   byId("water-preference").value = state.autoTour.drinkingWaterPreference;
   updateProfileDescription();
@@ -544,7 +545,7 @@ function updateEndpointControls() {
     byId(`hard-${kind}-lon`).value = point?.lon ?? "";
     byId(`set-hard-${kind}`).textContent = state.endpointSetMode === kind
       ? `Click map for ${kind}`
-      : "Set on map";
+      : kind === "start" ? (point ? "Change on map" : "Choose on map") : "Set on map";
   }
   const topology = endpoints.routeTopology;
   renderEndpointTopologyControls(
@@ -707,13 +708,25 @@ function renderModeControls() {
   byId("waypoint-order-field").classList.toggle("hidden", auto);
   byId("preferred-pois").classList.toggle("hidden", !auto);
   byId("requested-places").classList.toggle("hidden", !auto);
-  byId("point-editor-title").textContent = auto ? "Start and hard anchors" : "Required POIs";
-  byId("generate").textContent = auto ? "Generate Auto Tour" : "Generate routes";
+  byId("point-editor-title").textContent = auto ? "Places and advanced anchors" : "Points to connect";
+  const pointsEditor = byId("planning-points");
+  if (pointsEditor.dataset.mode !== state.planningMode) {
+    pointsEditor.open = !auto;
+    if (auto) byId("route-form").after(pointsEditor);
+    else byId("route-form").querySelector(".generate-actions").before(pointsEditor);
+    pointsEditor.dataset.mode = state.planningMode;
+  }
+  byId("generate").textContent = "Generate";
   byId("generate-top").textContent = "Generate";
   byId("places-explanation").textContent = auto
-    ? "Browse mapped places and optionally prefer eligible places for Auto Tour. Simply selecting a place never changes the route."
+    ? "Browse mapped places and optionally prefer eligible places in your suggested route. Simply selecting a place never changes the route."
     : "Discovery only: shown places never alter mandatory points, generation, ranking, or GPX output.";
   updateEndpointControls();
+  const start = activeEndpoints().start;
+  byId("plan-start-summary").textContent = start
+    ? `${start.name || "Start"} · ${Number(start.lat).toFixed(5)}, ${Number(start.lon).toFixed(5)}`
+    : "Choose Start on the map";
+  byId("clear-hard-start").hidden = !start;
   renderPreferredPois();
   byId("show-dropped-requested-radii-control").classList.toggle("hidden", !auto);
   renderRequestedPlacesList();
@@ -1760,14 +1773,30 @@ function renderStatus() {
   const running = ["running", "reversing"].includes(state.request.status);
   const readOnly = isImmutableSnapshotDisplay();
   const open = isOpenPlan();
-  byId("controls-title").textContent = open ? "Build your route" : "Build your loop";
+  byId("controls-title").textContent = "Plan";
   byId("generation-title").textContent = state.request.status === "reversing"
     ? "Reversing route…"
     : open ? "Planning your route…" : "Planning your loop…";
   const availability = currentGenerationAvailability();
+  // Derive copy from the same authorities as Generate, never a second readiness store.
+  const profile = selectedProfileStatus();
+  byId("planning-readiness").textContent = localPlanner
+    ? regionPlanningError ? regionFailureMessage(regionPlanningError)
+      : !localRouteCapabilities?.enabled ? "On-device routing is unavailable in this app build."
+      : !localRouteCapabilities.installed_pack_count ? "Download a supported region to plan."
+      : !profile?.available ? "This activity is unavailable in the installed region."
+      : `Ready on device · ${byId("planning-region").selectedOptions[0]?.textContent || "Installed region"}`
+    : profile?.available ? "Routing service ready" : "Selected activity unavailable in the routing service";
+  byId("plan-regions").classList.toggle("hidden", !localPlanner);
+  byId("plan-capabilities").textContent = localPlanner
+    ? state.planningMode === "auto_tour"
+      ? "On-device suggestions support loops from Start, without required interior points or imported stops. Other settings are kept and unsupported requests report an error."
+      : "On-device connections support exact points and shortest paths, with nature and loop preferences off. Unsupported choices report an error; your points are not weakened."
+    : "Choose a loop back to Start, or a point-to-point route with a destination. Available activities use the routing service.";
   byId("generate").disabled = readOnly || running || !availability.enabled;
   byId("generate-top").disabled = byId("generate").disabled;
   byId("cancel").classList.toggle("hidden", !running);
+  byId("hard-start-control").disabled = running || readOnly;
   byId("generation-state").classList.toggle("hidden", !running);
   document
     .querySelectorAll("#route-form input, #route-form select, #poi-list input, #poi-list button, #add-point-mode, #clear-points, input[name='planning-mode']")
@@ -2668,7 +2697,7 @@ function bindEvents() {
   byId("cancel").addEventListener("click", () => state.abortController?.abort());
   byId("clear-results").addEventListener("click", invalidateAndRender);
   byId("route-form").addEventListener("change", (event) => {
-    if (event.target.id.startsWith("hard-")) return;
+    if (event.target.id.startsWith("hard-") || event.target.closest("#planning-points")) return;
     updateOptionsFromControls();
     if (event.target.id === "profile" && plannerProfilePreference) {
       void plannerProfilePreference.remember(state.routingProfile).then((persisted) => {
@@ -3051,7 +3080,21 @@ async function initializeRegionScreen() {
 }
 
 async function start() {
-  appShell = initializeAppShell({ resizeMap });
+  appShell = initializeAppShell({ resizeMap: ({ layoutChanged, view }) => {
+    resizeMap();
+    if (!layoutChanged || view !== "plan" || isImmutableSnapshotDisplay()
+      || ["running", "reversing"].includes(state.request.status)) return;
+    const endpoints = activeEndpoints();
+    const point = state.endpointSetMode === "end" ? endpoints.end
+      : state.endpointSetMode === "start" ? endpoints.start
+      : state.points[state.selectedPointIndex] ?? endpoints.start;
+    if (point) keepCoordinateVisible([point.lon, point.lat]);
+  } });
+  byId("plan-regions").addEventListener("click", () => {
+    byId("offline-regions").open = true;
+    document.querySelector(".header-tools").open = true;
+    byId("planning-region").focus();
+  });
   decorateIcons();
   try {
     await initializePwaRuntime({

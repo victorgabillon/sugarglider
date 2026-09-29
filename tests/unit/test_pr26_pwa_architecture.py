@@ -157,20 +157,21 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v47_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v48_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v47"
+    assert generation.group(1) == "v48"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
             "index.html",
             "app.js",
             "app_shell.js",
+            "map_viewport.js",
             "state.js",
             "map.js",
             "place_presentation.js",
@@ -240,18 +241,21 @@ def test_shared_shell_generation_tracks_v47_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "e9abd0523f7bbfe4251e0138d3992bc566ba89dad8bf42341f37e5d581b160b7"
+            "2066f52643578d3dcefa2be525d8b8cadfeb40f3f8952a1de0f1f1237b21b821"
         ),
-        "app.js": ("71a3b813d288562105dbd7e8a240da33bc709b9e2fa06e2289e5bafc9c8ca83f"),
+        "app.js": ("bd9404111d36b59895bfa505c5331d67514e4b7d5eebf665b9bc556bc0098d2a"),
+        "map_viewport.js": (
+            "afad92cd8b766c284fda15bd29cc73b1d9b66b43516450447646093d6005e86c"
+        ),
         "app_shell.js": (
-            "88f6b66300fb1763cf3bd9f56167cce13d5424ef561cb7e15735d8b7c57bb0be"
+            "aa3c203a3042fb812c1088adc60fa3f07585ef014aec9a8584895e660862a7eb"
         ),
         "state.js": (
             "34347ae0256e236f0465855be121a8c56a337a69095dda0e08f1cedf45ae7039"
         ),
-        "map.js": ("13fe4bb7f4bf25783899fac94df139a156fdfd640523e6ea6c4bf3055ded90d3"),
+        "map.js": ("12a2720eeb9cb13a378bd9e7cae9a45d5fe7ae6f9cd75b43e7ce7fcf2b9a4e12"),
         "styles.css": (
-            "b17f22a3564c82e7ab7afc4d22a024d04082c4225563b1b16ca28aac8310d3d8"
+            "9a37ec91ebaeae7a89959cfcbc4dabbecd6d063035253d4ec4adbacd0197bc0f"
         ),
         "planner_profile.js": (
             "4183a1318f3aa49df52ca0a46329caaa4f6eee1bec1b49612c446562b1b0030a"

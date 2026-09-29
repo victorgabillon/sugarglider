@@ -32,11 +32,23 @@ Files: index.html (semantic workspace/navigation/results grouping, file tools), 
 
 Acceptance: all five target widths; no horizontal overflow; map remains visible while configuring; Plan/Routes/Map keyboard and touch actions; return to Map without losing form/route state; desktop map dominates width; existing START/Generate/POI/waypoint/GPX flows pass; no social functionality exposed in Android. Existing map art/route rules unchanged. Before/after real-state evidence, browser scenarios, make check, JVM/lint/debug build. No release artifact/version change.
 
-## UI-2 — Auto Tour primary flow
+## UI-2 — Planning experience + mode unification + Auto Tour primary flow
 
-Based on current main after UI-1 review/merge. Files: index.html planning form, app.js renderStatus/read controls, state.js only where presentation state requires it, planner_profile.js unchanged unless a concrete defect is found, styles.css and browser scenarios.
+Study approved 2026-09-29. PR1 #63 merged as 2ea8b47cea1320c928e688278063f8b3a1339e46, tree d06297e68d10fa2b2eac19100fef5e786effc94f. PR2 starts on feat/ui2-planning-flow only after merged-main CI is green. Approved primary wording: **Suggest a route** / **Connect my points**, with explanations of distance-led design and user-chosen points. No stacked branch. The master plan was updated before production implementation.
 
-Order activity → distance → Start guidance → Generate. Move tolerance/candidate count/coordinate entry and advanced preferences behind understandable disclosure; preserve all six profiles, strict/balanced/flexible semantics and explicit failure actions. Simplify loading/cancel/error copy. Acceptance: fresh default Trail run on Android; explicit Hike persists; real START immediately enables Generate; no hidden hard constraints; keyboard and narrow/keyboard-open layouts work.
+**Product distinction:** Auto Tour asks Sugarglider to design/discover a route. Waypoint Route asks Sugarglider to connect points chosen by the user. One Plan experience presents these as two understandable choices, with one shared Routes destination. Keep their routing algorithms, capability validation and mode-specific drafts separate.
+
+**Audit before selecting the design:** trace the existing owner and presentation of Start, Activity, region/profile readiness, planning type, Generate, loading/cancellation, validation/errors and results. Compare concise alternatives in the real application at phone and desktop sizes. Record both user questions: “a nice 10 km run” and “from here through three places.” Evaluate discoverability, truthful capability wording, screen use and readability; distinguish expert walkthrough predictions from human usability-test results.
+
+**Shared planning presentation:** one Plan title, explained mode choice, Activity selector, readiness summary/action, active Start presentation, generation/status area and result transition. Reuse current availability and execution paths. Preserve each mode’s points/options when switching; never silently copy, overwrite, weaken or reinterpret exact constraints. Shared presentation does not require shared stored Start objects.
+
+**Auto Tour primary flow:** choose activity → roughly how far → choose Start → Generate. Scenic/water/nature and route-discovery preferences are optional. Keep explicit strict/balanced bounds and unavailable-data warnings discoverable and truthful. Expose existing advanced settings without making the initial path depend on understanding routing internals.
+
+**Waypoint integration in this PR:** the same shared fields and Generate/Routes flow, a concise explanation that selected points are connected, and the existing destination/waypoint editor where applicable. Do not redesign add/select/edit/remove/reorder interactions yet. Both modes may use Loop; supported desktop Auto Tour can also have an end. Android Auto Tour is loop-only. Preserve these real capability differences rather than claiming destination or distance fields belong exclusively to one algorithm.
+
+**Files:** index.html planning form; app.js presentation, shared renderStatus and existing mode-switch hooks; a small pure presentation module only if needed; styles.css; focused browser scenarios. Reuse planner_profile.js and generationAvailability(). Avoid state.js changes unless a concrete presentation defect requires the smallest correction. No changes to routing engines, request schemas, region schemas/catalog, native bridge or profile persistence. Cache revision/Android allowlist only if shared asset delivery requires it.
+
+**Acceptance:** the two novice tasks identify the intended branch without knowing the established mode names; both branches stay within one Plan workspace and return to Routes; Activity/readiness/Start/Generate have consistent presentation; exact mode round-trip preserves points/options; no silent request rewrite. Fresh Trail run and explicit Hike persistence remain correct; real Start enables Generate and remains visible after entering Plan (viewport-only correction if needed); loading/cancel/error and 360/390/412/1280/1440 layouts work. Compare canonical requests before/after presentation changes, including explicit constraints and Waypoint distance settings. Real-map screenshots, focused browser regressions, make check and Android validation. No application version bump, release signing, Play action or tag.
 
 ## UI-3 — Route comparison and export
 
@@ -79,4 +91,23 @@ Full repository checks: `make check`; with JDK 17 and an Android SDK, `cd androi
 
 ### Deliberately deferred
 
-The form still has its existing detailed controls and copy; UI-2 will simplify their hierarchy. Candidate diagnostics remain in UI-3's scope. Waypoint editing and region terminology retain their current behavior pending UI-4/UI-5. The separate Python boundary-crossing nature-polygon rejection and local GraphHopper isochrone warning are documented in the audit, not changed here. Browser emulation and an Android debug build are not a claim of new Play-delivered acceptance.
+UI-2 now groups the existing controls in one Plan flow. Candidate diagnostics remain in UI-3's scope. Waypoint editing and region terminology retain their current behavior pending UI-4/UI-5. The separate Python boundary-crossing nature-polygon rejection and local GraphHopper isochrone warning are documented in the audit, not changed here. Browser emulation and an Android debug build are not a claim of new Play-delivered acceptance.
+
+
+## UI-2 implementation contract
+
+PR2 starts from merged PR1/main `2ea8b47cea1320c928e688278063f8b3a1339e46` after all main CI passed. The primary labels are **Suggest a route** and **Connect my points**, each with its approved explanatory sentence. They share Activity, Distance, active Start presentation, readiness and Generate/status. More planning options retains topology/destination, tolerance, strict/balanced/maximum, candidate count, profile/data warnings and discovery preferences. The existing point editor moves before Generate for Connect; advanced anchors remain collapsed for Suggest. Moving its existing DOM does not add a point-editing implementation.
+
+The mode IDs, `state.autoTour`, waypoint endpoints/points/options, request schemas, engines, shared activity preference and results remain authoritative. No second planner store is introduced. A form-restoration defect discovered by the required roundtrip test is fixed: a null maximum in the waypoint draft must remain blank instead of falling back to the Auto Tour maximum. Edits in the waypoint form no longer write inactive Auto Tour metadata. This preserves intent instead of changing algorithm behavior.
+
+`app_shell.js` marks actual container dimension changes. Only the Plan resize callback may call the screen-space visibility helper for the active edit point (otherwise selected point or Start). It checks the visible map container, because canvas dimensions can lag MapLibre's resized projection by a frame. Already visible points cause no pan; no coordinate changes, render recentering, map-move listener or camera store is added. Routes and active generation never invoke that correction.
+
+The shared shell cache is v48. `map_viewport.js` is included in the explicit offline allowlist and generated Android assets. Version remains **1.0.3 / code 5**. No engine, region, Play, signing or release change is part of UI2 PR2.
+
+### Planning tests and evidence
+
+The standalone `tests/browser/ui2_planning_harness.html` adds draft/availability/controls/resize regressions to the shell harness. `tests/browser/ui2_request_acceptance.cjs` runs real JSON imports and mode controls against a running application with six routing profiles. Set `PLAYWRIGHT_MODULE` when Playwright is outside Node's normal resolution, `UI2_BASE_URL` to the app, and `UI2_EVIDENCE_DIR` to an external directory. `UI2_PHASE=before` records the baseline failure without requiring the fix; the default after phase requires preserved drafts. No fixture is injected into the planner state in that integration test.
+
+External review evidence: `/home/pompote/oldata/victor/sugarglider-v1-artifacts/ui2-pr2-planning-2026-09-29/`, including paired captures, the canonical-request comparison, exact test totals and an interactive gallery. Captures use real Yvelines maps/places and local GraphHopper routes in isolated browser contexts, not a Play-device update. Novice-task reasoning is an expert heuristic walkthrough, not human usability validation.
+
+Candidate comparison and export hierarchy remain PR3. Full waypoint manipulation/touch/mouse redesign remains PR4. Region-management polish remains PR5.
