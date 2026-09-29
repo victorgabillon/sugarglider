@@ -938,7 +938,7 @@ function renderPoiEditor() {
   renderWaypointEditor({
     list: byId("poi-list"), points: state.points, selectedIndex: state.selectedPointIndex,
     visitOrders: candidateVisitOrders(),
-    onSelect: (index) => selectPoint(index, { requestPopup: true }),
+    onSelect: (index) => selectPoint(index),
     onChange: (index, field, value) => {
       clearPointPlacement();
       state.points[index] = { ...state.points[index], [field]: value };

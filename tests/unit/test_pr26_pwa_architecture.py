@@ -245,7 +245,7 @@ def test_shared_shell_generation_tracks_v50_cached_assets() -> None:
         "index.html": (
             "6dc3192f62fa4592358729c477a9de3a65a90d5a5839b1c753e9325c9de417d3"
         ),
-        "app.js": ("b4dac127e2fb19ac3b6d68adb302e426a8410a1aa276932f06084149a1026217"),
+        "app.js": ("2e905591c48c4bdf4b4188732dae137b4eecdfffb930923502347081a2c369d5"),
         "waypoint_editor.js": (
             "cc114f5890551599be7dad8385e14f951be523f19dcd6848de8c9a91cefb7cf5"
         ),
