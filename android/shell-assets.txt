@@ -52,6 +52,7 @@ manifest.webmanifest
 map.js
 map_pack_manifest.js
 map_pack_store.js
+map_viewport.js
 native_bridge_transport.js
 native_gpx_save.js
 offline_map.js

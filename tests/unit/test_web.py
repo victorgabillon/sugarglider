@@ -1324,7 +1324,7 @@ def test_generation_failures_are_visible_structured_and_accessible() -> None:
     assert "required-point index" in app
     assert "snap.toFixed(1)" in app
     assert "maximum.toFixed(1)" in app
-    assert "Use Auto Tour for approximate places" in app
+    assert "Use Suggest a route for approximate places" in app
     assert "no raw traceback is displayed" in app
     assert "alert(" not in app
 

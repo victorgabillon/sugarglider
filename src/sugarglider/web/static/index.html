@@ -208,40 +208,57 @@
       </nav>
       <aside class="panel controls" id="planning-panel" aria-labelledby="controls-title">
         <div class="panel-heading">
-          <div><p class="eyebrow">Plan</p><h1 id="controls-title" tabindex="-1">Build your loop</h1></div>
+          <div><h1 id="controls-title" tabindex="-1">Plan</h1></div>
           <button id="clear-results" class="text-button" type="button">Clear results</button>
         </div>
 
-        <fieldset class="planning-mode" aria-label="Planning mode">
-          <legend>Planning mode</legend>
-          <label><input type="radio" name="planning-mode" value="auto_tour" checked> Auto Tour</label>
-          <label><input type="radio" name="planning-mode" value="waypoint_route"> Waypoint Route</label>
+        <fieldset class="planning-mode" aria-label="How would you like to plan?">
+          <legend class="visually-hidden">How would you like to plan?</legend>
+          <label><input type="radio" name="planning-mode" value="auto_tour" checked><span><strong>Suggest a route</strong><small>Choose a distance and Sugarglider designs the route.</small></span></label>
+          <label><input type="radio" name="planning-mode" value="waypoint_route"><span><strong>Connect my points</strong><small>Choose the points Sugarglider should connect.</small></span></label>
         </fieldset>
-
-        <details class="control-section" open>
-          <summary>Route settings</summary>
-          <form id="route-form" novalidate>
-            <label>Route name<input id="route-name" name="name" value="Sugarglider route" maxlength="120" required></label>
-            <div class="field-pair">
-              <label>Target <span>km</span><input id="target-distance" type="number" min="1" max="200" step="0.1" value="20" required></label>
-              <label>Tolerance <span>km</span><input id="tolerance" type="number" min="0.1" max="10" step="0.1" value="2" required></label>
-            </div>
-            <div class="field-pair">
-              <label>Candidates<select id="candidate-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
-              <label>Activity profile<select id="profile" aria-describedby="profile-description"></select></label>
-            </div>
-            <p id="profile-description" class="field-help" role="status">Loading routing profiles…</p>
-            <label>Route topology<select id="route-topology"><option value="loop">Loop</option><option value="point_to_point">Point to point</option></select></label>
-            <section class="endpoint-controls" aria-label="Route endpoints">
+        <div class="plan-readiness"><p id="planning-readiness" class="field-help" role="status">Checking routing availability…</p><button id="plan-regions" class="text-button hidden" type="button">Regions</button></div>
+        <form id="route-form" novalidate>
+          <label class="plan-activity">Activity<select id="profile" aria-describedby="profile-description"></select></label>
+          <label class="plan-distance">Distance (km)<input id="target-distance" type="number" min="1" max="200" step="0.1" value="20" required></label>
+          <section class="endpoint-controls" aria-label="Route endpoints">
               <fieldset class="endpoint-control" id="hard-start-control">
-                <legend><label><input id="hard-start-enabled" type="checkbox"> Hard start</label></legend>
+                <legend>Start</legend>
+                <p id="plan-start-summary" class="field-help" role="status">Choose Start on the map</p>
+                <div class="button-row"><button id="set-hard-start" class="button secondary" type="button">Choose on map</button><button id="clear-hard-start" class="text-button" type="button">Clear</button></div>
+                <details class="start-details"><summary>Edit Start coordinates</summary>
+                <label class="check-control"><input id="hard-start-enabled" type="checkbox"> Use this Start</label>
                 <label>Name<input id="hard-start-name" maxlength="200" placeholder="Hard start"></label>
                 <div class="field-pair">
                   <label>Latitude<input id="hard-start-lat" type="number" min="-90" max="90" step="0.000001" placeholder="Optional"></label>
                   <label>Longitude<input id="hard-start-lon" type="number" min="-180" max="180" step="0.000001" placeholder="Optional"></label>
                 </div>
-                <div class="button-row"><button id="set-hard-start" class="button secondary" type="button">Set on map</button><button id="clear-hard-start" class="text-button" type="button">Clear</button></div>
+                </details>
               </fieldset>
+          </section>
+        <div class="generate-actions">
+          <button id="generate" class="button primary wide" type="button" data-icon="generate" aria-describedby="request-status" disabled>Generate</button>
+          <button id="cancel" class="button danger hidden" type="button" data-icon="cancel">Cancel</button>
+        </div>
+
+        <section id="generation-state" class="generation-state hidden" aria-labelledby="generation-title" aria-live="polite">
+          <img src="/static/brand/sugarglider-compact-icon.png" width="48" height="48" alt="">
+          <div><h2 id="generation-title">Planning your loop…</h2><p>Checking the requested points and route alternatives. This may take a little while for low-overlap or nature-aware searches.</p></div>
+        </section>
+        <p id="request-status" class="status" aria-live="polite">Click the map to choose your start point.</p>
+          <details class="control-section" id="planning-preferences">
+            <summary>More planning options</summary>
+            <p id="profile-description" class="field-help" role="status">Loading routing profiles…</p>
+            <p id="plan-capabilities" class="field-help"></p>
+            <label>Route name<input id="route-name" name="name" value="Sugarglider route" maxlength="120" required></label>
+            <div class="field-pair">
+              <label>Tolerance <span>km</span><input id="tolerance" type="number" min="0.1" max="10" step="0.1" value="2" required></label>
+              <label>Candidates<select id="candidate-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+            </div>
+            <label>Distance priority<select id="distance-priority"><option value="flexible" selected>Flexible — places and coherence first</option><option value="balanced">Balanced</option><option value="strict">Strict — tolerance first</option></select></label>
+            <label>Maximum distance (optional) <span>km</span><input id="maximum-distance" type="number" min="0.1" max="200" step="0.1" placeholder="Server safety maximum"></label>
+            <p class="field-help">Flexible and balanced tolerance allow compromises. An explicit maximum is binding for balanced and strict requests; strict also requires a maximum. Unsupported settings are reported without changing your choices.</p>
+            <label>Route shape<select id="route-topology"><option value="loop">Loop</option><option value="point_to_point">Point to point</option></select></label>
               <p id="loop-end-explanation" class="field-help endpoint-explanation" role="status">End is the start for loop routes.</p>
               <fieldset class="endpoint-control hidden" id="hard-end-control" aria-hidden="true" hidden disabled>
                 <legend><label><input id="hard-end-enabled" type="checkbox"> Hard end</label></legend>
@@ -252,15 +269,11 @@
                 </div>
                 <div class="button-row"><button id="set-hard-end" class="button secondary" type="button">Set on map</button><button id="clear-hard-end" class="text-button" type="button">Clear</button></div>
               </fieldset>
-            </section>
-            <section id="auto-tour-fields" class="mode-fields" aria-label="Auto Tour preferences">
-              <p class="auto-tour-explanation">Builds graph-routed skeletons, resolves meaningful access approaches for requested places, then evaluates nearby scenic and verified-water opportunities inside a fixed search budget. A selected stop is guaranteed within its strict approach tolerance.</p>
+            <section id="auto-tour-fields" class="mode-fields" aria-label="Route discovery preferences">
+              <p class="auto-tour-explanation">Shape the suggested route with optional preferences. Mapped places and nature depend on available regional data.</p>
               <label>Direction<select id="direction-preference"><option value="any">Any</option><option value="clockwise">Clockwise</option><option value="counterclockwise">Counter-clockwise</option></select></label>
-              <label>Distance priority<select id="distance-priority"><option value="flexible" selected>Flexible — places and coherence first</option><option value="balanced">Balanced</option><option value="strict">Strict — tolerance first</option></select></label>
               <details class="places-advanced">
-                <summary>Advanced Auto Tour limits</summary>
-                <label>Maximum distance (optional) <span>km</span><input id="maximum-distance" type="number" min="0.1" max="200" step="0.1" placeholder="Server safety maximum"></label>
-                <p class="field-help">Blank means no user maximum; the server safety maximum applies.</p>
+                <summary>Discovery limits</summary>
                 <label>Free POI out-and-back distance (total) <span>m</span><input id="free-poi-spur" type="number" min="0" max="1000" step="25" value="200"></label>
                 <p class="field-help">One verified physical POI excursion gets a 200 m allowance—approximately 100 m out and 100 m back on the same path.</p>
               </details>
@@ -279,8 +292,9 @@
               <p id="nature-availability" class="field-help" role="status"></p>
             </details>
             <input id="seed" type="hidden" value="0">
-          </form>
-        </details>
+            <button id="copy-request" class="text-button" type="button" data-icon="copy">Copy request JSON</button>
+          </details>
+        </form>
 
         <details class="control-section places-controls">
           <summary><span>Places</span><span id="places-count"></span></summary>
@@ -301,7 +315,7 @@
           <p id="places-explanation" class="field-help">Browse mapped places and optionally prefer eligible places for Auto Tour. Simply selecting a place never changes the route; shown places never alter mandatory points, generation, ranking, or GPX output.</p>
         </details>
 
-        <details class="control-section poi-editor" open>
+        <details class="control-section poi-editor" id="planning-points">
           <summary><span id="point-editor-title">Start and hard anchors</span><span id="poi-count">0 / 7</span></summary>
           <section id="preferred-pois" class="preferred-pois" aria-label="Preferred places">
             <div class="section-heading"><strong>Preferred places</strong><span id="preferred-poi-count">0 / 8</span></div>
@@ -327,17 +341,6 @@
           <p id="gpx-details"></p>
         </section>
 
-        <div class="generate-actions">
-          <button id="generate" class="button primary wide" type="button" data-icon="generate" aria-describedby="request-status" disabled>Generate Auto Tour</button>
-          <button id="cancel" class="button danger hidden" type="button" data-icon="cancel">Cancel</button>
-          <button id="copy-request" class="text-button" type="button" data-icon="copy">Copy request JSON</button>
-        </div>
-
-        <section id="generation-state" class="generation-state hidden" aria-labelledby="generation-title" aria-live="polite">
-          <img src="/static/brand/sugarglider-compact-icon.png" width="48" height="48" alt="">
-          <div><h2 id="generation-title">Planning your loop…</h2><p>Checking the requested points and route alternatives. This may take a little while for low-overlap or nature-aware searches.</p></div>
-        </section>
-        <p id="request-status" class="status" aria-live="polite">Click the map to choose your start point.</p>
       </aside>
 
       <section class="map-panel" aria-labelledby="map-title">

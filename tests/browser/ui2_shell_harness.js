@@ -57,7 +57,9 @@ export async function runShellHarness() {
       assert(!byId("planning-panel").hidden && byId("results-panel").hidden, "Plan reveals only planning panel");
       assert(document.activeElement.id === "controls-title", "Plan moves focus to heading");
       assert(rect(".map-panel").height > 80, "map context remains while planning");
-      assert(byId("planning-panel").scrollHeight > byId("planning-panel").clientHeight, "long form has own scroll area");
+      byId("planning-preferences").open = true;
+      await settle();
+      assert(byId("planning-panel").scrollHeight > byId("planning-panel").clientHeight, "expanded form has own scroll area");
       byId("planning-panel").scrollTop = 250;
       const scroll = byId("planning-panel").scrollTop;
       nav("routes").click();

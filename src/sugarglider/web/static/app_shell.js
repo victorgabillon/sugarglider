@@ -11,10 +11,17 @@ export function initializeAppShell({ document = globalThis.document, resizeMap =
   const buttons = [...navigation.querySelectorAll("[data-shell-view]")];
   let current = mobile.matches ? "map" : "plan";
   let resizeFrame = null;
+  let previousSize = null;
   const listeners = new window.AbortController();
   function resized() {
     if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
-    resizeFrame = window.requestAnimationFrame(() => { resizeFrame = null; resizeMap(); });
+    resizeFrame = window.requestAnimationFrame(() => {
+      resizeFrame = null;
+      const size = [mapPanel.clientWidth, mapPanel.clientHeight];
+      const layoutChanged = previousSize !== null && size.some((value, index) => value !== previousSize[index]);
+      previousSize = size;
+      resizeMap({ layoutChanged, view: current });
+    });
   }
   function show(view, { focus = false } = {}) {
     if (!["map", "plan", "routes"].includes(view) || document.body.classList.contains("outing-mode")) return;
