@@ -37,11 +37,15 @@ export function createRegionScreen({ elements, versions, product, withRegion,
   confirmRemoval = (message) => globalThis.confirm(message), lifecycleTarget = globalThis,
 } = {}) {
   let catalog = [], rows = [], pending = false, closed = false, readyBuild = null, cancelling = false;
-  const { container, selector, list, status, cancel, refresh: refreshButton, mapStatus } = elements;
+  const { container, selector, list, status, cancel, refresh: refreshButton, mapStatus, progress, diagnostics, diagnosticCode } = elements;
+  let focusKey = null;
 
   function message(text, code = "") {
     if (closed) return;
     status.textContent = text; status.dataset.state = code;
+    const failure = code && !["regional_ready", "regional_checking", "regional_installing", "regional_installed", "regional_removed", "regional_cancelling", "regional_required", "regional_selection_required"].includes(code);
+    if (diagnostics) diagnostics.hidden = !failure;
+    if (diagnosticCode) diagnosticCode.textContent = failure ? code : "";
   }
   function render() {
     if (closed) return;
@@ -49,8 +53,18 @@ export function createRegionScreen({ elements, versions, product, withRegion,
     refreshButton.disabled = pending || isPlanning();
     cancel.classList.toggle("hidden", !pending || !product.busy());
     cancel.disabled = cancelling;
+    list.setAttribute("aria-busy", String(pending));
+    if (progress) progress.hidden = !pending || !product.busy();
     for (const button of list.querySelectorAll("button")) {
       button.disabled = pending || (button.dataset.mutation === "remove" && isPlanning()) || button.dataset.unavailable === "true";
+    }
+    if (!pending && focusKey) {
+      const active = document.activeElement;
+      if (active === document.body || list.contains(active)) {
+        const target = [...list.querySelectorAll("button")].find((button) => button.dataset.regionAction === focusKey);
+        (target && !target.disabled ? target : selector).focus({ preventScroll: true });
+      }
+      focusKey = null;
     }
   }
   function renderRows() {
@@ -60,6 +74,7 @@ export function createRegionScreen({ elements, versions, product, withRegion,
       selector.append(option(row.region_id, row.manifest.display_name));
     }
     selector.value = selectedRegionId() ?? "";
+    const openDetails = new Set([...list.querySelectorAll("details[open]")].map((detail) => detail.dataset.regionId));
     list.replaceChildren();
     const ids = [...new Set([...catalog.map((row) => row.region_id), ...rows.map((row) => row.region_id)])];
     for (const id of ids) {
@@ -67,32 +82,49 @@ export function createRegionScreen({ elements, versions, product, withRegion,
       const item = document.createElement("li"); item.className = "offline-region-card";
       const name = document.createElement("strong"); name.textContent = offering?.display_name ?? stored?.manifest?.display_name ?? id;
       item.append(name);
+      const same = stored?.manifest?.build_id === offering?.build_id;
+      const verified = stored?.manifest?.build_id === readyBuild && id === selectedRegionId();
+      const installed = stored?.status === "committed";
+      const stateLabel = installed && offering && !same ? "Update available" : verified ? "Ready" : installed ? "Installed" : stored ? "Needs attention" : offering?.manifest_url ? "Available" : "Download unavailable";
+      item.dataset.regionState = stateLabel;
+      const badge = document.createElement("p"); badge.className = "region-state"; badge.textContent = stateLabel; item.append(badge);
+      const technical = document.createElement("details"); technical.className = "region-technical"; technical.dataset.regionId = id; technical.open = openDetails.has(id);
+      const summary = document.createElement("summary"); summary.textContent = "Technical details"; technical.append(summary);
+      appendText(technical, `Region ID: ${id}`);
+      if (stored?.manifest) appendText(technical, `Installed build: ${stored.manifest.build_id}`);
+      if (offering) appendText(technical, `Available build: ${offering.build_id}`);
       if (offering) {
         appendText(item, offering.description);
         appendText(item, `About ${bytes(offering.download_bytes)} to download, plus small region details. All six activities are included.`);
       }
-      const verified = stored?.manifest?.build_id === readyBuild && id === selectedRegionId();
       appendText(item, verified ? "Map ✓ · Routing ✓ · Places ✓ · Nature ✓"
-        : stored?.status === "committed" ? "Stored on this device. Select this region to check all four components."
-        : stored ? regionFailureMessage(stored.code ?? "regional_install_incomplete") : "Not installed");
-      if (stored?.manifest) appendText(item, `Installed version ${stored.manifest.build_id.slice(0, 12)}`);
+        : stored?.status === "committed" ? "Installed on this device. Select this region to check it is ready."
+        : stored ? regionFailureMessage(stored.code ?? "regional_install_incomplete") : "Not installed. Download once to use this region offline.");
+      if (installed && offering && !same) appendText(item, "A newer download is available. Your installed region stays available until the update is ready.");
       if (stored?.status === "committed" && id === selectedRegionId()) {
-        item.append(button("Show region on map", async () => { viewRegion(stored.manifest.bounds); }));
+        item.append(button("Show region on map", async () => { viewRegion(stored.manifest.bounds); }, `${id}:view`));
       }
       if (offering?.manifest_url) {
-        const same = stored?.manifest?.build_id === offering.build_id;
         item.append(button(same ? "Verify download" : stored?.manifest ? "Update region" : "Download region", async () => {
           await act(async () => {
+            const action = same ? "Checking" : stored?.manifest ? "Updating" : "Downloading";
+            message(`${action} ${name.textContent}…`, "regional_installing");
+            if (progress) progress.removeAttribute("value");
             const installed = await product.install(offering.manifest_url, { expectedRegionId: id, expectedBuildId: offering.build_id,
               expectedDownloadBytes: offering.download_bytes, onProgress: ({ component, received_bytes: received, total_bytes: total }) => {
-                message(`${PHASES[component] ?? "Preparing region"}${total ? `: ${bytes(received)} of ${bytes(total)}` : "…"}`, "regional_installing");
+                message(`${action} ${name.textContent} · ${PHASES[component] ?? "Preparing region"}${total ? `: ${bytes(received)} of ${bytes(total)}` : "…"}`, "regional_installing");
+                if (progress) {
+                  progress.setAttribute("aria-label", PHASES[component] ?? "Preparing region");
+                  if (total > 0 && Number.isFinite(received)) { progress.max = total; progress.value = Math.min(received, total); }
+                  else progress.removeAttribute("value");
+                }
                 render();
               } });
             if (closed) return;
             if (selectedRegionId() === null) selectRegion(installed.region_id);
             message(`${installed.display_name} is installed.`, "regional_installed");
           });
-        }));
+        }, `${id}:install`, !same));
       } else if (offering) {
         const unavailable = button("Download unavailable", async () => {}); unavailable.dataset.unavailable = "true"; item.append(unavailable);
         appendText(item, "Region files are not available from a download service yet.");
@@ -101,16 +133,21 @@ export function createRegionScreen({ elements, versions, product, withRegion,
         const remove = button(stored ? "Remove region" : "Clear regional data", async () => {
           if (isPlanning() || !confirmRemoval(`Remove ${name.textContent} and all of its offline data from this device? Saved route snapshots are kept.`)) return;
           await act(async () => { await product.remove(id); message("Region removed from this device.", "regional_removed"); });
-        });
-        remove.dataset.mutation = "remove"; item.append(remove);
+        }, `${id}:remove`);
+        remove.classList.add("danger");
+        remove.dataset.mutation = "remove"; (stored ? item : technical).append(remove);
         for (const buildId of stored?.inactive_build_ids ?? []) {
-          const discard = button(`Remove unused version ${buildId.slice(0, 12)}`, async () => {
+          appendText(technical, `Unused build: ${buildId}`);
+          const discard = button("Remove unused download", async () => {
             if (isPlanning() || !confirmRemoval("Remove this unused download? The currently installed version is kept.")) return;
             await act(async () => { await product.discardUpdate(id, buildId); message("Unused download removed.", "regional_removed"); });
-          });
-          discard.dataset.mutation = "remove"; item.append(discard);
+          }, `${id}:discard:${buildId}`);
+          discard.setAttribute("aria-label", `Remove unused download ${buildId.slice(0, 12)}`);
+          discard.classList.add("danger");
+          discard.dataset.mutation = "remove"; technical.append(discard);
         }
       }
+      item.append(technical);
       list.append(item);
     }
     render();
@@ -162,6 +199,7 @@ export function createRegionScreen({ elements, versions, product, withRegion,
 
   async function act(action, { refreshAfter = true } = {}) {
     if (pending || closed) return;
+    focusKey = document.activeElement?.dataset.regionAction ?? null;
     pending = true; cancelling = false; render();
     let failure = null;
     try { await action(); }
@@ -210,6 +248,6 @@ export function createRegionScreen({ elements, versions, product, withRegion,
 
 function option(value, text) { const element = document.createElement("option"); element.value = value; element.textContent = text; return element; }
 function appendText(parent, text) { const element = document.createElement("p"); element.textContent = text; parent.append(element); }
-function button(label, action) { const element = document.createElement("button"); element.type = "button";
-  element.className = "button secondary"; element.textContent = label; element.addEventListener("click", () => { void action(); }); return element; }
+function button(label, action, key = "", primary = false) { const element = document.createElement("button"); element.type = "button";
+  element.className = primary ? "button primary" : "button secondary"; element.dataset.regionAction = key; element.textContent = label; element.addEventListener("click", () => { void action(); }); return element; }
 function bytes(value) { return `${(value / 1_000_000).toFixed(1)} MB`; }

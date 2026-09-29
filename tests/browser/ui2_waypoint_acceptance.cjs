@@ -30,6 +30,11 @@ await load();
 for(const type of ['ice','ordinary']){
  await view('map');if(type==='ice'){await page.evaluate(()=>window.M.focusCoordinate([2.1251258,48.8008765]));await page.locator('.maplibregl-ctrl-zoom-in').click({clickCount:2})}
  else {await view('plan');await expose('#place-unknown-water');await page.locator('#place-unknown-water').check();await page.locator('#place-broad').check();await view('map');await page.waitForFunction(()=>window.S.state.poiRequest.status==='success'&&window.S.state.poiFeatures.some(f=>f.category!=='ice_cream'));const p=await page.evaluate(()=>window.S.state.poiFeatures.find(f=>f.category!=='ice_cream').coordinate);await page.evaluate(p=>window.M.focusCoordinate([p.lon,p.lat]),p)}
+ // Real basemap label collision can suppress an ordinary icon at one zoom.
+ // Zoom through the UI until an actual marker is rendered before targeting it.
+ if(type==='ordinary')for(let step=0;step<3;step++){
+  try{await page.waitForFunction(()=>{const d=window.M.placeMapDiagnostics();return window.S.state.poiFeatures.some(f=>f.category!=='ice_cream'&&d.markerIds.includes(f.id))},null,{timeout:2000});break}catch{await page.locator('.maplibregl-ctrl-zoom-in').click()}
+ }
  await page.waitForTimeout(1000);await page.waitForFunction(type=>{const d=window.M.placeMapDiagnostics();return type==='ice'?d.markerIds.includes('node/9739373333'):window.S.state.poiFeatures.some(f=>f.category!=='ice_cream'&&d.markerIds.includes(f.id))},type);
  const id=type==='ice'?'node/9739373333':await page.evaluate(()=>{const d=window.M.placeMapDiagnostics();return window.S.state.poiFeatures.find(f=>f.category!=='ice_cream'&&d.markerIds.includes(f.id)).id});
  for(const placing of [false,true]){

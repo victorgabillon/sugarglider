@@ -51,7 +51,12 @@ export function renderPwaStatus(state) {
     || state.pwaUpdateAvailable
     || !["idle", "ready"].includes(state.pwaStatus)
     || state.storagePersistenceStatus !== "unknown";
-  panel.classList.toggle("hidden", !meaningful);
+  const message = statusMessage(state);
+  const healthy = !offline && !snapshotOffline && !state.pwaUpdateAvailable
+    && ["idle", "ready"].includes(state.pwaStatus) && state.storagePersistenceStatus === "unknown";
+  panel.classList.toggle("hidden", !meaningful || healthy);
+  const summary = byId("app-status-summary");
+  if (summary) summary.textContent = `${isBundledAndroidApp() ? "On device" : offline ? "Offline" : "Online"} · ${message}`;
   byId("pwa-network-status").textContent = isBundledAndroidApp() ? "On device" : offline ? "Offline" : "Online";
   byId("pwa-status-message").textContent = statusMessage(state);
   byId("retry-connection").classList.toggle("hidden", !offline);
@@ -154,8 +159,10 @@ function statusMessage(state) {
     return "Offline storage unavailable.";
   }
   if (state.networkStatus === "offline") {
-    return "Server features are unavailable. Retry when connectivity returns.";
+    return isBundledAndroidApp()
+      ? "You can use regions already installed on this device."
+      : "Server features are unavailable. Retry when connectivity returns.";
   }
-  if (isBundledAndroidApp()) return "Maps and routes use installed regions. Sharing needs a connection.";
+  if (isBundledAndroidApp()) return "Maps and routes use installed regions.";
   return "App ready for offline use.";
 }

@@ -894,3 +894,38 @@ body.ui-shell:not(.outing-mode) {
 .map-edit-notice { position: absolute; z-index: 8; bottom: 5rem; left: 50%; transform: translateX(-50%); width: min(360px, calc(100% - 8rem)); padding: .6rem; border: 2px solid #214b3b; border-radius: 10px; background: #fffaf0; box-shadow: 0 2px 8px #0002; }
 .map-edit-notice p { margin: 0 0 .4rem; font-size: .85rem; line-height: 1.4; }
 .map-edit-notice .button { min-height: 44px; }
+
+/* UI2 final consistency: native controls, one utility scroller, truthful states. */
+.ui-shell:not(.outing-mode) :is(button, input, select, summary):focus-visible { outline: 3px solid #245d90; outline-offset: 3px; }
+.ui-shell:not(.outing-mode) :is(.header-tools-menu, .panel) summary { cursor: pointer; min-height: 44px; padding-block: .65rem; }
+.ui-shell:not(.outing-mode) .header-tools-menu :is(.button, .text-button) { min-height: 44px; white-space: normal; }
+.ui-shell:not(.outing-mode) .header-tools-menu .button.secondary { color: var(--text); border-color: #aaa996; background: var(--elevated-surface); }
+.ui-shell:not(.outing-mode) .header-tools-menu .button.primary { color: #fff; background: var(--primary-action); }
+.ui-shell:not(.outing-mode) .header-tools-menu details > :not(summary) { margin-block: .5rem; }
+.ui-shell:not(.outing-mode) .header-tools-menu .plan-file-tools > button { width: 100%; }
+.ui-shell:not(.outing-mode) .header-tools-menu { max-height: calc(100dvh - 11rem); }
+.ui-shell:not(.outing-mode) .offline-region-card { padding: .85rem; display: grid; gap: .6rem; border: 1px solid #bac9bc; border-radius: 12px; background: #fffdf6; }
+.ui-shell:not(.outing-mode) .offline-region-card p { margin: 0; overflow-wrap: anywhere; }
+.region-state { color: #214b3b; font-weight: 800; }
+.region-technical { border-top: 1px solid #d1d5c8; font-size: .8125rem; }
+.region-technical p, #regional-error-code { overflow-wrap: anywhere; }
+.ui-shell:not(.outing-mode) .header-tools-menu .button.danger { color: #853324; background: #fffdf6; border-color: #b87c71; }
+#regional-list { padding: 0; }
+#regional-progress { width: 100%; height: 1rem; accent-color: #214b3b; }
+.ui-shell:not(.outing-mode) .maplibregl-ctrl-group button { width: 44px; height: 44px; }
+.ui-shell:not(.outing-mode) .maplibregl-popup-close-button { min-width: 44px; min-height: 44px; border-radius: 8px; }
+.ui-shell:not(.outing-mode) .maplibregl-popup-content { padding-right: 44px; }
+.ui-shell:not(.outing-mode) .map-tools > summary, .ui-shell:not(.outing-mode) .legend > summary { min-height: 44px; display: flex; align-items: center; }
+.ui-shell:not(.outing-mode) .text-button:disabled { color: #666b62; }
+.ui-shell:not(.outing-mode) .topbar :is(button, summary, a):focus-visible { outline-color: #ffe39a; }
+.ui-shell:not(.outing-mode) .header-tools-menu :is(button, summary, a):focus-visible { outline-color: #245d90; }
+.ui-shell:not(.outing-mode) .button:disabled, .ui-shell:not(.outing-mode) .header-tools-menu .button:disabled { opacity: 1; color: #5c6258; background: #e5e6de; border-color: #abb2a6; }
+.ui-shell:not(.outing-mode) .map-tools[open] { max-height: calc(100% - 1.3rem); max-width: calc(100% - 4.5rem); overflow-y: auto; }
+@container planning-map (max-height: 240px) {
+  .ui-shell:not(.outing-mode) .maplibregl-ctrl-group { display: flex; }
+  .ui-shell:not(.outing-mode) .maplibregl-ctrl-group button + button { border-top: 0; border-left: 1px solid #ddd; }
+}
+
+.ui-shell:not(.outing-mode) .map-panel { container: planning-map / size; }
+.map-tools .legend { position: static; max-width: 100%; margin-top: .5rem; box-shadow: none; }
+.map-tools .legend-items { max-height: none; overflow: visible; }

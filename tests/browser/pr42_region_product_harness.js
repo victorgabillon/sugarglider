@@ -149,7 +149,7 @@ export async function runPr42RegionProductHarness() {
     assert(!requests.slice(updateStart).some((entry) => entry.url.endsWith("basemap.pmtiles")), "resume hashes and reuses staged map");
     cases.push("resumed_update_reuses_staged_map_and_switches_only_after_verification");
 
-    click(`Remove unused version ${first.manifest.build_id.slice(0, 12)}`); await settled();
+    click("Remove unused download"); await settled();
     assert(!nativeStored.has(first.manifest.build_id) && nativeStored.has(current.manifest.build_id), "unused cleanup only removes old native version");
     equal(ready, "ready", "current version remains usable");
     cases.push("unused_version_removal_preserves_current_region");
