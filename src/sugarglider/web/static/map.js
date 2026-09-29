@@ -1,3 +1,4 @@
+import { routeColor } from "./route_results.js";
 import { keepMapCoordinateVisible } from "./map_viewport.js";
 import * as maplibregl from "./vendor/maplibre-gl-6.4.1/maplibre-gl.mjs";
 import { gpxFeatureCollection } from "./gpx.js";
@@ -1443,13 +1444,19 @@ export function renderCandidates(
       source: sourceId,
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": selected ? "#214b3b" : ["match", index % 4, 0, "#497c6c", 1, "#5f6d91", 2, "#7d6b52", "#596f63"],
+        "line-color": routeColor(index, selected),
         "line-width": selected ? 6 : 3,
         "line-opacity": selected ? 0.94 : 0.55,
         "line-dasharray": selected ? [1, 0] : [2.2, 1.4],
       },
     });
   });
+  // Keep selected geometry above alternatives without changing candidate order or IDs.
+  const selectedIndex = candidates.findIndex((candidate) => candidate.id === selectedCandidateId);
+  if (selectedIndex >= 0) {
+    map.moveLayer(`candidate-${selectedIndex}-casing`);
+    map.moveLayer(`candidate-${selectedIndex}-line`);
+  }
   renderDirectionArrows(
     candidates.find((candidate) => candidate.id === selectedCandidateId) ?? null,
     showDirection,

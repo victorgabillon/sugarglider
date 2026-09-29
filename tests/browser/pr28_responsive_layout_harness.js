@@ -69,6 +69,7 @@ function applicationFrame(source, width) {
 }
 
 function installFixtureContent(document) {
+  byId(document, "selected-route-panel").classList.remove("hidden");
   const candidateList = byId(document, "candidate-list");
   candidateList.innerHTML = `
     <article class="candidate-card selected recommended">

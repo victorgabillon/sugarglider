@@ -111,3 +111,14 @@ The standalone `tests/browser/ui2_planning_harness.html` adds draft/availability
 External review evidence: `/home/pompote/oldata/victor/sugarglider-v1-artifacts/ui2-pr2-planning-2026-09-29/`, including paired captures, the canonical-request comparison, exact test totals and an interactive gallery. Captures use real Yvelines maps/places and local GraphHopper routes in isolated browser contexts, not a Play-device update. Novice-task reasoning is an expert heuristic walkthrough, not human usability validation.
 
 Candidate comparison and export hierarchy remain PR3. Full waypoint manipulation/touch/mouse redesign remains PR4. Region-management polish remains PR5.
+
+
+## UI-3 implementation contract
+
+Baseline: PR2 merge e26ad8105397cddc5a72a0aee4ba9b8201cc7637, tree ca65aac58980ee821481b38305521d8d459511f6. The shared Routes workspace retains returned array order, ranks, IDs and first-candidate default. `route_results.js` only renders those objects; `state.selectedSignature` remains the selection authority. Numbered cards show distance, distance-range status and mapped repeated travel (Unknown when unavailable). A check mark, pressed state and solid line identify selection; alternatives use dashed matching swatches. Selecting never regenerates or fits the camera, preserves keyboard focus and clears an outdated visualization while the selected projection loads.
+
+One selected-route surface places Export GPX before Route details. Normal details retain stop outcomes, traversal and coverage-aware measurements; score, search budget, full IDs and loop/nature calculations are under Technical diagnostics. More route actions retains existing reversal/save capabilities; private Android capabilities are unchanged. GPX still snapshots the selected candidate into the existing local worker and existing Android/browser saver. Status is visible in Routes; save cancellation never changes a route.
+
+Empty Routes distinguishes never generated, zero results, failure, cancellation and invalidated results. `resultsInvalidated` is only a transient notice bit, not a candidate or selection store. Starting a validated new generation clears obsolete candidates; failure/cancellation cannot leave an older result looking current. A completed new result scrolls Routes to its beginning once. Manual workspace switches and candidate selection do not repeatedly recenter the map. Short phone viewports keep a 120px minimum map; all results remain in one task scroller.
+
+PR4 retains waypoint editing; PR5 retains regions/secondary surfaces and the final consistency sweep. Version stays 1.0.3 / code 5. Responsive browser evidence is not a phone installation or a formal WCAG audit.

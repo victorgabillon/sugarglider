@@ -91,6 +91,7 @@ regional_map_store.js
 regional_native.js
 regional_planning.js
 regional_routing_reference.js
+route_results.js
 saved_routes.js
 service_worker_policy.js
 state.js

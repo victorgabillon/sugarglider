@@ -1,10 +1,11 @@
+import { renderRouteChoices, emptyResultsMarkup } from "./route_results.js";
 import { initializeAppShell } from "./app_shell.js";
 import { ApiError, generatePlan, getConfig, getPoiStatus, getRoutingProfiles, reversePlan, searchPois, visualizeRoute } from "./api.js";
 import { createLocalPlaceSearch } from "./local_places.js";
 import { createLocalGpxExporter } from "./local_gpx_client.js";
 import { isBundledAndroidApp } from "./android_app.js";
 import { createGpxFileSaver } from "./native_gpx_save.js";
-import { constructionLabel, escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, lowOverlapLabel, metricRows } from "./format.js";
+import { escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
 import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap, keepCoordinateVisible } from "./map.js";
@@ -145,6 +146,7 @@ function showError(message, details = "", code = "", context = "", suggestion = 
   suggestionElement.textContent = suggestion;
   suggestionElement.classList.toggle("hidden", !suggestion);
   byId("error-details").textContent = details;
+  byId("error-details").closest("details").open = false;
   byId("error-banner").classList.remove("hidden");
   byId("exact-error-actions").classList.toggle(
     "hidden",
@@ -1111,18 +1113,6 @@ function renderMapData() {
   positionPlannerLocationLayers();
 }
 
-function candidateBadges(candidate) {
-  const values = [];
-  values.push(`<span class="badge">${escapeHtml(profileDisplayName(candidate.routing_profile))}</span>`);
-  values.push(`<span class="badge">${escapeHtml(directionLabel(candidate.traversal))}</span>`);
-  for (const role of candidate.roles) {
-    values.push(`<span class="badge">${escapeHtml(friendlyLabel(role))}</span>`);
-  }
-  if (candidate.rank === 1) values.push('<span class="badge recommended">Recommended</span>');
-  values.push(`<span class="badge ${candidate.diagnostics.within_tolerance ? "good" : "warn"}">${candidate.diagnostics.within_tolerance ? "Within tolerance" : "Outside tolerance"}</span>`);
-  return values.join("");
-}
-
 function directionLabel(traversal) {
   return {
     start_to_end: "Start → End",
@@ -1142,46 +1132,6 @@ function traversalSummary(candidate, result) {
   return `<section class="direction-summary" role="status" aria-label="Route traversal direction"><h3>Traversal direction</h3><p><strong>${escapeHtml(label)}</strong></p><p class="context-note">Direction arrows follow the returned routed geometry. They are planning context, not turn-by-turn instructions.</p></section>`;
 }
 
-function autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare) {
-  const analysis = candidate.route.analysis;
-  const targetDifference = candidate.route.summary.distance_m - state.options.targetDistanceKm * 1000;
-  const targetDifferenceLabel = `${targetDifference >= 0 ? "+" : "−"}${formatDistance(Math.abs(targetDifference))}`;
-  const requestedTotal = candidate.reached_stops.filter((stop) => stop.selection_origin === "requested").length
-    + candidate.approximated_stops.filter((stop) => stop.selection_origin === "requested").length
-    + candidate.dropped_stops.filter((stop) => stop.selection_origin === "requested").length;
-  const requestedSelected = candidate.diagnostics.requested_stop_count;
-  const discoveredSelected = candidate.reached_stops.filter((stop) => stop.selection_origin !== "requested").length;
-  const metrics = [
-    ["Covered requested stops", `${formatCount(requestedSelected)} / ${formatCount(requestedTotal)}`],
-    ["Reached discovered stops", formatCount(discoveredSelected)],
-    ["Distance", formatDistance(candidate.route.summary.distance_m)],
-    ["Target difference", targetDifferenceLabel],
-    ["Immediate backtracking", backtrackShare(analysis) === null ? "Unknown" : formatDistance(candidate.diagnostics.immediate_backtracking_m)],
-  ].map(([label, value]) => `<span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong>`).join("");
-  return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate)}</div><p class="candidate-construction">${escapeHtml(friendlyLabel(candidate.diagnostics.details.construction ?? result.kind))}</p><div class="candidate-key-metrics">${metrics}</div>${metricBar("Total repetition", repetitionShare(analysis), "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", backtrackShare(analysis), "backtrack", formatPercent(analysis.immediate_backtrack.share))}${metricBar("Outbound/return proximity", analysis.loop_geometry?.outbound_return_proximity.share ?? null, "backtrack", analysis.loop_geometry ? formatPercent(analysis.loop_geometry.outbound_return_proximity.share) : "not evaluated")}${metricBar("Mapped nature", analysis.nature ? analysis.nature.nature_score / 100 : null, "nature", analysis.nature ? `${analysis.nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(analysis.loop_geometry)}`;
-}
-
-function candidateChoiceSummary(candidate, analysis, selected) {
-  const quality = primaryQualityMetric(analysis);
-  const nature = analysis.nature;
-  const repeated = repetitionShare(analysis);
-  const metric = (label, value) => `<span><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong></span>`;
-  const badges = [
-    `<span class="badge">${escapeHtml(profileDisplayName(candidate.routing_profile))}</span>`,
-    candidate.rank === 1 ? '<span class="badge recommended">Recommended</span>' : "",
-    `<span class="badge ${candidate.diagnostics.within_tolerance ? "good" : "warn"}">${candidate.diagnostics.within_tolerance ? "Within tolerance" : "Outside tolerance"}</span>`,
-  ].join("");
-  return `<div class="candidate-choice-heading"><h3>${selected ? "Your route" : `Route ${candidate.rank}`}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${badges}</div><div class="candidate-choice-metrics">${metric("Nature", nature ? `${nature.nature_score.toFixed(0)} / 100` : "Unknown")}${metric(quality?.[0] ?? "Route quality", quality?.[1] == null ? "Unknown" : formatPercent(quality[1]))}${metric("Repeated", repeated == null ? "Unknown" : formatPercent(repeated))}</div><span class="candidate-choice-action">${selected ? "Selected route" : "Use this route"}</span>`;
-}
-
-function metricBar(label, share, className, displayValue) {
-  if (share === null || share === undefined) {
-    return `<div class="bar-metric ${className} not-evaluated"><div class="bar-heading"><span>${escapeHtml(label)}</span><strong>not evaluated</strong></div><div class="metric-track" aria-hidden="true"></div></div>`;
-  }
-  const percentage = Math.max(0, Math.min(100, Number(share) * 100));
-  return `<div class="bar-metric ${className}"><div class="bar-heading"><span>${escapeHtml(label)}</span><strong>${escapeHtml(displayValue)}</strong></div><div class="metric-track" role="img" aria-label="${escapeHtml(`${label}: ${displayValue}`)}"><div class="metric-fill" style="--metric-value:${percentage.toFixed(3)}%"></div></div></div>`;
-}
-
 // Display only availability/coverage supplied by the canonical analysis.
 function repetitionShare(analysis) {
   return analysis.repetition.available ? analysis.repetition.repeated_distance.share : null;
@@ -1191,17 +1141,6 @@ function backtrackShare(analysis) {
 }
 function detailShare(analysis, metric, detail) {
   return analysis.detail_breakdowns?.[detail]?.coverage_share > 0 ? analysis[metric].share : null;
-}
-
-function primaryQualityMetric(analysis) {
-  const quality = analysis.activity_quality;
-  const covered = (detail) => Number(quality.detail_coverage?.[detail] ?? 0) > 0;
-  if (quality.activity_kind === "walking") return ["Trail-like", covered("road_class") ? quality.trail_like.share : null];
-  if (quality.activity_kind === "running") return ["Runnable surface", covered("surface") ? quality.runnable_surface.share : null];
-  if (quality.activity_kind === "cycling") {
-    return ["Cycling network", covered("bike_network") ? quality.cycling_network.share : null];
-  }
-  return null;
 }
 
 function activityQualitySection(analysis) {
@@ -1253,42 +1192,6 @@ function activityQualitySection(analysis) {
     ]);
   }
   return "";
-}
-
-function loopGeometryCardSummary(geometry) {
-  if (!geometry) {
-    return '<div class="loop-geometry-card not-evaluated"><div class="loop-geometry-heading"><strong>Loop geometry</strong><span>not evaluated</span></div><p>Shape metrics are unknown, not zero.</p></div>';
-  }
-  return `<div class="loop-geometry-card"><div class="loop-geometry-heading"><strong>Loop geometry</strong><span>${geometry.penalty_breakdown.total.toFixed(4)} · lower is better</span></div><dl><dt>Compactness</dt><dd>${geometry.compactness.toFixed(4)}</dd><dt>Sector balance</dt><dd>${geometry.sector_balance.toFixed(4)}</dd><dt>Near-parallel</dt><dd>${formatPercent(geometry.near_parallel.share)}</dd><dt>Self-crossings</dt><dd>${formatCount(geometry.self_crossing_count)}</dd></dl></div>`;
-}
-
-function loopGeometryCardDetails(geometry) {
-  const details = document.createElement("details");
-  details.className = "loop-geometry-details";
-  const summary = document.createElement("summary");
-  summary.textContent = "Loop geometry details";
-  const content = document.createElement("div");
-  content.innerHTML = geometry
-    ? metricRows([
-      ["Elongation", geometry.elongation.toFixed(4)],
-      ["Enclosed area", `${geometry.enclosed_area_m2.toFixed(2)} m²`],
-      ["Maximum radius", `${geometry.max_radius_m.toFixed(2)} m`],
-    ])
-    : metricRows([
-      ["Elongation", "not evaluated"],
-      ["Enclosed area", "not evaluated"],
-      ["Maximum radius", "not evaluated"],
-    ]);
-  details.append(summary, content);
-  return details;
-}
-
-function spurCardSummary(spurAnalysis) {
-  const analysis = spurAnalysis ?? {
-    spur_count: 0,
-    total_repeated_distance_m: 0,
-  };
-  return `<div class="spur-card-summary"><strong>${formatCount(analysis.spur_count)} out-and-back excursion${analysis.spur_count === 1 ? "" : "s"}</strong><span>${formatDistance(analysis.total_repeated_distance_m)} repeated inside excursions</span></div>`;
 }
 
 function structuralAlternativeSummary(candidate) {
@@ -1362,87 +1265,18 @@ function bestExcludedRefinementSummary(diagnostics) {
 
 function renderCandidatesPanel() {
   const container = byId("candidate-list");
-  const result = currentDisplayContext();
   const candidates = currentDisplayedCandidates();
-  const diagnostics = currentSearchDiagnostics();
+  const result = currentDisplayContext();
+  byId("candidates-title").textContent = candidates.length === 1 ? "Your route" : candidates.length ? `${candidates.length} routes to explore` : "Routes";
+  byId("search-summary").textContent = candidates.length
+    ? `${result?.kind === "waypoint_route" ? "Connect my points" : "Suggest a route"} · ${profileDisplayName(result?.routing_profile)}`
+    : "";
+  byId("results-back-to-plan").classList.toggle("hidden", Boolean(candidates.length));
   if (!candidates.length) {
-    container.innerHTML = state.generationResult
-      ? '<p class="empty-copy">No route candidate could satisfy the current hard constraints.</p>'
-      : '<p class="empty-copy">Returned routes will appear here in ranked order.</p>';
-    byId("search-summary").textContent = state.generationResult
-      ? "No safe planning candidates returned"
-      : "";
+    container.innerHTML = emptyResultsMarkup(state);
     return;
   }
-  byId("search-summary").textContent = isSavedRouteSnapshotDisplay()
-    ? "1 immutable snapshot candidate · search diagnostics not applicable"
-    : diagnostics
-      ? `${candidates.length} canonical candidate${candidates.length === 1 ? "" : "s"} returned`
-      : "1 saved source candidate · search diagnostics not applicable";
-  container.replaceChildren();
-  candidates.forEach((candidate) => {
-    const analysis = candidate.route.analysis;
-    const nature = analysis.nature;
-    const loopGeometry = analysis.loop_geometry;
-    const repeatedDistance = analysis.repetition.repeated_distance.distance_m;
-    const nonImmediate = Math.max(repeatedDistance - analysis.immediate_backtrack.distance_m, 0);
-    const nonImmediateShare = candidate.route.summary.distance_m > 0
-      ? nonImmediate / candidate.route.summary.distance_m
-      : 0;
-    const selected = candidate.id === state.selectedSignature;
-    const card = document.createElement("article");
-    card.className = `candidate-card${selected ? " selected" : ""}${candidate.rank === 1 ? " recommended" : ""}`;
-    card.setAttribute("aria-label", `Candidate ${candidate.rank}${candidate.rank === 1 ? ", recommended" : ""}`);
-
-    const selector = document.createElement("button");
-    selector.type = "button";
-    selector.className = "candidate-select";
-    selector.setAttribute("aria-pressed", String(selected));
-    selector.setAttribute("aria-label", `Select candidate ${candidate.rank}, ${formatDistance(candidate.route.summary.distance_m)}`);
-    selector.innerHTML = candidateChoiceSummary(candidate, analysis, selected);
-    selector.addEventListener("click", () => selectCandidate(candidate.id));
-    card.append(selector);
-
-    const detailMarkup = state.planningMode === "auto_tour"
-      ? autoCandidateSummary(candidate, result, nonImmediate, nonImmediateShare) + structuralAlternativeSummary(candidate) + spurCardSummary(analysis.spurs)
-      : (() => { const quality = primaryQualityMetric(analysis); return `<div class="candidate-title"><h3>Candidate ${candidate.rank}</h3><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></div><div class="candidate-badges">${candidateBadges(candidate)}</div><p class="candidate-construction">${escapeHtml(constructionLabel(candidate.diagnostics.details.construction ?? "route"))}</p><div class="candidate-key-metrics"><span>Target error</span><strong>${formatDistance(candidate.diagnostics.target_error_m)}</strong><span>Other repetition</span><strong>${repetitionShare(analysis) === null || backtrackShare(analysis) === null ? "Unknown" : `${formatDistance(nonImmediate)} · ${formatPercent(nonImmediateShare)}`}</strong><span>Major road</span><strong>${detailShare(analysis, "major_road", "road_class") === null ? "Unknown" : formatPercent(analysis.major_road.share)}</strong></div>${metricBar("Total repetition", repetitionShare(analysis), "repetition", formatPercent(analysis.repetition.repeated_distance.share))}${metricBar("Immediate backtracking", backtrackShare(analysis), "backtrack", formatPercent(analysis.immediate_backtrack.share))}${quality ? metricBar(quality[0], quality[1], "trail", quality[1] == null ? "not evaluated" : formatPercent(quality[1])) : ""}${metricBar("Paved", detailShare(analysis, "paved", "surface"), "paved", formatPercent(analysis.paved.share))}${metricBar("Mapped nature", nature ? nature.nature_score / 100 : null, "nature", nature ? `${nature.nature_score.toFixed(1)} / 100` : "not evaluated")}${loopGeometryCardSummary(loopGeometry)}${structuralAlternativeSummary(candidate)}${spurCardSummary(analysis.spurs)}`; })();
-    const routeDetails = document.createElement("details");
-    routeDetails.className = "candidate-route-details";
-    const routeDetailsSummary = document.createElement("summary");
-    routeDetailsSummary.textContent = "Route details";
-    const routeDetailsContent = document.createElement("div");
-    routeDetailsContent.className = "candidate-detail-content";
-    routeDetailsContent.innerHTML = detailMarkup;
-    routeDetailsContent.append(loopGeometryCardDetails(loopGeometry));
-    routeDetails.append(routeDetailsSummary, routeDetailsContent);
-
-    const warningCodes = [...new Set([
-      ...(diagnostics?.warnings ?? []),
-      ...analysis.warnings,
-      ...(analysis.spurs?.warnings ?? []),
-      ...(loopGeometry?.warnings ?? []),
-      ...(nature?.warnings ?? []),
-    ])];
-    if (warningCodes.length) {
-      const warnings = document.createElement("ul");
-      warnings.className = "card-warnings";
-      warningCodes.forEach((warning) => {
-        const item = document.createElement("li");
-        item.textContent = friendlyLabel(warning);
-        warnings.append(item);
-      });
-      card.append(warnings);
-      const details = document.createElement("details");
-      const summary = document.createElement("summary");
-      summary.textContent = "Raw warning codes";
-      const code = document.createElement("code");
-      code.textContent = warningCodes.join("\n");
-      details.append(summary, code);
-      card.append(details);
-    }
-    card.append(routeDetails);
-    container.append(card);
-  });
+  renderRouteChoices(container, candidates, state.selectedSignature, selectCandidate);
 }
 
 function section(title, rows) {
@@ -1617,6 +1451,12 @@ function renderMetrics() {
   const busy = ["running", "reversing"].includes(state.request.status);
   const readOnly = isImmutableSnapshotDisplay();
   const savingUnavailable = !state.config?.saved_routes_available;
+  byId("selected-route-panel").classList.toggle("hidden", !candidate);
+  byId("metrics-title").textContent = candidate ? `Route ${candidate.rank} · selected` : "Selected route";
+  byId("selected-route-context").textContent = candidate
+    ? `${profileDisplayName(candidate.routing_profile)} · ${candidate.topology === "loop" ? "Loop" : "Point to point"}` : "";
+  byId("download-gpx").setAttribute("aria-label", candidate ? `Export Route ${candidate.rank} as GPX` : "Export GPX");
+  byId("save-route-selected").classList.toggle("hidden", savingUnavailable || readOnly || !candidate);
   byId("download-gpx").disabled = !candidate || busy || pendingGpxExport !== null;
   byId("download-gpx").setAttribute("aria-busy", String(pendingGpxExport !== null));
   byId("reverse-route").disabled = readOnly || !candidate || busy || Boolean(localPlanner) || Boolean(state.importedGpx && !state.generationResult);
@@ -1647,7 +1487,27 @@ function renderCanonicalMetrics(candidate, result) {
     ...(analysis.loop_geometry?.warnings ?? []),
     ...(analysis.nature?.warnings ?? []),
   ])];
-  byId("metrics-content").innerHTML = compromiseSummary(candidate) + traversalSummary(candidate, result) + endpointSection(result)
+  byId("metrics-content").innerHTML = compromiseSummary(candidate)
+    + traversalSummary(candidate, result)
+    + constraintItinerary(candidate)
+    + section("Route quality", [
+      ["Total repetition", repetitionShare(analysis) === null ? "Unknown" : `${formatDistance(analysis.repetition.repeated_distance.distance_m)} · ${formatPercent(analysis.repetition.repeated_distance.share)}`],
+      ["Immediate backtracking", backtrackShare(analysis) === null ? "Unknown" : `${formatDistance(analysis.immediate_backtrack.distance_m)} · ${formatPercent(analysis.immediate_backtrack.share)}`],
+      ["Paved", detailShare(analysis, "paved", "surface") === null ? "Unknown" : formatPercent(analysis.paved.share)],
+      ["Major roads", detailShare(analysis, "major_road", "road_class") === null ? "Unknown" : formatPercent(analysis.major_road.share)],
+    ])
+    + routeShapeIssuesSection(analysis, candidate)
+    + activityQualitySection(analysis)
+    + section("Mapped environment", analysis.nature ? [
+      ["Woodland", formatPercent(analysis.nature.woodland.share)],
+      ["Open natural land", formatPercent(analysis.nature.open_natural.share)],
+      ["Unknown land cover", formatPercent(analysis.nature.unknown_landcover.share)],
+    ] : [["Nature", "Unknown — mapped nature analysis is unavailable"]])
+    + '<p class="context-note">Mapped measurements may have incomplete coverage. They do not guarantee current conditions or access.</p>'
+    + '<details class="route-diagnostics"><summary>Technical diagnostics</summary>'
+    + endpointSection(result)
+    + structuralAlternativeSummary(candidate)
+    + natureSection(analysis.nature, { nature_index_available: Boolean(analysis.nature) })
     + section("Canonical candidate", [
       ["Candidate ID", candidate.id],
       ["Routing profile", profileDisplayName(candidate.routing_profile)],
@@ -1659,18 +1519,8 @@ function renderCanonicalMetrics(candidate, result) {
       ["Planning constraints met", candidate.diagnostics.safety_eligible ? "Yes" : "No"],
       ["Reached / approximated / dropped", `${candidate.reached_stops.length} / ${candidate.approximated_stops.length} / ${candidate.dropped_stops.length}`],
     ])
-    + constraintItinerary(candidate)
-    + section("Route quality", [
-      ["Total repetition", repetitionShare(analysis) === null ? "Unknown" : `${formatDistance(analysis.repetition.repeated_distance.distance_m)} · ${formatPercent(analysis.repetition.repeated_distance.share)}`],
-      ["Immediate backtracking", backtrackShare(analysis) === null ? "Unknown" : `${formatDistance(analysis.immediate_backtrack.distance_m)} · ${formatPercent(analysis.immediate_backtrack.share)}`],
-      ["Paved", detailShare(analysis, "paved", "surface") === null ? "Unknown" : formatPercent(analysis.paved.share)],
-      ["Major roads", detailShare(analysis, "major_road", "road_class") === null ? "Unknown" : formatPercent(analysis.major_road.share)],
-    ])
-    + routeShapeIssuesSection(analysis, candidate)
-    + activityQualitySection(analysis)
     + section("Score", [["Total", Number(candidate.score.total).toFixed(6)], ...scoreRows])
     + (result.topology === "loop" ? loopGeometrySection(analysis.loop_geometry) : "")
-    + natureSection(analysis.nature, { nature_index_available: Boolean(analysis.nature) })
     + (diagnostics ? bestExcludedRefinementSummary(diagnostics) : "")
     + (diagnostics
       ? section("Search budget", [
@@ -1679,7 +1529,7 @@ function renderCanonicalMetrics(candidate, result) {
         ...phaseRows,
       ])
       : `<section><h3>Search diagnostics</h3><p>Not applicable — loaded immutable ${state.outingDisplay ? "outing" : "saved-route"} snapshot.</p></section>`)
-    + `<section><h3>Warnings</h3><ul class="warning-list">${warnings.length ? warnings.map((warning) => `<li>${escapeHtml(friendlyLabel(warning))}</li>`).join("") : `<li>${diagnostics ? "No route or search warnings." : "No route warnings. Search diagnostics are not applicable."}</li>`}</ul></section>`;
+    + `<section><h3>Warnings</h3><ul class="warning-list">${warnings.length ? warnings.map((warning) => `<li>${escapeHtml(friendlyLabel(warning))}</li>`).join("") : `<li>${diagnostics ? "No route or search warnings." : "No route warnings. Search diagnostics are not applicable."}</li>`}</ul></section>` + '</details>';
   wireCompromiseActions(candidate);
 }
 
@@ -1863,6 +1713,8 @@ function renderPwaApplication() {
 async function selectCandidate(candidateId) {
   if (!currentDisplayedCandidates().some((candidate) => candidate.id === candidateId)) return;
   state.selectedSignature = candidateId;
+  renderVisualization(null, false);
+  if (!pendingGpxExport) byId("export-status").textContent = "";
   render();
   const candidate = selectedCandidate();
   if (!candidate) return;
@@ -1921,6 +1773,8 @@ async function generate() {
     showError(error.message);
     return;
   }
+  invalidateCandidates();
+  state.resultsInvalidated = false;
   const id = state.request.id + 1;
   state.request = { status: "running", id, startedAt: Date.now() };
   state.abortController = new AbortController();
@@ -1938,6 +1792,7 @@ async function generate() {
       ? await localPlanner.generate(request, state.abortController.signal)
       : await generatePlan(request, state.abortController.signal);
     if (state.request.id !== id) return;
+    state.resultsInvalidated = false;
     state.generationResult = result;
     state.generationSourceRequest = request;
     state.selectedSignature = result.candidates[0]?.id ?? null;
@@ -1951,6 +1806,7 @@ async function generate() {
       fitCoordinates(result.candidates[0].route.geometry);
       await selectCandidate(result.candidates[0].id);
       appShell?.show("routes");
+      byId("results-panel").scrollTop = 0;
     } else {
       showNoCandidateError(result);
     }
@@ -1964,8 +1820,7 @@ async function generate() {
     window.clearInterval(elapsedTimer);
     if (state.request.id === id) {
       state.abortController = null;
-      renderStatus();
-      renderMapData();
+      render();
     }
   }
 }
@@ -2137,11 +1992,11 @@ function showNoCandidateError(result) {
     return;
   }
   showError(
-    "No route candidate could satisfy the current hard constraints.",
+    "No matching route found.",
     safeGenerationDiagnostics(result),
     "no_route_candidate",
-    "Every returned candidate was rejected or the search produced no complete route.",
-    GENERATION_SUGGESTION,
+    "Your points and constraints have been kept.",
+    "Try changing the distance or your points in Plan.",
   );
 }
 
@@ -2157,11 +2012,12 @@ function handleGenerationError(error) {
       : "The planning request was not completed.";
     lastExactFailure = error.code === "exact_waypoint_not_reached" ? error.metadata : null;
     showError(
-      error.message,
-      error.details,
+      error.code === "exact_waypoint_not_reached" ? error.message : "Route planning couldn’t finish.",
+      `${error.message}\n${error.details}`,
       error.code,
       context,
-      error.metadata?.suggestion ?? GENERATION_SUGGESTION,
+      error.metadata?.suggestion ?? (error.code === "exact_waypoint_not_reached"
+        ? GENERATION_SUGGESTION : "Check your points and routing availability in Plan, then try again."),
     );
     return;
   }
@@ -2169,8 +2025,8 @@ function handleGenerationError(error) {
     "Route generation failed.",
     "A browser error interrupted generation; no raw traceback is displayed.",
     "browser_generation_error",
-    "The planning request was not completed.",
-    GENERATION_SUGGESTION,
+    "Your points and preferences are kept.",
+    "Return to Plan and try again.",
   );
 }
 
@@ -2440,17 +2296,17 @@ async function downloadSelected() {
   const operation = {};
   pendingGpxExport = operation;
   renderMetrics();
-  byId("request-status").textContent = "Preparing GPX…";
+  byId("export-status").textContent = `Preparing Route ${candidate.rank} as GPX…`;
   try {
     const prepared = await localGpxExporter.exportCandidate(candidate);
-    byId("request-status").textContent = "Choose where to save the GPX file…";
+    byId("export-status").textContent = "Choose where to save the GPX file…";
     const result = await gpxFileSaver.save(prepared);
     if (result.status === "cancelled") {
-      byId("request-status").textContent = "GPX save cancelled. Your route is unchanged.";
+      byId("export-status").textContent = "GPX save cancelled. Your route is unchanged.";
       return;
     }
     if (result.status === "saved") {
-      byId("request-status").textContent = "GPX file saved.";
+      byId("export-status").textContent = `Route ${candidate.rank} GPX saved.`;
       return;
     }
     const { blob, filename } = result;
@@ -2460,9 +2316,12 @@ async function downloadSelected() {
     link.download = filename;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
-    byId("request-status").textContent = `${filename} prepared from the selected route.`;
+    byId("export-status").textContent = `${filename} prepared from the selected route.`;
   } catch (error) {
-    if (error.name !== "AbortError") handleError(error, "GPX export failed.");
+    if (error.name !== "AbortError") {
+      byId("export-status").textContent = "Could not export GPX. Try again.";
+      handleError(error, "GPX export failed.");
+    }
   } finally {
     if (pendingGpxExport === operation) pendingGpxExport = null;
     renderMetrics();
@@ -2811,6 +2670,7 @@ function bindEvents() {
     updatePoiFiltersFromControls();
     schedulePoiRefresh();
   });
+  byId("results-back-to-plan").addEventListener("click", () => appShell?.show("plan", { focus: true }));
   byId("download-gpx").addEventListener("click", downloadSelected);
   byId("save-route").addEventListener("click", saveSelectedRoute);
   byId("save-route-selected").addEventListener("click", saveSelectedRoute);

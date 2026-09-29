@@ -837,3 +837,40 @@ body.ui-shell:not(.outing-mode) {
 @media (max-height: 500px) and (max-width: 840px) {
   .ui-shell:not(.outing-mode) .planner:not([data-view="map"]) { grid-template-rows: minmax(96px, 1fr) minmax(0, 3fr) auto; }
 }
+
+/* UI2 Routes: a compact comparison list and one selected-route action surface. */
+.ui-shell:not(.outing-mode) .candidate-list { gap: .5rem; }
+.ui-shell:not(.outing-mode) .candidate-select { padding: .7rem .8rem; min-height: 44px; }
+.ui-shell:not(.outing-mode) .candidate-card { box-shadow: none; }
+.ui-shell:not(.outing-mode) .candidate-card.selected { border: 2px solid #214b3b; background: #edf3eb; }
+.ui-shell:not(.outing-mode) .candidate-choice-heading { align-items: baseline; gap: .5rem; flex-wrap: wrap; font-size: 1rem; }
+.ui-shell:not(.outing-mode) .candidate-choice-heading strong { white-space: normal; }
+.route-swatch { display: inline-block; width: 1.2rem; margin-right: .4rem; border-top: 3px dashed var(--route-color); vertical-align: middle; }
+.route-swatch.solid { border-top-style: solid; border-top-width: 4px; }
+.route-comparison, .route-stop-notice { display: block; margin-top: .35rem; font-size: .8rem; line-height: 1.5; color: #45564c; overflow-wrap: anywhere; }
+.ui-shell:not(.outing-mode) .candidate-choice-action { margin-top: .25rem; font-size: .8rem; color: #214b3b; }
+.ui-shell:not(.outing-mode) .candidate-strip { padding-bottom: .8rem; }
+.ui-shell:not(.outing-mode) .candidate-select:focus-visible { outline: 3px solid #315f9b; outline-offset: 3px; }
+.ui-shell:not(.outing-mode) .metrics { padding-top: 1rem; }
+.ui-shell:not(.outing-mode) .metrics .panel-heading { margin-bottom: .5rem; }
+#search-summary { margin: .35rem 0 .75rem; }
+#export-status:empty { display: none; }
+.route-empty h3 { font-size: 1rem; color: #214b3b; }
+.route-empty p { font-size: .9rem; line-height: 1.6; color: #45564c; }
+#results-back-to-plan { margin-top: .7rem; }
+.route-other-actions { margin-top: .5rem; }
+.route-other-actions > summary, .route-diagnostics > summary { min-height: 44px; padding: .75rem .3rem; font-size: .85rem; color: #315746; cursor: pointer; }
+.ui-shell:not(.outing-mode) .metrics-content, .ui-shell:not(.outing-mode) #metrics-content { overflow-wrap: anywhere; }
+.ui-shell:not(.outing-mode) .metric-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.ui-shell:not(.outing-mode) .metric-grid dd { min-width: 0; overflow-wrap: anywhere; }
+.ui-shell:not(.outing-mode) .candidate-choice-action,
+.ui-shell:not(.outing-mode) .selected .candidate-choice-action {
+  display: block; min-height: 0; padding: 0; border: 0; border-radius: 0;
+  background: transparent; color: #214b3b; text-align: left;
+}
+#selected-route-panel .button { min-height: 44px; }
+@media (max-width: 840px) {
+  .ui-shell:not(.outing-mode) .planner[data-view="routes"] {
+    grid-template-rows: minmax(120px, 2fr) minmax(0, 3fr) auto;
+  }
+}

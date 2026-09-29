@@ -621,7 +621,7 @@ def test_pr28_browser_harness_covers_responsive_application_states() -> None:
     planner_end = html.index("</main>", planner_start)
     outing_panel = html.index('id="outing-view-panel"')
     map_panel = html.index('class="map-panel"')
-    metrics_panel = html.index('class="panel metrics"')
+    metrics_panel = html.index('id="selected-route-panel"')
     assert planner_start < map_panel < outing_panel < metrics_panel < planner_end
     assert html.count('id="outing-view-panel"') == 1
     assert 'id="show-create-outing" class="button primary hidden"' in html
@@ -690,7 +690,8 @@ def test_frontend_exposes_nature_without_raw_polygon_requests() -> None:
         "Unknown land cover",
     ):
         assert label in html or label in app
-    assert "nature ? `${nature.nature_score" in app
+    assert "nature.nature_score.toFixed(1)" in app
+    assert "Unknown — mapped nature analysis is unavailable" in app
     assert '"not evaluated"' in app
     assert 'state.request.status !== "running"' in app
     assert "state.request.startedAt === null" in app
@@ -714,8 +715,7 @@ def test_frontend_exposes_loop_geometry_request_metrics_and_nulls() -> None:
     assert 'loopGeometryPreference: "off"' in state
     assert '? planner.options.loopGeometryPreference\n        : "off"' in state
     assert "preferences.loop_geometry" in app
-    assert "loopGeometryCardSummary" in app
-    assert "loopGeometryCardDetails" in app
+    assert "Technical diagnostics</summary>" in app
     assert "loopGeometrySection" in app
     assert '<details class="loop-geometry-exact">' in app
     assert "Exact geometry details" in app
@@ -734,7 +734,7 @@ def test_frontend_exposes_loop_geometry_request_metrics_and_nulls() -> None:
         "Maximum radius",
     ):
         assert label in app
-    assert "Shape metrics are unknown, not zero" in app
+    assert "Loop-geometry metrics are unknown, not numeric zero" in app
     assert "loop_geometry_analysis_incomplete" in formatting
     assert "loop_geometry_no_candidate_improvement" in formatting
     assert "natureSection(analysis.nature" in app
@@ -1187,7 +1187,7 @@ def test_route_spur_diagnostics_render_as_accessible_map_issues() -> None:
         "REQUESTED_APPROACH_CONNECTOR_LAYER"
     )
     map_render = app[
-        app.index("function renderMapData()") : app.index("function candidateBadges")
+        app.index("function renderMapData()") : app.index("function directionLabel")
     ]
     assert (
         map_render.index("renderVisualization(")
@@ -1319,7 +1319,10 @@ def test_generation_failures_are_visible_structured_and_accessible() -> None:
     assert "renderStatus();" in app
     assert "handleGenerationError(error)" in app
     assert "showNoCandidateError(result)" in app
-    assert "No route candidate could satisfy the current hard constraints" in app
+    assert "No matching route found." in app
+    assert html.index("<summary>Technical details</summary>") < html.index(
+        'id="error-code"'
+    )
     assert "exactWaypointContext(error.metadata)" in app
     assert "required-point index" in app
     assert "snap.toFixed(1)" in app

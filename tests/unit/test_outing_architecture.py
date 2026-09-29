@@ -270,7 +270,7 @@ def test_outing_display_does_not_schedule_planner_poi_requests() -> None:
 def test_outing_map_branch_precedes_ordinary_candidate_rendering() -> None:
     app = (STATIC_DIRECTORY / "app.js").read_text()
     render = app[
-        app.index("function renderMapData()") : app.index("function candidateBadges")
+        app.index("function renderMapData()") : app.index("function directionLabel")
     ]
     outing_branch = render.index("if (state.outingDisplay && state.outingSnapshot)")
     assert outing_branch < render.index("renderCandidates(")
