@@ -620,3 +620,181 @@ footer { padding: .48rem 1rem; color: #d6e0da; background: var(--primary-action)
 .offline-region-card { padding: 1rem; border: 1px solid #becbc3; border-radius: 8px; background: white; overflow-wrap: anywhere; }
 .offline-region-card p { margin: .6rem 0; font-size: .9rem; }
 .offline-region-card button { margin: .25rem .25rem .25rem 0; max-width: 100%; white-space: normal; }
+
+
+/* UI 2: one map workspace, with one task panel at a time. Outing pages keep
+   their own layout. Without the controller the ordinary document still works. */
+.results-panel { display: contents; }
+.workspace-navigation[hidden], .ui-shell [hidden] { display: none !important; }
+body.ui-shell:not(.outing-mode) {
+  --space-1: .25rem;
+  --space-2: .5rem;
+  --space-3: .75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --radius-control: .5rem;
+  --radius-panel: 1rem;
+  --selected-surface: #e5eee6;
+  --type-title: 1.25rem;
+  --type-body: .9375rem;
+  --type-meta: .8125rem;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ui-shell:not(.outing-mode) .topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  min-height: 0;
+  padding: var(--space-2) var(--space-4);
+  gap: var(--space-3);
+}
+.ui-shell:not(.outing-mode) .brand { gap: var(--space-2); }
+.ui-shell:not(.outing-mode) .brand img { width: 36px; height: 36px; }
+.ui-shell:not(.outing-mode) .brand-copy strong { font-size: 1.4rem; }
+.ui-shell:not(.outing-mode) .brand-copy > span { display: none; }
+.ui-shell:not(.outing-mode) .topbar nav { display: flex; flex-wrap: nowrap; width: auto; max-width: none; margin-top: 0; gap: var(--space-2); }
+.ui-shell:not(.outing-mode) .topbar nav > * { width: auto; }
+.ui-shell:not(.outing-mode) .header-tools-menu {
+  z-index: 25;
+  max-height: min(75vh, 42rem);
+  max-height: min(75dvh, 42rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-3);
+  border-radius: var(--radius-panel);
+}
+.ui-shell:not(.outing-mode) .offline-regions { margin: var(--space-2) 0; }
+.ui-shell:not(.outing-mode) .notice { flex: 0 0 auto; max-height: 35vh; overflow: auto; }
+.ui-shell:not(.outing-mode) .pwa-status { display: block; padding: var(--space-1) var(--space-4); }
+.ui-shell:not(.outing-mode) .pwa-status .notice-mark { display: none; }
+.ui-shell:not(.outing-mode) .pwa-status h2,
+.ui-shell:not(.outing-mode) .pwa-status p { display: inline; font-size: .75rem; }
+.ui-shell:not(.outing-mode) .pwa-status h2 { margin-right: var(--space-2); }
+.ui-shell:not(.outing-mode) .pwa-status .button-row:has(> :not(.hidden)) { margin-top: var(--space-2); }
+.ui-shell:not(.outing-mode) .pwa-status .button-row:not(:has(> :not(.hidden))) { display: none; }
+.ui-shell:not(.outing-mode) .planner {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 22.5rem minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "workspace map" "controls map";
+}
+.ui-shell:not(.outing-mode) .planner[data-view="routes"] { grid-template-areas: "workspace map" "results map"; }
+.ui-shell:not(.outing-mode) .workspace-navigation {
+  grid-area: workspace;
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-background);
+}
+.workspace-navigation button {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: .5rem .25rem;
+  border: 1px solid transparent;
+  border-radius: .5rem;
+  color: var(--muted-text);
+  background: transparent;
+  font-size: .875rem;
+  font-weight: 700;
+}
+.workspace-navigation button[aria-pressed="true"] { color: var(--primary-action); background: var(--selected-surface); border-color: #a9bbaa; box-shadow: inset 0 -2px var(--primary-action); }
+.workspace-navigation button:hover { color: var(--primary-action); background: #edf1e8; }
+.workspace-navigation button:active { background: #d7e4d7; }
+.ui-shell:not(.outing-mode) .workspace-navigation [data-shell-view="map"] { display: none; }
+.ui-shell:not(.outing-mode) .controls {
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4);
+}
+.ui-shell:not(.outing-mode) .results-panel {
+  grid-area: results;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-right: 1px solid var(--border);
+  background: var(--panel-background);
+}
+.ui-shell:not(.outing-mode) .results-panel > * { flex-shrink: 0; }
+.ui-shell:not(.outing-mode) .candidate-strip { order: 0; padding: var(--space-4); border-top: 0; background: transparent; }
+.ui-shell:not(.outing-mode) .candidate-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); overflow: visible; }
+.ui-shell:not(.outing-mode) .candidate-card { width: auto; min-width: 0; border-radius: var(--radius-control); }
+.ui-shell:not(.outing-mode) .metrics { order: 1; max-height: none; overflow: visible; border: 0; border-top: 1px solid var(--border); padding: var(--space-4); }
+.ui-shell:not(.outing-mode) .map-panel { align-self: stretch; height: 100%; min-height: 0; }
+.ui-shell:not(.outing-mode) #map { height: 100%; min-height: 0; }
+.ui-shell:not(.outing-mode) .map-empty-state { top: 4.5rem; width: min(330px, calc(100% - 5rem)); grid-template-columns: 44px minmax(0, 1fr); gap: var(--space-2); box-shadow: var(--shadow-small); }
+.ui-shell:not(.outing-mode) .map-empty-state img { width: 44px; height: 44px; }
+.ui-shell:not(.outing-mode) .map-empty-state h2 { font-size: 1rem; }
+.ui-shell:not(.outing-mode) .map-empty-state p { font-size: .75rem; }
+.ui-shell:not(.outing-mode) .button { border-radius: var(--radius-control); }
+.ui-shell:not(.outing-mode) .controls h1 { font-size: var(--type-title); }
+.ui-shell:not(.outing-mode) .controls h2,
+.ui-shell:not(.outing-mode) .results-panel h2 { font-size: 1rem; }
+.ui-shell:not(.outing-mode) .controls label { font-size: var(--type-meta); }
+.ui-shell:not(.outing-mode) input,
+.ui-shell:not(.outing-mode) select { border-radius: var(--radius-control); }
+/* Attribution remains visible on the map. Keep the document footer accessible. */
+.ui-shell:not(.outing-mode) > footer { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); }
+.ui-shell.outing-mode .workspace-navigation { display: none; }
+
+@media (max-width: 840px) {
+  .ui-shell:not(.outing-mode) .topbar { padding: var(--space-2); gap: var(--space-2); }
+  .ui-shell:not(.outing-mode) .brand img { width: 28px; height: 28px; }
+  .ui-shell:not(.outing-mode) .brand-copy strong { font-size: 1.05rem; }
+  .ui-shell:not(.outing-mode) .topbar .button,
+  .ui-shell:not(.outing-mode) .header-tools > summary { min-height: 44px; padding: .5rem .6rem; font-size: .8125rem; }
+  .ui-shell:not(.outing-mode) .topbar nav { gap: var(--space-1); }
+  .ui-shell:not(.outing-mode) .planner {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 2fr) minmax(0, 3fr) auto;
+    grid-template-areas: "map" "controls" "workspace";
+  }
+  .ui-shell:not(.outing-mode) .planner[data-view="routes"] { grid-template-areas: "map" "results" "workspace"; }
+  .ui-shell:not(.outing-mode) .planner[data-view="map"] { grid-template-rows: minmax(0, 1fr) auto; grid-template-areas: "map" "workspace"; }
+  .ui-shell:not(.outing-mode) .workspace-navigation {
+    border: 0;
+    border-top: 1px solid var(--border);
+    padding: var(--space-1) var(--space-2) max(var(--space-1), env(safe-area-inset-bottom));
+  }
+  .ui-shell:not(.outing-mode) .workspace-navigation [data-shell-view="map"] { display: block; }
+  .ui-shell:not(.outing-mode) .controls,
+  .ui-shell:not(.outing-mode) .results-panel { border: 0; border-top: 1px solid var(--border); }
+  .ui-shell:not(.outing-mode) .controls { padding: var(--space-4); }
+  .ui-shell:not(.outing-mode) .button,
+  .ui-shell:not(.outing-mode) input:not([type="checkbox"]):not([type="radio"]),
+  .ui-shell:not(.outing-mode) select { min-height: 44px; }
+  .ui-shell:not(.outing-mode) input:not([type="checkbox"]):not([type="radio"]),
+  .ui-shell:not(.outing-mode) select { font-size: 1rem; }
+  .ui-shell:not(.outing-mode) .maplibregl-ctrl-group button { width: 44px; height: 44px; }
+  .ui-shell:not(.outing-mode) .map-empty-state { top: 3.8rem; left: .5rem; width: min(300px, calc(100% - 4.25rem)); transform: none; }
+  .ui-shell:not(.outing-mode) .planner:not([data-view="map"]) .map-empty-state { display: none; }
+  .ui-shell:not(.outing-mode) .legend { max-width: calc(100% - 4rem); }
+}
+
+.ui-shell:not(.outing-mode) .maplibregl-popup { z-index: 6; }
+.ui-shell:not(.outing-mode) .map-panel:has(.maplibregl-popup) .map-empty-state { display: none; }
+.ui-shell:not(.outing-mode) .maplibregl-popup-close-button { width: 44px; height: 44px; font-size: 24px; }
+.ui-shell:not(.outing-mode) .point-popup { padding-right: 2.75rem; }
+.ui-shell .skip-link { max-width: calc(100vw - 2rem); }
+.ui-shell:not(.outing-mode) .header-tools-menu { grid-template-columns: minmax(0, 1fr); }
+.ui-shell:not(.outing-mode) .header-tools-menu > * { grid-column: auto; min-width: 0; }
+.ui-shell:not(.outing-mode) .topbar nav { flex-wrap: wrap; max-width: 100%; }
+.ui-shell:not(.outing-mode) .topbar nav > * { flex-shrink: 0; }
+
+.ui-shell:not(.outing-mode) .legend { bottom: 4rem; }
+.ui-shell:not(.outing-mode) .maplibregl-ctrl-attrib { max-height: 3.25rem; overflow-y: auto; }

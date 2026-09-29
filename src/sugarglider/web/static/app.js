@@ -1,3 +1,4 @@
+import { initializeAppShell } from "./app_shell.js";
 import { ApiError, generatePlan, getConfig, getPoiStatus, getRoutingProfiles, reversePlan, searchPois, visualizeRoute } from "./api.js";
 import { createLocalPlaceSearch } from "./local_places.js";
 import { createLocalGpxExporter } from "./local_gpx_client.js";
@@ -112,6 +113,7 @@ localGpxExporter.prepare();
 let pendingGpxExport = null;
 let elapsedTimer = null;
 let mapReady = false;
+let appShell = null;
 let poiDebounceTimer = null;
 let pendingPoiBounds = null;
 let savedRoutePageEpoch = 0;
@@ -707,7 +709,7 @@ function renderModeControls() {
   byId("requested-places").classList.toggle("hidden", !auto);
   byId("point-editor-title").textContent = auto ? "Start and hard anchors" : "Required POIs";
   byId("generate").textContent = auto ? "Generate Auto Tour" : "Generate routes";
-  byId("generate-top").textContent = auto ? "Generate Auto Tour" : "Generate";
+  byId("generate-top").textContent = "Generate";
   byId("places-explanation").textContent = auto
     ? "Browse mapped places and optionally prefer eligible places for Auto Tour. Simply selecting a place never changes the route."
     : "Discovery only: shown places never alter mandatory points, generation, ranking, or GPX output.";
@@ -1901,6 +1903,7 @@ async function generate() {
     byId("request-status").textContent = `${planningLabel}… ${seconds} s elapsed`;
   }, 1000);
   render();
+  appShell?.reveal("#generation-state");
   try {
     const result = localPlanner
       ? await localPlanner.generate(request, state.abortController.signal)
@@ -1918,6 +1921,7 @@ async function generate() {
     if (result.candidates.length) {
       fitCoordinates(result.candidates[0].route.geometry);
       await selectCandidate(result.candidates[0].id);
+      appShell?.show("routes");
     } else {
       showNoCandidateError(result);
     }
@@ -2376,6 +2380,7 @@ async function importRequest(file) {
     setEditableRequestStatus(state.planningMode === "auto_tour"
       ? `${file.name} loaded. ${state.importDiagnostics.supplied_location_count} supplied locations: ${state.importDiagnostics.consumed_as_start_count} START, ${state.importDiagnostics.consumed_as_end_count} END, ${state.autoTour.requestedPlaces.length} requested places; ${state.importDiagnostics.discarded_count} discarded.`
       : `${file.name} loaded. All ${state.points.length} named waypoint constraints and strengths are ready for review.`);
+    appShell?.show("plan");
     fitCoordinates([
       ...imported.points,
       ...imported.hardPoints,
@@ -2393,6 +2398,7 @@ async function importGpx(file) {
   try {
     state.importedGpx = parseGpx(await file.text(), file.name);
     render();
+    appShell?.show("map");
     fitCoordinates(state.importedGpx.segments.flat());
   } catch (error) {
     showError("Could not import GPX.", error.message);
@@ -2699,6 +2705,7 @@ function bindEvents() {
         ? `Click map for ${kind}`
         : "Set on map";
       renderStatus();
+      if (state.endpointSetMode) appShell?.show("map", { focus: true });
     });
     byId(`clear-hard-${kind}`).addEventListener("click", () => {
       assignActiveEndpoint(kind, null);
@@ -2724,6 +2731,7 @@ function bindEvents() {
     state.addPointMode = !state.addPointMode;
     byId("add-point-mode").setAttribute("aria-pressed", String(state.addPointMode));
     byId("add-point-mode").lastChild.textContent = state.addPointMode ? " Click map once…" : " Add on map";
+    if (state.addPointMode) appShell?.show("map", { focus: true });
     renderStatus();
   });
   byId("fit-points").addEventListener("click", () => {
@@ -3043,6 +3051,7 @@ async function initializeRegionScreen() {
 }
 
 async function start() {
+  appShell = initializeAppShell({ resizeMap });
   decorateIcons();
   try {
     await initializePwaRuntime({

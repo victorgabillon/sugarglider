@@ -40,8 +40,8 @@ def test_pr29_shell_keeps_primary_actions_outside_secondary_disclosures() -> Non
     nav = html[html.index('<nav aria-label="File') : html.index("</nav>")]
     tools = nav[nav.index('<details class="header-tools') :]
     assert nav.index('id="generate-top"') < nav.index('<details class="header-tools')
-    assert nav.index('for="gpx-file"') < nav.index('<details class="header-tools')
-    assert nav.index('id="save-route"') < nav.index('<details class="header-tools')
+    assert 'id="import-gpx"' in tools
+    assert 'id="save-route"' in tools
     assert 'id="request-file"' in tools
     assert 'id="export-plan"' in tools
     assert "<summary>Advanced route preferences</summary>" in html
