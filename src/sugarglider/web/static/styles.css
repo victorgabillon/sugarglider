@@ -870,7 +870,27 @@ body.ui-shell:not(.outing-mode) {
 }
 #selected-route-panel .button { min-height: 44px; }
 @media (max-width: 840px) {
-  .ui-shell:not(.outing-mode) .planner[data-view="routes"] {
+  .ui-shell:not(.outing-mode) .planner:not([data-view="map"]) {
     grid-template-rows: minmax(120px, 2fr) minmax(0, 3fr) auto;
   }
 }
+
+/* UI2 Connect: one task scroller, explicit placement, one selected stop editor. */
+.ui-shell:not(.outing-mode) #connect-shape, .ui-shell:not(.outing-mode) #connect-end { grid-column: 1 / -1; }
+.ui-shell:not(.outing-mode) #planning-points[data-mode="waypoint_route"] > summary { position: static; }
+.ui-shell:not(.outing-mode) #planning-points[data-mode="waypoint_route"] #poi-list { max-height: none; overflow: visible; }
+.ui-shell:not(.outing-mode) .waypoint-row { display: block; padding: 0; box-shadow: none; }
+.point-select { display: grid; gap: .2rem; width: 100%; min-height: 44px; padding: .7rem; text-align: left; border: 0; border-radius: 8px; background: transparent; color: #214b3b; }
+.stop-order, .stop-constraint { font-size: .8rem; line-height: 1.4; }
+.point-select .poi-name { font-size: .95rem; overflow-wrap: anywhere; }
+.stop-editor { padding: .7rem; border-top: 1px solid #b7c8b6; }
+.stop-editor label { display: grid; gap: .3rem; margin: .5rem 0; font-size: .85rem; }
+.stop-editor input, .stop-editor select { min-width: 0; width: 100%; }
+.stop-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem; }
+.stop-actions .button { min-height: 44px; white-space: normal; font-size: .8rem; padding: .5rem; }
+.stop-editor summary { min-height: 44px; padding-block: .8rem; font-size: .85rem; }
+.point-select:focus-visible { outline: 3px solid #315f9b; outline-offset: -3px; }
+.selected-endpoint { outline: 2px solid #214b3b; outline-offset: 2px; border-radius: 8px; }
+.map-edit-notice { position: absolute; z-index: 8; bottom: 5rem; left: 50%; transform: translateX(-50%); width: min(360px, calc(100% - 8rem)); padding: .6rem; border: 2px solid #214b3b; border-radius: 10px; background: #fffaf0; box-shadow: 0 2px 8px #0002; }
+.map-edit-notice p { margin: 0 0 .4rem; font-size: .85rem; line-height: 1.4; }
+.map-edit-notice .button { min-height: 44px; }

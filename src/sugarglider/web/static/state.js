@@ -100,6 +100,8 @@ export const state = {
   durableOutboxPresent: false,
   selectedSignature: null,
   selectedPointIndex: null,
+  selectedEndpointKind: null, // Endpoint selection; mutually exclusive with selectedPointIndex.
+  movingPointIndex: null, // One-shot map edit, not a second point store.
   pendingPointPopupIndex: null,
   selectedRequestedPlaceId: null,
   pendingRequestedPlacePopupId: null,
@@ -250,13 +252,13 @@ export function generationAvailability({
   if (!start) {
     return {
       enabled: false,
-      reason: "Click the map to choose your start point.",
+      reason: planningMode === "waypoint_route" ? "Choose Start on map in Plan." : "Click the map to choose your start point.",
     };
   }
   if (routeTopology === "point_to_point" && !end) {
     return {
       enabled: false,
-      reason: "Now click the map to choose your end point.",
+      reason: planningMode === "waypoint_route" ? "Choose End on map in Plan." : "Now click the map to choose your end point.",
     };
   }
   if (
@@ -296,6 +298,11 @@ export function saveActivePoints() {
 export function switchPlanningMode(mode) {
   if (mode === state.planningMode || !["auto_tour", "waypoint_route"].includes(mode)) return;
   saveActivePoints();
+  state.addPointMode = false;
+  state.endpointSetMode = null;
+  state.movingPointIndex = null;
+  state.selectedEndpointKind = null;
+  state.settingRequestedApproachId = null;
   state.planningMode = mode;
   state.points = mode === "auto_tour"
     ? [state.autoTour.start, ...state.autoTour.hardPoints].filter(Boolean)

@@ -44,8 +44,8 @@ export function runPlannerEndpointUxHarness() {
   scenarios.push("explicit_endpoint_mode_can_replace_endpoint");
   scenarioExplicitWaypointAndPoiModesSuppressImplicitEndpoints();
   scenarios.push("explicit_waypoint_and_poi_modes_suppress_implicit_endpoints");
-  scenarioImplicitPlacementIsSharedByBothPlanningModes();
-  scenarios.push("implicit_placement_is_shared_by_both_planning_modes");
+  scenarioEndpointHelperSupportsBothDraftShapes();
+  scenarios.push("endpoint_helper_supports_both_draft_shapes");
 
   return scenarios;
 }
@@ -137,7 +137,7 @@ function scenarioWaypointPointToPointRequiresEndpoints() {
       start: null,
       end: null,
     }).reason,
-    "Click the map to choose your start point.",
+    "Choose Start on map in Plan.",
     "Waypoint open route first requires a start",
   );
   equal(
@@ -146,7 +146,7 @@ function scenarioWaypointPointToPointRequiresEndpoints() {
       routeTopology: "point_to_point",
       end: null,
     }).reason,
-    "Now click the map to choose your end point.",
+    "Choose End on map in Plan.",
     "Waypoint open route then requires an end",
   );
 }
@@ -253,7 +253,9 @@ function scenarioExplicitWaypointAndPoiModesSuppressImplicitEndpoints() {
   equal(poiEndpoints.end, null, "requested-place mode does not create end");
 }
 
-function scenarioImplicitPlacementIsSharedByBothPlanningModes() {
+// The pure helper accepts both shapes. The actual Connect UI requires explicit
+// placement; ui2_waypoint_acceptance.cjs checks that background-tap guard.
+function scenarioEndpointHelperSupportsBothDraftShapes() {
   for (const planningMode of ["auto_tour", "waypoint_route"]) {
     const loop = planningModeEndpointState(planningMode, "loop");
     equal(ordinaryMapClick(loop, MAP_CLICK), "start", `${planningMode} loop sets start`);
