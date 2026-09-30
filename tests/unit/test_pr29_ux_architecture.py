@@ -46,7 +46,7 @@ def test_pr29_shell_keeps_primary_actions_outside_secondary_disclosures() -> Non
     assert 'id="export-plan"' in tools
     assert "<summary>Advanced route preferences</summary>" in html
     assert '<details class="map-tools"' in html
-    assert "<summary>Layers</summary>" in html
+    assert "<summary>Map options</summary>" in html
     assert '<details class="metrics-disclosure">' in html
     assert "<summary>Route details</summary>" in html
     application = (STATIC / "app.js").read_text()

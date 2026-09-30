@@ -34,31 +34,37 @@
             <button class="button secondary" id="import-gpx" type="button" data-icon="gpx">Import GPX</button>
             <input class="visually-hidden" id="gpx-file" type="file" hidden accept="application/gpx+xml,.gpx">
 
-            <button class="button secondary" id="import-plan" type="button" data-icon="json">Import plan JSON</button>
-            <input class="visually-hidden" id="request-file" type="file" hidden accept="application/json,.json">
-            <button class="button secondary" id="export-plan" type="button" data-icon="json">Export plan JSON</button>
+            <details class="plan-file-tools">
+              <summary>Plan files and storage</summary>
+              <button class="button secondary" id="import-plan" type="button" data-icon="json">Import plan JSON</button>
+              <input class="visually-hidden" id="request-file" type="file" hidden accept="application/json,.json">
+              <button class="button secondary" id="export-plan" type="button" data-icon="json">Export plan JSON</button>
+              <button id="clear-offline-data" class="text-button" type="button">Clear saved offline data</button>
+            </details>
             <button class="button secondary" id="edit-trail-profile" type="button">My profile</button>
-            <button id="clear-offline-data" class="text-button" type="button">Clear saved offline data</button>
+            <details class="app-status-details"><summary>App status</summary><p id="app-status-summary">Checking app status…</p></details>
             <details id="offline-regions" class="offline-regions hidden">
-              <summary><strong>Offline regions</strong><span>Maps, routing, places and nature on this device</span></summary>
+              <summary><strong>Regions</strong><span>Maps, routing, places and nature on this device</span></summary>
               <div class="offline-regions-body">
                 <label for="planning-region">Region for this plan</label>
                 <select id="planning-region"><option value="">Choose an installed region</option></select>
                 <p id="regional-status" role="status" aria-live="polite">Checking regional data…</p>
+                <progress id="regional-progress" hidden aria-label="Region download"></progress>
+                <details id="regional-diagnostics" hidden><summary>Technical details</summary><code id="regional-error-code"></code></details>
                 <p id="regional-map-status" role="status">No offline map is selected.</p>
                 <div class="button-row">
                   <button id="regional-refresh" type="button" class="button secondary">Check regions</button>
                   <button id="regional-cancel" type="button" class="button secondary hidden">Cancel download</button>
                 </div>
                 <ul id="regional-list" class="offline-region-list"></ul>
-                <p class="help">Keep the app open while downloading. A region becomes available after all four components pass verification. Updates keep the installed version until the replacement is ready.</p>
+                <p class="help">Keep the app open while downloading. The region is ready after all downloaded files have been checked. Updates keep the installed version until the replacement is ready.</p>
               </div>
             </details>
             <details class="about-panel">
               <summary data-icon="info">About Sugarglider</summary>
               <div class="about-content">
                 <img src="/static/brand/sugarglider-banner.png" width="1800" height="498" loading="lazy" alt="Sugarglider trail-planning mascot">
-                <p>Plan graph-valid hiking loops through every point you choose, compare trail and nature context, then export the selected result as a clean GPX track.</p>
+                <p>Plan outdoor routes for running, hiking and cycling. Let Sugarglider suggest a route or connect your chosen points, then export your selected route as GPX.</p>
               </div>
             </details>
           </div>
@@ -102,10 +108,10 @@
         <p id="error-suggestion" class="error-suggestion hidden"></p>
         <div id="exact-error-actions" class="button-row hidden" aria-label="Exact waypoint actions">
           <button id="error-use-nearest" class="button secondary" type="button">Use nearest reachable point</button>
-          <button id="error-best-effort" class="button secondary" type="button">Convert to best effort</button>
+          <button id="error-best-effort" class="button secondary" type="button">Allow best effort</button>
           <button id="error-requested-place" class="button secondary" type="button">Convert to requested place</button>
-          <button id="error-move-waypoint" class="button secondary" type="button">Move exact waypoint</button>
-          <button id="error-remove-waypoint" class="button secondary" type="button">Remove waypoint</button>
+          <button id="error-move-waypoint" class="button secondary" type="button">Move this stop</button>
+          <button id="error-remove-waypoint" class="button secondary" type="button">Remove this stop</button>
         </div>
         <details><summary>Technical details</summary><p id="error-code" class="error-code hidden"></p><pre id="error-details"></pre></details>
       </div>
@@ -254,7 +260,7 @@
             <label>Route name<input id="route-name" name="name" value="Sugarglider route" maxlength="120" required></label>
             <div class="field-pair">
               <label>Tolerance <span>km</span><input id="tolerance" type="number" min="0.1" max="10" step="0.1" value="2" required></label>
-              <label>Candidates<select id="candidate-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+              <label>Route options<select id="candidate-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
             </div>
             <label>Distance priority<select id="distance-priority"><option value="flexible" selected>Flexible — places and coherence first</option><option value="balanced">Balanced</option><option value="strict">Strict — tolerance first</option></select></label>
             <label>Maximum distance (optional) <span>km</span><input id="maximum-distance" type="number" min="0.1" max="200" step="0.1" placeholder="Server safety maximum"></label>
@@ -317,19 +323,19 @@
               <label class="check-control warning-control"><input id="place-non-potable" type="checkbox"> Explicitly non-potable water</label>
             </details>
           </form>
-          <p id="places-explanation" class="field-help">Browse mapped places and optionally prefer eligible places for Auto Tour. Simply selecting a place never changes the route; shown places never alter mandatory points, generation, ranking, or GPX output.</p>
+          <p id="places-explanation" class="field-help">Browse mapped places and optionally prefer eligible places for a suggested route. Simply selecting a place never changes the route; shown places never alter mandatory points, generation, ranking, or GPX output.</p>
         </details>
 
         <details class="control-section poi-editor" id="planning-points">
           <summary><span id="point-editor-title">Start and hard anchors</span><span id="poi-count">0 / 7</span></summary>
           <section id="preferred-pois" class="preferred-pois" aria-label="Preferred places">
             <div class="section-heading"><strong>Preferred places</strong><span id="preferred-poi-count">0 / 8</span></div>
-            <p id="preferred-poi-empty" class="field-help">Choose “Prefer in Auto Tour” from an eligible place popup.</p>
+            <p id="preferred-poi-empty" class="field-help">Choose “Prefer for suggested route” from an eligible place popup.</p>
             <ul id="preferred-poi-list"></ul>
           </section>
           <section id="requested-places" class="preferred-pois" aria-label="Requested places and approaches">
             <div class="section-heading"><strong>Requested places and approaches</strong><span id="requested-place-count">0 / 30</span></div>
-            <p id="requested-place-empty" class="field-help">In Auto Tour mode, imported request points after the start appear here instead of becoming exact waypoints.</p>
+            <p id="requested-place-empty" class="field-help">For suggested routes, imported places after Start appear here with their original constraints.</p>
             <ul id="requested-place-list"></ul>
           </section>
           <div id="connect-order"></div>
@@ -362,12 +368,44 @@
           <div><h2 id="empty-title">Start on the map</h2><p>Tap or click the map to choose your starting point.</p></div>
         </section>
         <details class="map-tools" aria-label="Map display controls">
-          <summary>Layers</summary>
+          <summary>Map options</summary>
           <div class="map-tool-options">
             <label data-icon="alternatives"><input id="show-all" type="checkbox" checked> Show alternatives</label>
             <label data-icon="nature"><input id="show-nature" type="checkbox"> Show nature</label>
             <label data-icon="direction"><input id="show-direction" type="checkbox" checked> Show direction arrows</label>
             <label id="show-dropped-requested-radii-control" class="advanced-map-control" title="Advanced requested-stop display"><input id="show-dropped-requested-radii" type="checkbox"> Dropped access-search areas</label>
+            <details class="legend">
+              <summary>Map legend</summary>
+              <div class="legend-items">
+                <span><i class="line selected"></i>Selected route</span>
+                <span><i class="line alternative"></i>Alternative</span>
+                <span><i class="line repeated"></i>Repeated</span>
+                <span><i class="line backtrack"></i>Immediate out-and-back</span>
+                <span><i class="line spur"></i>Detected excursion</span>
+                <span><i class="marker mandatory">1</i>Required mascot pin</span>
+                <span><i class="marker start">1</i>Start/end</span>
+                <span class="legend-group">Your plan</span>
+                <span><i class="marker requested-pending">R1</i>Requested, pending</span>
+                <span><i class="marker requested-selected">R1</i>Requested, reached</span>
+                <span><i class="marker requested-pending">R1</i>Requested, approximated</span>
+                <span><i class="marker requested-dropped">R1</i>Requested, dropped</span>
+                <span><i class="marker access"></i>Selected approach</span>
+                <span><i class="marker optional"></i>Generated point</span>
+                <span><i class="marker waypoint"></i>GPX waypoint</span>
+                <span class="legend-group">Mapped OSM discovery</span>
+                <span><i class="marker place-scenic">▲</i>Scenic place</span>
+                <span><i class="marker place-water mascot-water"></i>Verified water mascot pin</span>
+                <span><i class="marker visited-place"></i>Visited place</span>
+                <span><i class="marker place-unknown">?</i>Unknown potability</span>
+                <span><i class="line imported"></i>Imported GPX</span>
+                <span class="nature-legend"><i class="line woodland"></i>Woodland</span>
+                <span class="nature-legend"><i class="line open-natural"></i>Open natural</span>
+                <span class="nature-legend"><i class="line agriculture"></i>Agriculture</span>
+                <span class="nature-legend"><i class="line urban"></i>Urban/developed</span>
+                <span class="nature-legend"><i class="line water"></i>Water crossing</span>
+                <span class="nature-legend"><i class="line nature-unknown"></i>Unknown land cover</span>
+              </div>
+            </details>
             <details id="offline-maps" class="offline-maps" aria-labelledby="offline-maps-title">
               <summary><strong id="offline-maps-title">Offline maps</strong></summary>
               <div class="offline-maps-body">
@@ -454,38 +492,7 @@
             </section>
           </div>
         </details>
-        <details class="legend">
-          <summary>Map legend</summary>
-          <div class="legend-items">
-            <span><i class="line selected"></i>Selected route</span>
-            <span><i class="line alternative"></i>Alternative</span>
-            <span><i class="line repeated"></i>Repeated</span>
-            <span><i class="line backtrack"></i>Immediate out-and-back</span>
-            <span><i class="line spur"></i>Detected excursion</span>
-            <span><i class="marker mandatory">1</i>Required mascot pin</span>
-            <span><i class="marker start">1</i>Start/end</span>
-            <span class="legend-group">Your plan</span>
-            <span><i class="marker requested-pending">R1</i>Requested, pending</span>
-            <span><i class="marker requested-selected">R1</i>Requested, reached</span>
-            <span><i class="marker requested-pending">R1</i>Requested, approximated</span>
-            <span><i class="marker requested-dropped">R1</i>Requested, dropped</span>
-            <span><i class="marker access"></i>Selected approach</span>
-            <span><i class="marker optional"></i>Generated point</span>
-            <span><i class="marker waypoint"></i>GPX waypoint</span>
-            <span class="legend-group">Mapped OSM discovery</span>
-            <span><i class="marker place-scenic">▲</i>Scenic place</span>
-            <span><i class="marker place-water mascot-water"></i>Verified water mascot pin</span>
-            <span><i class="marker visited-place"></i>Visited place</span>
-            <span><i class="marker place-unknown">?</i>Unknown potability</span>
-            <span><i class="line imported"></i>Imported GPX</span>
-            <span class="nature-legend"><i class="line woodland"></i>Woodland</span>
-            <span class="nature-legend"><i class="line open-natural"></i>Open natural</span>
-            <span class="nature-legend"><i class="line agriculture"></i>Agriculture</span>
-            <span class="nature-legend"><i class="line urban"></i>Urban/developed</span>
-            <span class="nature-legend"><i class="line water"></i>Water crossing</span>
-            <span class="nature-legend"><i class="line nature-unknown"></i>Unknown land cover</span>
-          </div>
-        </details>
+
       </section>
 
       <section id="outing-view-panel" class="notice outing-view hidden" aria-labelledby="outing-view-title">

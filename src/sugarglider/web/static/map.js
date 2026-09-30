@@ -776,11 +776,11 @@ function poiPopupContent(feature) {
     const prefer = document.createElement("button");
     prefer.type = "button";
     prefer.className = "button secondary popup-prefer";
-    prefer.textContent = preferredPoiIds.has(feature.id) ? "Preferred in Auto Tour" : "Prefer in Auto Tour";
+    prefer.textContent = preferredPoiIds.has(feature.id) ? "Preferred for suggested route" : "Prefer for suggested route";
     prefer.disabled = preferredPoiIds.has(feature.id);
     prefer.addEventListener("click", () => {
       poiPreferHandler?.(feature);
-      prefer.textContent = "Preferred in Auto Tour";
+      prefer.textContent = "Preferred for suggested route";
       prefer.disabled = true;
     });
     content.append(prefer);

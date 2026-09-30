@@ -1,3 +1,4 @@
+import { isBundledAndroidApp } from "./android_app.js";
 import {
   DEFAULT_AVATAR_KEY,
   avatarDefaultName,
@@ -31,6 +32,10 @@ export async function initializeTrailProfile({
     initialized = true;
   }
   syncProfileUi();
+  if (isBundledAndroidApp()) {
+    const privacy = document.querySelector(".profile-privacy");
+    if (privacy) privacy.textContent = "Your nickname and badge stay on this device. There is no account or live-location sharing in this release.";
+  }
   if (requireSetup && !currentProfile) openTrailProfileEditor({ required: true });
   return currentProfile;
 }
@@ -156,6 +161,10 @@ function bindProfileControls() {
     closeProfileDialog();
   });
   const dialog = byId("trail-profile-dialog");
+  dialog.addEventListener("close", () => {
+    const tools = document.querySelector(".header-tools");
+    if (tools && !tools.open) tools.querySelector("summary")?.focus({ preventScroll: true });
+  });
   dialog.addEventListener("cancel", (event) => {
     if (setupRequired) event.preventDefault();
   });

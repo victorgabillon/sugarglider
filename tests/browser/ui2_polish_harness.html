@@ -1,0 +1,6 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>UI2 final polish</title><pre id="result">running</pre><script type="module">
+import { runPolishHarness } from './ui2_polish_harness.js';
+const output=document.getElementById('result');
+try { output.textContent=JSON.stringify(await runPolishHarness());output.dataset.status='passed'; }
+catch(error){output.textContent=error.stack;output.dataset.status='failed';}
+</script></html>

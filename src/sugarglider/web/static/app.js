@@ -287,13 +287,13 @@ function preferPoi(feature) {
   if (!eligibleAccess || (!scenic && !verifiedWater) || feature.potability === "non_potable") return;
   if (state.autoTour.preferredPoiIds.includes(feature.id)) return;
   if (state.autoTour.preferredPoiIds.length >= 8) {
-    showError("Auto Tour supports at most eight preferred places.");
+    showError("Suggested routes support at most eight preferred places.");
     return;
   }
   state.autoTour.preferredPoiIds.push(feature.id);
   invalidateAndRender();
   setEditableRequestStatus(
-    `${feature.display_name} added as a soft Auto Tour preference.`,
+    `${feature.display_name} added as a suggested-route preference.`,
   );
 }
 
@@ -446,7 +446,7 @@ function renderSnapshotProfileIdentity(profileId) {
   option.textContent = `${friendlyLabel(profileId)} — saved snapshot`;
   select.append(option);
   select.value = profileId;
-  byId("profile-description").textContent = "Availability is not checked while viewing an immutable snapshot.";
+  byId("profile-description").textContent = "Showing the activity saved with this route.";
 }
 
 function selectedProfileStatus(profileId = state.routingProfile) {
@@ -462,7 +462,7 @@ function profileDisplayName(profileId) {
 
 function updateProfileDescription() {
   if (isSavedRouteSnapshotDisplay()) {
-    byId("profile-description").textContent = "Availability is not checked while viewing an immutable snapshot.";
+    byId("profile-description").textContent = "Showing the activity saved with this route.";
     return;
   }
   const status = selectedProfileStatus(byId("profile").value);
@@ -734,7 +734,7 @@ function renderModeControls() {
   byId("generate-top").textContent = "Generate";
   byId("places-explanation").textContent = auto
     ? "Browse mapped places and optionally prefer eligible places in your suggested route. Simply selecting a place never changes the route."
-    : "Discovery only: shown places never alter mandatory points, generation, ranking, or GPX output.";
+    : "Explore places on the map. Selecting one does not change your route points or exported route.";
   updateEndpointControls();
   const start = activeEndpoints().start;
   const end = activeEndpoints().end;
@@ -1884,8 +1884,8 @@ async function generate() {
     state.visualizationCache.clear();
     state.request = { status: "success", id, startedAt: null };
     byId("request-status").textContent = result.candidates.length
-      ? `${result.candidates.length} candidate route${result.candidates.length === 1 ? "" : "s"} generated.`
-      : "No route candidate could satisfy the current hard constraints.";
+      ? `${result.candidates.length} route${result.candidates.length === 1 ? "" : "s"} generated.`
+      : "No route matches the required points and settings.";
     render();
     if (result.candidates.length) {
       fitCoordinates(result.candidates[0].route.geometry);
@@ -2311,7 +2311,7 @@ async function importRequest(file) {
     });
     state.options = imported.options;
     if (state.planningMode === "auto_tour") {
-      if (!imported.autoTourStart) throw new Error("Auto Tour JSON needs a resolvable start.");
+      if (!imported.autoTourStart) throw new Error("The suggested-route plan needs a valid Start.");
       state.autoTour.start = imported.autoTourStart;
       state.autoTour.end = imported.end;
       state.autoTour.hardPoints = imported.hardPoints;
@@ -2818,7 +2818,7 @@ function bindEvents() {
       const request = currentPlanRequest();
       await navigator.clipboard.writeText(JSON.stringify(request, null, 2));
       byId("request-status").textContent = state.planningMode === "auto_tour"
-        ? "Auto Tour request copied with requested places, distance priority, and POI preferences."
+        ? "Suggested-route plan copied with places, distance settings and preferences."
         : "Request JSON copied with every required-point name.";
     } catch (error) {
       showError("Could not copy request JSON.", error.message);
@@ -3039,7 +3039,8 @@ async function initializeRegionScreen() {
     },
     onMapChange: async () => { if (offlineMaps) regionScreen.mapState(await offlineMaps.refresh({ reopen: true })); },
     elements: { container: byId("offline-regions"), selector: byId("planning-region"), list: byId("regional-list"),
-      status: byId("regional-status"), mapStatus: byId("regional-map-status"), cancel: byId("regional-cancel"), refresh: byId("regional-refresh") },
+      status: byId("regional-status"), mapStatus: byId("regional-map-status"), cancel: byId("regional-cancel"), refresh: byId("regional-refresh"),
+      progress: byId("regional-progress"), diagnostics: byId("regional-diagnostics"), diagnosticCode: byId("regional-error-code") },
   });
   await regionScreen.initialize();
 }
@@ -3172,7 +3173,7 @@ async function start() {
     if (!natureAvailable && !sharedSnapshot) state.options.naturePreference = "off";
     updateControlsFromOptions();
     byId("nature-availability").textContent = localPlanner
-      ? "Auto Tour uses installed regional nature data. Missing data and uncovered sections remain unknown."
+      ? "Suggested routes use installed regional nature data. Missing data and uncovered sections remain unknown."
       : natureAvailable
       ? `Local OSM nature index available. Water proximity uses ${state.config.nature_water_buffer_m} m.`
       : "Local OSM nature index unavailable. Prefer mapped nature is disabled; routing still works.";
@@ -3254,7 +3255,7 @@ async function start() {
             : state.config.max_required_points;
           if (state.points.length >= maximum) {
             showError(state.planningMode === "auto_tour"
-              ? "Auto Tour already has a start and the maximum six hard anchors."
+              ? "The suggested route already has Start and the maximum six required points."
               : "The route already has the maximum 30 mandatory points.");
             return;
           }
@@ -3310,15 +3311,15 @@ async function start() {
       fitCoordinates(sharedSnapshot.candidate.route.geometry);
       if (state.networkStatus !== "offline") {
         await selectCandidate(sharedSnapshot.candidate.id);
-        byId("request-status").textContent = "Immutable saved route loaded without generation, rerouting, or reranking.";
+        byId("request-status").textContent = "Saved route opened. Its route and settings are unchanged.";
       } else {
         byId("request-status").textContent = (
-          "Showing the exact saved offline copy without API calls, generation, rerouting, reranking, or live data."
+          "Showing the saved offline copy. Its route and settings are unchanged."
         );
       }
     } else if (state.networkStatus === "offline") {
       byId("request-status").textContent = (
-        localPlanner ? "Planning uses installed data on this device. Sharing needs a connection."
+        localPlanner ? "Planning uses installed data on this device."
           : "Sugarglider is offline. The application shell is ready; reconnect to plan a route."
       );
     }

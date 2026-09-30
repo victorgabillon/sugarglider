@@ -842,7 +842,7 @@ def test_frontend_auto_tour_is_default_and_preserves_waypoint_mode() -> None:
     assert "scripts/migrate_plan_json.py" in app
     assert "value.requested_stops" in app
     assert 'switchPlanningMode("waypoint_route")' not in app
-    assert "Prefer in Auto Tour" in map_code
+    assert "Prefer for suggested route" in map_code
     assert "Require exact visit" not in html + app + map_code
     assert (
         'const VERIFIED_WATER_PIN_URL = "/static/brand/sugarglider-water-pin.png"'
@@ -990,10 +990,10 @@ def test_best_effort_gui_explains_compromises_and_requires_regeneration() -> Non
 
     for label in (
         "Use nearest reachable point",
-        "Convert to best effort",
+        "Allow best effort",
         "Convert to requested place",
-        "Move exact waypoint",
-        "Remove waypoint",
+        "Move this stop",
+        "Remove this stop",
     ):
         assert label in html
     for label in ("Make exact", "Accept approximation", "Remove stop"):
