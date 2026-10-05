@@ -217,15 +217,15 @@
           <button id="clear-results" class="text-button" type="button">Clear results</button>
         </div>
 
-        <fieldset class="planning-mode" aria-label="How would you like to plan?">
-          <legend class="visually-hidden">How would you like to plan?</legend>
-          <label><input type="radio" name="planning-mode" value="auto_tour" checked><span><strong>Suggest a route</strong><small>Choose a distance and Sugarglider designs the route.</small></span></label>
-          <label><input type="radio" name="planning-mode" value="waypoint_route"><span><strong>Connect my points</strong><small>Choose the points Sugarglider should connect.</small></span></label>
-        </fieldset>
         <div class="plan-readiness"><p id="planning-readiness" class="field-help" role="status">Checking routing availability…</p><button id="plan-regions" class="text-button hidden" type="button">Regions</button></div>
         <form id="route-form" novalidate>
           <label class="plan-activity">Activity<select id="profile" aria-describedby="profile-description"></select></label>
           <label class="plan-distance">Distance (km)<input id="target-distance" type="number" min="1" max="200" step="0.1" value="20" required></label>
+          <section class="route-intent" aria-label="Interpreted route" aria-live="polite">
+            <strong id="route-intent-summary">Tap the map to choose Start</strong>
+            <p id="route-intent-help" class="field-help">Then generate a route, or keep tapping to add stops.</p>
+            <button id="undo-point-edit-plan" class="button secondary" type="button" hidden>Undo</button>
+          </section>
           <div id="connect-shape" class="hidden"></div>
           <section class="endpoint-controls" aria-label="Route endpoints">
               <fieldset class="endpoint-control" id="hard-start-control">
@@ -255,6 +255,13 @@
         <p id="request-status" class="status" aria-live="polite">Click the map to choose your start point.</p>
           <details class="control-section" id="planning-preferences">
             <summary>More planning options</summary>
+            <fieldset class="planning-mode" aria-describedby="planning-strategy-note">
+              <legend>Planning strategy</legend>
+              <label><input type="radio" name="planning-mode" value="automatic" checked><span><strong>Automatic</strong><small>Plan from the points on your map.</small></span></label>
+              <label><input type="radio" name="planning-mode" value="auto_tour"><span><strong>Suggest a route</strong><small>Keep discovery preferences and advanced anchors.</small></span></label>
+              <label><input type="radio" name="planning-mode" value="waypoint_route"><span><strong>Connect my points</strong><small>Keep an explicit route through points.</small></span></label>
+            </fieldset>
+            <p id="planning-strategy-note" class="field-help"></p>
             <p id="profile-description" class="field-help" role="status">Loading routing profiles…</p>
             <p id="plan-capabilities" class="field-help"></p>
             <label>Route name<input id="route-name" name="name" value="Sugarglider route" maxlength="120" required></label>
@@ -358,6 +365,10 @@
       <section class="map-panel" aria-labelledby="map-title">
         <h2 id="map-title" class="visually-hidden">Interactive route map</h2>
         <div id="map" role="application" aria-label="Interactive trail route map"></div>
+        <div class="map-intent-bar">
+          <section id="map-route-intent" class="map-route-intent hidden" aria-label="Route summary" aria-live="polite"><strong id="map-route-summary"></strong><p id="map-route-help"></p></section>
+          <button id="undo-point-edit" class="button secondary" type="button" hidden>Undo</button>
+        </div>
         <div id="map-edit-notice" class="map-edit-notice hidden" role="status"><p id="map-edit-guidance"></p><button id="cancel-point-placement" class="button secondary" type="button">Cancel</button></div>
         <button id="planner-location-control" class="planner-location-control hidden" type="button" aria-label="Show my location" aria-pressed="false" aria-busy="false" aria-describedby="planner-location-status" title="Show my location">
           <img src="/static/brand/gps-recenter-default.png" width="40" height="40" alt="">

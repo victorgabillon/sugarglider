@@ -929,3 +929,24 @@ body.ui-shell:not(.outing-mode) {
 .ui-shell:not(.outing-mode) .map-panel { container: planning-map / size; }
 .map-tools .legend { position: static; max-width: 100%; margin-top: .5rem; box-shadow: none; }
 .map-tools .legend-items { max-height: none; overflow: visible; }
+
+/* Automatic route intent is shared by Plan and the continuously editable map. */
+.ui-shell:not(.outing-mode) .planning-mode { grid-template-columns: 1fr; }
+.route-intent { margin: .75rem 0; padding: .65rem; border-left: 3px solid var(--primary-action); background: var(--elevated-surface); overflow-wrap: anywhere; }
+.route-intent .field-help { margin-bottom: 0; }
+.map-intent-bar { position: absolute; z-index: 4; bottom: 80px; left: 10px; width: min(340px, calc(100% - 80px)); display: grid; gap: .35rem; pointer-events: none; }
+.map-route-intent { padding: .6rem .75rem; background: rgb(255 250 240 / 96%); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-small); overflow-wrap: anywhere; }
+.map-route-intent strong { font-size: .9rem; }
+.map-route-intent p { margin: .25rem 0 0; font-size: .75rem; line-height: 1.4; }
+#undo-point-edit { pointer-events: auto; justify-self: start; min-height: 44px; }
+.map-panel:has(.maplibregl-popup) .map-route-intent { display: none; }
+@media (max-width: 900px) {
+  .planner:not([data-view="map"]) .map-route-intent { display: none; }
+  .planner:not([data-view="map"]) .map-intent-bar { display: none; }
+}
+@media (max-width: 900px) and (max-height: 650px) {
+  .map-route-intent p { display: none; }
+  .map-intent-bar { width: calc(100% - 20px); display: flex; align-items: flex-end; }
+  .map-route-intent { flex: 1; min-width: 0; }
+  #undo-point-edit { flex: 0 0 auto; }
+}

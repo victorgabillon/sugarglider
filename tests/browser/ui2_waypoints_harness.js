@@ -57,7 +57,7 @@ export async function runWaypointHarness() {
     switchPlanningMode('waypoint_route');
     check('rich_request_restores_exactly', () => same(currentPlanRequest(), request, 'all constraints/end/order/activity/distances'));
     const args = { planningMode: 'waypoint_route', routeTopology: 'loop', start: null, end: null, mandatoryPointCount: 0, pointValidationMessage: '', profileAvailable: true };
-    check('missing_start_explicit_guidance', () => assert(generationAvailability(args).reason.includes('Choose Start'), 'choose start'));
+    check('missing_start_explicit_guidance', () => assert(generationAvailability(args).reason.includes('choose your Start'), 'choose start'));
     check('loop_requires_stop', () => assert(!generationAvailability({ ...args, start: request.start }).enabled, 'loop stop'));
     check('loop_start_and_stop_ready', () => assert(generationAvailability({ ...args, start: request.start, mandatoryPointCount: 1 }).enabled, 'ready'));
     check('open_route_needs_end', () => assert(!generationAvailability({ ...args, start: request.start, routeTopology: 'point_to_point' }).enabled, 'end'));

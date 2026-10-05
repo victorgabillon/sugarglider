@@ -4,6 +4,7 @@ android_ui_config.json
 api.js
 app.js
 app_shell.js
+automatic_intent.js
 avatar.js
 brand/gps-recenter-active.png
 brand/gps-recenter-default.png

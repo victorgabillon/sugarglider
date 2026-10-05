@@ -208,6 +208,7 @@ if (!O) throw Error("Set UI2_EVIDENCE_DIR to an external evidence directory.");
   w.name = "blank-maximum-waypoint-draft";
   await load(a);
   await load(w);
+  await page.locator("#planning-preferences").evaluate(el => { el.open = true; });
   for (const mode of [
     "auto_tour",
     "waypoint_route",
@@ -221,6 +222,16 @@ if (!O) throw Error("Set UI2_EVIDENCE_DIR to an external evidence directory.");
     actual: roundtrip,
     pass: require("util").isDeepStrictEqual(w, roundtrip),
   };
+  const discovery = fixture("auto_tour", "trail_run", "flexible");
+  discovery.name = "guarded-discovery-intent";
+  discovery.preferred_discovered_poi_ids = ["node/700102346"];
+  await load(discovery);
+  await page.locator('input[name="planning-mode"][value="automatic"]').click();
+  await page.locator("#error-banner").waitFor({ state: "visible" });
+  const guarded = await snapshot();
+  assert.deepEqual(guarded, discovery);
+  assert.equal(await page.locator('input[name="planning-mode"][value="auto_tour"]').isChecked(), true);
+  records.push({ expected: discovery, actual: guarded, pass: true, check: "lossy automatic conversion refused" });
   fs.writeFileSync(
     O + "/requests-" + phase + ".json",
     JSON.stringify({ records, preservation }, null, 2),
