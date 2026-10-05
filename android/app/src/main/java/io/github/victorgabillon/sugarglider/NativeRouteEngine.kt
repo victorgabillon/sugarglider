@@ -45,6 +45,11 @@ internal enum class LocalRouteProfile(
     }
 }
 
+/**
+ * One bounded route call within a canonical planning search, not a whole plan.
+ * The shared JavaScript gateway owns proposal order, budget and caching; native
+ * code validates profile, points and the exact committed regional reference.
+ */
 internal data class NativeRouteRequest(
     val version: Int,
     val requestId: String,

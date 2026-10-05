@@ -24,6 +24,14 @@ type SearchFamily = Literal[
 
 @dataclass(frozen=True)
 class CandidateDraft:
+    """Carry a retained routed proposal into shared final evaluation.
+
+    Search phases may compare structural facts before creating this value.
+    Expensive final analysis belongs to the evaluator; public ranks and roles
+    belong to the portfolio. Stop outcomes and original waypoint indices travel
+    with the geometry rather than being reconstructed from its display order.
+    """
+
     route: RouteResult
     routing_points: tuple[Coordinate, ...]
     topology: RouteTopology

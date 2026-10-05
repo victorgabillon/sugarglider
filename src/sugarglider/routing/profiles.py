@@ -1,4 +1,10 @@
-"""Canonical immutable public routing-profile registry and catalog models."""
+"""Own public profile identity and its immutable GraphHopper policy.
+
+Backend names such as ``bike`` and ``mtb`` stay behind this boundary. Planning,
+cache identity, analysis and GPX use the six public IDs without aliases or an
+implicit hike fallback. Android has a separate Valhalla mapping for those same
+public IDs; matching labels do not imply identical backend route geometry.
+"""
 
 from typing import Literal
 

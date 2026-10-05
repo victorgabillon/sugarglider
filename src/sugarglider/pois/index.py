@@ -1,4 +1,10 @@
-"""Load one immutable projected point index for bounded local POI searches."""
+"""Load one immutable local index for bounded POI and approach searches.
+
+The build pipeline parses OSM; runtime queries use the startup-loaded STRtree.
+A feature's semantic point identifies the place, while its meaningful approach
+points are separate routing targets. Finding a nearby feature is discovery,
+not evidence that a routed candidate actually reaches an allowed approach.
+"""
 
 import gzip
 import json

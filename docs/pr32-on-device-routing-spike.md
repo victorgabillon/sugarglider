@@ -1,5 +1,9 @@
 # PR32 on-device routing spike
 
+> Historical feasibility report. Normal Android planning now uses local Valhalla.
+> The spike limitations below describe this milestone, not the current planner.
+> See [Android architecture](android-architecture.md) and [planning](planning-model.md).
+
 PR32 asks one narrow question: can the arm64 Fairphone calculate a graph-derived
 OSM A-to-B route with FastAPI and GraphHopper unavailable? It does not replace
 Generate, implement Auto Tour locally, or establish equivalence between

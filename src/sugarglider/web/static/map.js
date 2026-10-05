@@ -1,3 +1,7 @@
+// Own MapLibre layers and marker DOM, not planning or analysis. Planner edits
+// leave through callbacks; discovered Places are read-only until an explicit
+// editor action. Candidate overlays consume the supplied visualization, and
+// participant markers use unsnapped coordinates without inferring route progress.
 import { routeColor } from "./route_results.js";
 import { keepMapCoordinateVisible } from "./map_viewport.js";
 import * as maplibregl from "./vendor/maplibre-gl-6.4.1/maplibre-gl.mjs";

@@ -66,6 +66,9 @@ export function createLocalPlanningContext({ profile, route, totalLimit, phaseLi
     return pending;
   }
 
+  // Routing facts come from this gateway, not reconstructed search counters.
+  // Successful/failed entries count settled replies; in-flight promises are
+  // already cached for joining, so callers publish diagnostics after draining.
   function snapshot() {
     return deepFreeze({
       budget: {

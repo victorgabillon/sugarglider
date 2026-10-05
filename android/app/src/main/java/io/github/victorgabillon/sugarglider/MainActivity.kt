@@ -48,6 +48,12 @@ import androidx.webkit.WebViewFeature
 import java.time.Instant
 import java.util.concurrent.Executors
 
+/**
+ * Own the visible WebView and its native bridge lifetimes, not editable planner state.
+ * The bundled page plans locally; native code supplies routing, regional archive access,
+ * location permission and document saving. Page/channel identity guards delayed replies
+ * so a replaced document cannot inherit an older document's work or authority.
+ */
 class MainActivity : Activity() {
     private lateinit var application: SugargliderApplication
     private lateinit var nativeRouteEngine: NativeRouteEngine
@@ -620,6 +626,8 @@ class MainActivity : Activity() {
     }
 
     private fun installBridge(created: WebView, origin: String) {
+        // Origin permission alone is insufficient: the callback must also belong
+        // to the current WebView's main frame and current bridge page/channel.
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return
         WebViewCompat.addWebMessageListener(
             created,

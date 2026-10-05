@@ -1,3 +1,7 @@
+// Explicit Remember stores only participant authority, never owner/invitation
+// authority. The separate latest-only outbox has no token or client sequence;
+// restoring either record requires foreground Resume before publication.
+// Forget/replacement and outbox mutation share a transaction to defeat stale tabs.
 import { PWA_STORES } from "./pwa_store.js";
 
 const SCHEMA_VERSION = 1;

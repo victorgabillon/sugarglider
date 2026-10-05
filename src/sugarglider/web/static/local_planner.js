@@ -1,3 +1,7 @@
+// The Android planning boundary validates supported intent before native work.
+// One active request owns search, native drain and canonical publication under
+// a committed-region lease. Identical requests join it; failure remains local
+// and visible rather than silently changing mode or calling the server planner.
 import { createLocalAutoTourEngine, validateLocalAutoTourRequest } from "./local_auto_tour.js";
 import { createLocalWaypointRouteEngine, validateLocalWaypointRouteRequest } from "./local_waypoint_route.js";
 import { createLocalPlanPublisher } from "./local_plan_client.js";

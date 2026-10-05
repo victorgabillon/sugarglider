@@ -1,4 +1,10 @@
-"""Immutable saved-route application service."""
+"""Persist submitted request/candidate snapshots without invoking planning.
+
+Neutral validation checks the submitted pair at creation. Reads and GPX export
+then use that stored snapshot rather than rerouting or reranking it. The owner
+capability is returned once, stored only as a hash, and excluded from public
+snapshot models; an unlisted public slug grants reading, not ownership.
+"""
 
 from __future__ import annotations
 

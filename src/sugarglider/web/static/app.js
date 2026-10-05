@@ -1,3 +1,6 @@
+// Compose the shared page: controls, editable state, map and platform adapters.
+// Server planning and Android local planning both publish canonical results;
+// rendering/selection must use those results rather than reconstructing search.
 import { appendMapIntent, reconcileAutomaticIntent, hasDiscoveryIntent, routeIntentPresentation, rememberPointEdit, undoPointEdit, clearPointUndo, pointUndoLabel } from "./automatic_intent.js";
 import { renderWaypointEditor } from "./waypoint_editor.js";
 import { renderRouteChoices, emptyResultsMarkup } from "./route_results.js";
@@ -2398,6 +2401,8 @@ async function importGpx(file) {
   }
 }
 
+// Export the selected returned candidate (or stored snapshot) as it stands.
+// Export must never issue another generation or routing request.
 async function downloadSelected() {
   const candidate = selectedCandidate();
   if (!candidate || pendingGpxExport || ["running", "reversing"].includes(state.request.status)) return;
@@ -2541,6 +2546,8 @@ function dismissSavedRouteReceipt() {
   render();
 }
 
+// A stored candidate is display authority, not a PlanResult with invented search
+// diagnostics. Editing requires the separate explicit copy transition below.
 function displaySavedRoute(saved) {
   applyCanonicalRequestState(saved.source_request, { requireKnownProfile: false });
   state.generationSourceRequest = null;

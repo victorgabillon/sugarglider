@@ -1,4 +1,9 @@
-"""One cohesive request-scoped planning search context."""
+"""Own the mutable search resources shared by every phase of one request.
+
+Producers and refinements receive the same context. Routing-call facts come from
+its gateway and budget; algorithm counters describe proposals and rejections,
+so they must never be used to reconstruct backend usage.
+"""
 
 from dataclasses import dataclass, field
 
@@ -21,6 +26,13 @@ class SearchDiagnosticsCollector:
 
 @dataclass(frozen=True)
 class PlanningSearchContext:
+    """Fix resource identity while allowing the budget, cache and facts to advance.
+
+    Freezing this container prevents a phase from replacing a shared resource.
+    It does not freeze the request's mutable counters or make it reusable across
+    independent planning requests.
+    """
+
     budget: SearchBudget
     routes: CachedRoutingGateway
     diagnostics: SearchDiagnosticsCollector

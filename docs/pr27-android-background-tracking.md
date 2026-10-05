@@ -1,5 +1,9 @@
 # PR27 installable Android shell and screen-off location sharing
 
+> Historical implementation record. The current Android app routes locally and
+> disables social sharing/tracking; its main manifest has no tracking service.
+> Use [Android architecture](android-architecture.md) for current enablement.
+
 ## Product boundary
 
 PR27 adds an installable Android application with package ID

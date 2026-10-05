@@ -1,8 +1,13 @@
-// Presentation policy over the existing planner authorities, not another plan.
+// UI policy chooses between two canonical algorithms: Start alone is Auto Tour;
+// an explicit stop/end makes it Waypoint Route. Removing the last stop returns
+// to Auto Tour with the same Start. Discovery selections keep explicit intent
+// when conversion would lose requested-place semantics.
 import { state, saveActivePoints, isImmutableSnapshotDisplay } from "./state.js";
 
 const commonOptions = ["name", "targetDistanceKm", "toleranceKm", "maximumDistanceKm",
   "distancePriority", "candidateCount", "seed", "waypointOrder"];
+// Keep one recent point edit, including any inferred mode transition. Results,
+// discovery filters and snapshot display are outside this editable-plan undo.
 let undo = null;
 const undoFields = ["planningMode", "planningStrategy", "points", "autoTour", "waypointEndpoints",
   "waypointPoints", "options", "autoTourOptions", "waypointOptions", "selectedPointIndex", "selectedEndpointKind"];
@@ -82,6 +87,7 @@ export function appendMapIntent(coordinate, assignEndpoint) {
   const maximum = state.planningStrategy === "auto_tour" ? 6 : (state.config?.max_required_points ?? 30);
   if (count >= maximum) throw new Error(`This route already has the maximum ${maximum} stops.`);
   rememberPointEdit("Stop added");
+  // Identity survives later reordering; the displayed visit number may change.
   const next = state.points.reduce((n, p) => Math.max(n, p.originalIndex ?? -1), -1) + 1;
   const point = { name: `Point ${count + 1}`, ...coordinate, originalIndex: next };
   state.points.push(point); reconcileAutomaticIntent();

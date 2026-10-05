@@ -29,7 +29,13 @@ class CandidateScorer(Protocol):
 
 
 class CandidateEvaluator:
-    """Validate and enrich a complete draft exactly once before portfolio work."""
+    """Finalize retained drafts without choosing their public rank or role.
+
+    Temporary search states must use structural analysis only. Callers pass
+    complete retained drafts here once, so nature and loop-geometry enrichment
+    do not run for every beam/insertion state. The evaluator has no routing
+    backend and cannot repair an invalid candidate by inventing new geometry.
+    """
 
     def __init__(self, result_factory: RouteResultFactory | None = None) -> None:
         self._result_factory = result_factory

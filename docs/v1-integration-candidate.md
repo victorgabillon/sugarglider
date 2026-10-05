@@ -1,5 +1,9 @@
 # Local V1 code 2 integration candidate
 
+> Historical code-2 preparation record. Branches, readiness and release statements
+> below describe that candidate only. Use [Android architecture](android-architecture.md)
+> for current runtime policy and [development](development.md) for current checks.
+
 **READY FOR WORK PUBLICATION** describes the completed preparation pass. It does
 not close the original PR gates, physical consumer-region acceptance or release
 signing, and does not authorize publication or merge to main.

@@ -1,4 +1,9 @@
-"""Behavioral parity fixtures for the native canonical Waypoint pipeline."""
+"""Canonical Python Waypoint behavior with a deterministic injected adapter.
+
+The historical ``native`` name refers to direct canonical orchestration, not
+Android Valhalla. Fixture geometry is test data; production geometry must always
+come from the selected routing backend.
+"""
 
 from math import hypot
 from typing import Any, cast

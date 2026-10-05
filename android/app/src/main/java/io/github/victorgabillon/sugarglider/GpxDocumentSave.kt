@@ -69,7 +69,13 @@ internal enum class GpxSaveStatus(val wireValue: String) {
     WRITE_FAILED("write_failed"),
 }
 
-/** Called on the UI thread except for the explicitly dispatched output write. */
+/**
+ * Own one picker/write operation and report success only after bytes are written.
+ * A picker result is not proof of a saved file. Activity recreation retains only
+ * an uncertainty warning; document bytes, URI and old-page reply authority do not
+ * survive. The supplied bytes already represent the selected immutable candidate.
+ * Calls stay on the UI thread except for the explicitly dispatched output write.
+ */
 internal class GpxDocumentSaver(
     private val showPicker: (String) -> Unit,
     private val execute: (() -> Unit) -> Unit,

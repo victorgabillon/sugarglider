@@ -1,3 +1,6 @@
+// Test UI-policy transitions against the canonical requests they actually emit.
+// Manual-mode equivalence protects geometry/options across inference and Undo;
+// no routing fixture is needed to prove that editing preserves intent.
 import { state, saveActivePoints, assignRouteEndpoint, setRouteTopology, currentPlanRequest, generationAvailability, switchPlanningMode } from '../../src/sugarglider/web/static/state.js';
 import { appendMapIntent, reconcileAutomaticIntent, undoPointEdit, clearPointUndo, pointUndoLabel, routeIntentPresentation } from '../../src/sugarglider/web/static/automatic_intent.js';
 const assert = (ok, message) => { if (!ok) throw Error(message); };

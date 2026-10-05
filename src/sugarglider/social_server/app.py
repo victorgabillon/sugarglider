@@ -1,4 +1,10 @@
-"""Production factory: immutable sharing, outings and latest positions only."""
+"""Compose the optional social service without loading a routing graph.
+
+Persistence, immutable sharing, outings and latest positions are its runtime
+responsibilities. The shared shell may display supplied snapshots, but this
+factory does not install planning routes or derive regions/POIs. Constructing
+or smoke-testing this factory is not evidence that a public host is deployed.
+"""
 
 import asyncio
 import logging

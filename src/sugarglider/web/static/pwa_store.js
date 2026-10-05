@@ -1,3 +1,7 @@
+// This is the only module allowed to open application IndexedDB. Other modules
+// use its bounded stores/transactions so session removal and outbox writes can
+// stay atomic. Storage is optional: failures must preserve valid network data
+// and online startup, and must not masquerade as a durable successful write.
 const DATABASE_NAME = "sugarglider-pwa";
 const DATABASE_VERSION = 2;
 

@@ -290,7 +290,12 @@ def _structural_key(
 
 
 class PlanService:
-    """Dispatch one strict request union to mode-specific candidate producers."""
+    """Dispatch canonical requests to two separate planning algorithms.
+
+    Automatic route intent belongs to the UI. This service does not infer a
+    different mode from point count or retry a failed request with weaker
+    constraints; its validated request kind selects the producer directly.
+    """
 
     def __init__(
         self,

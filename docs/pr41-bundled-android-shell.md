@@ -1,5 +1,9 @@
 # PR41 — bundled Android first launch
 
+> Historical first-launch preparation record. The open routing/installation gates
+> below belong to this milestone. Current platform and regional contracts are in
+> [Android architecture](android-architecture.md) and [regions and Places](regions-and-places.md).
+
 This preparation builds on `af37a1f` on the dependent branch
 `feat/pr41-bundled-android-shell`. The normal planner now ships inside the APK and
 opens at `https://appassets.androidplatform.net/` on ordinary first launch.

@@ -1,4 +1,9 @@
-"""PR39 real tiny OSM geometry plus injected map/routing builds; no services."""
+"""Regional publication contracts with tiny generated OSM and injected builders.
+
+Fixtures exercise coverage/source identity and complete staging without a real
+regional extract, Docker or routing service. A partial component build must
+never replace or become a published region.
+"""
 
 import gzip
 import hashlib

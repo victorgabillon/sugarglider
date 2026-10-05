@@ -1,5 +1,9 @@
 # PR43 — Small production social service
 
+> Detailed milestone runbook. Current ownership and enablement are summarized in
+> [social service](social-service.md). CI smoke checks and the deployment procedure
+> below do not by themselves establish a live public social deployment.
+
 The production entry point is `python -m sugarglider.social_server serve`. It
 starts SQLite-backed sharing, outings and latest-position services without
 constructing a routing client, loading a regional index, or starting a routing

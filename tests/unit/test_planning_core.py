@@ -1,4 +1,9 @@
-"""Canonical models, profiles, budgets, cache, evaluation, and portfolio."""
+"""Protect shared planning ownership independently of either mode's heuristics.
+
+Counting adapters prove who may route/enrich and when a cache hit spends no
+backend budget. These tests complement mode tests without depending on a graph,
+map data or a network service.
+"""
 
 from typing import cast
 
