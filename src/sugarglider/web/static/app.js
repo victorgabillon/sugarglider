@@ -1,3 +1,4 @@
+import { appendMapIntent, reconcileAutomaticIntent, hasDiscoveryIntent, routeIntentPresentation, rememberPointEdit, undoPointEdit, clearPointUndo, pointUndoLabel } from "./automatic_intent.js";
 import { renderWaypointEditor } from "./waypoint_editor.js";
 import { renderRouteChoices, emptyResultsMarkup } from "./route_results.js";
 import { initializeAppShell } from "./app_shell.js";
@@ -70,7 +71,7 @@ import {
   renderPwaStatus,
 } from "./pwa_view.js";
 import { createSavedRoute, deleteSavedRoute, getSavedRoute, savedRouteShareUrl, shareSavedRoute, sharedRouteSlug } from "./saved_routes.js";
-import { applyImplicitEndpointMapClick, assignRouteEndpoint, currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, generationAvailability, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, readPlannerOptionsFromControls, renderEndpointTopologyControls, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, setRouteTopology, state, switchPlanningMode } from "./state.js";
+import { assignRouteEndpoint, currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, generationAvailability, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, readPlannerOptionsFromControls, renderEndpointTopologyControls, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, setRouteTopology, state, switchPlanningMode } from "./state.js";
 import {
   initializeTrailProfile,
   subscribeTrailProfile,
@@ -549,7 +550,7 @@ function updateEndpointControls() {
     byId(`hard-${kind}-lon`).value = point?.lon ?? "";
     byId(`set-hard-${kind}`).textContent = state.endpointSetMode === kind
       ? `Click map for ${kind}`
-      : kind === "start" ? (point ? "Change on map" : "Choose on map") : "Set on map";
+      : kind === "start" ? (point ? "Move Start" : "Choose on map") : point ? "Move End" : "Set on map";
   }
   const topology = endpoints.routeTopology;
   renderEndpointTopologyControls(
@@ -704,7 +705,7 @@ function renderRequestedPlacesList() {
 function renderModeControls() {
   const auto = state.planningMode === "auto_tour";
   document.querySelectorAll('input[name="planning-mode"]').forEach((input) => {
-    input.checked = input.value === state.planningMode;
+    input.checked = input.value === state.planningStrategy;
   });
   byId("auto-tour-fields").classList.toggle("hidden", !auto);
   byId("waypoint-order-field").classList.toggle("hidden", auto);
@@ -741,9 +742,15 @@ function renderModeControls() {
   byId("plan-end-summary").textContent = end ? end.name || "End selected" : "Choose End on the map";
   byId("clear-hard-end").hidden = !end;
   byId("plan-start-summary").textContent = start
-    ? `${start.name || "Start"} · ${Number(start.lat).toFixed(5)}, ${Number(start.lon).toFixed(5)}`
+    ? `${start.name === "Hard start" ? "Start set ✓" : start.name || "Start set ✓"}`
     : "Choose Start on the map";
   byId("clear-hard-start").hidden = !start;
+  const intent = routeIntentPresentation();
+  byId("route-intent-summary").textContent = intent.title;
+  byId("route-intent-help").textContent = intent.detail;
+  byId("map-route-summary").textContent = intent.compactTitle ?? intent.title;
+  byId("map-route-help").textContent = intent.detail;
+  byId("planning-strategy-note").textContent = state.planningStrategy === "automatic" ? "Uses your map points to choose how to plan." : "Explicit strategy retained. Imported plans keep their original routing intent.";
   renderPreferredPois();
   byId("show-dropped-requested-radii-control").classList.toggle("hidden", !auto);
   renderRequestedPlacesList();
@@ -829,7 +836,9 @@ function activeMapPlacementGuidance() {
   return "";
 }
 
-function invalidateAndRender() {
+function invalidateAndRender({ preserveUndo = false } = {}) {
+  if (!preserveUndo) clearPointUndo();
+  if (reconcileAutomaticIntent()) updateControlsFromOptions();
   localPlanner?.invalidate();
   saveActivePoints();
   if (state.request.status === "running") {
@@ -892,6 +901,7 @@ function updatePoiSelection(scrollSelected = false) {
 }
 
 function selectPoint(index, { scrollSelected = false, requestPopup = false } = {}) {
+  if (state.planningMode === "auto_tour" && state.autoTour.start && index === 0) { selectEndpoint("start"); return; }
   if (!Number.isInteger(index) || index < 0 || index >= state.points.length) return;
   clearPointPlacement();
   state.selectedEndpointKind = null;
@@ -1073,13 +1083,14 @@ function movePoint(from, to) {
 }
 
 function removePoint(index) {
+  rememberPointEdit("Point removed");
   clearPointPlacement();
   if (state.planningMode === "auto_tour" && state.autoTour.start && index === 0) {
     saveActivePoints();
     state.autoTour.start = null;
     state.points = [...state.autoTour.hardPoints];
     state.selectedPointIndex = state.points.length ? 0 : null;
-    invalidateAndRender();
+    invalidateAndRender({ preserveUndo: true });
     return;
   }
   const selectedPoint = state.selectedPointIndex === null ? null : state.points[state.selectedPointIndex];
@@ -1089,7 +1100,7 @@ function removePoint(index) {
   } else {
     state.selectedPointIndex = state.points.length ? Math.min(index, state.points.length - 1) : null;
   }
-  invalidateAndRender();
+  invalidateAndRender({ preserveUndo: true });
   (byId("poi-list").querySelector(".poi-row.selected .point-select") ?? byId("add-point-mode")).focus({ preventScroll: true });
 }
 
@@ -1700,6 +1711,13 @@ function renderStatus() {
   const readOnly = isImmutableSnapshotDisplay();
   const open = isOpenPlan();
   byId("controls-title").textContent = "Plan";
+  byId("map-route-intent").classList.toggle("hidden", running || readOnly || !activeEndpoints().start || Boolean(activeMapPlacementGuidance()));
+  const undoLabel = pointUndoLabel();
+  for (const id of ["undo-point-edit", "undo-point-edit-plan"]) {
+    byId(id).hidden = !undoLabel || running || readOnly;
+    byId(id).textContent = id === "undo-point-edit" ? "Undo" : `${undoLabel} · Undo`;
+    byId(id).setAttribute("aria-label", `${undoLabel} · Undo`);
+  }
   byId("generation-title").textContent = state.request.status === "reversing"
     ? "Reversing route…"
     : open ? "Planning your route…" : "Planning your loop…";
@@ -1762,9 +1780,7 @@ function renderEmptyState() {
     || state.importedGpx
     || currentDisplayedCandidates().length > 0;
   byId("planner-empty").classList.toggle("hidden", Boolean(hasWork || activeEndpoints().start || activeMapPlacementGuidance()));
-  byId("planner-empty").querySelector("p").textContent = state.planningMode === "waypoint_route"
-    ? "Open Plan to choose Start and add stops. Ordinary map taps only explore."
-    : "Tap or click the map to choose your starting point.";
+  byId("planner-empty").querySelector("p").textContent = "Tap the map to choose Start, then keep tapping to add stops.";
 }
 
 function render() {
@@ -1850,6 +1866,7 @@ function validateRequestControls() {
 }
 
 async function generate() {
+  clearPointUndo();
   hideError();
   let request;
   try {
@@ -2257,6 +2274,8 @@ function applyCanonicalRequestState(value, options = {}) {
   clearPointPlacement();
   state.selectedEndpointKind = null;
   state.planningMode = imported.canonical.kind;
+  state.planningStrategy = imported.canonical.kind;
+  clearPointUndo();
   state.routingProfile = imported.canonical.routing_profile;
   document.querySelectorAll('input[name="planning-mode"]').forEach((input) => {
     input.checked = input.value === state.planningMode;
@@ -2305,6 +2324,8 @@ async function importRequest(file) {
   try {
     const imported = normalizeImportedRequest(JSON.parse(await file.text()));
     state.planningMode = imported.canonical.kind;
+    state.planningStrategy = imported.canonical.kind;
+    clearPointUndo();
     state.routingProfile = imported.canonical.routing_profile;
     document.querySelectorAll('input[name="planning-mode"]').forEach((input) => {
       input.checked = input.value === state.planningMode;
@@ -2646,9 +2667,14 @@ function bindEvents() {
   byId("generate").addEventListener("click", generate);
   byId("generate-top").addEventListener("click", generate);
   byId("cancel").addEventListener("click", () => state.abortController?.abort());
-  byId("clear-results").addEventListener("click", invalidateAndRender);
+  byId("clear-results").addEventListener("click", () => invalidateAndRender());
+  for (const id of ["undo-point-edit", "undo-point-edit-plan"]) {
+    byId(id).addEventListener("click", () => {
+      if (undoPointEdit()) { updateControlsFromOptions(); invalidateAndRender(); }
+    });
+  }
   byId("route-form").addEventListener("change", (event) => {
-    if (event.target.id.startsWith("hard-") || (event.target.closest("#planning-points") && event.target.id !== "point-order-mode")) return;
+    if (event.target.name === "planning-mode" || event.target.id.startsWith("hard-") || (event.target.closest("#planning-points") && event.target.id !== "point-order-mode")) return;
     updateOptionsFromControls();
     if (event.target.id === "profile" && plannerProfilePreference) {
       void plannerProfilePreference.remember(state.routingProfile).then((persisted) => {
@@ -2660,8 +2686,19 @@ function bindEvents() {
   document.querySelectorAll('input[name="planning-mode"]').forEach((input) => {
     input.addEventListener("change", () => {
       if (!input.checked) return;
+      clearPointPlacement();
       updateOptionsFromControls();
-      switchPlanningMode(input.value);
+      if (input.value === "automatic") {
+        if (hasDiscoveryIntent()) {
+          showError("This plan has discovery-specific places.", "Keep Suggest a route to preserve them, or remove those choices before using Automatic.");
+          renderModeControls(); return;
+        }
+        state.planningStrategy = "automatic";
+        reconcileAutomaticIntent();
+      } else {
+        state.planningStrategy = input.value;
+        switchPlanningMode(input.value);
+      }
       updateControlsFromOptions();
       invalidateAndRender();
     });
@@ -2696,10 +2733,11 @@ function bindEvents() {
       if (state.endpointSetMode) appShell?.show("map", { focus: true });
     });
     byId(`clear-hard-${kind}`).addEventListener("click", () => {
+      rememberPointEdit(`${kind === "start" ? "Start" : "End"} removed`);
       assignActiveEndpoint(kind, null);
       if (state.selectedEndpointKind === kind) state.selectedEndpointKind = null;
       if (state.endpointSetMode === kind) state.endpointSetMode = null;
-      invalidateAndRender();
+      invalidateAndRender({ preserveUndo: true });
     });
   }
   byId("request-file").addEventListener("change", (event) => {
@@ -2717,6 +2755,7 @@ function bindEvents() {
     render();
   });
   byId("add-point-mode").addEventListener("click", () => {
+    if (state.planningStrategy === "automatic") { clearPointPlacement(); appShell?.show("map", { focus: true }); renderStatus(); return; }
     const active = state.addPointMode;
     clearPointPlacement();
     state.addPointMode = !active;
@@ -3286,23 +3325,12 @@ async function start() {
           return;
         }
 
-        if (state.planningMode === "waypoint_route") return;
-        const implicitEndpointKind = applyImplicitEndpointMapClick({
-          endpoints: activeEndpoints(),
-          coordinate,
-          assignEndpoint: assignActiveEndpoint,
-          settingRequestedApproachId: state.settingRequestedApproachId,
-          endpointSetMode: state.endpointSetMode,
-          addPointMode: state.addPointMode,
-        });
-        if (!implicitEndpointKind) return;
-        if (implicitEndpointKind === "start" && state.planningMode === "auto_tour") {
-          state.selectedPointIndex = 0;
-        }
-        invalidateAndRender();
-        setEditableRequestStatus(
-          `${implicitEndpointKind === "start" ? "Start" : "End"} point set from map.`,
-        );
+        try {
+          appendMapIntent(coordinate, assignActiveEndpoint);
+          updateControlsFromOptions();
+          invalidateAndRender({ preserveUndo: true });
+          setEditableRequestStatus("Ready to generate.");
+        } catch (error) { showError(error.message); }
       },
     });
     if (mapInitialized) void plannerLocation?.initialize();

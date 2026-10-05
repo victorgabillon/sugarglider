@@ -526,13 +526,13 @@ def test_frontend_exposes_topology_aware_endpoints_and_open_metrics() -> None:
     assert "assignRouteEndpoint" in app
     assert "renderEndpointTopologyControls" in app
     assert "generationAvailability" in app
-    assert "applyImplicitEndpointMapClick" in app
+    assert "appendMapIntent" in app
     assert "if (!latitudeValue || !longitudeValue) return null;" in app
     assert "End is the start for loop routes." in html
     assert 'id="hard-end-control" aria-hidden="true" hidden disabled' in html
     assert 'aria-describedby="request-status"' in html
-    assert '"Click the map to choose your start point."' in state_code
-    assert '"Now click the map to choose your end point."' in state_code
+    assert '"Tap the map to choose your Start."' in state_code
+    assert '"Tap the map to choose End."' in state_code
     assert '"The selected routing profile is unavailable."' in state_code
     assert ".endpoint-control .button-row { display: grid;" in styles
     assert "topology: endpoints.routeTopology" in state_code
@@ -554,7 +554,7 @@ def test_frontend_exposes_topology_aware_endpoints_and_open_metrics() -> None:
         "if (state.addPointMode)"
     )
     assert map_click.index("if (state.addPointMode)") < map_click.index(
-        "const implicitEndpointKind = applyImplicitEndpointMapClick("
+        "appendMapIntent(coordinate, assignActiveEndpoint)"
     )
 
 
@@ -818,7 +818,7 @@ def test_frontend_auto_tour_is_default_and_preserves_waypoint_mode() -> None:
     map_code = (STATIC_DIRECTORY / "map.js").read_text(encoding="utf-8")
 
     assert 'planningMode: "auto_tour"' in state_code
-    assert 'value="auto_tour" checked' in html
+    assert 'value="automatic" checked' in html
     assert 'value="waypoint_route"' in html
     assert 'fetch("/v2/plans/generate"' in api
     assert "diagnostics.cache.hit_count" in app

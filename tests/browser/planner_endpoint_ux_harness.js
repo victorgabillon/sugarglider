@@ -94,7 +94,7 @@ function scenarioLoopToPointToPointRequiresEnd() {
   equal(presentation.hardEndAvailable, true, "point-to-point exposes Hard end");
   equal(
     availability({ routeTopology: endpoints.routeTopology, end: endpoints.end }).reason,
-    "Now click the map to choose your end point.",
+    "Tap the map to choose End.",
     "point-to-point requires its newly exposed end",
   );
 }
@@ -115,7 +115,7 @@ function scenarioAutoTourPointToPointRequiresEndpoints() {
       start: null,
       end: null,
     }).reason,
-    "Click the map to choose your start point.",
+    "Tap the map to choose your Start.",
     "Auto Tour open route first requires a start",
   );
   equal(
@@ -124,7 +124,7 @@ function scenarioAutoTourPointToPointRequiresEndpoints() {
       routeTopology: "point_to_point",
       end: null,
     }).reason,
-    "Now click the map to choose your end point.",
+    "Tap the map to choose End.",
     "Auto Tour open route then requires an end",
   );
 }
@@ -137,7 +137,7 @@ function scenarioWaypointPointToPointRequiresEndpoints() {
       start: null,
       end: null,
     }).reason,
-    "Choose Start on map in Plan.",
+    "Tap the map to choose your Start.",
     "Waypoint open route first requires a start",
   );
   equal(
@@ -146,7 +146,7 @@ function scenarioWaypointPointToPointRequiresEndpoints() {
       routeTopology: "point_to_point",
       end: null,
     }).reason,
-    "Choose End on map in Plan.",
+    "Tap the map to choose End.",
     "Waypoint open route then requires an end",
   );
 }
@@ -154,7 +154,7 @@ function scenarioWaypointPointToPointRequiresEndpoints() {
 function scenarioDisabledReasonsAreActionable() {
   equal(
     availability({ start: null }).reason,
-    "Click the map to choose your start point.",
+    "Tap the map to choose your Start.",
     "loop missing-start reason is explicit",
   );
   equal(

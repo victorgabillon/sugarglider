@@ -60,7 +60,8 @@ export async function runPlanningHarness() {
     const loaded = new Promise(resolve => frame.onload = resolve); frame.srcdoc = markup.documentElement.outerHTML; document.body.append(frame); await loaded;
     const doc = frame.contentDocument, byId = id => doc.getElementById(id);
     const labels = [...doc.querySelectorAll('.planning-mode strong')].map(n => n.textContent);
-    same(labels, ['Suggest a route', 'Connect my points'], 'explained user intentions');
+    same(labels, ['Automatic', 'Suggest a route', 'Connect my points'], 'advanced strategies');
+    assert(byId('planning-preferences').contains(doc.querySelector('.planning-mode')), 'strategy is advanced, not required');
     assert(doc.querySelectorAll('#profile').length === 1 && doc.querySelectorAll('#hard-start-control').length === 1, 'one shared Activity and Start');
     assert(byId('plan-start-summary').textContent === 'Choose Start on the map', 'empty other draft guidance');
     const form = byId('route-form');

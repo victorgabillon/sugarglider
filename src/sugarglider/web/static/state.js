@@ -12,6 +12,7 @@ export const state = {
   routingProfileCatalog: null,
   routingProfile: null,
   planningMode: "auto_tour",
+  planningStrategy: "automatic", // UI policy only; imports preserve their explicit kind.
   points: [],
   waypointPoints: [],
   autoTour: {
@@ -252,13 +253,13 @@ export function generationAvailability({
   if (!start) {
     return {
       enabled: false,
-      reason: planningMode === "waypoint_route" ? "Choose Start on map in Plan." : "Click the map to choose your start point.",
+      reason: "Tap the map to choose your Start.",
     };
   }
   if (routeTopology === "point_to_point" && !end) {
     return {
       enabled: false,
-      reason: planningMode === "waypoint_route" ? "Choose End on map in Plan." : "Now click the map to choose your end point.",
+      reason: "Tap the map to choose End.",
     };
   }
   if (
