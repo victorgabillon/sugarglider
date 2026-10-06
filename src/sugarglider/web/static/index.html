@@ -272,7 +272,7 @@
             <label>Distance priority<select id="distance-priority"><option value="flexible" selected>Flexible — places and coherence first</option><option value="balanced">Balanced</option><option value="strict">Strict — tolerance first</option></select></label>
             <label>Maximum distance (optional) <span>km</span><input id="maximum-distance" type="number" min="0.1" max="200" step="0.1" placeholder="Server safety maximum"></label>
             <p class="field-help">Flexible and balanced tolerance allow compromises. An explicit maximum is binding for balanced and strict requests; strict also requires a maximum. Unsupported settings are reported without changing your choices.</p>
-            <div id="endpoint-options-anchor"><label id="route-shape-field">Finish<select id="route-topology"><option value="loop">Return to Start (Loop)</option><option value="point_to_point">At a different End</option></select></label>
+            <div id="endpoint-options-anchor"><label id="route-shape-field">Finish<select id="route-topology"><option value="loop">Loop</option><option value="point_to_point">Finish elsewhere</option></select></label>
               <p id="loop-end-explanation" class="field-help endpoint-explanation" role="status">End is the start for loop routes.</p>
               <fieldset class="endpoint-control hidden" id="hard-end-control" aria-hidden="true" hidden disabled>
                 <legend>End</legend>
@@ -302,7 +302,7 @@
             </section>
             <details class="places-advanced route-advanced">
               <summary>Advanced route preferences</summary>
-              <div id="advanced-order-anchor"><label id="waypoint-order-field">Visit order<select id="point-order-mode"><option value="fixed">Keep this order</option><option value="optimize" data-optimized="true">Let Sugarglider order the stops</option></select></label></div>
+              <div id="advanced-order-anchor"><label id="waypoint-order-field">Visit order<select id="point-order-mode"><option value="fixed">As tapped</option><option value="optimize" data-optimized="true">Optimize stops</option></select></label></div>
               <label>Path selection<select id="path-selection-mode"><option value="shortest">Natural shortest paths</option><option value="low_overlap">Low-overlap alternatives</option></select></label>
               <label>Loop shape<select id="loop-geometry-preference"><option value="off">Off</option><option value="prefer">Prefer balanced loops</option></select></label>
               <p class="field-help">Prefers compact, directionally balanced loops with fewer close parallel corridors. Distance, backtracking and repetition remain more important.</p>
@@ -365,11 +365,19 @@
       <section class="map-panel" aria-labelledby="map-title">
         <h2 id="map-title" class="visually-hidden">Interactive route map</h2>
         <div id="map" role="application" aria-label="Interactive trail route map"></div>
-        <div class="map-intent-bar">
-          <section id="map-route-intent" class="map-route-intent hidden" aria-label="Route summary" aria-live="polite"><strong id="map-route-summary"></strong><p id="map-route-help"></p></section>
-          <button id="undo-point-edit" class="button secondary" type="button" hidden>Undo</button>
-        </div>
-        <div id="map-edit-notice" class="map-edit-notice hidden" role="status"><p id="map-edit-guidance"></p><button id="cancel-point-placement" class="button secondary" type="button">Cancel</button></div>
+        <section id="route-dock" class="route-dock" aria-label="Edit route">
+          <div class="route-dock-controls">
+            <button id="undo-point-edit" type="button" aria-label="Undo route edit" disabled><span aria-hidden="true">↶</span><span class="visually-hidden">Undo</span></button>
+            <button id="redo-point-edit" type="button" aria-label="Redo route edit" disabled><span aria-hidden="true">↷</span><span class="visually-hidden">Redo</span></button>
+            <label>Finish<span class="dock-choice"><span id="dock-finish-label" aria-hidden="true">Loop</span><select id="dock-finish" aria-label="Finish"><option value="loop">Loop</option><option value="point_to_point">Finish elsewhere</option></select></span></label>
+            <label>Order<span class="dock-choice"><span id="dock-order-label" aria-hidden="true">As tapped</span><select id="dock-order" aria-label="Order"><option value="fixed">As tapped</option><option value="optimize">Optimize stops</option></select></span></label>
+          </div>
+          <div id="route-point-strip" class="route-point-strip" role="group" aria-label="Route points"></div>
+          <p id="route-dock-hint" class="route-dock-hint" aria-live="polite">Tap the map to choose Start</p>
+          <section id="map-route-intent" class="visually-hidden" aria-label="Route summary" aria-live="polite"><strong id="map-route-summary"></strong><p id="map-route-help"></p></section>
+          <section id="route-quick-editor" class="route-quick-editor" aria-label="Selected route point" hidden></section>
+          <div id="map-edit-notice" class="map-edit-notice hidden" role="status"><p id="map-edit-guidance"></p><button id="cancel-point-placement" class="button secondary" type="button">Cancel</button></div>
+        </section>
         <button id="planner-location-control" class="planner-location-control hidden" type="button" aria-label="Show my location" aria-pressed="false" aria-busy="false" aria-describedby="planner-location-status" title="Show my location">
           <img src="/static/brand/gps-recenter-default.png" width="40" height="40" alt="">
         </button>
