@@ -1,5 +1,6 @@
 import { renderRouteDock } from "./route_dock.js";
-import { appendMapIntent, reconcileAutomaticIntent, hasDiscoveryIntent, routeIntentPresentation, rememberPointEdit, undoPointEdit, clearPointUndo, pointUndoLabel, redoPointEdit, changeMapTopology } from "./automatic_intent.js";
+import { addResolvedRouteLocation, replaceResolvedRouteLocation } from "./route_point_acquisition.js";
+import { reconcileAutomaticIntent, hasDiscoveryIntent, routeIntentPresentation, rememberPointEdit, undoPointEdit, clearPointUndo, pointUndoLabel, redoPointEdit, changeMapTopology } from "./automatic_intent.js";
 import { renderWaypointEditor } from "./waypoint_editor.js";
 import { renderRouteChoices, emptyResultsMarkup } from "./route_results.js";
 import { initializeAppShell } from "./app_shell.js";
@@ -837,7 +838,7 @@ function activeMapPlacementGuidance() {
     return `Click the map to set your ${state.endpointSetMode} point.`;
   }
   if (state.movingPointIndex !== null) return `Choose a new position for ${pointDisplayName(state.points[state.movingPointIndex], state.movingPointIndex)}. Other points stay unchanged.`;
-  if (state.addPointMode) return state.planningMode === "waypoint_route" ? "Tap an empty map position to add one stop." : "Click the map to add a required point.";
+  if (state.addPointMode) return state.planningStrategy === "automatic" ? "Tap an empty map position to extend the route." : "Tap an empty map position to add one stop.";
   return "";
 }
 
@@ -950,7 +951,7 @@ function renderPoiEditor() {
   if (state.planningMode !== "waypoint_route") return renderLegacyPoiEditor();
   renderWaypointEditor({
     list: byId("poi-list"), points: state.points, selectedIndex: state.selectedPointIndex,
-    visitOrders: candidateVisitOrders(),
+    visitOrders: candidateVisitOrders(), reorderDisabled: state.options.waypointOrder !== "fixed",
     onSelect: (index) => selectPoint(index),
     onChange: (index, field, value) => {
       rememberPointEdit("Stop updated");
@@ -1077,6 +1078,8 @@ function renderLegacyPoiEditor() {
 }
 
 function movePoint(from, to) {
+  if (isImmutableSnapshotDisplay() || ["running", "reversing"].includes(state.request.status)) return;
+  if (state.planningMode === "waypoint_route" && state.options.waypointOrder !== "fixed") return;
   if (to < 0 || to >= state.points.length || from === to || !state.points[from]) return;
   const focusPlan = byId("poi-list").contains(document.activeElement);
   rememberPointEdit("Stop reordered");
@@ -1090,6 +1093,7 @@ function movePoint(from, to) {
 }
 
 function removePoint(index) {
+  if (isImmutableSnapshotDisplay() || ["running", "reversing"].includes(state.request.status)) return;
   if (!state.points[index]) return;
   const focusPlan = byId("poi-list").contains(document.activeElement);
   rememberPointEdit("Point removed");
@@ -1139,12 +1143,9 @@ function renderMapData() {
       || ["running", "reversing"].includes(state.request.status),
     {
       onDrag: (index, coordinate) => {
-        rememberPointEdit("Point moved");
-        clearPointPlacement();
         const start = state.planningMode === "auto_tour" && state.autoTour.start && index === 0;
-        state.selectedEndpointKind = start ? "start" : null;
-        state.points[index] = { ...state.points[index], ...coordinate };
-        state.selectedPointIndex = start ? null : index;
+        replaceResolvedRouteLocation(start ? { endpoint: "start" } : { index }, coordinate, { assignEndpoint: assignActiveEndpoint });
+        clearPointPlacement();
         invalidateAndRender();
       },
       onActivate: (index) => selectPoint(index, {
@@ -1789,9 +1790,15 @@ function renderStatus() {
   renderRouteDock({ root: byId("route-dock"), disabled: running || readOnly,
     visits: selectedCandidate()?.diagnostics.details.required_waypoint_order ?? [],
     onSelectPoint: selectPoint, onSelectEndpoint: selectEndpoint,
+    onClearSelection: () => { clearPointPlacement(); state.selectedPointIndex = null; state.selectedEndpointKind = null; render(); },
     onMove: beginPointMove, onRemove: removePoint, onReorder: movePoint,
     onMoveEndpoint: kind => byId(`set-hard-${kind}`).click(),
     onClearEndpoint: kind => byId(`clear-hard-${kind}`).click(),
+    onChooseMap: () => {
+      clearPointPlacement(); state.addPointMode = true;
+      render(); appShell?.show("map", { focus: true });
+    },
+    onDetails: () => { appShell?.show("plan"); appShell?.reveal(state.selectedEndpointKind ? `#hard-${state.selectedEndpointKind}-control` : ".poi-row.selected"); },
   });
 }
 
@@ -3303,14 +3310,8 @@ async function start() {
         }
         if (state.endpointSetMode) {
           const kind = state.endpointSetMode;
-          const existing = activeEndpoints()[kind];
-          rememberPointEdit(`${kind === "start" ? "Start" : "End"} moved`);
-          assignActiveEndpoint(kind, {
-            ...existing,
-            name: byId(`hard-${kind}-name`).value.trim()
-              || existing?.name
-              || `Hard ${kind}`,
-            ...coordinate,
+          replaceResolvedRouteLocation({ endpoint: kind }, coordinate, {
+            assignEndpoint: assignActiveEndpoint, name: byId(`hard-${kind}-name`).value.trim(),
           });
           state.endpointSetMode = null;
           byId(`set-hard-${kind}`).textContent = "Set on map";
@@ -3323,7 +3324,7 @@ async function start() {
         }
         if (state.movingPointIndex !== null) {
           const index = state.movingPointIndex;
-          if (state.points[index]) { rememberPointEdit("Stop moved"); state.points[index] = { ...state.points[index], ...coordinate }; }
+          replaceResolvedRouteLocation({ index }, coordinate);
           clearPointPlacement();
           invalidateAndRender();
 
@@ -3331,46 +3332,18 @@ async function start() {
           return;
         }
         if (state.addPointMode) {
-          const maximum = state.planningMode === "auto_tour"
-            ? 6 + Number(Boolean(state.autoTour.start))
-            : state.config.max_required_points;
-          if (state.points.length >= maximum) {
-            showError(state.planningMode === "auto_tour"
-              ? "The suggested route already has Start and the maximum six required points."
-              : "The route already has the maximum 30 mandatory points.");
-            return;
-          }
-          rememberPointEdit("Point added");
-          const nextOriginalIndex = state.points.reduce(
-            (highest, point) => Math.max(highest, Number.isInteger(point.originalIndex) ? point.originalIndex : -1),
-            -1,
-          ) + 1;
-          const point = {
-            name: state.planningMode === "auto_tour"
-              ? (state.points.length ? `Hard anchor ${state.points.length}` : "Start")
-              : `Point ${state.points.length + 1}`,
-            ...coordinate,
-            originalIndex: nextOriginalIndex,
-            _mapCreated: true,
-          };
-          if (state.planningMode === "auto_tour" && !state.autoTour.start) {
-            assignActiveEndpoint("start", point);
-          } else {
-            state.points.push(point);
-          }
-          state.selectedEndpointKind = null;
-          state.selectedPointIndex = state.points.length - 1;
-          state.addPointMode = false;
-          byId("add-point-mode").setAttribute("aria-pressed", "false");
-          byId("add-point-mode").lastChild.textContent = " Add on map";
-          invalidateAndRender();
-          setEditableRequestStatus("Required point set from map.");
-          if (state.planningMode === "waypoint_route") appShell?.reveal(".poi-row.selected");
+          try {
+            addResolvedRouteLocation(coordinate, { assignEndpoint: assignActiveEndpoint,
+              explicitStop: state.planningStrategy !== "automatic" });
+            clearPointPlacement(); updateControlsFromOptions(); invalidateAndRender();
+            keepCoordinateVisible([coordinate.lon, coordinate.lat]);
+            setEditableRequestStatus("Route point set from map.");
+          } catch (error) { showError(error.message); }
           return;
         }
 
         try {
-          appendMapIntent(coordinate, assignActiveEndpoint);
+          addResolvedRouteLocation(coordinate, { assignEndpoint: assignActiveEndpoint });
           updateControlsFromOptions();
           invalidateAndRender();
           keepCoordinateVisible([coordinate.lon, coordinate.lat]);

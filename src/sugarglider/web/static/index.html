@@ -369,11 +369,15 @@
           <div class="route-dock-controls">
             <button id="undo-point-edit" type="button" aria-label="Undo route edit" disabled><span aria-hidden="true">↶</span><span class="visually-hidden">Undo</span></button>
             <button id="redo-point-edit" type="button" aria-label="Redo route edit" disabled><span aria-hidden="true">↷</span><span class="visually-hidden">Redo</span></button>
-            <label>Finish<span class="dock-choice"><span id="dock-finish-label" aria-hidden="true">Loop</span><select id="dock-finish" aria-label="Finish"><option value="loop">Loop</option><option value="point_to_point">Finish elsewhere</option></select></span></label>
-            <label>Order<span class="dock-choice"><span id="dock-order-label" aria-hidden="true">As tapped</span><select id="dock-order" aria-label="Order"><option value="fixed">As tapped</option><option value="optimize">Optimize stops</option></select></span></label>
+            <label><span class="visually-hidden">Finish</span><span class="dock-choice"><span id="dock-finish-label" aria-hidden="true">Loop</span><select id="dock-finish" aria-label="Finish"><option value="loop">Loop</option><option value="point_to_point">Finish elsewhere</option></select></span></label>
+            <label><span class="visually-hidden">Order</span><span class="dock-choice"><span id="dock-order-label" aria-hidden="true">As tapped</span><select id="dock-order" aria-label="Order"><option value="fixed">As tapped</option><option value="optimize">Optimize stops</option></select></span></label>
           </div>
           <div id="route-point-strip" class="route-point-strip" role="group" aria-label="Route points"></div>
-          <p id="route-dock-hint" class="route-dock-hint" aria-live="polite">Tap the map to choose Start</p>
+          <p id="route-dock-hint" class="visually-hidden" aria-live="polite">Tap the map to choose Start</p>
+          <p id="route-strip-help" class="visually-hidden"></p>
+          <div id="route-add-menu" class="route-dock-popover" popover="auto" role="dialog" aria-label="Add point"><button type="button" data-dock-action="choose-map">Choose on map</button></div>
+          <div id="route-drag-trash" class="route-drag-trash" role="region" aria-label="Remove stop drop target" hidden>Remove</div>
+          <p id="route-drag-status" class="visually-hidden" role="status" aria-live="polite"></p>
           <section id="map-route-intent" class="visually-hidden" aria-label="Route summary" aria-live="polite"><strong id="map-route-summary"></strong><p id="map-route-help"></p></section>
           <section id="route-quick-editor" class="route-quick-editor" aria-label="Selected route point" hidden></section>
           <div id="map-edit-notice" class="map-edit-notice hidden" role="status"><p id="map-edit-guidance"></p><button id="cancel-point-placement" class="button secondary" type="button">Cancel</button></div>
