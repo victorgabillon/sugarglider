@@ -1,0 +1,9 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Map legibility policy</title>
+<link rel="stylesheet" href="/static/vendor/maplibre-gl-6.4.1/maplibre-gl.css">
+<link rel="stylesheet" href="/static/styles.css">
+<div id="map" style="width:900px;height:650px"></div><pre id="result">running</pre>
+<script type="module">
+import {run} from './map_legibility_harness.js';
+try {const cases=await run();result.dataset.status='passed';result.textContent=JSON.stringify(cases)}
+catch(e){result.dataset.status='failed';result.textContent=e.stack}
+</script></html>

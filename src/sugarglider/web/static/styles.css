@@ -1000,3 +1000,12 @@ body.outing-mode .route-dock { display: none; }
   .point-dragging .route-quick-editor > button { visibility: hidden; }
 }
 .route-dock .dock-choice select, .route-dock .dock-choice select:disabled { opacity: 0; }
+
+/* Priority details stay readable above the route dock, including short maps. */
+.map-panel:has(.priority-place-popup) .map-empty-state { display: none; }
+.priority-place-popup .maplibregl-popup-close-button { width: 44px; height: 44px; background: #fffdf7; border-radius: 0 8px 0 8px; font-size: 24px; z-index: 1; }
+.priority-place-popup .place-popup h3 { padding-right: 40px; }
+.priority-place-popup .place-details-heading img { max-height: max(32px, min(84px, calc(var(--priority-popup-height, 320px) - 24px))); }
+@container planning-map (max-height: 450px) {
+  .priority-place-popup .place-details { padding: 6px 8px; }
+}

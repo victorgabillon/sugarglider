@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v54_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v55_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v54"
+    assert generation.group(1) == "v55"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -233,7 +233,7 @@ def test_shared_shell_generation_tracks_v54_cached_assets() -> None:
             "5e7ca9b810851ab81baf2a365e43f2a6aab7a89015e59a7dfe29fea3f4581c83"
         ),
         "place_presentation.js": (
-            "e246706ff8260c188cbbebc7fc5ab31657168893cbf0542ef59135d5749613e3"
+            "e2cf0c4c179db6f0eb58ab3236747d9dceeb268eee4bf3188907f8f32005cffa"
         ),
         "local_places.js": (
             "7c5297aa221f4b6795e3fa968b7523713d7c76b0a0a420a868141a81a303ab08"
@@ -293,9 +293,9 @@ def test_shared_shell_generation_tracks_v54_cached_assets() -> None:
         "state.js": (
             "4d863a1f6a2e87bb7f29ce4fc4dbb336473d12578fcff2aa339b5ce99bc08c4b"
         ),
-        "map.js": ("2fc7ea4245c604738f084e7cbd5861aa352daad62626b08f03b41fefbb8f7b2f"),
+        "map.js": ("e27059d75c826693a2628cf3554427e5b01304f7dd4305ae70aa2e2c07ca73c0"),
         "styles.css": (
-            "fd78cf9ee2000f352511e69cb17e34c328cab62a5681f4d4eba74edaa5c80c47"
+            "0a324dd1aa9072998ef2c28f91b78397aaac98b21d94066f577454d061512406"
         ),
         "planner_profile.js": (
             "4183a1318f3aa49df52ca0a46329caaa4f6eee1bec1b49612c446562b1b0030a"

@@ -1,4 +1,5 @@
 import * as packagedMapLibre from "./vendor/maplibre-gl-6.4.1/maplibre-gl.mjs";
+import { offlineBasemapPresentationLayer } from "./offline_label_policy.js";
 import {
   createMapPackStore,
 } from "./map_pack_store.js";
@@ -454,8 +455,9 @@ function installLocalBasemap(map, opened) {
     maxzoom: manifest.max_zoom,
   });
   const beforeId = firstOverlayLayerId(map);
-  for (const original of protomapsLayers(LOCAL_SOURCE_ID, namedFlavor("light"))) {
-    if (original.type === "symbol" || original.type === "background") continue;
+  for (const generated of protomapsLayers(LOCAL_SOURCE_ID, namedFlavor("light"), { lang: "fr" })) {
+    const original = offlineBasemapPresentationLayer(generated);
+    if (!original) continue;
     const layer = {
       ...original,
       id: `${LOCAL_LAYER_PREFIX}${original.id}`,
