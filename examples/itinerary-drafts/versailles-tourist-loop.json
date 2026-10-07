@@ -1,0 +1,42 @@
+{
+  "format": "sugarglider_itinerary_draft",
+  "version": 1,
+  "name": "Versailles gardens and arboretum",
+  "activity": "trail_run",
+  "topology": "loop",
+  "target_distance_km": 15,
+  "tolerance_km": 2,
+  "start": {
+    "name": "Versailles Château Rive Gauche",
+    "lat": 48.8002,
+    "lon": 2.129
+  },
+  "end": null,
+  "stops": [
+    {
+      "name": "Orangerie",
+      "lat": 48.8031494,
+      "lon": 2.1189913,
+      "reason": "Historic garden architecture beside the palace"
+    },
+    {
+      "name": "Bassin de Neptune",
+      "lat": 48.8086904,
+      "lon": 2.1222321137897056,
+      "reason": "An ornamental basin in the palace gardens"
+    },
+    {
+      "name": "Trianon-sous-Bois entrance",
+      "lat": 48.8153952,
+      "lon": 2.1043618,
+      "reason": "A mapped entrance near the Trianon buildings"
+    },
+    {
+      "name": "Bosquet de l'Atlas",
+      "lat": 48.8215971,
+      "lon": 2.112409,
+      "reason": "A named collection in the arboretum"
+    }
+  ],
+  "order": "optimize"
+}

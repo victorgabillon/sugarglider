@@ -4,6 +4,21 @@
 // UI selection alone must not change coordinates or invalidate a returned route.
 import { emptyOutingLiveState } from "./outing_live_state.js";
 
+// One immutable authority for a fresh Waypoint Route, including draft conversion.
+export const WAYPOINT_PRODUCT_DEFAULTS = Object.freeze({
+  name: "Sugarglider route",
+  targetDistanceKm: 20,
+  toleranceKm: 2,
+  maximumDistanceKm: null,
+  distancePriority: "flexible",
+  candidateCount: 3,
+  seed: 0,
+  waypointOrder: "fixed",
+  pathSelectionMode: "shortest",
+  naturePreference: "off",
+  loopGeometryPreference: "off",
+});
+
 export const state = {
   plan: {
     schema_version: 1,
@@ -53,19 +68,7 @@ export const state = {
   },
   autoTourOptions: null,
   importDiagnostics: null,
-  waypointOptions: {
-    name: "Sugarglider route",
-    targetDistanceKm: 20,
-    toleranceKm: 2,
-    maximumDistanceKm: null,
-    distancePriority: "flexible",
-    candidateCount: 3,
-    seed: 0,
-    waypointOrder: "fixed",
-    pathSelectionMode: "shortest",
-    naturePreference: "off",
-    loopGeometryPreference: "off",
-  },
+  waypointOptions: { ...WAYPOINT_PRODUCT_DEFAULTS },
   generationResult: null,
   resultsInvalidated: false, // Presentation notice only; never stores a candidate.
   generationSourceRequest: null,

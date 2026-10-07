@@ -28,6 +28,8 @@ format.js
 gpx.js
 icons.js
 index.html
+itinerary_dialog.js
+itinerary_draft.js
 local_analysis_templates.js
 local_auto_tour.js
 local_candidate_enrichment.js

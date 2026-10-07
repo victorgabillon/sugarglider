@@ -1,3 +1,5 @@
+import { initializeItineraryDialog } from "./itinerary_dialog.js";
+import { validateLocalWaypointRouteRequest, LOCAL_WAYPOINT_MAX_WAYPOINTS } from "./local_waypoint_route.js";
 import { renderRouteDock } from "./route_dock.js";
 import { addResolvedRouteLocation, replaceResolvedRouteLocation } from "./route_point_acquisition.js";
 import { reconcileAutomaticIntent, hasDiscoveryIntent, routeIntentPresentation, rememberPointEdit, undoPointEdit, clearPointUndo, pointUndoLabel, redoPointEdit, changeMapTopology } from "./automatic_intent.js";
@@ -1757,6 +1759,7 @@ function renderStatus() {
       ? "On-device suggestions support loops from Start, without required interior points or imported stops. Other settings are kept and unsupported requests report an error."
       : "On-device connections support exact points and shortest paths, with nature and loop preferences off. Unsupported choices report an error; your points are not weakened."
     : "Choose a loop back to Start, or a point-to-point route with a destination. Available activities use the routing service.";
+  byId("import-itinerary").disabled = readOnly || running;
   byId("generate").disabled = readOnly || running || !availability.enabled;
   byId("generate-top").disabled = byId("generate").disabled;
   byId("cancel").classList.toggle("hidden", !running);
@@ -2348,53 +2351,7 @@ function applyCanonicalRequestState(value, options = {}) {
 async function importRequest(file) {
   if (isSavedRouteSnapshotDisplay()) return;
   try {
-    const imported = normalizeImportedRequest(JSON.parse(await file.text()));
-    state.planningMode = imported.canonical.kind;
-    state.planningStrategy = imported.canonical.kind;
-    clearPointUndo();
-    state.routingProfile = imported.canonical.routing_profile;
-    document.querySelectorAll('input[name="planning-mode"]').forEach((input) => {
-      input.checked = input.value === state.planningMode;
-    });
-    state.options = imported.options;
-    if (state.planningMode === "auto_tour") {
-      if (!imported.autoTourStart) throw new Error("The suggested-route plan needs a valid Start.");
-      state.autoTour.start = imported.autoTourStart;
-      state.autoTour.end = imported.end;
-      state.autoTour.hardPoints = imported.hardPoints;
-      state.autoTour.requestedPlaces = imported.requestedPlaces;
-      state.importDiagnostics = imported.importDiagnostics;
-      state.autoTour.maximumDistanceKm = imported.maximumDistanceKm;
-      state.autoTour.routeTopology = imported.routeTopology;
-      state.autoTour.preferredPoiIds = [
-        ...(imported.canonical.preferred_discovered_poi_ids ?? []),
-      ];
-      state.autoTour.distancePriority = imported.canonical.distance_objective.priority;
-      state.autoTour.directionPreference = imported.canonical.preferences.direction;
-      state.autoTour.scenicPreference = imported.canonical.preferences.scenic;
-      state.autoTour.drinkingWaterPreference = imported.canonical.preferences.drinking_water;
-      state.autoTourOptions = { ...imported.options };
-      state.points = [state.autoTour.start, ...state.autoTour.hardPoints].filter(Boolean);
-      state.selectedPointIndex = state.points.length ? 0 : null;
-      state.selectedRequestedPlaceId = null;
-      state.pendingRequestedPlacePopupId = null;
-    } else {
-      state.points = imported.points;
-      state.waypointPoints = [...imported.points];
-      state.waypointEndpoints.start = imported.start;
-      state.waypointEndpoints.end = imported.end;
-      state.waypointEndpoints.routeTopology = imported.routeTopology;
-      state.selectedPointIndex = state.points.length ? 0 : null;
-    }
-    state.plan = {
-      schema_version: 1,
-      kind: imported.canonical.kind,
-      common: null,
-      auto_tour: null,
-      waypoint_route: null,
-    };
-    state.pendingPointPopupIndex = null;
-    updateControlsFromOptions();
+    const imported = applyCanonicalRequestState(JSON.parse(await file.text()));
     invalidateAndRender();
     setEditableRequestStatus(state.planningMode === "auto_tour"
       ? `${file.name} loaded. ${state.importDiagnostics.supplied_location_count} supplied locations: ${state.importDiagnostics.consumed_as_start_count} START, ${state.importDiagnostics.consumed_as_end_count} END, ${state.autoTour.requestedPlaces.length} requested places; ${state.importDiagnostics.discarded_count} discarded.`
@@ -2786,6 +2743,38 @@ function bindEvents() {
       invalidateAndRender();
     });
   }
+  initializeItineraryDialog({
+    root: byId("itinerary-dialog"), launcher: byId("import-itinerary"),
+    maximumStops: () => state.config?.max_required_points ?? 30,
+    capability: (request) => {
+      const profile = state.routingProfileCatalog?.profiles.find(status => status.profile.id === request.routing_profile);
+      if (!localPlanner) return profile?.available
+        ? "Uses the routing service when you explicitly Generate."
+        : "This activity is currently unavailable. The itinerary can be imported; generation will report the limitation.";
+      const limitations = [];
+      try { validateLocalWaypointRouteRequest(request); }
+      catch (error) { limitations.push(`This itinerary cannot generate on device: ${friendlyLabel(error.code)}.`); }
+      if (regionPlanningError) limitations.push(regionFailureMessage(regionPlanningError));
+      else if (!localRouteCapabilities?.enabled) limitations.push("On-device routing is unavailable in this app build.");
+      else if (!localRouteCapabilities.installed_pack_count) limitations.push("Download a supported offline region before generating.");
+      else if (!profile?.available) limitations.push("This activity is unavailable in the installed region.");
+      return `On-device connections accept up to ${LOCAL_WAYPOINT_MAX_WAYPOINTS} interior stops. Local paths are experimental and differ from server routing. ${limitations.join(" ")} All stops and exact constraints will be preserved.`;
+    },
+    promptSettings: () => ({ start: activeEndpoints().start, end: activeEndpoints().end,
+      topology: activeEndpoints().routeTopology, activity: state.routingProfile,
+      target_distance_km: state.options.targetDistanceKm, tolerance_km: state.options.toleranceKm }),
+    canImport: () => !isImmutableSnapshotDisplay() && !["running", "reversing"].includes(state.request.status),
+    onImport: (request, draft) => {
+      const imported = applyCanonicalRequestState(request);
+      state.points.forEach((point, index) => {
+        if (draft.stops[index].reason) point.itineraryReason = draft.stops[index].reason;
+      });
+      invalidateAndRender();
+      setEditableRequestStatus("Itinerary imported. Review the locations on the map, then Generate when ready.");
+      appShell?.show("plan");
+      fitCoordinates([imported.start, ...state.points, imported.end].filter(Boolean).map(point => [point.lon, point.lat]));
+    },
+  });
   byId("request-file").addEventListener("change", (event) => {
     const file = event.target.files[0];
     if (file) importRequest(file);

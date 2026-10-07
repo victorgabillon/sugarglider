@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>Itinerary draft harness</title>
+  <pre id="result">running</pre>
+  <script type="module">
+    import { runItineraryDraftHarness } from "./itinerary_draft_harness.js";
+    const result = document.getElementById("result");
+    window.addEventListener("unhandledrejection", (event) => {
+      result.dataset.status = "failed";
+      result.textContent = String(event.reason);
+    });
+    try {
+      const scenarios = await runItineraryDraftHarness();
+      if (result.dataset.status !== "failed") {
+        result.dataset.status = "passed";
+        result.textContent = JSON.stringify(scenarios);
+      }
+    } catch (error) {
+      result.dataset.status = "failed";
+      result.textContent = error.stack ?? String(error);
+    }
+  </script>
+</html>

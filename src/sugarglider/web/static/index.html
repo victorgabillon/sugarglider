@@ -99,6 +99,28 @@
       </form>
     </dialog>
 
+    <dialog id="itinerary-dialog" class="itinerary-dialog" aria-labelledby="itinerary-title" aria-describedby="itinerary-introduction">
+      <div class="itinerary-header"><h2 id="itinerary-title">Import itinerary</h2></div>
+      <div class="itinerary-body">
+        <p id="itinerary-introduction">Sugarglider does not contact an AI service. Paste itinerary JSON generated elsewhere, or choose a JSON file.</p>
+        <section id="itinerary-input-stage">
+          <label for="itinerary-text">Itinerary draft JSON</label>
+          <p id="itinerary-text-help" class="field-help">One version 1 JSON object, optionally in a JSON code fence. Maximum 64 KiB.</p>
+          <textarea id="itinerary-text" rows="9" aria-describedby="itinerary-text-help" spellcheck="false"></textarea>
+          <button id="itinerary-choose-file" class="button secondary" type="button">Choose JSON file</button>
+          <label for="itinerary-file" class="visually-hidden">Choose itinerary JSON file</label><input id="itinerary-file" type="file" hidden accept="application/json,.json">
+          <details class="itinerary-prompt-helper"><summary>Create prompt for an assistant</summary>
+            <p class="field-help">Build a prompt locally, then inspect or edit it. Copying may include your chosen Start coordinates. Nothing is sent automatically.</p>
+            <button id="itinerary-create-prompt" class="button secondary" type="button">Create prompt</button>
+            <div id="itinerary-prompt-area" hidden><label for="itinerary-prompt">Editable assistant prompt</label><textarea id="itinerary-prompt" rows="8" spellcheck="false"></textarea><button id="itinerary-copy-prompt" class="button secondary" type="button">Copy prompt</button><p id="itinerary-copy-status" class="field-help" role="status"></p></div>
+          </details>
+        </section>
+        <section id="itinerary-review-stage" hidden aria-label="Review itinerary"><div id="itinerary-preview"></div><p class="itinerary-warning">Coordinates came from an external source and are not verified by Sugarglider. Review the locations on the map before relying on the route.</p><p id="itinerary-capability" class="field-help"></p></section>
+        <p id="itinerary-error" class="validation" role="alert" aria-live="assertive" aria-atomic="true"></p>
+      </div>
+      <div class="itinerary-actions"><button id="itinerary-cancel" class="button secondary" type="button">Cancel</button><button id="itinerary-back" class="button secondary" type="button" hidden>Back</button><button id="itinerary-review" class="button primary" type="button">Review itinerary</button><button id="itinerary-confirm" class="button primary" type="button" hidden>Import itinerary</button></div>
+    </dialog>
+
     <section id="error-banner" class="notice error hidden" role="alert" aria-live="assertive" aria-atomic="true" aria-labelledby="error-title">
       <div class="notice-mark" aria-hidden="true">!</div>
       <div class="notice-copy">
@@ -218,6 +240,7 @@
         </div>
 
         <div class="plan-readiness"><p id="planning-readiness" class="field-help" role="status">Checking routing availability…</p><button id="plan-regions" class="text-button hidden" type="button">Regions</button></div>
+        <div class="itinerary-launch"><button id="import-itinerary" class="button secondary" type="button">Import itinerary</button><p class="field-help">Paste named places from an external assistant or a JSON file.</p></div>
         <form id="route-form" novalidate>
           <label class="plan-activity">Activity<select id="profile" aria-describedby="profile-description"></select></label>
           <label class="plan-distance">Distance (km)<input id="target-distance" type="number" min="1" max="200" step="0.1" value="20" required></label>
