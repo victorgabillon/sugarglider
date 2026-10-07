@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v52_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v54_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v52"
+    assert generation.group(1) == "v54"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -172,6 +172,10 @@ def test_shared_shell_generation_tracks_v52_cached_assets() -> None:
             "app.js",
             "app_shell.js",
             "automatic_intent.js",
+            "route_edit_history.js",
+            "route_dock.js",
+            "route_point_drag.js",
+            "route_point_acquisition.js",
             "map_viewport.js",
             "route_results.js",
             "waypoint_editor.js",
@@ -213,8 +217,20 @@ def test_shared_shell_generation_tracks_v52_cached_assets() -> None:
             "public_profile_metadata.js",
         )
     } == {
+        "route_dock.js": (
+            "14dfa3e9d2711d5b5b65799d848505ec6e43a0c16b82ce8bdb754b40bb350344"
+        ),
+        "route_point_drag.js": (
+            "a61aa834611a65ca108fbedf9645ae6f5a6188c15ba48795b0417e6489808862"
+        ),
+        "route_point_acquisition.js": (
+            "a3d96403ec07bafb5f490dd3983670558e0f344eb4a1110e87e1c75ce4f43e28"
+        ),
+        "route_edit_history.js": (
+            "7fb0be59fb37419d41bab341162c222d38f066e0c69c4037db3dcf4b3bfed58b"
+        ),
         "automatic_intent.js": (
-            "aa8cde612dda75a546144df4b7aad2d96f0706f5bdf2fa1bf7799ac55f5a739c"
+            "5e7ca9b810851ab81baf2a365e43f2a6aab7a89015e59a7dfe29fea3f4581c83"
         ),
         "place_presentation.js": (
             "e246706ff8260c188cbbebc7fc5ab31657168893cbf0542ef59135d5749613e3"
@@ -250,9 +266,9 @@ def test_shared_shell_generation_tracks_v52_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "8c8d1b1296188c82e0aee78a312018476f518ddb6f5d5ff4407dc1d54bd94d19"
+            "4b25335efde9fbb6d5d82148b01e8a4c83d7ebf54c63272f69d9ffaaabc52e9b"
         ),
-        "app.js": ("8ffcc8317f2fa41078e700c921992181c91a0649003bf7c27b4e962c933397f4"),
+        "app.js": ("fbf3489c2849ecbe31db71620b16258d527f9f966c38f77232515a4f0d64296f"),
         "region_screen.js": (
             "0cf6d527a0ea957e0222a31a8ffa2ee1d1a24b2118628c6fd70e4dbd9d5371c5"
         ),
@@ -263,7 +279,7 @@ def test_shared_shell_generation_tracks_v52_cached_assets() -> None:
             "cb2671c7d5c5905f5905942d7620c4bf2b98a57771165134275668faea965a25"
         ),
         "waypoint_editor.js": (
-            "cc114f5890551599be7dad8385e14f951be523f19dcd6848de8c9a91cefb7cf5"
+            "7d2a8689dd9e79bfde9eedfba9390e26127dd162b18c481eef4b357eb17252c8"
         ),
         "route_results.js": (
             "2c77c0f3ef38b605a2858341e992a93fbc9c4c49cf77d3ba2ec6aab7f1076480"
@@ -277,9 +293,9 @@ def test_shared_shell_generation_tracks_v52_cached_assets() -> None:
         "state.js": (
             "4d863a1f6a2e87bb7f29ce4fc4dbb336473d12578fcff2aa339b5ce99bc08c4b"
         ),
-        "map.js": ("bd512d9bdc66272b6e790ab12cb2f3f0d20b57901959f0c564afc8578d2f1d59"),
+        "map.js": ("2fc7ea4245c604738f084e7cbd5861aa352daad62626b08f03b41fefbb8f7b2f"),
         "styles.css": (
-            "a645ce23e3e75150bf15db63b2257685a2e21a0b216c0ff367541fa93d1cd47c"
+            "fd78cf9ee2000f352511e69cb17e34c328cab62a5681f4d4eba74edaa5c80c47"
         ),
         "planner_profile.js": (
             "4183a1318f3aa49df52ca0a46329caaa4f6eee1bec1b49612c446562b1b0030a"

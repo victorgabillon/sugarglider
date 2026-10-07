@@ -6,7 +6,7 @@ export const constraintLabels = Object.freeze({
   best_effort: "Best effort",
 });
 
-export function renderWaypointEditor({ list, points, selectedIndex, visitOrders, onSelect, onChange, onMove, onRemove, onPlace }) {
+export function renderWaypointEditor({ list, points, selectedIndex, visitOrders, reorderDisabled = false, onSelect, onChange, onMove, onRemove, onPlace }) {
   const document = list.ownerDocument;
   const active = list.contains(document.activeElement) ? document.activeElement : null;
   const focus = active ? { index: active.closest(".poi-row")?.dataset.pointIndex, field: active.dataset.field, action: active.dataset.action, select: active.classList.contains("point-select") } : null;
@@ -60,8 +60,8 @@ export function renderWaypointEditor({ list, points, selectedIndex, visitOrders,
       const actions = document.createElement("div"); actions.className = "stop-actions";
       for (const [action, text, handler, disabled] of [
         ["place", "Move on map", () => onPlace(index), false],
-        ["up", "Move earlier", () => onMove(index, index - 1), index === 0],
-        ["down", "Move later", () => onMove(index, index + 1), index === points.length - 1],
+        ["up", "Move earlier", () => onMove(index, index - 1), reorderDisabled || index === 0],
+        ["down", "Move later", () => onMove(index, index + 1), reorderDisabled || index === points.length - 1],
         ["remove", "Remove stop", () => onRemove(index), false],
       ]) {
         const actionButton = document.createElement("button"); actionButton.type = "button"; actionButton.className = "button secondary";

@@ -526,7 +526,9 @@ def test_frontend_exposes_topology_aware_endpoints_and_open_metrics() -> None:
     assert "assignRouteEndpoint" in app
     assert "renderEndpointTopologyControls" in app
     assert "generationAvailability" in app
-    assert "appendMapIntent" in app
+    assert "addResolvedRouteLocation" in app
+    acquisition = (STATIC_DIRECTORY / "route_point_acquisition.js").read_text()
+    assert "appendMapIntent(coordinate, assignEndpoint)" in acquisition
     assert "if (!latitudeValue || !longitudeValue) return null;" in app
     assert "End is the start for loop routes." in html
     assert 'id="hard-end-control" aria-hidden="true" hidden disabled' in html
@@ -554,7 +556,8 @@ def test_frontend_exposes_topology_aware_endpoints_and_open_metrics() -> None:
         "if (state.addPointMode)"
     )
     assert map_click.index("if (state.addPointMode)") < map_click.index(
-        "appendMapIntent(coordinate, assignActiveEndpoint)"
+        "addResolvedRouteLocation(coordinate, "
+        "{ assignEndpoint: assignActiveEndpoint });"
     )
 
 

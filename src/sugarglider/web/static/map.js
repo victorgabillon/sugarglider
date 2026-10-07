@@ -250,12 +250,6 @@ export function initializeMap(config, handlers) {
       );
       return;
     }
-    const labelLayers = [SELECTED_LABEL_LAYER, REQUIRED_LABEL_LAYER].filter((id) => map.getLayer(id));
-    const label = labelLayers.length ? map.queryRenderedFeatures(event.point, { layers: labelLayers })[0] : null;
-    if (label?.properties?.source_index !== undefined) {
-      requiredPointActivateHandler?.(Number(label.properties.source_index));
-      return;
-    }
     const requestedLayers = [
       REQUESTED_SELECTED_LAYER,
       REQUESTED_ORDER_LAYER,
@@ -290,6 +284,13 @@ export function initializeMap(config, handlers) {
       if (feature) {
         poiActivateHandler?.(feature.id);
       }
+      return;
+    }
+    // A mapped place remains inspection-only even beside a route label.
+    const labelLayers = [SELECTED_LABEL_LAYER, REQUIRED_LABEL_LAYER].filter((id) => map.getLayer(id));
+    const label = labelLayers.length ? map.queryRenderedFeatures(event.point, { layers: labelLayers })[0] : null;
+    if (label?.properties?.source_index !== undefined) {
+      requiredPointActivateHandler?.(Number(label.properties.source_index));
       return;
     }
     const cluster = map.getLayer(POI_CLUSTER_LAYER)
@@ -2335,10 +2336,13 @@ function endpointMarkerElement(kind, point) {
 
 export function renderHardEndpoints(start, end, handlers = {}) {
   if (!map) return;
+  const focusedKind = document.activeElement?.classList.contains("endpoint-marker")
+    ? document.activeElement.classList.contains("start") ? "start" : "end" : null;
   clearMarkers(endpointMarkers);
   for (const [kind, point] of [["start", start], ["end", end]]) {
     if (!validCoordinate(point)) continue;
     const element = endpointMarkerElement(kind, point);
+    element.disabled = Boolean(handlers.disabled);
     element.classList.toggle("selected", handlers.selectedKind === kind);
     element.setAttribute("aria-pressed", String(handlers.selectedKind === kind));
     element.addEventListener("click", (event) => {
@@ -2353,6 +2357,8 @@ export function renderHardEndpoints(start, end, handlers = {}) {
     })
       .setLngLat([point.lon, point.lat])
       .addTo(map);
+    element.setAttribute("aria-label", `${kind === "start" ? "Start" : "End"}: ${point.name || kind}`);
+    if (focusedKind === kind && !element.disabled) element.focus({ preventScroll: true });
     endpointMarkers.push(marker);
   }
 }
@@ -2533,6 +2539,7 @@ function renderRequiredLabels(entries, selectedIndex) {
 
 export function renderRequiredMarkers(points, visits, selectedIndex, popupIndex, disabled, handlers, firstIsStart = true) {
   if (!map) return;
+  const focusedIndex = document.activeElement?.classList.contains("required-marker") ? document.activeElement.dataset.pointIndex : null;
   clearMarkers(requiredMarkers);
   requiredPointActivateHandler = handlers.onActivate;
   const entries = orderedEntries(points, visits);
@@ -2575,6 +2582,7 @@ export function renderRequiredMarkers(points, visits, selectedIndex, popupIndex,
     });
     if (popupIndex === sourceIndex) marker.togglePopup();
     requiredMarkers.push(marker);
+    if (focusedIndex === String(sourceIndex) && !disabled) element.focus({ preventScroll: true });
   });
   renderRequiredLabels(entries, selectedIndex);
 }
@@ -2667,5 +2675,15 @@ export function resizeMap() { map?.resize(); }
 
 // Called only after a Plan layout resize, never from render or map movement.
 export function keepCoordinateVisible(coordinate) {
-  return keepMapCoordinateVisible(map, coordinate);
+  if (!map) return null;
+  keepMapCoordinateVisible(map, coordinate);
+  const dock = document.getElementById("route-dock");
+  if (dock?.getClientRects().length) {
+    const top = map.getContainer().getBoundingClientRect().top;
+    const bottom = Math.max(60, dock.getBoundingClientRect().top - top - 12);
+    const point = map.project(coordinate);
+    if (point.y > bottom) map.panBy([0, point.y - bottom], { duration: 0 });
+  }
+  const point = map.project(coordinate);
+  return { x: point.x, y: point.y };
 }

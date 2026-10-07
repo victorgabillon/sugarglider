@@ -1,4 +1,6 @@
-import { appendMapIntent, reconcileAutomaticIntent, hasDiscoveryIntent, routeIntentPresentation, rememberPointEdit, undoPointEdit, clearPointUndo, pointUndoLabel } from "./automatic_intent.js";
+import { renderRouteDock } from "./route_dock.js";
+import { addResolvedRouteLocation, replaceResolvedRouteLocation } from "./route_point_acquisition.js";
+import { reconcileAutomaticIntent, hasDiscoveryIntent, routeIntentPresentation, rememberPointEdit, undoPointEdit, clearPointUndo, pointUndoLabel, redoPointEdit, changeMapTopology } from "./automatic_intent.js";
 import { renderWaypointEditor } from "./waypoint_editor.js";
 import { renderRouteChoices, emptyResultsMarkup } from "./route_results.js";
 import { initializeAppShell } from "./app_shell.js";
@@ -291,6 +293,7 @@ function preferPoi(feature) {
     showError("Suggested routes support at most eight preferred places.");
     return;
   }
+  rememberPointEdit("Place preference added");
   state.autoTour.preferredPoiIds.push(feature.id);
   invalidateAndRender();
   setEditableRequestStatus(
@@ -356,6 +359,7 @@ function schedulePoiRefresh(bounds = currentViewportBounds()) {
 }
 
 function updateOptionsFromControls() {
+  changeMapTopology(byId("route-topology").value);
   state.routingProfile = byId("profile").value;
   state.options = readPlannerOptionsFromControls(byId);
   if (state.planningMode === "auto_tour") {
@@ -366,7 +370,6 @@ function updateOptionsFromControls() {
     state.autoTour.drinkingWaterPreference = byId("water-preference").value;
   }
   const routeTopology = byId("route-topology").value;
-  setRouteTopology(activeEndpoints(), routeTopology);
   if (routeTopology === "loop" && state.endpointSetMode === "end") {
     state.endpointSetMode = null;
   }
@@ -528,6 +531,7 @@ function endpointFromControls(kind) {
   const lon = Number(longitudeValue);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   return {
+    ...activeEndpoints()[kind],
     name: byId(`hard-${kind}-name`).value.trim() || `Hard ${kind}`,
     lat,
     lon,
@@ -561,7 +565,7 @@ function updateEndpointControls() {
   const orderSelect = byId("point-order-mode");
   if (state.planningMode === "waypoint_route") {
     const optimized = orderSelect.querySelector('option[data-optimized="true"]');
-    optimized.textContent = "Let Sugarglider order the stops";
+    optimized.textContent = "Optimize stops";
     orderSelect.value = state.options.waypointOrder;
   }
 }
@@ -659,6 +663,7 @@ function renderRequestedPlacesList() {
     remove.textContent = "Remove";
     remove.setAttribute("aria-label", `Remove requested place ${place.name}`);
     remove.addEventListener("click", () => {
+      rememberPointEdit("Requested place removed");
       state.autoTour.requestedPlaces = places.filter((_value, placeIndex) => placeIndex !== index);
       if (state.selectedRequestedPlaceId === id) {
         state.selectedRequestedPlaceId = null;
@@ -694,6 +699,7 @@ function renderRequestedPlacesList() {
     clearApproach.textContent = "Clear approach";
     clearApproach.disabled = !place.approachOverride;
     clearApproach.addEventListener("click", () => {
+      rememberPointEdit("Place approach cleared");
       place.approachOverride = null;
       invalidateAndRender();
     });
@@ -832,12 +838,11 @@ function activeMapPlacementGuidance() {
     return `Click the map to set your ${state.endpointSetMode} point.`;
   }
   if (state.movingPointIndex !== null) return `Choose a new position for ${pointDisplayName(state.points[state.movingPointIndex], state.movingPointIndex)}. Other points stay unchanged.`;
-  if (state.addPointMode) return state.planningMode === "waypoint_route" ? "Tap an empty map position to add one stop." : "Click the map to add a required point.";
+  if (state.addPointMode) return state.planningStrategy === "automatic" ? "Tap an empty map position to extend the route." : "Tap an empty map position to add one stop.";
   return "";
 }
 
-function invalidateAndRender({ preserveUndo = false } = {}) {
-  if (!preserveUndo) clearPointUndo();
+function invalidateAndRender() {
   if (reconcileAutomaticIntent()) updateControlsFromOptions();
   localPlanner?.invalidate();
   saveActivePoints();
@@ -929,7 +934,6 @@ function selectEndpoint(kind) {
   state.selectedEndpointKind = kind;
   state.selectedPointIndex = null;
   render();
-  appShell?.reveal(`#hard-${kind}-control`);
   const point = activeEndpoints()[kind];
   if (point) keepCoordinateVisible([point.lon, point.lat]);
 }
@@ -947,9 +951,10 @@ function renderPoiEditor() {
   if (state.planningMode !== "waypoint_route") return renderLegacyPoiEditor();
   renderWaypointEditor({
     list: byId("poi-list"), points: state.points, selectedIndex: state.selectedPointIndex,
-    visitOrders: candidateVisitOrders(),
+    visitOrders: candidateVisitOrders(), reorderDisabled: state.options.waypointOrder !== "fixed",
     onSelect: (index) => selectPoint(index),
     onChange: (index, field, value) => {
+      rememberPointEdit("Stop updated");
       clearPointPlacement();
       state.points[index] = { ...state.points[index], [field]: value };
       invalidateAndRender();
@@ -1012,6 +1017,7 @@ function renderLegacyPoiEditor() {
       if (field === "lon") { input.min = "-180"; input.max = "180"; input.step = "0.000001"; }
       input.addEventListener("focus", () => selectPoint(index));
       input.addEventListener("change", () => {
+        rememberPointEdit("Point updated");
         state.points[index] = {
           ...state.points[index],
           [field]: field === "name" ? input.value : Number(input.value),
@@ -1072,25 +1078,33 @@ function renderLegacyPoiEditor() {
 }
 
 function movePoint(from, to) {
-  if (to < 0 || to >= state.points.length) return;
+  if (isImmutableSnapshotDisplay() || ["running", "reversing"].includes(state.request.status)) return;
+  if (state.planningMode === "waypoint_route" && state.options.waypointOrder !== "fixed") return;
+  if (to < 0 || to >= state.points.length || from === to || !state.points[from]) return;
+  const focusPlan = byId("poi-list").contains(document.activeElement);
+  rememberPointEdit("Stop reordered");
   clearPointPlacement();
   const selectedPoint = state.selectedPointIndex === null ? null : state.points[state.selectedPointIndex];
   const [point] = state.points.splice(from, 1);
   state.points.splice(to, 0, point);
   state.selectedPointIndex = selectedPoint ? state.points.indexOf(selectedPoint) : null;
   invalidateAndRender();
-  byId("poi-list").querySelector(".poi-row.selected .point-select")?.focus({ preventScroll: true });
+  if (focusPlan) byId("poi-list").querySelector(".poi-row.selected .point-select")?.focus({ preventScroll: true });
 }
 
 function removePoint(index) {
+  if (isImmutableSnapshotDisplay() || ["running", "reversing"].includes(state.request.status)) return;
+  if (!state.points[index]) return;
+  const focusPlan = byId("poi-list").contains(document.activeElement);
   rememberPointEdit("Point removed");
   clearPointPlacement();
   if (state.planningMode === "auto_tour" && state.autoTour.start && index === 0) {
     saveActivePoints();
     state.autoTour.start = null;
     state.points = [...state.autoTour.hardPoints];
+    state.selectedEndpointKind = null;
     state.selectedPointIndex = state.points.length ? 0 : null;
-    invalidateAndRender({ preserveUndo: true });
+    invalidateAndRender();
     return;
   }
   const selectedPoint = state.selectedPointIndex === null ? null : state.points[state.selectedPointIndex];
@@ -1100,8 +1114,8 @@ function removePoint(index) {
   } else {
     state.selectedPointIndex = state.points.length ? Math.min(index, state.points.length - 1) : null;
   }
-  invalidateAndRender({ preserveUndo: true });
-  (byId("poi-list").querySelector(".poi-row.selected .point-select") ?? byId("add-point-mode")).focus({ preventScroll: true });
+  invalidateAndRender();
+  if (focusPlan) (byId("poi-list").querySelector(".poi-row.selected .point-select") ?? byId("add-point-mode")).focus({ preventScroll: true });
 }
 
 function renderMapData() {
@@ -1123,21 +1137,19 @@ function renderMapData() {
   renderRequiredMarkers(
     state.points,
     candidate?.diagnostics.details.required_waypoint_order,
-    state.selectedPointIndex,
+    state.selectedEndpointKind === "start" && state.planningMode === "auto_tour" ? 0 : state.selectedPointIndex,
     popupIndex,
     isImmutableSnapshotDisplay()
       || ["running", "reversing"].includes(state.request.status),
     {
       onDrag: (index, coordinate) => {
+        const start = state.planningMode === "auto_tour" && state.autoTour.start && index === 0;
+        replaceResolvedRouteLocation(start ? { endpoint: "start" } : { index }, coordinate, { assignEndpoint: assignActiveEndpoint });
         clearPointPlacement();
-        state.selectedEndpointKind = null;
-        state.points[index] = { ...state.points[index], ...coordinate };
-        state.selectedPointIndex = index;
         invalidateAndRender();
       },
       onActivate: (index) => selectPoint(index, {
-        scrollSelected: true,
-        requestPopup: true,
+        requestPopup: false,
       }),
     },
     state.planningMode === "auto_tour",
@@ -1146,7 +1158,8 @@ function renderMapData() {
   renderHardEndpoints(
     state.planningMode === "auto_tour" ? null : endpoints.start,
     endpoints.end,
-    { onActivate: selectEndpoint, selectedKind: state.selectedEndpointKind },
+    { onActivate: selectEndpoint, selectedKind: state.selectedEndpointKind,
+      disabled: isImmutableSnapshotDisplay() || ["running", "reversing"].includes(state.request.status) },
   );
   renderOptionalMarkers(candidate?.optional_points ?? []);
   renderImportedGpx(state.importedGpx);
@@ -1678,6 +1691,7 @@ function wireCompromiseActions(candidate) {
       if (!target) return;
       const stop = candidate.approximated_stops.find((value) => value.id === id);
       if (!stop) return;
+      rememberPointEdit("Stop constraint updated");
       const item = target.collection[target.index];
       if (button.dataset.compromiseAction === "remove") {
         target.collection.splice(target.index, 1);
@@ -1713,9 +1727,9 @@ function renderStatus() {
   byId("controls-title").textContent = "Plan";
   byId("map-route-intent").classList.toggle("hidden", running || readOnly || !activeEndpoints().start || Boolean(activeMapPlacementGuidance()));
   const undoLabel = pointUndoLabel();
-  for (const id of ["undo-point-edit", "undo-point-edit-plan"]) {
+  for (const id of ["undo-point-edit-plan"]) {
     byId(id).hidden = !undoLabel || running || readOnly;
-    byId(id).textContent = id === "undo-point-edit" ? "Undo" : `${undoLabel} · Undo`;
+    byId(id).textContent = `${undoLabel} · Undo`;
     byId(id).setAttribute("aria-label", `${undoLabel} · Undo`);
   }
   byId("generation-title").textContent = state.request.status === "reversing"
@@ -1773,6 +1787,19 @@ function renderStatus() {
     }
     if (localPlanner) localAvailabilityStatusText = placementGuidance || (!availability.enabled ? availability.reason : null);
   }
+  renderRouteDock({ root: byId("route-dock"), disabled: running || readOnly,
+    visits: selectedCandidate()?.diagnostics.details.required_waypoint_order ?? [],
+    onSelectPoint: selectPoint, onSelectEndpoint: selectEndpoint,
+    onClearSelection: () => { clearPointPlacement(); state.selectedPointIndex = null; state.selectedEndpointKind = null; render(); },
+    onMove: beginPointMove, onRemove: removePoint, onReorder: movePoint,
+    onMoveEndpoint: kind => byId(`set-hard-${kind}`).click(),
+    onClearEndpoint: kind => byId(`clear-hard-${kind}`).click(),
+    onChooseMap: () => {
+      clearPointPlacement(); state.addPointMode = true;
+      render(); appShell?.show("map", { focus: true });
+    },
+    onDetails: () => { appShell?.show("plan"); appShell?.reveal(state.selectedEndpointKind ? `#hard-${state.selectedEndpointKind}-control` : ".poi-row.selected"); },
+  });
 }
 
 function renderEmptyState() {
@@ -1866,7 +1893,6 @@ function validateRequestControls() {
 }
 
 async function generate() {
-  clearPointUndo();
   hideError();
   let request;
   try {
@@ -2608,6 +2634,7 @@ function failedExactPoint() {
 function updateFailedExactPoint(action) {
   const target = failedExactPoint();
   if (!target) return;
+  if (action !== "move") rememberPointEdit("Stop constraint updated");
   clearPointPlacement();
   state.selectedEndpointKind = null;
   const point = target.collection[target.index];
@@ -2657,7 +2684,28 @@ function updateFailedExactPoint(action) {
 }
 
 function bindEvents() {
-  byId("cancel-point-placement").addEventListener("click", () => { clearPointPlacement(); render(); appShell?.show("plan", { focus: true }); });
+  byId("redo-point-edit").addEventListener("click", () => {
+    if (redoPointEdit()) { updateControlsFromOptions(); invalidateAndRender(); }
+  });
+  byId("dock-finish").addEventListener("change", () => {
+    try { changeMapTopology(byId("dock-finish").value); updateControlsFromOptions(); invalidateAndRender(); }
+    catch (error) { render(); showError(error.message); }
+  });
+  byId("dock-order").addEventListener("change", () => {
+    rememberPointEdit("Visit order changed");
+    state.options.waypointOrder = byId("dock-order").value;
+    updateControlsFromOptions(); invalidateAndRender();
+  });
+  const dockPanel = byId("route-dock").closest(".map-panel");
+  const measureDock = () => {
+    dockPanel.style.setProperty("--route-dock-height", `${byId("route-dock").getBoundingClientRect().height}px`);
+    const attribution = dockPanel.querySelector(".maplibregl-ctrl-attrib");
+    dockPanel.style.setProperty("--route-attribution-clearance", `${Math.max(32, (attribution?.getBoundingClientRect().height ?? 0) + 18)}px`);
+  };
+  const dockObserver = new ResizeObserver(measureDock);
+  dockObserver.observe(byId("route-dock")); dockObserver.observe(dockPanel);
+  new MutationObserver(measureDock).observe(dockPanel, { childList: true, subtree: true });
+  byId("cancel-point-placement").addEventListener("click", () => { clearPointPlacement(); render(); appShell?.show("map"); });
   byId("dismiss-error").addEventListener("click", hideError);
   byId("error-use-nearest").addEventListener("click", () => updateFailedExactPoint("nearest"));
   byId("error-best-effort").addEventListener("click", () => updateFailedExactPoint("best_effort"));
@@ -2675,7 +2723,8 @@ function bindEvents() {
   }
   byId("route-form").addEventListener("change", (event) => {
     if (event.target.name === "planning-mode" || event.target.id.startsWith("hard-") || (event.target.closest("#planning-points") && event.target.id !== "point-order-mode")) return;
-    updateOptionsFromControls();
+    rememberPointEdit("Route settings changed");
+    try { updateOptionsFromControls(); } catch (error) { updateControlsFromOptions(); render(); showError(error.message); return; }
     if (event.target.id === "profile" && plannerProfilePreference) {
       void plannerProfilePreference.remember(state.routingProfile).then((persisted) => {
         if (!persisted) reportOptionalStorageFailure();
@@ -2686,13 +2735,14 @@ function bindEvents() {
   document.querySelectorAll('input[name="planning-mode"]').forEach((input) => {
     input.addEventListener("change", () => {
       if (!input.checked) return;
+      if (input.value === "automatic" && hasDiscoveryIntent()) {
+        showError("This plan has discovery-specific places.", "Keep Suggest a route to preserve them, or remove those choices before using Automatic.");
+        renderModeControls(); return;
+      }
+      rememberPointEdit("Planning choice changed");
       clearPointPlacement();
       updateOptionsFromControls();
       if (input.value === "automatic") {
-        if (hasDiscoveryIntent()) {
-          showError("This plan has discovery-specific places.", "Keep Suggest a route to preserve them, or remove those choices before using Automatic.");
-          renderModeControls(); return;
-        }
         state.planningStrategy = "automatic";
         reconcileAutomaticIntent();
       } else {
@@ -2708,15 +2758,11 @@ function bindEvents() {
       byId(`hard-${kind}-${suffix}`).addEventListener("change", () => {
         const point = endpointFromControls(kind);
         if (byId(`hard-${kind}-enabled`).checked && !point) return;
+        rememberPointEdit(`${kind === "start" ? "Start" : "End"} updated`);
         clearPointPlacement();
         assignActiveEndpoint(kind, point);
-        if (state.planningMode === "waypoint_route") {
-          state.selectedEndpointKind = point ? kind : null;
-          state.selectedPointIndex = null;
-        }
-        state.selectedPointIndex = kind === "start" && point && state.planningMode === "auto_tour"
-          ? 0
-          : state.selectedPointIndex;
+        state.selectedEndpointKind = point ? kind : null;
+        state.selectedPointIndex = null;
         invalidateAndRender();
       });
     }
@@ -2737,7 +2783,7 @@ function bindEvents() {
       assignActiveEndpoint(kind, null);
       if (state.selectedEndpointKind === kind) state.selectedEndpointKind = null;
       if (state.endpointSetMode === kind) state.endpointSetMode = null;
-      invalidateAndRender({ preserveUndo: true });
+      invalidateAndRender();
     });
   }
   byId("request-file").addEventListener("change", (event) => {
@@ -2776,6 +2822,7 @@ function bindEvents() {
   });
   byId("clear-points").addEventListener("click", () => {
     if (state.points.length > 1 && !window.confirm("Remove all mandatory points and generated results?")) return;
+    rememberPointEdit("Route points cleared");
     clearPointPlacement();
     state.points = [];
     if (state.planningMode === "auto_tour") {
@@ -3255,7 +3302,7 @@ async function start() {
             (value.id ?? requestedPlaceIdentifier(value, index))
             === state.settingRequestedApproachId
           ));
-          if (place) place.approachOverride = coordinate;
+          if (place) { rememberPointEdit("Place approach updated"); place.approachOverride = coordinate; }
           state.settingRequestedApproachId = null;
           invalidateAndRender();
           setEditableRequestStatus("Requested-place approach set from map.");
@@ -3263,12 +3310,8 @@ async function start() {
         }
         if (state.endpointSetMode) {
           const kind = state.endpointSetMode;
-          const existing = activeEndpoints()[kind];
-          assignActiveEndpoint(kind, {
-            name: byId(`hard-${kind}-name`).value.trim()
-              || existing?.name
-              || `Hard ${kind}`,
-            ...coordinate,
+          replaceResolvedRouteLocation({ endpoint: kind }, coordinate, {
+            assignEndpoint: assignActiveEndpoint, name: byId(`hard-${kind}-name`).value.trim(),
           });
           state.endpointSetMode = null;
           byId(`set-hard-${kind}`).textContent = "Set on map";
@@ -3276,59 +3319,34 @@ async function start() {
           setEditableRequestStatus(
             `${kind === "start" ? "Start" : "End"} point set from map.`,
           );
-          if (state.planningMode === "waypoint_route") appShell?.reveal(`#hard-${kind}-control`);
+
           return;
         }
         if (state.movingPointIndex !== null) {
           const index = state.movingPointIndex;
-          if (state.points[index]) state.points[index] = { ...state.points[index], ...coordinate };
+          replaceResolvedRouteLocation({ index }, coordinate);
           clearPointPlacement();
           invalidateAndRender();
-          appShell?.reveal(".poi-row.selected");
+
           setEditableRequestStatus("Stop moved. Generate again to use the new position.");
           return;
         }
         if (state.addPointMode) {
-          const maximum = state.planningMode === "auto_tour"
-            ? 6 + Number(Boolean(state.autoTour.start))
-            : state.config.max_required_points;
-          if (state.points.length >= maximum) {
-            showError(state.planningMode === "auto_tour"
-              ? "The suggested route already has Start and the maximum six required points."
-              : "The route already has the maximum 30 mandatory points.");
-            return;
-          }
-          const nextOriginalIndex = state.points.reduce(
-            (highest, point) => Math.max(highest, Number.isInteger(point.originalIndex) ? point.originalIndex : -1),
-            -1,
-          ) + 1;
-          const point = {
-            name: state.planningMode === "auto_tour"
-              ? (state.points.length ? `Hard anchor ${state.points.length}` : "Start")
-              : `Point ${state.points.length + 1}`,
-            ...coordinate,
-            originalIndex: nextOriginalIndex,
-          };
-          if (state.planningMode === "auto_tour" && !state.autoTour.start) {
-            assignActiveEndpoint("start", point);
-          } else {
-            state.points.push(point);
-          }
-          state.selectedEndpointKind = null;
-          state.selectedPointIndex = state.points.length - 1;
-          state.addPointMode = false;
-          byId("add-point-mode").setAttribute("aria-pressed", "false");
-          byId("add-point-mode").lastChild.textContent = " Add on map";
-          invalidateAndRender();
-          setEditableRequestStatus("Required point set from map.");
-          if (state.planningMode === "waypoint_route") appShell?.reveal(".poi-row.selected");
+          try {
+            addResolvedRouteLocation(coordinate, { assignEndpoint: assignActiveEndpoint,
+              explicitStop: state.planningStrategy !== "automatic" });
+            clearPointPlacement(); updateControlsFromOptions(); invalidateAndRender();
+            keepCoordinateVisible([coordinate.lon, coordinate.lat]);
+            setEditableRequestStatus("Route point set from map.");
+          } catch (error) { showError(error.message); }
           return;
         }
 
         try {
-          appendMapIntent(coordinate, assignActiveEndpoint);
+          addResolvedRouteLocation(coordinate, { assignEndpoint: assignActiveEndpoint });
           updateControlsFromOptions();
-          invalidateAndRender({ preserveUndo: true });
+          invalidateAndRender();
+          keepCoordinateVisible([coordinate.lon, coordinate.lat]);
           setEditableRequestStatus("Ready to generate.");
         } catch (error) { showError(error.message); }
       },
