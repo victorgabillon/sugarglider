@@ -1,4 +1,11 @@
-"""Application service for shared outings with independent route snapshots."""
+"""Own outing membership and independent participant route snapshots.
+
+Each participant copies an immutable submitted route; there is no shared
+itinerary and no dependency on the source saved route remaining available.
+Owner, invitation and participant capabilities grant different operations and
+must not enter public snapshots. Live-backed removal delegates the membership
+change and tombstone to one repository transaction.
+"""
 
 from __future__ import annotations
 

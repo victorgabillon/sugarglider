@@ -1,4 +1,10 @@
-"""Fractional route attribution against the local projected nature index."""
+"""Attribute existing routed edges against the local projected nature index.
+
+Edge distances are already normalized to the routing backend's total. Primary
+classes partition that total, including unknown coverage; park/protected and
+near-water values are independent overlays. Intersection computes attribution,
+never replacement route geometry or an urban guess outside index coverage.
+"""
 
 import logging
 from collections.abc import Iterable

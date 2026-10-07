@@ -1,3 +1,6 @@
+// Own this page's worker requests for regional index loading and bounded queries.
+// Replies correlate to operation IDs; the region coordinator owns installation
+// and the planner owns intent. A discovery query must not mutate either one.
 import { RegionalDataError, freezeData } from "./regional_manifest.js";
 
 export function createLocalRegionClient({

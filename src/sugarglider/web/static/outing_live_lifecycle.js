@@ -1,3 +1,6 @@
+// Slug alone cannot identify a view lifetime: leaving and reopening the same
+// outing must invalidate old stream, recovery and membership callbacks.
+// The session object's identity and epoch jointly own current-page mutations.
 export function createOutingLiveLifecycle() {
   let epoch = 0;
   let current = null;

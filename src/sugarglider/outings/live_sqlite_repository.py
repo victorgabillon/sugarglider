@@ -74,6 +74,12 @@ class SQLiteOutingLiveRepository:
         return None if state is None else state.snapshot
 
     def get_live_stream_state(self, slug: str) -> OutingLiveStreamStateRecord | None:
+        """Read positions, durable cursor and replay bounds from one SQLite view.
+
+        Separate reads could advertise a reset cursor newer than the positions
+        being serialized, causing a reconnect to skip a committed update. The
+        cursor remains authoritative even after every replay row is pruned.
+        """
         try:
             with self._connection() as connection:
                 connection.isolation_level = None

@@ -14,11 +14,15 @@ import com.valhalla.valhalla.ValhallaException
 import com.valhalla.valhalla.ValhallaResponse
 import java.io.File
 
+/** Both build variants route on-device; no server URL selects an alternate engine. */
 internal object NativeRouteEngineFactory {
     fun create(context: Context): NativeRouteEngine = ValhallaMobileRouteEngine(context)
 }
 
 private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
+    // The application repository leases immutable regional files. Keep at most
+    // one current-pack actor; selecting a new pack must release the old actor's
+    // native resources rather than accumulating a process-wide graph cache.
     private val applicationContext = context.applicationContext
     private val repository = (applicationContext as SugargliderApplication).regionalRoutingRepository
     private val actorHolder = SingleCurrentRoutingPackActor(

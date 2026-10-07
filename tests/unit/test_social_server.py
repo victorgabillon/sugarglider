@@ -1,4 +1,9 @@
-"""Production social deployment contracts, using only in-process ASGI and SQLite."""
+"""Social factory/storage contracts using in-process ASGI and SQLite.
+
+These checks prove service composition and bounded persistence behavior, not
+public host deployment. No GraphHopper, regional input or external service is
+needed to construct and exercise the sharing application.
+"""
 
 import asyncio
 import json

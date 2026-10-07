@@ -176,6 +176,13 @@ def build_region(
     source_url: str | None = None,
     builder: ComponentBuilder = build_components,
 ) -> Path:
+    """Publish a new regional directory only after every component verifies.
+
+    The configured coverage and source identity bind all component builders to
+    one input. A private staging directory contains partial work, and the final
+    rename exposes only a verified manifest/component set. Existing outputs
+    are refused so a failed rebuild cannot damage a distributable region.
+    """
     spec = load_spec(root, region_id)
     output_root = contained_path(root, "data/offline-regions")
     output = contained_path(root, f"data/offline-regions/{spec.region_id}")

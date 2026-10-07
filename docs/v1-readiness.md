@@ -1,5 +1,9 @@
 # Android V1 readiness
 
+> Historical readiness ledger. Milestone status, artifact versions and deployment
+> statements below are time-scoped evidence, not the current capability matrix.
+> Start with [architecture](architecture.md) and its linked current guides.
+
 ## Immutable outcome
 
 Deliver a Google Play release candidate that installs normally, downloads at least

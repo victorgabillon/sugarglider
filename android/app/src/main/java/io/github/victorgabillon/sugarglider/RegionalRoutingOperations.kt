@@ -50,8 +50,14 @@ internal data class RegionalRoutingOperationStatus(
     val code: RegionalPackFailure? = null,
 )
 
-// One application-owned worker and one latest operation, with no durable queue.
-// Page invalidation requests cancellation; ownership lasts until file work ends.
+/**
+ * Serialize native install/inspect/remove work independently of page rendering.
+ * Owner plus operation identity controls polling and cancellation. The web region
+ * coordinator decides activation only after all components verify; completing a
+ * native archive transfer alone must not make a partially installed region ready.
+ * One application-owned worker retains only its latest operation, with no durable
+ * queue. Page invalidation cancels work; ownership lasts until file work ends.
+ */
 internal class RegionalRoutingOperations(
     private val executor: Executor,
     private val inspect: (RegionalRoutingPackReference) -> Unit,

@@ -1,4 +1,10 @@
-"""Strict canonical schema-version-1 planning requests."""
+"""Strict canonical schema-version-1 requests, independent of UI editing state.
+
+The discriminated kind selects Auto Tour or Waypoint Route, not a third
+automatic algorithm. Exact coordinates remain hard; approach/best-effort stops
+keep their explicit semantics. Unsupported intent must be rejected visibly,
+never erased by a compatibility adapter or a weakened retry.
+"""
 
 from typing import Annotated, Literal, Self
 
@@ -25,6 +31,8 @@ class CanonicalModel(ImmutableModel):
 
 
 class DistanceObjective(CanonicalModel):
+    # A maximum is hard for balanced/strict, while flexible keeps it as pressure.
+    # Strict additionally requires the complete target tolerance to fit inside it.
     target_m: Annotated[float, Field(ge=1_000, le=200_000)]
     tolerance_m: Annotated[float, Field(ge=100, le=10_000)]
     maximum_m: Annotated[float, Field(gt=0, le=200_000)] | None

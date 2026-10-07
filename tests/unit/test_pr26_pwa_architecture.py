@@ -239,7 +239,7 @@ def test_shared_shell_generation_tracks_v55_cached_assets() -> None:
             "7c5297aa221f4b6795e3fa968b7523713d7c76b0a0a420a868141a81a303ab08"
         ),
         "local_planner.js": (
-            "a2ea147a2cf3d987d38ac1f3b3980112984db3c3577ab8e171b6a9f53caaa20f"
+            "849b02b8f594400956eefdd61b99cc02eead3c92e9818e064a46bf4836c3e29b"
         ),
         "canonical_numbers.js": (
             "0c45121c5e89d9dcbd23c126740a7f3760e8c31f9683d8206b70c6d253e65a26"
@@ -291,7 +291,7 @@ def test_shared_shell_generation_tracks_v55_cached_assets() -> None:
             "aa3c203a3042fb812c1088adc60fa3f07585ef014aec9a8584895e660862a7eb"
         ),
         "state.js": (
-            "4d863a1f6a2e87bb7f29ce4fc4dbb336473d12578fcff2aa339b5ce99bc08c4b"
+            "e3589fa1ad19a08bbfd90bec1102934b197005c59cce6b952eddaf6ccccf3c42"
         ),
         "map.js": ("e27059d75c826693a2628cf3554427e5b01304f7dd4305ae70aa2e2c07ca73c0"),
         "styles.css": (
@@ -307,7 +307,7 @@ def test_shared_shell_generation_tracks_v55_cached_assets() -> None:
             "364b36d2750d24fd4b9e56b4cc8004fb98623eb26e3b0239749dbe6504a54a3b"
         ),
         "local_planning_context.js": (
-            "4daf16dd06654c1d4b857fd2b4497b87821c64aac9de0c73675b0b3a59add519"
+            "aa6a94b9eee2821d68881b29d84346e8cbb7039a0200db2b0abcb0fd8373c2cd"
         ),
         "local_auto_tour.js": (
             "2b4c13d1ca70538c28e766937756bc2bece5a852ec8880a06330e2b8cf71fc54"
@@ -319,7 +319,7 @@ def test_shared_shell_generation_tracks_v55_cached_assets() -> None:
             "50dcb3ec6a87cd3382dfc25d6b70b525191d6c8b310132901eb34cbd7f686efc"
         ),
         "local_region_client.js": (
-            "c111e281c60d0d0b4525c1f240641dca15888877e188467bba1416c4ae73ad5a"
+            "62b66cf3f6cbf5c5cef955343812970ca2fae49f2a277f673c6bdc13b605c2f5"
         ),
         "local_region_data.js": (
             "26a24c30d024a6d383e46eb3f90cc02246bab479851caa384c2b7ea2890b2c8a"

@@ -570,6 +570,8 @@ def project_geometry_edges(
     scale_factor = (
         route_distance_m / geometry_distance_m if geometry_distance_m > 0 else 0.0
     )
+    # Geometry lengths apportion the backend's authoritative distance. They do
+    # not supply replacement route geometry or override its reported total.
     normalized = [length * scale_factor for length in raw_lengths]
     if normalized:
         normalized[-1] = max(0.0, route_distance_m - sum(normalized[:-1]))
@@ -592,7 +594,7 @@ def known_edge_id(edge: ProjectedGeometryEdge) -> int | None:
 def repeated_edge_runs(
     edges: tuple[ProjectedGeometryEdge, ...],
 ) -> tuple[_EdgeRun, ...]:
-    """Return traversal runs using the exact public PR2 repetition semantics."""
+    """Group consecutive same-edge traversals, splitting at unknowns or reversal."""
     runs: list[_EdgeRun] = []
     current_id: int | None = None
     current_distance = 0.0

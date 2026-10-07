@@ -496,6 +496,8 @@ async def test_sse_resets_behind_empty_retained_window_but_not_at_durable_cursor
 def test_durable_cursor_survives_complete_purge_restart_and_count_pruning(
     tmp_path: Path,
 ) -> None:
+    # A cursor derived from remaining rows would rewind after pruning, allowing
+    # reconnects to skip new updates or reuse an already delivered event ID.
     _, repository, service, clock = _repositories(tmp_path)
     for sequence in range(5):
         service.update_position(

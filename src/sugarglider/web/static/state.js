@@ -1,3 +1,7 @@
+// Page-owned state separates editable drafts, returned candidates and immutable
+// snapshot display. Receipt capabilities stay in memory unless the participant
+// explicitly chooses Remember through the focused persistence module.
+// UI selection alone must not change coordinates or invalidate a returned route.
 import { emptyOutingLiveState } from "./outing_live_state.js";
 
 export const state = {
@@ -281,6 +285,8 @@ export function generationAvailability({
   return { enabled: true, reason: "" };
 }
 
+// Auto Tour's editor includes Start in points; Waypoint Route keeps endpoints
+// separately. Synchronize that representation before saving or inferring intent.
 export function saveActivePoints() {
   if (state.planningMode === "auto_tour") {
     if (state.autoTour.start) {
@@ -519,6 +525,8 @@ export function waypointPlanRequestSnapshot(planner) {
   return { schema_version: 1, kind: "waypoint_route", ...common, ...modeState };
 }
 
+// This synchronizes the active draft and derived plan mirror before serializing
+// the canonical request. Snapshot viewing never calls it to recreate a search.
 export function currentPlanRequest() {
   saveActivePoints();
   const endpoints = state.planningMode === "auto_tour"

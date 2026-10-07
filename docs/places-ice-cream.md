@@ -1,5 +1,9 @@
 # Places: ice-cream discovery
 
+> Delivery record and classifier specification. Publication/readiness statements
+> below belong to the named build; the current catalog advertises classifier-2 data.
+> See [regions and Places](regions-and-places.md) for current installation and UI behavior.
+
 Ice cream is a display-only category. Selecting it does not add a waypoint,
 change a route, or make an Auto Tour preference. The existing scenic/water
 preferences and nature analysis retain their semantics.

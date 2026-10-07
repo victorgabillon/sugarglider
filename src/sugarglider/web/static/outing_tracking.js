@@ -1,3 +1,7 @@
+// A user-started foreground session owns watches, timers, PUTs and clears by
+// generation. Publication is single-flight and retains only the latest sample.
+// Stop waits behind a definite active PUT outcome; an uncertain transport result
+// keeps the expiry warning and clear retry rather than claiming sharing ended.
 const PUBLICATION_INTERVAL_MS = 5_000;
 const INITIAL_RETRY_MS = 1_000;
 const MAXIMUM_RETRY_MS = 30_000;

@@ -31,7 +31,14 @@ class SearchBudgetExhaustedError(RuntimeError):
 
 
 class CachedRoutingGateway:
-    """Reserve on misses and cache both successful and failed backend calls."""
+    """Own all backend calls and their accounting for one planning request.
+
+    Cache identity includes the public profile and routing options. A repeated
+    failure is as reusable as a success: retrying it in another search phase
+    would spend budget and could change deterministic search outcomes. A miss
+    reserves capacity before calling the backend; rejection before that call
+    has its own counter and is not a cached backend failure.
+    """
 
     def __init__(self, backend: AutoTourRoutingBackend, budget: SearchBudget) -> None:
         self._backend = backend

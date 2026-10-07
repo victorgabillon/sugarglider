@@ -37,6 +37,13 @@ internal class ExecutorTaskScheduler : NativeTaskScheduler {
     }
 }
 
+/**
+ * Implement explicit native sharing behind the currently disabled release policy.
+ * One generation owns callbacks for one encrypted participant session and latest
+ * pending fix. Old callbacks cannot mutate a replacement session; authenticated
+ * not-found cleanup still removes its matching stored identity after Stop.
+ * Existence of this implementation does not enable a service or permission.
+ */
 internal class NativeTrackingEngine(
     private val store: SecureStateStore,
     private val publisher: NativeTrackingPublisher,

@@ -1,8 +1,10 @@
-"""Full bundled-page regression with real CDP pointer input.
+"""Bundled-page pointer fixture with isolated native/storage boundaries.
 
-Fixtures only replace native/storage boundaries. Use --app-root with the frozen
-checkout to prove it fails without editing it. HTTPS, Chrome profile and OPFS
-region fixtures are isolated from production.
+This historical helper still assumes older startup wording and control hit
+areas. It is not a current automatic-intent acceptance gate until those checks
+are repaired; use the browser harnesses and automatic_intent_acceptance.cjs for
+current intent coverage. --app-root can compare an unchanged checkout without
+editing it. HTTPS, Chrome profile and OPFS fixtures remain isolated from production.
 """
 
 from __future__ import annotations

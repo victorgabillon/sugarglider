@@ -1,5 +1,9 @@
 # Exact handoff for ChatGPT Work
 
+> Historical code-2 publication handoff. Preserve its exact-byte instructions as
+> evidence for that build; do not reuse its build identity as the current catalog.
+> See [regions and Places](regions-and-places.md) for current distribution ownership.
+
 The single block below is self-contained. No publication was performed by Codex.
 
 ```text
