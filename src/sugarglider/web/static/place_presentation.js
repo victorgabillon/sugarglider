@@ -12,17 +12,23 @@ export const PLACE_PRESENTATIONS = Object.freeze({
   drinking_water: category("Drinking water", "poi-water-verified", 10),
   fountain: category("Fountain", "poi-water-unknown", 10),
   water_tap: category("Water tap", "poi-water-unknown", 10),
-  ice_cream: category("Ice cream", "poi-ice-cream", 40, 13, 15, ICE_CREAM_ART_URL),
+  ice_cream: category("Ice cream", "poi-ice-cream", 40, 12, 15, ICE_CREAM_ART_URL),
 });
 
 export const ICE_CREAM_ICON_SVG = '<path d="m17 27 7 14 7-14Z" fill="#f4c48d" stroke="#873054" stroke-width="2.5" stroke-linejoin="round"/><path d="M14 23a10 10 0 0 1 20 0c4 1 3 7-1 7-2 0-3-1-4-2-2 3-7 3-9 0-4 4-10-1-6-5Z" fill="#f5a9c7" stroke="#873054" stroke-width="2.5"/>';
+
+export function isPriorityPlace(feature) {
+  return feature.category === "ice_cream"
+    || (feature.category === "drinking_water" && feature.potability === "verified");
+}
 
 export function placePresentation(feature) {
   const presentation = PLACE_PRESENTATIONS[feature.category];
   if (!presentation) return category("Mapped place", "poi-attraction");
   if (feature.potability === "non_potable") return { ...presentation, icon: "poi-water-nonpotable" };
   if (feature.potability === "unknown") return { ...presentation, icon: "poi-water-unknown" };
-  if (feature.potability === "verified") return { ...presentation, icon: "poi-water-verified" };
+  if (feature.potability === "verified") return { ...presentation, icon: "poi-water-verified",
+    ...(feature.category === "drinking_water" ? { minZoom: 13, labelZoom: 14 } : {}) };
   return presentation;
 }
 

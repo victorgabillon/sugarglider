@@ -56,6 +56,7 @@ map_pack_store.js
 map_viewport.js
 native_bridge_transport.js
 native_gpx_save.js
+offline_label_policy.js
 offline_map.js
 offline_region_catalog.json
 offline_snapshots.js
