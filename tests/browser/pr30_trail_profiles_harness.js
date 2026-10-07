@@ -246,7 +246,7 @@ async function profileMarkupScenario() {
   const radios = [...document.querySelectorAll(
     'input[name="trail-profile-avatar"]',
   )];
-  equal(radios.map((radio) => radio.value), AVATAR_KEYS, "five badge radios");
+  equal(radios.map((radio) => radio.value), AVATAR_KEYS, "six badge radios");
   for (const radio of radios) {
     const image = radio.closest("label")?.querySelector("img");
     const label = avatarDisplayLabel(radio.value);
@@ -269,13 +269,13 @@ function avatarFallbackScenario() {
   equal(normalizeAvatarKey("unknown"), DEFAULT_AVATAR_KEY, "unknown is blue");
   equal(
     AVATAR_KEYS.map((key) => avatarDisplayLabel(key)),
-    ["Lake", "Forest", "Vico", "Jime", "Lezca"],
+    ["Lake", "Forest", "Vico", "Jime", "Lezca", "Olivier"],
     "display labels do not change stable avatar keys",
   );
   equal(avatarDisplayLabel("unknown"), "Lake", "unknown label is Lake");
   equal(
     AVATAR_KEYS.map((key) => avatarDefaultName(key)),
-    [null, null, "Vico", "Jime", "Lezca"],
+    [null, null, "Vico", "Jime", "Lezca", "Olivier"],
     "only named badges supply default names",
   );
   equal(outingAvatarImageId("unknown"), "outing-avatar-blue", "map ID fallback");
@@ -287,8 +287,9 @@ function avatarFallbackScenario() {
       "outing-avatar-orange",
       "outing-avatar-tomato",
       "outing-avatar-mask",
+      "outing-avatar-olivier",
     ],
-    "five stable map image IDs",
+    "six stable map image IDs",
   );
   const blueOnly = (imageId) => imageId === "outing-avatar-blue";
   equal(

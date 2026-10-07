@@ -14,6 +14,7 @@ BADGE_HASHES = {
     "orange.png": "7341ee2b77171515e5308d924a82a1a78769d32134d8ea757457daffa7755df9",
     "tomato.png": "483bfee9e59dc914f0e634714c6990b972cea35eab66675ba43df72d4e29b129",
     "mask.png": "0cf50dc763279290f655daeeda6e4044fcbd319b799a6457109ac547204c7a24",
+    "olivier.png": "8dfb73bd42bb3ebeb53419b61032d7370611e077818829892425305657ef61a6",
 }
 AVATAR_LABELS = {
     "blue": "Lake",
@@ -21,6 +22,7 @@ AVATAR_LABELS = {
     "orange": "Vico",
     "tomato": "Jime",
     "mask": "Lezca",
+    "olivier": "Olivier",
 }
 AVATAR_DEFAULT_NAMES = {
     "blue": None,
@@ -28,6 +30,7 @@ AVATAR_DEFAULT_NAMES = {
     "orange": "Vico",
     "tomato": "Jime",
     "mask": "Lezca",
+    "olivier": "Olivier",
 }
 
 
@@ -51,7 +54,7 @@ def test_profile_shell_is_local_versioned_and_never_starts_tracking() -> None:
     assert 'id="setup-join-profile"' in html
     assert "Welcome to Sugarglider" in html
     assert "visible to anyone with the public link" in html
-    assert html.count('name="trail-profile-avatar"') == 5
+    assert html.count('name="trail-profile-avatar"') == 6
     for key, label in AVATAR_LABELS.items():
         assert f'value="{key}"' in html
         assert f"/static/brand/profile-badges/{key}.png" in html
@@ -148,7 +151,7 @@ def test_pr30_shell_cache_and_framework_free_harness_cover_new_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     harness = (ROOT / "tests/browser/pr30_trail_profiles_harness.js").read_text()
     html = (ROOT / "tests/browser/pr30_trail_profiles_harness.html").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v56`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v57`" in worker
     for name in BADGE_HASHES:
         assert f'"/static/brand/profile-badges/{name}"' in worker
     assert '"/static/avatar.js"' in worker
