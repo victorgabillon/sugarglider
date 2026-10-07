@@ -79,7 +79,7 @@ button:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity:
 .profile-privacy { color: var(--muted-text); line-height: 1.45; }
 .profile-badge-picker { min-width: 0; padding: 0; border: 0; }
 .profile-badge-picker legend { margin-bottom: .5rem; font-weight: 700; }
-.profile-badge-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .5rem; }
+.profile-badge-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .5rem; }
 .profile-badge-card { position: relative; display: grid; justify-items: center; gap: .25rem; padding: .45rem .3rem; border: 2px solid var(--border); border-radius: .75rem; background: var(--page-background); cursor: pointer; }
 .profile-badge-card:has(input:checked) { border-color: var(--primary-action); box-shadow: 0 0 0 2px rgb(33 75 59 / 18%); }
 .profile-badge-card:has(input:focus-visible) { outline: 3px solid var(--focus-ring); outline-offset: 2px; }

@@ -50,6 +50,7 @@ PROFILE_BADGE_FILENAMES = (
     "orange.png",
     "tomato.png",
     "mask.png",
+    "olivier.png",
 )
 GPS_CONTROL_FILENAMES = (
     "gps-recenter-default.png",

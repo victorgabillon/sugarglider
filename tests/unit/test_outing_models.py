@@ -46,9 +46,15 @@ def test_avatar_keys_are_strict_and_backward_compatible() -> None:
         display_name="Legacy",
         saved_route_slug=SLUG,
     )
+    olivier = OutingJoinRequest(
+        display_name="Olivier",
+        avatar_key="olivier",
+        saved_route_slug=SLUG,
+    )
     assert created.participant_avatar_key == "forest"
     assert joined.avatar_key == "mask"
     assert legacy_join.avatar_key == "blue"
+    assert olivier.avatar_key == "olivier"
     with pytest.raises(ValidationError):
         OutingCreateRequest(
             title="Outing",

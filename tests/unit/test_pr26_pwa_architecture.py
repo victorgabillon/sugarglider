@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v56_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v57_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v56"
+    assert generation.group(1) == "v57"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -274,7 +274,7 @@ def test_shared_shell_generation_tracks_v56_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "8e9bcef32679f1dde0c55f9610725439b955ba5216b63adb273a296ca7f9d652"
+            "da838bb70e3541379eb1c000f7abf69805493a6b428b6a7b68d6a357dcb7f472"
         ),
         "app.js": ("4bd9bb704c492d3b40f02c07f7def30507f1a6a62292b18ff9fcf251d00de893"),
         "region_screen.js": (
@@ -303,7 +303,7 @@ def test_shared_shell_generation_tracks_v56_cached_assets() -> None:
         ),
         "map.js": ("e27059d75c826693a2628cf3554427e5b01304f7dd4305ae70aa2e2c07ca73c0"),
         "styles.css": (
-            "6f25f2e15a652a7fcb7e54ba4b1cd02e0bd5def4f8df6682dceba8d3d9d7778f"
+            "fcf713876d3024a0dc1b396796fd017c6bc832de548d7fe6093345a21d3c784d"
         ),
         "planner_profile.js": (
             "4183a1318f3aa49df52ca0a46329caaa4f6eee1bec1b49612c446562b1b0030a"
