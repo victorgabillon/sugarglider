@@ -11,6 +11,7 @@ brand/gps-recenter-default.png
 brand/profile-badges/blue.png
 brand/profile-badges/forest.png
 brand/profile-badges/mask.png
+brand/profile-badges/olivier.png
 brand/profile-badges/orange.png
 brand/profile-badges/tomato.png
 brand/sugarglider-banner.png

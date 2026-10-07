@@ -6,6 +6,7 @@ export const AVATAR_KEYS = Object.freeze([
   "orange",
   "tomato",
   "mask",
+  "olivier",
 ]);
 
 export const AVATAR_LABELS = Object.freeze({
@@ -14,6 +15,7 @@ export const AVATAR_LABELS = Object.freeze({
   orange: "Vico",
   tomato: "Jime",
   mask: "Lezca",
+  olivier: "Olivier",
 });
 
 export const AVATAR_DEFAULT_NAMES = Object.freeze({
@@ -22,6 +24,7 @@ export const AVATAR_DEFAULT_NAMES = Object.freeze({
   orange: "Vico",
   tomato: "Jime",
   mask: "Lezca",
+  olivier: "Olivier",
 });
 
 const AVATAR_KEY_SET = new Set(AVATAR_KEYS);

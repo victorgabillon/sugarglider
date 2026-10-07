@@ -20,13 +20,14 @@ CapabilityToken = Annotated[str, Field(min_length=32, max_length=128)]
 OutingTitle = Annotated[str, Field(min_length=1, max_length=120)]
 ParticipantDisplayName = Annotated[str, Field(min_length=1, max_length=80)]
 SavedRouteSlugReference = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{20,64}$")]
-AvatarKey = Literal["blue", "forest", "orange", "tomato", "mask"]
+AvatarKey = Literal["blue", "forest", "orange", "tomato", "mask", "olivier"]
 AVATAR_KEYS: tuple[AvatarKey, ...] = (
     "blue",
     "forest",
     "orange",
     "tomato",
     "mask",
+    "olivier",
 )
 AVATAR_KEY_ADAPTER: TypeAdapter[AvatarKey] = TypeAdapter(AvatarKey)
 
