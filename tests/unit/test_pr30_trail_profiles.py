@@ -14,7 +14,7 @@ BADGE_HASHES = {
     "orange.png": "7341ee2b77171515e5308d924a82a1a78769d32134d8ea757457daffa7755df9",
     "tomato.png": "483bfee9e59dc914f0e634714c6990b972cea35eab66675ba43df72d4e29b129",
     "mask.png": "0cf50dc763279290f655daeeda6e4044fcbd319b799a6457109ac547204c7a24",
-    "olivier.png": "8dfb73bd42bb3ebeb53419b61032d7370611e077818829892425305657ef61a6",
+    "olivier.png": "144f9b9883163ff9ce5f6449add50cbec6bba2c7f76fe1f168ffa4c8065d16f2",
 }
 AVATAR_LABELS = {
     "blue": "Lake",

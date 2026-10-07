@@ -18,6 +18,7 @@ PROFILE_BADGE_FILENAMES: tuple[str, ...] = (
     "orange.png",
     "tomato.png",
     "mask.png",
+    "olivier.png",
 )
 GPS_CONTROL_FILENAMES: tuple[str, ...] = (
     "gps-recenter-default.png",
