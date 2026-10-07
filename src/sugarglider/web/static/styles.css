@@ -1009,3 +1009,33 @@ body.outing-mode .route-dock { display: none; }
 @container planning-map (max-height: 450px) {
   .priority-place-popup .place-details { padding: 6px 8px; }
 }
+
+/* Native modal keeps review separate from editable route state. */
+.itinerary-launch { margin-block: .75rem; }
+.itinerary-launch p { margin-block: .35rem; }
+.itinerary-dialog { width: min(36rem, calc(100vw - 1rem)); max-width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); padding: 0; color: var(--text); background: var(--elevated-surface); border: 1px solid var(--border); border-radius: 1rem; box-shadow: var(--shadow-medium); overflow: hidden; }
+.itinerary-dialog[open] { display: flex; flex-direction: column; }
+.itinerary-dialog::backdrop { background: rgb(20 36 29 / 62%); }
+.itinerary-header, .itinerary-actions { padding: .75rem 1rem; flex: none; }
+.itinerary-header h2 { margin: 0 0 .4rem; font-size: 1.25rem; }
+.itinerary-header p { margin: 0; }
+.itinerary-body { padding: 0 1rem; overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+.itinerary-dialog label { display: block; font-weight: 650; }
+.itinerary-dialog textarea { display: block; box-sizing: border-box; width: 100%; min-width: 0; min-height: 7rem; max-height: 40dvh; resize: vertical; font: inherit; line-height: 1.4; padding: .6rem; border: 1px solid var(--border); border-radius: .5rem; color: var(--text); background: var(--surface); margin-block: .5rem; }
+.itinerary-actions { display: flex; flex-wrap: wrap; gap: .5rem; border-top: 1px solid var(--border); }
+.itinerary-actions .primary { margin-inline-start: auto; }
+.itinerary-dialog [hidden] { display: none !important; }
+.itinerary-prompt-helper { margin-block: 1rem; }
+.itinerary-dialog li, .itinerary-dialog p, .itinerary-dialog h3, .itinerary-reason { overflow-wrap: anywhere; }
+.itinerary-dialog li { margin-block: .7rem; }
+.itinerary-dialog li p { margin-block: .25rem; }
+.itinerary-warning { border-inline-start: 3px solid var(--border); padding-inline-start: .75rem; }
+.itinerary-reason { font-size: .9rem; }
+@media (max-height: 500px) { .itinerary-header { padding-block: .4rem; } .itinerary-header p { font-size: .85rem; } .itinerary-actions { padding-block: .4rem; } }
+
+@media (max-width: 30rem) {
+  .itinerary-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-inline: .75rem; }
+  .itinerary-actions .button { padding-inline: .25rem; }
+  .itinerary-actions .primary { margin-inline-start: 0; }
+  .itinerary-actions #itinerary-confirm { grid-column: 1 / -1; }
+}

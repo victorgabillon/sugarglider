@@ -45,6 +45,10 @@ export function renderWaypointEditor({ list, points, selectedIndex, visitOrders,
         input.addEventListener("change", () => onChange(index, key, type === "number" ? input.value.trim() ? Number(input.value) : (key === "lat" || key === "lon" ? NaN : null) : input.value));
         label.append(input); parent.append(label);
       };
+      if (point.itineraryReason) {
+        const reason = document.createElement("p"); reason.className = "itinerary-reason";
+        reason.textContent = `Suggested because: ${point.itineraryReason}`; editor.append(reason);
+      }
       field(editor, "name", "Name", "text", point.name);
       const label = document.createElement("label"); label.textContent = "How closely should the route visit?";
       const strength = document.createElement("select"); strength.dataset.field = "constraintStrength";
