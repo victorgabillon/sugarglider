@@ -1,26 +1,37 @@
-// UI policy chooses between two canonical algorithms: Start alone is Auto Tour;
-// an explicit stop/end makes it Waypoint Route. Removing the last stop returns
-// to Auto Tour with the same Start. Discovery selections keep explicit intent
-// when conversion would lose requested-place semantics.
+// Presentation policy over the existing planner authorities, not another plan.
 import { state, saveActivePoints, isImmutableSnapshotDisplay } from "./state.js";
+import { rememberPointEdit, commitPointEdit } from "./route_edit_history.js";
+export { rememberPointEdit, undoPointEdit, redoPointEdit, clearPointUndo, pointUndoLabel, pointRedoLabel } from "./route_edit_history.js";
 
 const commonOptions = ["name", "targetDistanceKm", "toleranceKm", "maximumDistanceKm",
   "distancePriority", "candidateCount", "seed", "waypointOrder"];
-// Keep one recent point edit, including any inferred mode transition. Results,
-// discovery filters and snapshot display are outside this editable-plan undo.
-let undo = null;
-const undoFields = ["planningMode", "planningStrategy", "points", "autoTour", "waypointEndpoints",
-  "waypointPoints", "options", "autoTourOptions", "waypointOptions", "selectedPointIndex", "selectedEndpointKind"];
-export function clearPointUndo() { undo = null; }
-export function pointUndoLabel() { return undo?.label ?? ""; }
-export function rememberPointEdit(label) {
-  undo = { label, values: structuredClone(Object.fromEntries(undoFields.map(k => [k, state[k]]))) };
+const endpointKeys = new Set(["name", "lat", "lon", "id", "originalIndex", "_mapCreated", "constraintStrength"]);
+function exactEndpointCompatible(point) {
+  return point && (point.constraintStrength ?? "exact") === "exact"
+    && Object.keys(point).every(key => endpointKeys.has(key));
 }
-export function undoPointEdit() {
-  if (!undo || isImmutableSnapshotDisplay() || ["running", "reversing"].includes(state.request.status)) return false;
-  Object.assign(state, undo.values); undo = null;
-  state.endpointSetMode = null; state.addPointMode = false; state.movingPointIndex = null;
-  state.pendingPointPopupIndex = null; state.settingRequestedApproachId = null;
+export function changeMapTopology(topology) {
+  const endpoints = state.planningMode === "auto_tour" ? state.autoTour : state.waypointEndpoints;
+  if (!["loop", "point_to_point"].includes(topology) || topology === endpoints.routeTopology) return false;
+  saveActivePoints();
+  const firstStop = state.planningMode === "auto_tour" && endpoints.start ? 1 : 0;
+  const last = state.points.length > firstStop ? state.points.at(-1) : null;
+  const end = endpoints.end;
+  const maximum = state.planningStrategy === "auto_tour" ? 6 : (state.config?.max_required_points ?? 30);
+  if (topology === "loop" && end && (!exactEndpointCompatible(end) || state.points.length - firstStop >= maximum)) {
+    throw new Error("Keep Finish elsewhere: End cannot become an exact stop without losing intent or exceeding the stop limit.");
+  }
+  rememberPointEdit("Finish changed");
+  if (topology === "point_to_point" && last?._mapCreated && exactEndpointCompatible(last)) {
+    state.points.pop(); endpoints.end = last;
+    state.selectedEndpointKind = "end"; state.selectedPointIndex = null;
+  } else if (topology === "loop" && end) {
+    state.points.push(end); endpoints.end = null;
+    state.selectedEndpointKind = null; state.selectedPointIndex = state.points.length - 1;
+  }
+  endpoints.routeTopology = topology;
+  state.endpointSetMode = null; state.movingPointIndex = null; state.addPointMode = false;
+  reconcileAutomaticIntent(); commitPointEdit();
   return true;
 }
 export function hasDiscoveryIntent() {
@@ -74,36 +85,39 @@ export function reconcileAutomaticIntent() {
 export function appendMapIntent(coordinate, assignEndpoint) {
   const endpoints = state.planningMode === "auto_tour" ? state.autoTour : state.waypointEndpoints;
   if (!endpoints.start) {
-    rememberPointEdit("Start added"); assignEndpoint("start", { name: "Hard start", ...coordinate });
+    rememberPointEdit("Start added"); assignEndpoint("start", { name: "Hard start", ...coordinate, _mapCreated: true });
     state.selectedEndpointKind = "start"; state.selectedPointIndex = null;
-    return true;
+    commitPointEdit(); return true;
   }
   if (endpoints.routeTopology === "point_to_point" && !endpoints.end) {
-    rememberPointEdit("End added"); assignEndpoint("end", { name: "Hard end", ...coordinate });
+    rememberPointEdit("End added"); assignEndpoint("end", { name: "Hard end", ...coordinate, _mapCreated: true });
     reconcileAutomaticIntent(); state.selectedEndpointKind = "end"; state.selectedPointIndex = null;
-    return true;
+    commitPointEdit(); return true;
   }
   const count = state.planningMode === "auto_tour" ? state.points.length - Number(Boolean(endpoints.start)) : state.points.length;
   const maximum = state.planningStrategy === "auto_tour" ? 6 : (state.config?.max_required_points ?? 30);
   if (count >= maximum) throw new Error(`This route already has the maximum ${maximum} stops.`);
-  rememberPointEdit("Stop added");
-  // Identity survives later reordering; the displayed visit number may change.
-  const next = state.points.reduce((n, p) => Math.max(n, p.originalIndex ?? -1), -1) + 1;
-  const point = { name: `Point ${count + 1}`, ...coordinate, originalIndex: next };
+  const extending = endpoints.routeTopology === "point_to_point" && state.planningStrategy === "automatic";
+  if (extending && !exactEndpointCompatible(endpoints.end)) throw new Error("Choose Move End to preserve this imported End’s intent.");
+  rememberPointEdit(extending ? "End extended" : "Stop added");
+  const next = state.points.reduce((n, p) => Math.max(n, p.originalIndex ?? -1), endpoints.end?.originalIndex ?? -1) + 1;
+  const point = extending ? endpoints.end : { name: `Point ${count + 1}`, ...coordinate, originalIndex: next, _mapCreated: true };
+  if (extending) assignEndpoint("end", { name: "Hard end", ...coordinate, originalIndex: next, _mapCreated: true });
   state.points.push(point); reconcileAutomaticIntent();
-  state.selectedPointIndex = state.points.indexOf(point); state.selectedEndpointKind = null;
+  state.selectedPointIndex = extending ? null : state.points.indexOf(point); state.selectedEndpointKind = extending ? "end" : null;
+  commitPointEdit();
   return true;
 }
 export function routeIntentPresentation() {
   const endpoints = state.planningMode === "auto_tour" ? state.autoTour : state.waypointEndpoints;
   const count = state.planningMode === "auto_tour" ? Math.max(0, state.points.length - Number(Boolean(endpoints.start))) : state.points.length;
   if (!endpoints.start) return { title: "Tap the map to choose Start", detail: "Then generate a route, or keep tapping to add stops." };
-  if (endpoints.routeTopology === "point_to_point" && !endpoints.end) return { title: "Start set · Choose End", detail: "Tap the map to set End. Further taps add stops before End." };
+  if (endpoints.routeTopology === "point_to_point" && !endpoints.end) return { title: "Start set · Choose End", detail: "Tap the map to choose End. Each further tap extends the route." };
   if (state.planningMode === "auto_tour") return {
     compactTitle: `${state.options.targetDistanceKm} km ${endpoints.routeTopology === "loop" ? "loop" : "route to End"}`,
     title: `${state.options.targetDistanceKm} km ${endpoints.routeTopology === "loop" ? "loop from Start" : "route to End"}`,
     detail: count || state.autoTour.requestedPlaces.length ? "Sugarglider will design a route with your chosen places." : "Start set. Generate now, or tap the map to add places to pass through.",
   };
   return { title: ["Start", ...Array.from({ length: count }, (_, i) => String(i + 1)), endpoints.routeTopology === "loop" ? "Start" : "End"].join(" → "),
-    detail: "Sugarglider will connect your points. Tap the map to add stops; select a point to edit it." };
+    detail: `Sugarglider will connect your points. ${endpoints.routeTopology === "loop" ? "Tap the map to add stops" : "Tap the map to extend End"}; select a point to edit it.` };
 }

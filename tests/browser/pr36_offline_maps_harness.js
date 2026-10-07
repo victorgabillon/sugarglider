@@ -71,7 +71,7 @@ export async function runPr36OfflineMapsHarness() {
   await scenarioRegionSwitch();
   scenarios.push("region_switch_removes_stale_source_and_keeps_overlays");
   scenarioNoRemoteStyleAssets();
-  scenarios.push("label_free_style_has_no_remote_glyph_or_sprite_dependency");
+  scenarios.push("packaged_style_has_no_remote_glyph_or_sprite_dependency");
   return scenarios;
 }
 
@@ -478,6 +478,8 @@ async function scenarioRegionSwitch() {
   equal(runtime.snapshot().active_pack_id, paris.pack_id, "Paris selected after region switch");
   equal(map.sources.size, 1, "single local vector source retained");
   for (const id of overlays) assert(map.layers.some((layer) => layer.id === id), `${id} survives`);
+  const firstOverlay = map.layers.findIndex((layer) => overlays.includes(layer.id));
+  assert(map.layers.every((layer, index) => !layer.id.startsWith("sugarglider-local-map-pack-") || index < firstOverlay), "all basemap geometry and labels remain below overlays");
   assert(map.events.includes("remove-source:sugarglider-local-map-pack"), "old source removed");
 }
 

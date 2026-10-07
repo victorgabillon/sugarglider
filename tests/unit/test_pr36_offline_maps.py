@@ -183,7 +183,8 @@ def test_local_basemap_uses_shared_map_and_preserves_truthful_fallbacks() -> Non
     assert "url: `pmtiles://${opened.source.getKey()}`" in offline_map
     assert "active_source_diagnostics" in offline_map
     assert "offlineMapSnapshot" in offline_map
-    assert 'original.type === "symbol" || original.type === "background"' in offline_map
+    assert "offlineBasemapPresentationLayer(generated)" in offline_map
+    assert '{ lang: "fr" }' in offline_map
     assert "removeLocalBasemap(currentMap)" in offline_map
     for state in (
         "local_pack_active",
@@ -201,7 +202,7 @@ def test_service_worker_precaches_runtime_but_never_map_archives() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     policy = (STATIC_DIRECTORY / "service_worker_policy.js").read_text()
     core = _core_assets(worker)
-    assert "`${SHELL_CACHE_PREFIX}v52`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v55`" in worker
     assert {
         "/static/vendor/pmtiles-4.5.0/pmtiles.js",
         "/static/vendor/protomaps-basemaps-5.7.2/basemaps.js",

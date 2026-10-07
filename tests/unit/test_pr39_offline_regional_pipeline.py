@@ -1,9 +1,4 @@
-"""Regional publication contracts with tiny generated OSM and injected builders.
-
-Fixtures exercise coverage/source identity and complete staging without a real
-regional extract, Docker or routing service. A partial component build must
-never replace or become a published region.
-"""
+"""PR39 real tiny OSM geometry plus injected map/routing builds; no services."""
 
 import gzip
 import hashlib
@@ -528,7 +523,7 @@ def test_make_cli_ignore_and_runtime_isolation() -> None:
         assert pin in map_builder
     assert provenance.valhalla_image in routing_builder
     worker = (ROOT / "src/sugarglider/web/static/service-worker.js").read_text()
-    assert "const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v52`;" in worker
+    assert "const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v55`;" in worker
     assert "offline_regions" not in worker
     for folder in (ROOT / "src/sugarglider/web", ROOT / "src/sugarglider/planning"):
         for path in folder.rglob("*.py"):

@@ -1,7 +1,3 @@
-// Own MapLibre layers and marker DOM, not planning or analysis. Planner edits
-// leave through callbacks; discovered Places are read-only until an explicit
-// editor action. Candidate overlays consume the supplied visualization, and
-// participant markers use unsnapped coordinates without inferring route progress.
 import { routeColor } from "./route_results.js";
 import { keepMapCoordinateVisible } from "./map_viewport.js";
 import * as maplibregl from "./vendor/maplibre-gl-6.4.1/maplibre-gl.mjs";
@@ -15,7 +11,7 @@ import {
 } from "./avatar.js";
 import { liveFreshness } from "./outing_live_state.js";
 import { requestedPlaceIdentifier } from "./state.js";
-import { createPlaceDetails, ICE_CREAM_ART_URL, ICE_CREAM_ICON_SVG, placePresentation } from "./place_presentation.js";
+import { createPlaceDetails, ICE_CREAM_ART_URL, ICE_CREAM_ICON_SVG, isPriorityPlace, placePresentation } from "./place_presentation.js";
 import {
   attachOfflineBasemap,
   detachOfflineBasemap,
@@ -28,6 +24,10 @@ const SELECTED_LABEL_LAYER = "required-point-labels-selected";
 const REQUIRED_PIN_URL = "/static/brand/sugarglider-map-pin.png";
 const VERIFIED_WATER_PIN_URL = "/static/brand/sugarglider-water-pin.png";
 const EMPTY_COLLECTION = { type: "FeatureCollection", features: [] };
+const POI_PRIORITY_SOURCE = "places-priority-pois";
+const POI_PRIORITY_MARKER_LAYER = "places-priority-markers";
+const POI_PRIORITY_LABEL_LAYER = "places-priority-labels";
+const POI_PRIORITY_VISITED_LAYER = "places-priority-visited";
 const POI_SOURCE = "places-pois";
 const POI_SELECTED_SOURCE = "places-poi-selected-source";
 const POI_CLUSTER_LAYER = "places-poi-clusters";
@@ -101,6 +101,9 @@ const DIRECTION_FOREGROUND_LAYERS = [
   POI_CLUSTER_LAYER,
   POI_VISITED_LAYER,
   POI_MARKER_LAYER,
+  POI_PRIORITY_VISITED_LAYER,
+  POI_PRIORITY_MARKER_LAYER,
+  POI_PRIORITY_LABEL_LAYER,
   REQUESTED_APPROACH_MARKER_LAYER,
   REQUESTED_MARKER_LAYER,
   REQUESTED_PREFERRED_LAYER,
@@ -140,6 +143,7 @@ let poiPreferHandler = null;
 let preferredPoiIds = new Set();
 let poiById = new Map();
 let poiPopup = null;
+let poiPopupObserver = null;
 let poiPopupId = null;
 let poiDeselectHandler = null;
 let selectedPoiId = null;
@@ -254,12 +258,6 @@ export function initializeMap(config, handlers) {
       );
       return;
     }
-    const labelLayers = [SELECTED_LABEL_LAYER, REQUIRED_LABEL_LAYER].filter((id) => map.getLayer(id));
-    const label = labelLayers.length ? map.queryRenderedFeatures(event.point, { layers: labelLayers })[0] : null;
-    if (label?.properties?.source_index !== undefined) {
-      requiredPointActivateHandler?.(Number(label.properties.source_index));
-      return;
-    }
     const requestedLayers = [
       REQUESTED_SELECTED_LAYER,
       REQUESTED_ORDER_LAYER,
@@ -278,7 +276,7 @@ export function initializeMap(config, handlers) {
       }
       return;
     }
-    const poiLayers = [POI_SELECTED_MARKER_LAYER, POI_MARKER_LAYER, POI_SELECTED_LABEL_LAYER, POI_LABEL_LAYER]
+    const poiLayers = [POI_SELECTED_MARKER_LAYER, POI_PRIORITY_MARKER_LAYER, POI_PRIORITY_LABEL_LAYER, POI_MARKER_LAYER, POI_SELECTED_LABEL_LAYER, POI_LABEL_LAYER]
       .filter((id) => map.getLayer(id));
     const hitRadius = window.matchMedia("(pointer: coarse)").matches ? 22 : 4;
     const hitArea = [[event.point.x - hitRadius, event.point.y - hitRadius],
@@ -294,6 +292,13 @@ export function initializeMap(config, handlers) {
       if (feature) {
         poiActivateHandler?.(feature.id);
       }
+      return;
+    }
+    // A mapped place remains inspection-only even beside a route label.
+    const labelLayers = [SELECTED_LABEL_LAYER, REQUIRED_LABEL_LAYER].filter((id) => map.getLayer(id));
+    const label = labelLayers.length ? map.queryRenderedFeatures(event.point, { layers: labelLayers })[0] : null;
+    if (label?.properties?.source_index !== undefined) {
+      requiredPointActivateHandler?.(Number(label.properties.source_index));
       return;
     }
     const cluster = map.getLayer(POI_CLUSTER_LAYER)
@@ -338,7 +343,7 @@ export function initializeMap(config, handlers) {
         REQUESTED_MARKER_LAYER,
         REQUESTED_MASCOT_LAYER,
       ].filter((id) => map.getLayer(id)),
-      ...[POI_SELECTED_MARKER_LAYER, POI_MARKER_LAYER, POI_CLUSTER_LAYER, POI_LABEL_LAYER, POI_SELECTED_LABEL_LAYER]
+      ...[POI_SELECTED_MARKER_LAYER, POI_PRIORITY_MARKER_LAYER, POI_PRIORITY_LABEL_LAYER, POI_MARKER_LAYER, POI_CLUSTER_LAYER, POI_LABEL_LAYER, POI_SELECTED_LABEL_LAYER]
         .filter((id) => map.getLayer(id)),
       ...[SPUR_TURNAROUND_LAYER, SPUR_BRANCH_LAYER]
         .filter((id) => map.getLayer(id)),
@@ -559,6 +564,9 @@ function ensurePoiLayers() {
       clusterRadius: 44,
     });
   }
+  if (!map.getSource(POI_PRIORITY_SOURCE)) {
+    map.addSource(POI_PRIORITY_SOURCE, { type: "geojson", data: EMPTY_COLLECTION });
+  }
   if (!map.getSource(POI_SELECTED_SOURCE)) {
     map.addSource(POI_SELECTED_SOURCE, { type: "geojson", data: EMPTY_COLLECTION });
   }
@@ -591,7 +599,7 @@ function ensurePoiLayers() {
     type: "circle",
     source: POI_SELECTED_SOURCE,
     paint: {
-      "circle-radius": ["case", ["==", ["get", "category"], "ice_cream"], 8, 19],
+      "circle-radius": ["case", ["==", ["get", "category"], "ice_cream"], 8, ["case", ["all", ["==", ["get", "category"], "drinking_water"], ["==", ["get", "icon_name"], "poi-water-verified"]], 23, 19]],
       "circle-color": "#fff",
       "circle-opacity": .8,
       "circle-stroke-color": ["case", ["==", ["get", "category"], "ice_cream"], "#a52e61", "#d9582b"],
@@ -635,12 +643,59 @@ function ensurePoiLayers() {
     paint: { "text-color": "#71354e", "text-halo-color": "#fffef9", "text-halo-width": 2 },
   });
   addPoiLayer({
+    id: POI_PRIORITY_VISITED_LAYER,
+    type: "circle",
+    source: POI_PRIORITY_SOURCE,
+    minzoom: 12,
+    filter: ["==", ["get", "visited"], true],
+    paint: {
+      "circle-radius": 26,
+      "circle-color": "#fffdf7",
+      "circle-opacity": .82,
+      "circle-stroke-color": "#d9582b",
+      "circle-stroke-width": 5,
+    },
+  });
+  // Icons remain independently visible; their names still collide normally.
+  addPoiLayer({
+    id: POI_PRIORITY_MARKER_LAYER,
+    type: "symbol",
+    source: POI_PRIORITY_SOURCE,
+    minzoom: 12,
+    layout: {
+      "icon-image": ["get", "icon_name"],
+      "icon-size": ["case", ["==", ["get", "category"], "drinking_water"], 1.25, 1.3],
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
+      // With overlap enabled, higher keys paint above lower keys.
+      "symbol-sort-key": ["case", ["==", ["get", "category"], "drinking_water"], 20, 10],
+    },
+  });
+  addPoiLayer({
+    id: POI_PRIORITY_LABEL_LAYER,
+    type: "symbol",
+    source: POI_PRIORITY_SOURCE,
+    minzoom: 14,
+    filter: ["==", ["get", "show_label"], true],
+    layout: {
+      "text-field": ["get", "display_name"],
+      "text-font": ["Open Sans Semibold"],
+      "text-size": 11,
+      "text-variable-anchor": ["top", "bottom", "left", "right"],
+      "text-radial-offset": 2.3,
+      "text-max-width": 13,
+      "text-allow-overlap": false,
+      "text-ignore-placement": false,
+    },
+    paint: { "text-color": "#26372f", "text-halo-color": "#fffef9", "text-halo-width": 2 },
+  });
+  addPoiLayer({
     id: POI_SELECTED_MARKER_LAYER,
     type: "symbol",
     source: POI_SELECTED_SOURCE,
     layout: {
       "icon-image": ["get", "selected_icon"],
-      "icon-size": ["case", ["==", ["get", "category"], "ice_cream"], 1, 1.08],
+      "icon-size": ["case", ["==", ["get", "category"], "ice_cream"], 1, ["case", ["all", ["==", ["get", "category"], "drinking_water"], ["==", ["get", "icon_name"], "poi-water-verified"]], 1.25, 1.08]],
       "icon-anchor": ["case", ["==", ["get", "category"], "ice_cream"], "bottom", "center"],
       "icon-offset": ["case", ["==", ["get", "category"], "ice_cream"], ["literal", [0, 6]], ["literal", [0, 0]]],
       "icon-allow-overlap": true,
@@ -794,9 +849,11 @@ function poiPopupContent(feature) {
 
 function showPoiPopup(feature) {
   removePoiPopup();
-  const popup = new maplibregl.Popup({ offset: feature.category === "ice_cream" ? 52 : 24,
-    ...(feature.category === "ice_cream" ? { anchor: "bottom" } : {}),
-    closeButton: true, maxWidth: "320px", className: feature.category === "ice_cream" ? "place-detail-popup" : "" })
+  const priority = isPriorityPlace(feature);
+  const popup = new maplibregl.Popup({ offset: feature.category === "ice_cream" ? 52 : priority ? 32 : 24,
+    ...(priority ? { anchor: "bottom" } : {}),
+    closeButton: true, maxWidth: "320px",
+    className: priority ? `${feature.category === "ice_cream" ? "place-detail-popup " : ""}priority-place-popup` : "" })
     .setLngLat([feature.coordinate.lon, feature.coordinate.lat])
     .setDOMContent(poiPopupContent(feature))
     .addTo(map);
@@ -805,25 +862,48 @@ function showPoiPopup(feature) {
   popup.on("close", () => {
     if (poiPopup !== popup) return;
     poiPopup = null; poiPopupId = null;
+    poiPopupObserver?.disconnect(); poiPopupObserver = null;
     poiDeselectHandler?.();
     map.getCanvas().focus({ preventScroll: true });
   });
   popup.getElement().addEventListener("keydown", (event) => {
     if (event.key === "Escape") { event.stopPropagation(); dismissPoi(); }
   });
-  if (feature.category === "ice_cream") {
-    // Keep the whole card inside the map, leaving its bottom controls/attribution clear.
+  if (priority) keepPriorityPoiPopupVisible(popup);
+}
+
+function keepPriorityPoiPopupVisible(popup) {
+  const viewport = map.getCanvas().getBoundingClientRect();
+  const dock = document.querySelector("#route-dock");
+  const dockTop = dock && !dock.hidden ? dock.getBoundingClientRect().top : viewport.bottom;
+  const top = viewport.top + 12;
+  // Reserve room for the selected artwork/ring below the card, above the dock.
+  const bottom = Math.max(top + 64, Math.min(viewport.bottom - 60, dockTop - 64));
+  const content = popup.getElement().querySelector(".point-popup, .place-details");
+  if (content) {
+    // The popup tip and border consume another twelve pixels.
+    content.style.maxHeight = `${Math.max(44, bottom - top - 12)}px`;
+    content.style.overflowY = "auto";
+    content.style.setProperty("--priority-popup-height", content.style.maxHeight);
+  }
+  // Artwork and container queries can change the card after mounting. Observe
+  // its final content size, retaining ownership through a newer selection.
+  const clamp = () => {
+    if (poiPopup !== popup || !map) return;
     const card = popup.getElement().getBoundingClientRect();
-    const viewport = map.getCanvas().getBoundingClientRect();
     const shiftX = Math.max(0, viewport.left + 12 - card.left)
       - Math.max(0, card.right - viewport.right + 12);
-    const shiftY = Math.max(0, viewport.top + 12 - card.top)
-      - Math.max(0, card.bottom - viewport.bottom + 60);
+    const shiftY = Math.max(0, top - card.top) - Math.max(0, card.bottom - bottom);
     if (shiftX || shiftY) map.panBy([-shiftX, -shiftY], { duration: 0 });
-  }
+  };
+  if (content && typeof ResizeObserver === "function") {
+    poiPopupObserver = new ResizeObserver(clamp);
+    poiPopupObserver.observe(content);
+  } else requestAnimationFrame(clamp);
 }
 
 function removePoiPopup() {
+  poiPopupObserver?.disconnect(); poiPopupObserver = null;
   const previous = poiPopup;
   poiPopup = null; poiPopupId = null;
   previous?.remove();
@@ -840,7 +920,9 @@ function updatePoiSources() {
   const features = [...poiById.values()];
   const zoom = map.getZoom();
   map.getSource(POI_SOURCE).setData(poiCollection(features.filter((feature) =>
-    feature.id !== selectedPoiId && zoom >= placePresentation(feature).minZoom), null, visitedPoiIds));
+    feature.id !== selectedPoiId && !isPriorityPlace(feature) && zoom >= placePresentation(feature).minZoom), null, visitedPoiIds));
+  map.getSource(POI_PRIORITY_SOURCE).setData(poiCollection(features.filter((feature) =>
+    feature.id !== selectedPoiId && isPriorityPlace(feature) && zoom >= placePresentation(feature).minZoom), null, visitedPoiIds));
   map.getSource(POI_SELECTED_SOURCE).setData(selectedPoiCollection(features, selectedPoiId, visitedPoiIds));
 }
 
@@ -1401,7 +1483,8 @@ export function placeMapDiagnostics() {
     ? [...new Set(map.queryRenderedFeatures(undefined, { layers: [layer] }).map((feature) => feature.properties.poi_id).filter(Boolean))] : [];
   return {
     selectedId: selectedPoiId, popupId: poiPopupId,
-    markerIds: rendered(POI_MARKER_LAYER), selectedMarkerIds: rendered(POI_SELECTED_MARKER_LAYER),
+    markerIds: [...rendered(POI_MARKER_LAYER), ...rendered(POI_PRIORITY_MARKER_LAYER)],
+    priorityMarkerIds: rendered(POI_PRIORITY_MARKER_LAYER), priorityLabelIds: rendered(POI_PRIORITY_LABEL_LAYER), selectedMarkerIds: rendered(POI_SELECTED_MARKER_LAYER),
     labelIds: rendered(POI_LABEL_LAYER),
     iceCreamIconLoaded: Boolean(map?.hasImage("poi-ice-cream")),
     iceCreamArtworkLoaded: Boolean(map?.hasImage("poi-ice-cream-selected")),
@@ -1409,6 +1492,20 @@ export function placeMapDiagnostics() {
       const point = map.project([feature.coordinate.lon, feature.coordinate.lat]);
       return { id: feature.id, point: [point.x, point.y] };
     }),
+  };
+}
+
+export function mapPresentationDiagnostics() {
+  const style = map?.getStyle();
+  const labels = style?.layers.filter((layer) => layer.type === "symbol"
+    && layer.id.startsWith("sugarglider-local-map-pack-")) ?? [];
+  return {
+    zoom: map?.getZoom(),
+    glyphs: style?.glyphs,
+    sources: style?.sources,
+    layers: style?.layers,
+    basemapText: labels.length ? map.queryRenderedFeatures(undefined, { layers: labels.map((layer) => layer.id) })
+      .map((feature) => ({ layer: feature.layer.id, name: feature.properties.name, kind: feature.properties.kind })) : [],
   };
 }
 
@@ -2339,10 +2436,13 @@ function endpointMarkerElement(kind, point) {
 
 export function renderHardEndpoints(start, end, handlers = {}) {
   if (!map) return;
+  const focusedKind = document.activeElement?.classList.contains("endpoint-marker")
+    ? document.activeElement.classList.contains("start") ? "start" : "end" : null;
   clearMarkers(endpointMarkers);
   for (const [kind, point] of [["start", start], ["end", end]]) {
     if (!validCoordinate(point)) continue;
     const element = endpointMarkerElement(kind, point);
+    element.disabled = Boolean(handlers.disabled);
     element.classList.toggle("selected", handlers.selectedKind === kind);
     element.setAttribute("aria-pressed", String(handlers.selectedKind === kind));
     element.addEventListener("click", (event) => {
@@ -2357,6 +2457,8 @@ export function renderHardEndpoints(start, end, handlers = {}) {
     })
       .setLngLat([point.lon, point.lat])
       .addTo(map);
+    element.setAttribute("aria-label", `${kind === "start" ? "Start" : "End"}: ${point.name || kind}`);
+    if (focusedKind === kind && !element.disabled) element.focus({ preventScroll: true });
     endpointMarkers.push(marker);
   }
 }
@@ -2537,6 +2639,7 @@ function renderRequiredLabels(entries, selectedIndex) {
 
 export function renderRequiredMarkers(points, visits, selectedIndex, popupIndex, disabled, handlers, firstIsStart = true) {
   if (!map) return;
+  const focusedIndex = document.activeElement?.classList.contains("required-marker") ? document.activeElement.dataset.pointIndex : null;
   clearMarkers(requiredMarkers);
   requiredPointActivateHandler = handlers.onActivate;
   const entries = orderedEntries(points, visits);
@@ -2579,6 +2682,7 @@ export function renderRequiredMarkers(points, visits, selectedIndex, popupIndex,
     });
     if (popupIndex === sourceIndex) marker.togglePopup();
     requiredMarkers.push(marker);
+    if (focusedIndex === String(sourceIndex) && !disabled) element.focus({ preventScroll: true });
   });
   renderRequiredLabels(entries, selectedIndex);
 }
@@ -2671,5 +2775,15 @@ export function resizeMap() { map?.resize(); }
 
 // Called only after a Plan layout resize, never from render or map movement.
 export function keepCoordinateVisible(coordinate) {
-  return keepMapCoordinateVisible(map, coordinate);
+  if (!map) return null;
+  keepMapCoordinateVisible(map, coordinate);
+  const dock = document.getElementById("route-dock");
+  if (dock?.getClientRects().length) {
+    const top = map.getContainer().getBoundingClientRect().top;
+    const bottom = Math.max(60, dock.getBoundingClientRect().top - top - 12);
+    const point = map.project(coordinate);
+    if (point.y > bottom) map.panBy([0, point.y - bottom], { duration: 0 });
+  }
+  const point = map.project(coordinate);
+  return { x: point.x, y: point.y };
 }
