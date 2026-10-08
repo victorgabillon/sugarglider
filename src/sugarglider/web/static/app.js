@@ -1,3 +1,4 @@
+import { initializeNativeItineraryHandoff } from "./native_itinerary_handoff.js";
 import { createLocationSearch } from "./location_search.js";
 import { initializeLocationSearchDialog } from "./location_search_dialog.js";
 import { initializeItineraryDialog } from "./itinerary_dialog.js";
@@ -2667,6 +2668,7 @@ function updateFailedExactPoint(action) {
   if (action === "move") appShell?.show("map", { focus: true });
 }
 
+let itineraryDialog = null;
 function bindEvents() {
   byId("redo-point-edit").addEventListener("click", () => {
     if (redoPointEdit()) { updateControlsFromOptions(); invalidateAndRender(); }
@@ -2770,7 +2772,7 @@ function bindEvents() {
       invalidateAndRender();
     });
   }
-  initializeItineraryDialog({
+  itineraryDialog = initializeItineraryDialog({
     root: byId("itinerary-dialog"), launcher: byId("import-itinerary"),
     maximumStops: () => state.config?.max_required_points ?? 30,
     capability: (request) => {
@@ -3368,6 +3370,7 @@ async function start() {
       },
     });
     if (mapInitialized) void plannerLocation?.initialize();
+    if (localPlanner) initializeNativeItineraryHandoff({ dialog: itineraryDialog });
     render();
     if (sharedSnapshot) {
       fitCoordinates(sharedSnapshot.candidate.route.geometry);

@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v58_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v59_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v58"
+    assert generation.group(1) == "v59"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -213,6 +213,7 @@ def test_shared_shell_generation_tracks_v58_cached_assets() -> None:
             "local_region_worker.js",
             "local_region_panel.js",
             "native_bridge_transport.js",
+            "native_itinerary_handoff.js",
             "api.js",
             "local_gpx_export.js",
             "local_gpx_client.js",
@@ -225,7 +226,7 @@ def test_shared_shell_generation_tracks_v58_cached_assets() -> None:
             "d637856e680a5f29511e568daaec73043690f6ffb3e2d721c7f5399e3d42f366"
         ),
         "itinerary_dialog.js": (
-            "10db95da0f2417c48807aaf156163c3a97efd05b1911a25153c62e1bdf05da4f"
+            "5307b28b6bf2c00672938196eca9595201b7470e195bf5cc323107b500dde4cd"
         ),
         "route_dock.js": (
             "edca98e12782a796b3b7f7d2726ad6aee68be66636760aa39a66bea89c08a00d"
@@ -276,7 +277,7 @@ def test_shared_shell_generation_tracks_v58_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "6bf6ed9a87fa919744ba75035d9df2eb6f4bd04e70fd6ac840fb4fd8f4e098b2"
+            "27ebdd61eb6a0ee6c98820f674413e880a82c9f928e475ec047eaf00b586a394"
         ),
         "location_search.js": (
             "635f5aaf5603cadbc3b77f035055251e54358b16a831d927e51fe6c44c031c36"
@@ -284,7 +285,7 @@ def test_shared_shell_generation_tracks_v58_cached_assets() -> None:
         "location_search_dialog.js": (
             "60924fa83037b8de5daa90cdfbcde5ab498a2134ff9a97b2b679e11b55c55b40"
         ),
-        "app.js": ("9cb460865d98ca456c7005d06a7d65d848af2a386b8b3846378e2c8df196b6b0"),
+        "app.js": ("fadd5b3a8611e24f0a6c0da0b36aa3924532e6359aac630a4175eb96f4dc6bc8"),
         "region_screen.js": (
             "0cf6d527a0ea957e0222a31a8ffa2ee1d1a24b2118628c6fd70e4dbd9d5371c5"
         ),
@@ -349,8 +350,11 @@ def test_shared_shell_generation_tracks_v58_cached_assets() -> None:
         "local_region_panel.js": (
             "43c5119cb1cf5ed4249dc00ae8a7d30741dd78b307a9305f31ee6a3988c456f6"
         ),
+        "native_itinerary_handoff.js": (
+            "835107e847c459772a794d9bacf4372b705cc6540db168c944b48d148fdb082d"
+        ),
         "native_bridge_transport.js": (
-            "485c4690f4b6c35a15c9800f1c7a7bb771814fe47d59fb419df5efe372e3b754"
+            "367825db860c5ebc11d9fe629978c1bcc796d2854d396cbebb8db8e19fbd2dfd"
         ),
         "api.js": ("2844e8cc44afc78de06e3ce24ff7e6040ce16c189fd84122b790404cdf76c297"),
         "local_gpx_export.js": (

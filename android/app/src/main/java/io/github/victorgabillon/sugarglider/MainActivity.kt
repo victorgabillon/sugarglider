@@ -14,6 +14,7 @@ import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Process
 import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
@@ -80,6 +81,18 @@ class MainActivity : Activity() {
         execute = { work -> documentExecutor.execute(work) },
         dispatch = { work -> runOnUiThread(work) },
     )
+    private val externalItineraryExecutor = Executors.newSingleThreadExecutor()
+    private val externalItineraryReceiver = ExternalItineraryReceiver(
+        execute = { work -> externalItineraryExecutor.execute(work) },
+        dispatch = { work -> runOnUiThread(work) },
+        openContent = { uri -> contentResolver.openInputStream(Uri.parse(uri)) },
+        reject = { reason ->
+            if (!isFinishing && !isDestroyed) AlertDialog.Builder(this)
+                .setTitle("Could not open shared itinerary").setMessage(reason.message)
+                .setPositiveButton("OK", null).show()
+        },
+        deliver = ::deliverExternalItinerary,
+    )
     private val webGeolocationPermissions = WebGeolocationPermissionCoordinator()
     private val statusObserver = NativeStatusRepository.Observer { status, terminalFailure ->
         runOnUiThread {
@@ -96,8 +109,12 @@ class MainActivity : Activity() {
         bundledShellAssets = BundledShellAssets(applicationContext)
         application.statusRepository.addObserver(statusObserver)
         registerPredictiveBackCallback()
-        pendingDeepLinkSlug = deepLinkSlug(intent)
-        if (V1ReleasePolicy.sharingEnabled &&
+        val initialIntent = intent
+        // Recreation deliberately loses a pending draft; never re-ingest the launch extras.
+        val external = savedInstanceState == null && captureExternalItinerary(initialIntent)
+        if (savedInstanceState != null) setIntent(cleanLauncherIntent())
+        pendingDeepLinkSlug = if (external) null else deepLinkSlug(initialIntent)
+        if (!external && V1ReleasePolicy.sharingEnabled &&
             (pendingDeepLinkSlug != null || savedInstanceState?.getBoolean(STATE_SHARING_SCREEN) == true)) {
             openSharingServer()
         } else openPlanner()
@@ -105,6 +122,11 @@ class MainActivity : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (captureExternalItinerary(intent)) {
+            // A trusted local page keeps its exact editable plan/result/history.
+            if (configuredOrigin != BundledShellPolicy.ORIGIN || webView == null) openPlanner()
+            return
+        }
         setIntent(intent)
         deepLinkSlug(intent)?.let {
             pendingDeepLinkSlug = it
@@ -123,6 +145,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         activityVisible = true
+        externalItineraryReceiver.flush()
         if (interruptedGpxSave) {
             interruptedGpxSave = false
             AlertDialog.Builder(this)
@@ -147,6 +170,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        externalItineraryReceiver.close()
+        externalItineraryExecutor.shutdownNow()
         pendingStart = null
         pendingLocalRoute = null
         pendingLocalCapabilities = null
@@ -304,6 +329,34 @@ class MainActivity : Activity() {
             setOnClickListener { openPlanner() }
         }, fullWidthWrap())
         setContentView(root)
+    }
+
+    private fun cleanLauncherIntent(): Intent = Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN)
+
+    @Suppress("DEPRECATION")
+    private fun captureExternalItinerary(incoming: Intent?): Boolean {
+        if (incoming == null || (incoming.action !in setOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE) &&
+                !(incoming.action == Intent.ACTION_VIEW && incoming.type == "application/json"))) return false
+        val input = try {
+            val text = if (incoming.action == Intent.ACTION_SEND) incoming.extras?.get(Intent.EXTRA_TEXT) else null
+            val uri = if (incoming.action == Intent.ACTION_VIEW) incoming.data else
+                incoming.extras?.get(Intent.EXTRA_STREAM) as? Uri
+            val granted = uri != null && incoming.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0 &&
+                checkUriPermission(uri, Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION) == PackageManager.PERMISSION_GRANTED
+            ExternalItineraryIntentParser.Input(incoming.action, incoming.type, text, uri?.toString(), granted)
+        } catch (_: Exception) { ExternalItineraryIntentParser.Input(null, null) }
+        // Drop all launch payload references; configuration/process recreation must not replay them.
+        setIntent(cleanLauncherIntent())
+        incoming.replaceExtras(null as Bundle?); incoming.data = null; incoming.clipData = null
+        externalItineraryReceiver.receive(input)
+        return true
+    }
+
+    private fun deliverExternalItinerary(draft: ExternalItineraryIntentParser.Pending): Boolean {
+        if (!activityVisible || configuredOrigin != BundledShellPolicy.ORIGIN) return false
+        val channel = activeBridgeChannel?.takeIf { it.itineraryReady } ?: return false
+        bridgeStatusCounter += 1
+        return postToBridge(channel, ExternalItineraryProtocol.draft("native-${channel.pageNonce}-$bridgeStatusCounter", draft))
     }
 
     private fun openPlanner() {
@@ -684,6 +737,13 @@ class MainActivity : Activity() {
                     if (origin == BundledShellPolicy.ORIGIN) NativeTrackingStatus.stopped()
                     else application.statusRepository.current(),
                 )
+                is BridgeRequest.ItineraryDialogState -> {
+                    channel.itineraryReady = true
+                    channel.itineraryOpen = request.open
+                    completeBridgePayload(request, payload, channel,
+                        ExternalItineraryProtocol.stateReply(request.requestId, request.open))
+                    externalItineraryReceiver.flush()
+                }
                 is BridgeRequest.SaveGpx -> {
                     val prepared = document ?: return@addWebMessageListener
                     val finish: (GpxSaveStatus) -> Unit = { status ->
@@ -1177,14 +1237,17 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun postToBridge(channel: BridgeChannel, payload: String) {
+    private fun postToBridge(channel: BridgeChannel, payload: String): Boolean {
         if (
             activeBridgeChannel === channel &&
             webView != null &&
             System.identityHashCode(webView) == channel.webViewIdentity &&
             bridgeNavigationEpoch == channel.navigationEpoch &&
             WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
-        ) channel.replyProxy.postMessage(payload)
+        ) {
+            return try { channel.replyProxy.postMessage(payload); true } catch (_: Exception) { false }
+        }
+        return false
     }
 
     private fun acceptBridgePage(
@@ -1246,6 +1309,11 @@ class MainActivity : Activity() {
     }
 
     private fun handleAndroidBack(navigateSystemBack: () -> Unit) {
+        val channel = activeBridgeChannel
+        if (configuredOrigin == BundledShellPolicy.ORIGIN && channel?.itineraryOpen == true) {
+            bridgeStatusCounter += 1
+            if (postToBridge(channel, ExternalItineraryProtocol.back("native-${channel.pageNonce}-$bridgeStatusCounter"))) return
+        }
         val current = webView
         val decision = BackNavigationPolicy.decide(
             currentUrl = current?.url,
@@ -1342,6 +1410,8 @@ class MainActivity : Activity() {
         var replyProxy: JavaScriptReplyProxy,
         val webViewIdentity: Int,
         val navigationEpoch: Long,
+        var itineraryReady: Boolean = false,
+        var itineraryOpen: Boolean = false,
     )
 
     companion object {

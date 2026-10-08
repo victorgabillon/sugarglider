@@ -134,10 +134,20 @@ itself is unchanged by this input feature.
 The local prompt helper includes the complete field template, enums, bounds and
 chosen settings so it can be copied without including technical routing defaults.
 
-## Future acquisition hooks
+## Coordinate acquisition
 
-Address/place search should resolve a location then feed existing route-point
+Address/place search resolves a location then feeds existing route-point
 acquisition, just like map taps, GPS and this draft import; an address is not a
-new route point type. Future Android `ACTION_SEND`/`ACTION_VIEW`, share target or
-Open with Sugarglider can hand a bounded draft into this same preview/confirmation
-flow. These hooks and direct provider integration are not implemented here.
+new route point type. Android Share and Open with use the same preview/confirmation
+flow described below. Direct provider integration remains outside this format.
+
+## Android Share and Open with
+
+In the Android app, share plain text or a JSON document to Sugarglider, or use
+Open with Sugarglider for a granted content:// JSON document. The same dialog
+opens with the untrusted text at the input stage. Review itinerary and then
+explicitly Import itinerary are required, just as with manual paste; nothing
+imports, generates, contacts a provider or follows a shared URL automatically.
+Native transport accepts at most 64 KiB UTF-8, reads temporary content grants once,
+and stores no draft or URI durably. Cancel preserves the current plan/results.
+The version 1 schema and coordinate authority are unchanged.
