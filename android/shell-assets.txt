@@ -79,6 +79,7 @@ outings.js
 place_presentation.js
 planner_location.js
 planner_profile.js
+poi_route_location.js
 public_profile_metadata.js
 pwa/icon-192.png
 pwa/icon-512.png

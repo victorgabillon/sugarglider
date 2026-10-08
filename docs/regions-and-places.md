@@ -74,6 +74,12 @@ names or descriptions as HTML.
 A Place tap opens details only. Changing filters, selecting/dismissing a popup or
 centering the map does not change required points, candidates, score, geometry or GPX.
 An explicit route preference/edit is separate and invalidates the plan when appropriate.
+**Pass through here** explicitly adds a hard route point using the same acquisition
+as a resolved search result: only the display name and coordinate enter the route.
+It is available in the editable planner for public/unknown-access places with valid
+coordinates; private/restricted and explicitly non-potable places have no such action.
+**Prefer for suggested route** remains a separate soft Auto Tour preference. Mapped
+access, opening and potability information are not guarantees.
 Only selected deliberate places become route anchors; incidental map discoveries do not.
 
 Water classes remain distinct: verified drinking water, unknown potability and explicitly

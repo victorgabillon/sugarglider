@@ -11,7 +11,7 @@ import {
 } from "./avatar.js";
 import { liveFreshness } from "./outing_live_state.js";
 import { requestedPlaceIdentifier } from "./state.js";
-import { createPlaceDetails, ICE_CREAM_ART_URL, ICE_CREAM_ICON_SVG, isPriorityPlace, placePresentation } from "./place_presentation.js";
+import { createPassThroughAction, createPlaceDetails, ICE_CREAM_ART_URL, ICE_CREAM_ICON_SVG, isPriorityPlace, placePresentation } from "./place_presentation.js";
 import {
   attachOfflineBasemap,
   detachOfflineBasemap,
@@ -140,6 +140,8 @@ let candidateClickHandler = null;
 let requiredPointActivateHandler = null;
 let poiActivateHandler = null;
 let poiPreferHandler = null;
+let poiPassThroughHandler = null;
+let poiCanPassThrough = () => false;
 let preferredPoiIds = new Set();
 let poiById = new Map();
 let poiPopup = null;
@@ -780,8 +782,12 @@ function popupRow(content, label, value, prominent = false) {
 }
 
 function poiPopupContent(feature) {
+  const passThrough = {
+    onPassThrough: (place) => poiPassThroughHandler?.(place) ?? false,
+    canPassThrough: (place) => poiCanPassThrough(place),
+  };
   if (placePresentation(feature).richImage) {
-    return createPlaceDetails(feature, { onCenter: (place) => map.easeTo({
+    return createPlaceDetails(feature, { ...passThrough, onCenter: (place) => map.easeTo({
       center: [place.coordinate.lon, place.coordinate.lat],
       offset: [0, 100], duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 300,
     }) });
@@ -828,6 +834,7 @@ function poiPopupContent(feature) {
     `${Number(feature.coordinate.lat).toFixed(6)}, ${Number(feature.coordinate.lon).toFixed(6)}`,
   );
   popupRow(content, "OSM object", `${feature.osm_type}/${feature.osm_id}`);
+  content.append(createPassThroughAction(feature, passThrough));
   const scenic = ["viewpoint", "observation_tower", "castle", "archaeological_site", "ruins", "tourism_attraction"].includes(feature.category);
   const verifiedWater = feature.category === "drinking_water" && feature.potability === "verified";
   const eligibleAccess = ["public", "unknown"].includes(feature.access_status);
@@ -1454,6 +1461,8 @@ export function renderPois(features, selectedId, onSelect, options = {}) {
   poiActivateHandler = onSelect;
   poiDeselectHandler = options.onDeselect ?? (() => onSelect(null));
   poiPreferHandler = options.onPrefer ?? null;
+  poiPassThroughHandler = options.onPassThrough ?? null;
+  poiCanPassThrough = options.canPassThrough ?? (() => false);
   preferredPoiIds = new Set(options.preferredIds ?? []);
   selectedPoiId = selectedId;
   visitedPoiIds = new Set(options.visitedIds ?? []);
@@ -1463,6 +1472,8 @@ export function renderPois(features, selectedId, onSelect, options = {}) {
   } else if (poiPopupId !== selectedId) {
     showPoiPopup(poiById.get(selectedId));
   }
+  const passThrough = poiPopup?.getElement().querySelector(".place-pass-through");
+  if (passThrough) passThrough.hidden = !poiCanPassThrough(poiById.get(selectedId));
   moveRequiredLabelsToTop();
   positionDirectionLayer();
 }
