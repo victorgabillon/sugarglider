@@ -39,10 +39,39 @@ CORS, no redirects, untransformed compressed files, every size/hash and a real
 Fairphone download. A green workflow is not proof of this client acceptance.
 
 Pages deployment replaces the complete site. Prepare an update with
-`--retain-directory` for the previous version. Never overwrite immutable files
-or silently retire a currently supported version. This initial tool supports one
-advertised region and one retained version. More retained versions/regions or
-traffic beyond Pages limits require a separate hosting/retention decision.
+one `--retain-directory` per still-supported previous version. The tool supports
+one advertised region plus zero or more retained immutable versions of that same
+region, bounded by the complete publication's size and archive-safety limits.
+Every version is verified independently and copied byte-for-byte. Only the current
+build appears in the catalog; retained build IDs are sorted deterministically.
+Never overwrite immutable files or silently retire a supported version: every
+version that must remain addressable must be included in the replacement site.
+Another geographical region or traffic beyond Pages limits requires a separate
+hosting decision.
+
+For example, retain two versions with:
+
+```sh
+uv run python -m sugarglider.offline_regions.distribution \
+  --region-directory /data/new \
+  --retain-directory /data/current-old \
+  --retain-directory /data/older \
+  --output-directory /data/new-publication \
+  --base-url https://victorgabillon.github.io/sugarglider-regions/ \
+  --description 'Reviewed regional coverage description'
+```
+
+Preparation is local only. The 950,000,000-byte budget includes every regional
+version plus reserved overhead, and available disk space must cover the site and
+ZIP. The existing 128-member archive metadata bound is also checked before
+assembly; with the fixed seven-file regional layout it permits up to 17 complete
+versions. This is an archive-safety bound, not a two-retained-version special case.
+
+The standalone unpack verifier must be copied from the reviewed application
+revision before a later publication. It verifies the catalog's one current row
+against the advertised manifest and checks every retained manifest's region/build
+path identity before extraction. The workflow, manual dispatch, archive-hash gate,
+privacy gate, pinned actions and deployment permissions remain unchanged.
 
 See the main repository's `docs/pr42-static-distribution.md` for preparation,
 current limits, licensing, approval gates and the publication checklist.

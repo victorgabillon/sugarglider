@@ -10,6 +10,9 @@ import subprocess
 import sys
 import tarfile
 from collections.abc import Mapping, Sequence
+from contextlib import nullcontext
+from copy import copy
+from os import stat_result
 from pathlib import Path
 
 import osmium
@@ -745,3 +748,649 @@ def test_static_update_retains_previous_immutable_downloads(
     assert json.loads((output / "report.json").read_bytes())["retained_build_ids"] == [
         old.build_id
     ]
+
+
+def _retained_version(source: Path, target: Path, classifier: str) -> Path:
+    """Make an independently valid historical fixture with different source/tool IDs."""
+    from sugarglider.offline_regions.models import build_identity
+
+    shutil.copytree(source, target)
+    value = json.loads((target / "manifest.json").read_bytes())
+    value["display_name"] = f"Historical classifier {classifier}"
+    value["source"]["sha256"] = hashlib.sha256(classifier.encode()).hexdigest()
+    value["tools"]["poi_classifier"] = classifier
+    value["tools"]["python_version"] = f"3.13.{classifier}"
+    poi_path = target / "pois/index.json.gz"
+    poi = json.loads(gzip.decompress(poi_path.read_bytes()))
+    poi["metadata"]["classifier_version"] = classifier
+    poi["metadata"]["build_configuration"]["classifier_version"] = classifier
+    poi_path.write_bytes(gzip.compress(canonical_json(poi), mtime=0))
+    descriptor = value["components"]["pois"]["files"][0]
+    descriptor.update(
+        byte_size=poi_path.stat().st_size,
+        sha256=hashlib.sha256(poi_path.read_bytes()).hexdigest(),
+    )
+    del value["build_id"]
+    value["build_id"] = build_identity(value)
+    (target / "manifest.json").write_bytes(canonical_json(value))
+    verify_region(target)
+    return target
+
+
+@pytest.fixture
+def retained_versions(
+    repository: Path, pbf: Path, tmp_path: Path
+) -> tuple[Path, Path, Path]:
+    current = build_region(repository, "marly", pbf, builder=fake_components)
+    previous = _retained_version(current, tmp_path / "previous", "2")
+    older = _retained_version(current, tmp_path / "older", "1")
+    return current, previous, older
+
+
+def _tree_bytes(directory: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(directory).as_posix(): path.read_bytes()
+        for path in directory.rglob("*")
+        if path.is_file()
+    }
+
+
+def _prepare_versions(
+    versions: tuple[Path, Path, Path], output: Path, retained: Sequence[Path]
+) -> Path:
+    from sugarglider.offline_regions.distribution import prepare_distribution
+
+    return prepare_distribution(
+        versions[0],
+        output,
+        base_url="https://packs.example/",
+        description="Current offering",
+        retain_directories=retained,
+    )
+
+
+def test_static_update_retains_multiple_versions_deterministically(
+    retained_versions: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    from sugarglider.offline_regions.unpack_distribution import unpack_distribution
+
+    current, previous, older = retained_versions
+    before = [_tree_bytes(path) for path in retained_versions]
+    one = _prepare_versions(retained_versions, tmp_path / "one", (previous, older))
+    two = _prepare_versions(retained_versions, tmp_path / "two", (older, previous))
+    assert _tree_bytes(one) == _tree_bytes(two)
+    report = json.loads((one / "report.json").read_bytes())
+    manifests = [verify_region(path) for path in retained_versions]
+    assert len({manifest.source.sha256 for manifest in manifests}) == 3
+    assert {manifest.tools.poi_classifier for manifest in manifests} == {"1", "2", "3"}
+    expected_ids = sorted(manifest.build_id for manifest in manifests[1:])
+    assert report["retained_build_ids"] == expected_ids
+    assert report["publication_regional_bytes"] == sum(
+        len(data) for tree in before for data in tree.values()
+    )
+    catalog = json.loads((one / "site/catalog.json").read_bytes())
+    assert [row["build_id"] for row in catalog["regions"]] == [manifests[0].build_id]
+    notice = (one / "site/README.txt").read_text()
+    assert notice.endswith("\n".join(f"- {build}" for build in expected_ids) + "\n")
+    archive = one / "sugarglider-regions-static.zip"
+    assert report["archive_sha256"] == hashlib.sha256(archive.read_bytes()).hexdigest()
+    unpacked = unpack_distribution(
+        archive, tmp_path / "unpacked", report["archive_sha256"]
+    )
+    for path, manifest, snapshot in zip(
+        retained_versions, manifests, before, strict=True
+    ):
+        relative = f"regions/{manifest.region_id}/{manifest.build_id}"
+        copied = one / "site" / relative
+        extracted = unpacked / relative
+        assert verify_region(copied) == manifest == verify_region(extracted)
+        assert _tree_bytes(copied) == _tree_bytes(extracted) == snapshot
+        assert _tree_bytes(path) == snapshot
+    # The deployment helper works when copied alone, outside the application package.
+    standalone = tmp_path / "unpack_distribution.py"
+    shutil.copyfile(
+        ROOT / "src/sugarglider/offline_regions/unpack_distribution.py", standalone
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            str(standalone),
+            str(archive),
+            str(tmp_path / "standalone-site"),
+            report["archive_sha256"],
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert _tree_bytes(tmp_path / "standalone-site") == _tree_bytes(one / "site")
+
+
+@pytest.mark.parametrize("count", [0, 1])
+def test_static_plural_retention_preserves_zero_and_one_version_behavior(
+    count: int, retained_versions: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    from sugarglider.offline_regions.distribution import prepare_distribution
+
+    current, previous, _ = retained_versions
+    plural = _prepare_versions(
+        retained_versions, tmp_path / "plural", (previous,)[:count]
+    )
+    alias = prepare_distribution(
+        current,
+        tmp_path / "alias",
+        base_url="https://packs.example/",
+        description="Current offering",
+        retain_directory=previous if count else None,
+    )
+    assert _tree_bytes(plural) == _tree_bytes(alias)
+    assert len(list((plural / "site/regions/marly").iterdir())) == count + 1
+
+
+def test_static_retention_rejects_conflicting_api_arguments(
+    retained_versions: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    from sugarglider.offline_regions.distribution import prepare_distribution
+
+    current, previous, older = retained_versions
+    output = tmp_path / "conflict"
+    with pytest.raises(ValueError, match="either"):
+        prepare_distribution(
+            current,
+            output,
+            base_url="https://packs.example/",
+            description="Fixture",
+            retain_directories=(older,),
+            retain_directory=previous,
+        )
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("case", ["same-path", "current", "copied-build"])
+def test_static_retention_rejects_duplicate_builds_before_output(
+    case: str, retained_versions: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    current, previous, _ = retained_versions
+    if case == "same-path":
+        retained = (previous, previous)
+    elif case == "current":
+        retained = (previous, current)
+    else:
+        other_path = tmp_path / "duplicate-copy"
+        shutil.copytree(previous, other_path)
+        retained = (previous, other_path)
+    output = tmp_path / "duplicate"
+    before = [_tree_bytes(path) for path in retained_versions]
+    with pytest.raises(ValueError, match="duplicate"):
+        _prepare_versions(retained_versions, output, retained)
+    assert not output.exists()
+    assert [_tree_bytes(path) for path in retained_versions] == before
+
+
+def test_static_retention_rejects_wrong_region_before_output(
+    retained_versions: tuple[Path, Path, Path],
+    repository: Path,
+    pbf: Path,
+    tmp_path: Path,
+) -> None:
+    other = build_region(repository, "paris", pbf, builder=fake_components)
+    output = tmp_path / "wrong-region"
+    with pytest.raises(ValueError, match="same region"):
+        _prepare_versions(retained_versions, output, (retained_versions[1], other))
+    assert not output.exists()
+
+
+def test_static_retention_rejects_one_corrupt_version_before_output(
+    retained_versions: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    _, previous, older = retained_versions
+    (older / "nature/index.json.gz").write_bytes(b"corrupt")
+    before = [_tree_bytes(path) for path in retained_versions]
+    output = tmp_path / "corrupt-retained"
+    with pytest.raises(ValueError, match="size"):
+        _prepare_versions(retained_versions, output, (previous, older))
+    assert not output.exists()
+    assert [_tree_bytes(path) for path in retained_versions] == before
+
+
+def test_static_retention_rejects_output_inside_second_retained_tree(
+    retained_versions: tuple[Path, Path, Path],
+) -> None:
+    _, previous, older = retained_versions
+    output = older / "publication"
+    with pytest.raises(ValueError, match="outside the retained"):
+        _prepare_versions(retained_versions, output, (previous, older))
+    assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "case", ["source-root", "retained-root", "retained-parent", "component"]
+)
+def test_static_retention_rejects_symlink_paths(
+    case: str, retained_versions: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    current, previous, older = retained_versions
+    linked = tmp_path / "link"
+    if case == "source-root":
+        linked.symlink_to(current, target_is_directory=True)
+        retained_versions = linked, previous, older
+    elif case == "retained-root":
+        linked.symlink_to(older, target_is_directory=True)
+        older = linked
+    elif case == "retained-parent":
+        linked.symlink_to(older.parent, target_is_directory=True)
+        older = linked / older.name
+    else:
+        original = older / "nature/index.json.gz"
+        external = tmp_path / "outside-index"
+        shutil.move(original, external)
+        original.symlink_to(external)
+    output = tmp_path / "symlink-output"
+    with pytest.raises(ValueError, match="symbolic|non-regular"):
+        _prepare_versions(retained_versions, output, (previous, older))
+    assert not output.exists()
+
+
+def test_static_retention_accounts_all_versions_in_host_budget(
+    retained_versions: tuple[Path, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sugarglider.offline_regions import distribution
+
+    # Isolate byte accounting after real validation without gigabytes of test data.
+    manifests = {path: verify_region(path) for path in retained_versions}
+    monkeypatch.setattr(distribution, "verify_region", manifests.__getitem__)
+    original_stat = Path.stat
+
+    def large_stat(path: Path, *, follow_symlinks: bool = True) -> stat_result:
+        result = original_stat(path, follow_symlinks=follow_symlinks)
+        if path.name == "basemap.pmtiles":
+            fields = list(result)
+            fields[6] = 320_000_000
+            return stat_result(fields)
+        return result
+
+    monkeypatch.setattr(Path, "stat", large_stat)
+    output = tmp_path / "too-large"
+    with pytest.raises(ValueError, match="static host size"):
+        _prepare_versions(retained_versions, output, retained_versions[1:])
+    assert not output.exists()
+
+
+def test_static_retention_accounts_all_versions_in_free_space(
+    retained_versions: tuple[Path, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trees = [_tree_bytes(path) for path in retained_versions]
+    byte_sizes = [sum(map(len, tree.values())) for tree in trees]
+    enough_for_two = sum(byte_sizes[:2]) * 2 + 65_536
+    assert enough_for_two < sum(byte_sizes) * 2 + 65_536
+    space = shutil.disk_usage(tmp_path)._replace(free=enough_for_two)
+    monkeypatch.setattr(shutil, "disk_usage", lambda _: space)
+    output = tmp_path / "no-space"
+    with pytest.raises(ValueError, match="free space"):
+        _prepare_versions(retained_versions, output, retained_versions[1:])
+    assert not output.exists()
+
+
+def test_static_retention_removes_partial_output_after_later_copy_failure(
+    retained_versions: tuple[Path, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    before = [_tree_bytes(path) for path in retained_versions]
+    last = max(retained_versions[1:], key=lambda path: verify_region(path).build_id)
+    copy_file = shutil.copyfile
+    copied: list[Path] = []
+
+    def failing_copy(source: Path, target: Path) -> Path:
+        if source == last / "nature/index.json.gz":
+            raise OSError("injected final retained copy failure")
+        copied.append(source)
+        return copy_file(source, target)
+
+    monkeypatch.setattr(shutil, "copyfile", failing_copy)
+    output = tmp_path / "partial"
+    with pytest.raises(OSError, match="injected"):
+        _prepare_versions(retained_versions, output, retained_versions[1:])
+    assert len(copied) > 7
+    assert not output.exists()
+    assert [_tree_bytes(path) for path in retained_versions] == before
+
+
+def test_static_retention_cli_accepts_repeatable_paths(
+    retained_versions: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    output = tmp_path / "cli"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "sugarglider.offline_regions.distribution",
+            "--region-directory",
+            str(retained_versions[0]),
+            "--retain-directory",
+            str(retained_versions[2]),
+            "--retain-directory",
+            str(retained_versions[1]),
+            "--output-directory",
+            str(output),
+            "--base-url",
+            "https://packs.example/",
+            "--description",
+            "CLI fixture",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report = json.loads((output / "report.json").read_bytes())
+    assert report["retained_build_ids"] == sorted(
+        verify_region(path).build_id for path in retained_versions[1:]
+    )
+    assert len(list((output / "site/regions/marly").iterdir())) == 3
+
+
+def _rewrite_static_zip(
+    source: Path,
+    target: Path,
+    *,
+    patches: Mapping[str, bytes] | None = None,
+    omit: str | None = None,
+    extra: tuple[str, bytes] | None = None,
+    compression: int = 0,
+) -> str:
+    import zipfile
+
+    with zipfile.ZipFile(source) as reader, zipfile.ZipFile(target, "w") as writer:
+        for original in reader.infolist():
+            if original.filename == omit:
+                continue
+            member = copy(original)
+            member.compress_type = compression
+            writer.writestr(
+                member, (patches or {}).get(member.filename, reader.read(original))
+            )
+        if extra is not None:
+            member = zipfile.ZipInfo(extra[0])
+            member.external_attr = 0o100644 << 16
+            member.compress_type = compression
+            writer.writestr(member, extra[1])
+    return hashlib.sha256(target.read_bytes()).hexdigest()
+
+
+def test_static_unpack_rejects_incomplete_third_version(
+    retained_versions: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    from sugarglider.offline_regions.unpack_distribution import unpack_distribution
+
+    prepared = _prepare_versions(
+        retained_versions, tmp_path / "complete", retained_versions[1:]
+    )
+    old = verify_region(retained_versions[2])
+    archive = tmp_path / "incomplete.zip"
+    digest = _rewrite_static_zip(
+        prepared / "sugarglider-regions-static.zip",
+        archive,
+        omit=f"regions/{old.region_id}/{old.build_id}/nature/index.json.gz",
+    )
+    output = tmp_path / "incomplete-site"
+    with pytest.raises(ValueError, match="incomplete regional"):
+        unpack_distribution(archive, output, digest)
+    assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "not-json",
+        "non-object",
+        "bad-schema",
+        "duplicate-field",
+        "two-offerings",
+        "missing-build",
+        "wrong-download-size",
+        "wrong-bounds",
+        "wrong-name",
+        "wrong-url-build",
+        "url-query",
+        "url-credentials",
+        "url-traversal",
+        "url-port",
+        "url-control",
+        "nonfinite-bounds",
+        "boolean-size",
+        "unsafe-text",
+    ],
+)
+def test_static_unpack_rejects_malformed_catalog_before_extraction(
+    case: str, retained_versions: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    from sugarglider.offline_regions.unpack_distribution import unpack_distribution
+
+    prepared = _prepare_versions(
+        retained_versions, tmp_path / "complete", retained_versions[1:]
+    )
+    catalog = json.loads((prepared / "site/catalog.json").read_bytes())
+    offering = catalog["regions"][0]
+    if case == "not-json":
+        content = b"{"
+    elif case == "non-object":
+        content = b"[]"
+    elif case == "duplicate-field":
+        content = b'{"schema_version":1,"schema_version":1,"regions":[]}'
+    else:
+        if case == "bad-schema":
+            catalog["schema_version"] = True
+        elif case == "two-offerings":
+            catalog["regions"].append(offering)
+        elif case == "missing-build":
+            offering["build_id"] = "0" * 64
+        elif case == "wrong-download-size":
+            offering["download_bytes"] += 1
+        elif case == "wrong-bounds":
+            offering["bounds"][0] += 0.001
+        elif case == "wrong-name":
+            offering["display_name"] = "Wrong name"
+        elif case == "wrong-url-build":
+            offering["manifest_url"] = (
+                "https://packs.example/regions/marly/" + "0" * 64 + "/manifest.json"
+            )
+        elif case == "url-query":
+            offering["manifest_url"] += "?query=1"
+        elif case == "url-credentials":
+            offering["manifest_url"] = offering["manifest_url"].replace(
+                "packs.example", "user@packs.example"
+            )
+        elif case == "url-traversal":
+            offering["manifest_url"] = offering["manifest_url"].replace(
+                "/regions/", "/../regions/"
+            )
+        elif case == "url-port":
+            offering["manifest_url"] = offering["manifest_url"].replace(
+                "packs.example", "packs.example:65536"
+            )
+        elif case == "url-control":
+            offering["manifest_url"] = offering["manifest_url"].replace(
+                "packs.example", "packs.example\n"
+            )
+        elif case == "nonfinite-bounds":
+            offering["bounds"][0] = float("nan")
+        elif case == "boolean-size":
+            offering["download_bytes"] = True
+        elif case == "unsafe-text":
+            offering["description"] = "Unsafe\ntext"
+        content = json.dumps(catalog).encode()
+    archive = tmp_path / "bad-catalog.zip"
+    digest = _rewrite_static_zip(
+        prepared / "sugarglider-regions-static.zip",
+        archive,
+        patches={"catalog.json": content},
+    )
+    output = tmp_path / "invalid-catalog"
+    with pytest.raises(ValueError):
+        unpack_distribution(archive, output, digest)
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("field", ["region_id", "build_id"])
+def test_static_unpack_rejects_retained_manifest_identity_mismatch(
+    field: str, retained_versions: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    from sugarglider.offline_regions.unpack_distribution import unpack_distribution
+
+    prepared = _prepare_versions(
+        retained_versions, tmp_path / "complete", retained_versions[1:]
+    )
+    old = verify_region(retained_versions[2])
+    name = f"regions/{old.region_id}/{old.build_id}/manifest.json"
+    value = json.loads((prepared / "site" / name).read_bytes())
+    value[field] = "other-region" if field == "region_id" else "0" * 64
+    archive = tmp_path / "bad-identity.zip"
+    digest = _rewrite_static_zip(
+        prepared / "sugarglider-regions-static.zip",
+        archive,
+        patches={name: canonical_json(value)},
+    )
+    output = tmp_path / "bad-identity"
+    with pytest.raises(ValueError, match="identity mismatch"):
+        unpack_distribution(archive, output, digest)
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("case", ["duplicate", "compressed", "unexpected-file"])
+def test_static_unpack_security_checks_remain_with_three_versions(
+    case: str, retained_versions: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    import zipfile
+
+    from sugarglider.offline_regions.unpack_distribution import unpack_distribution
+
+    prepared = _prepare_versions(
+        retained_versions, tmp_path / "complete", retained_versions[1:]
+    )
+    archive = tmp_path / "unsafe-three.zip"
+    extra = ("README.txt", b"duplicate") if case == "duplicate" else None
+    if case == "unexpected-file":
+        extra = ("secrets.json", b"unexpected")
+    with (
+        pytest.warns(UserWarning, match="Duplicate")
+        if case == "duplicate"
+        else nullcontext()
+    ):
+        digest = _rewrite_static_zip(
+            prepared / "sugarglider-regions-static.zip",
+            archive,
+            extra=extra,
+            compression=zipfile.ZIP_DEFLATED
+            if case == "compressed"
+            else zipfile.ZIP_STORED,
+        )
+    output = tmp_path / "unsafe-site"
+    with pytest.raises(ValueError):
+        unpack_distribution(archive, output, digest)
+    assert not output.exists()
+
+
+def test_publication_workflow_remains_manual_pinned_and_separates_authority() -> None:
+    import re
+
+    workflow = (ROOT / "deploy/regions/github-pages/publish.yml").read_text()
+    assert "on:\n  workflow_dispatch:\n    inputs:" in workflow
+    assert (
+        "  push:" not in workflow
+        and "  release:" not in workflow
+        and "  schedule:" not in workflow
+    )
+    assert "release_tag:" in workflow and "archive_sha256:" in workflow
+    assert "REGION_ARCHIVE_SHA256: ${{ inputs.archive_sha256 }}" in workflow
+    assert (
+        "python3 unpack_distribution.py "
+        '"$RUNNER_TEMP/region-publication/sugarglider-regions-static.zip" '
+        '"$RUNNER_TEMP/region-site" "$REGION_ARCHIVE_SHA256"' in workflow
+    )
+    assert (
+        'python3 copy_public_privacy.py privacy/index.html "$RUNNER_TEMP/region-site"'
+        in workflow
+    )
+    assert "    needs: prepare\n" in workflow
+    assert "permissions:\n  contents: read\n" in workflow
+    assert "      pages: write\n      id-token: write\n" in workflow
+    pins = re.findall(r"uses: ([A-Za-z0-9_/-]+)@([a-f0-9]{40})", workflow)
+    assert len(pins) == 5
+    assert {name for name, _ in pins} == {
+        "actions/checkout",
+        "actions/setup-python",
+        "actions/configure-pages",
+        "actions/upload-pages-artifact",
+        "actions/deploy-pages",
+    }
+    assert "cancel-in-progress: false" in workflow
+    assert "          include-hidden-files: true" in workflow
+
+
+def test_static_retention_is_not_limited_to_two_previous_versions(
+    retained_versions: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    from sugarglider.offline_regions.unpack_distribution import unpack_distribution
+
+    another = _retained_version(retained_versions[0], tmp_path / "another", "3")
+    retained = (*retained_versions[1:], another)
+    prepared = _prepare_versions(
+        retained_versions, tmp_path / "four-versions", retained
+    )
+    report = json.loads((prepared / "report.json").read_bytes())
+    assert report["retained_build_ids"] == sorted(
+        verify_region(path).build_id for path in retained
+    )
+    extracted = unpack_distribution(
+        prepared / "sugarglider-regions-static.zip",
+        tmp_path / "four-unpacked",
+        report["archive_sha256"],
+    )
+    assert len(list((extracted / "regions/marly").iterdir())) == 4
+    for path in (*retained_versions, another):
+        manifest = verify_region(path)
+        assert _tree_bytes(
+            extracted / "regions/marly" / manifest.build_id
+        ) == _tree_bytes(path)
+
+
+@pytest.mark.parametrize("case", ["archive", "site"])
+def test_static_unpack_keeps_archive_and_content_size_limits(
+    case: str,
+    retained_versions: tuple[Path, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import zipfile
+
+    from sugarglider.offline_regions import unpack_distribution as unpacker
+
+    prepared = _prepare_versions(
+        retained_versions, tmp_path / "complete", retained_versions[1:]
+    )
+    archive = prepared / "sugarglider-regions-static.zip"
+    report = json.loads((prepared / "report.json").read_bytes())
+    if case == "archive":
+        monkeypatch.setattr(unpacker, "MAX_BYTES", archive.stat().st_size - 1)
+    else:
+        original_members = zipfile.ZipFile.infolist
+
+        def oversized_member_list(bundle: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
+            members = [copy(member) for member in original_members(bundle)]
+            next(
+                member
+                for member in members
+                if member.filename.endswith("basemap.pmtiles")
+            ).file_size = 950_000_001
+            return members
+
+        monkeypatch.setattr(zipfile.ZipFile, "infolist", oversized_member_list)
+    output = tmp_path / "oversized-unpack"
+    with pytest.raises(ValueError, match="size budget"):
+        unpacker.unpack_distribution(archive, output, report["archive_sha256"])
+    assert not output.exists()

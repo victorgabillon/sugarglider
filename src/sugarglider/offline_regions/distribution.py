@@ -7,15 +7,28 @@ import re
 import shutil
 import sys
 import zipfile
+from collections.abc import Sequence
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from sugarglider.offline_regions.models import RegionalManifest, canonical_json
+from sugarglider.offline_regions.unpack_distribution import MAX_BYTES, MAX_FILES
 from sugarglider.offline_regions.validation import verify_region
 
 ODBL_URL = "https://opendatacommons.org/licenses/odbl/1-0/"
 OSM_URL = "https://www.openstreetmap.org/copyright"
 SOURCE_URL = "https://github.com/victorgabillon/sugarglider"
+
+
+def _regional_files(manifest: RegionalManifest) -> tuple[str, ...]:
+    return (
+        "manifest.json",
+        *(
+            file.path
+            for component in manifest.components.ordered
+            for file in component.files
+        ),
+    )
 
 
 def distribution_base_url(value: str) -> str:
@@ -83,15 +96,24 @@ def prepare_distribution(
     *,
     base_url: str,
     description: str,
+    retain_directories: Sequence[Path] = (),
     retain_directory: Path | None = None,
 ) -> Path:
-    """Verify source, exclusively create output, and package exact component bytes."""
+    """Package current and sorted retained versions; singular retention is an alias."""
     base = distribution_base_url(base_url)
     if not 1 <= len(description) <= 500 or description.strip() != description:
         raise ValueError("description must contain 1..500 trimmed characters")
     if any(ord(character) < 32 or ord(character) == 127 for character in description):
         raise ValueError("description contains control characters")
+    if retain_directory is not None:
+        if retain_directories:
+            raise ValueError("use either retain_directory or retain_directories")
+        retain_directories = (retain_directory,)
     source, output = source.absolute(), output.absolute()
+    retained_directories = tuple(path.absolute() for path in retain_directories)
+    for directory in (source, *retained_directories):
+        if any(path.is_symlink() for path in (directory, *directory.parents)):
+            raise ValueError("symbolic-link source/retained path is not allowed")
     if any(path.is_symlink() for path in (output, *output.parents)):
         raise ValueError("symbolic-link output path is not allowed")
     if output.exists():
@@ -99,32 +121,33 @@ def prepare_distribution(
     if not output.parent.is_dir() or output.resolve().is_relative_to(source.resolve()):
         raise ValueError("output requires an existing parent outside the source region")
     manifest = verify_region(source)
-    sources = [(source, manifest)]
-    if retain_directory is not None:
-        retained = verify_region(retain_directory)
-        if (
-            retained.region_id != manifest.region_id
-            or retained.build_id == manifest.build_id
-        ):
-            raise ValueError("retain one different version of the same region")
-        if output.resolve().is_relative_to(retain_directory.resolve()):
+    retained_sources: list[tuple[Path, RegionalManifest]] = []
+    build_ids = {manifest.build_id}
+    for directory in retained_directories:
+        retained = verify_region(directory)
+        if retained.region_id != manifest.region_id:
+            raise ValueError("retained versions must belong to the same region")
+        if retained.build_id in build_ids:
+            raise ValueError("duplicate current/retained build ID")
+        build_ids.add(retained.build_id)
+        if output.resolve().is_relative_to(directory.resolve()):
             raise ValueError("output must remain outside the retained region")
-        sources.append((retain_directory, retained))
-    relative = f"regions/{manifest.region_id}/{manifest.build_id}"
-    names = [
-        "manifest.json",
-        *(
-            file.path
-            for component in manifest.components.ordered
-            for file in component.files
-        ),
+        retained_sources.append((directory, retained))
+    sources = [
+        (source, manifest),
+        *sorted(retained_sources, key=lambda item: item[1].build_id),
     ]
-    total = sum((source / name).stat().st_size for name in names)
+    relative = f"regions/{manifest.region_id}/{manifest.build_id}"
+    total = sum((source / name).stat().st_size for name in _regional_files(manifest))
     publication_total = sum(
-        (directory / name).stat().st_size for directory, _ in sources for name in names
+        (directory / name).stat().st_size
+        for directory, captured in sources
+        for name in _regional_files(captured)
     )
-    if publication_total + 65_536 > 950_000_000:
+    if publication_total + 65_536 > MAX_BYTES:
         raise ValueError("publication exceeds the static host size budget")
+    if 4 + sum(len(_regional_files(captured)) for _, captured in sources) > MAX_FILES:
+        raise ValueError("publication exceeds the archive verifier file-count budget")
     if shutil.disk_usage(output.parent).free < publication_total * 2 + 65_536:
         raise ValueError("insufficient free space for the site and publication archive")
     output.mkdir()  # Exclusive ownership; never replace or reuse an existing output.
@@ -133,7 +156,7 @@ def prepare_distribution(
         for directory, captured in sources:
             target_region = site / "regions" / captured.region_id / captured.build_id
             target_region.mkdir(parents=True)
-            for name in names:
+            for name in _regional_files(captured):
                 target = target_region / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(directory / name, target)
@@ -164,8 +187,8 @@ def prepare_distribution(
         if len(sources) > 1:
             with (site / "README.txt").open("a", encoding="utf-8") as notice:
                 notice.write(
-                    "\nPrevious version retained under the same data license: "
-                    + sources[1][1].build_id
+                    "\nPrevious versions retained under the same data license:\n"
+                    + "\n".join(f"- {item.build_id}" for _, item in sources[1:])
                     + "\n"
                 )
         (site / ".nojekyll").write_bytes(b"")
@@ -231,7 +254,7 @@ def main() -> int:
     parser.add_argument("--output-directory", required=True, type=Path)
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--description", required=True)
-    parser.add_argument("--retain-directory", type=Path)
+    parser.add_argument("--retain-directory", type=Path, action="append", default=[])
     arguments = parser.parse_args()
     try:
         output = prepare_distribution(
@@ -239,7 +262,7 @@ def main() -> int:
             arguments.output_directory,
             base_url=arguments.base_url,
             description=arguments.description,
-            retain_directory=arguments.retain_directory,
+            retain_directories=arguments.retain_directory,
         )
     except (ValueError, OSError) as error:
         print(f"static-distribution: {error}", file=sys.stderr)
