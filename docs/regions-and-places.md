@@ -93,6 +93,35 @@ remains readable and the UI reports that this category is unavailable there. A c
 filter never upgrades or replaces an installed region automatically. Opening hours,
 stock and popularity are not inferred.
 
+## Practical discovery categories
+
+Classifier 3 adds exactly four categories: **toilets** (`amenity=toilets`),
+**café** (`amenity=cafe`), **bakery** (`shop=bakery`), and **picnic area**
+(`tourism=picnic_site`). Attached `toilets=yes`, restaurants, general shops,
+individual tables, benches, BBQs and campsites do not qualify. Existing classifier-2
+matches retain their primary, secondary, group, access, potability and name semantics,
+including dedicated ice-cream cafés. Only otherwise unclassified features use the new
+rules; café precedes bakery when both exact tags occur.
+
+Cafés and bakeries join the display-only `refreshment` group; toilets and picnic areas
+use `practical`. Toilets and picnic areas default on. Cafés and bakeries default off
+because towns can be dense. All four use ordinary clustered SVG icons: WC, mug, loaf
+and table. Initial visibility/label zooms are 14/16, 15/16, 15/16 and 13/15 respectively.
+Queries retain their bounded deterministic results and truthful truncation message;
+existing categories precede the four additions so dense new records cannot displace
+the existing bounded prefix.
+
+Index format stays 2. Classifier-1/2 regions remain readable; one concise capability
+message explains unavailable practical categories. Filters cannot manufacture missing
+records or upgrade a region. Local name search includes the new mapped names and
+friendly category text. Inspection is read-only; only explicit **Pass through here**
+adds ordinary name/latitude/longitude route points. These categories have no **Prefer**
+action and no automatic routing, ranking, Auto Tour, itinerary JSON or GPX influence.
+Mapped fee, opening and access fields remain facts rather than current guarantees.
+
+This application/builder change publishes no region and changes no public catalog.
+Classifier-3 Yvelines acceptance uses disposable generated data outside Git.
+
 ## Semantic location versus arrival
 
 A place's display/semantic coordinate may be a center far from an accessible entrance.

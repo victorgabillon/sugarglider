@@ -1,3 +1,4 @@
+import { placeCompatibilityMessage } from "./place_capabilities.js";
 import { initializeNativeItineraryHandoff } from "./native_itinerary_handoff.js";
 import { createLocationSearch } from "./location_search.js";
 import { initializeLocationSearchDialog } from "./location_search_dialog.js";
@@ -183,6 +184,10 @@ function showMapError(message) {
 function updatePoiFiltersFromControls() {
   state.poiFilters = {
     iceCream: byId("place-ice-cream").checked,
+    toilets: byId("place-toilets").checked,
+    picnicAreas: byId("place-picnic-areas").checked,
+    cafes: byId("place-cafes").checked,
+    bakeries: byId("place-bakeries").checked,
     scenic: byId("place-scenic").checked,
     verifiedWater: byId("place-verified-water").checked,
     unknownWater: byId("place-unknown-water").checked,
@@ -197,6 +202,10 @@ function poiCategoriesAndPotability() {
   const categories = [];
   const potability = [];
   if (state.poiFilters.iceCream) categories.push("ice_cream");
+  if (state.poiFilters.toilets) categories.push("toilets");
+  if (state.poiFilters.picnicAreas) categories.push("picnic_area");
+  if (state.poiFilters.cafes) categories.push("cafe");
+  if (state.poiFilters.bakeries) categories.push("bakery");
   if (state.poiFilters.scenic) categories.push(...PRIMARY_SCENIC_CATEGORIES);
   if (state.poiFilters.broadAttractions) categories.push("tourism_attraction");
   if (state.poiFilters.verifiedWater) {
@@ -242,7 +251,8 @@ function poiRequestBody(bounds) {
   const filters = poiCategoriesAndPotability();
   if (!filters.categories.length) return null;
   const groups = [];
-  if (filters.categories.includes("ice_cream")) groups.push("refreshment");
+  if (filters.categories.some((category) => ["ice_cream", "cafe", "bakery"].includes(category))) groups.push("refreshment");
+  if (filters.categories.some((category) => ["toilets", "picnic_area"].includes(category))) groups.push("practical");
   if (filters.categories.some((category) => PRIMARY_SCENIC_CATEGORIES.includes(category) || category === "tourism_attraction")) {
     groups.push("scenic");
   }
@@ -373,9 +383,9 @@ async function fetchViewportPois(id, bounds) {
     } else {
       byId("places-status").textContent = `${response.returned_count} mapped place${response.returned_count === 1 ? "" : "s"} in this viewport.`;
     }
-    if (state.poiFilters.iceCream && response.identity?.poi_classifier_version === "1") {
-      byId("places-status").textContent += " This installed region does not include ice-cream places yet.";
-    }
+    const compatibility = placeCompatibilityMessage(poiCategoriesAndPotability().categories,
+      response.identity?.poi_classifier_version ?? state.poiIndexStatus?.classifier_version);
+    if (response.available && compatibility) byId("places-status").textContent += ` ${compatibility}`;
   } catch (error) {
     if (state.poiRequest.id !== id || error.name === "AbortError") return;
     state.poiRequest = { status: "error", id };

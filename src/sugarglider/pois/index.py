@@ -255,6 +255,7 @@ class PoiIndex:
             available=True,
             index_path_basename=None,
             format_version=metadata.format_version,
+            classifier_version=metadata.classifier_version,
             source_basename=metadata.source_basename,
             feature_count=metadata.feature_count,
             category_counts={
@@ -347,8 +348,10 @@ def _matches(feature: PoiFeature, request: PoiSearchRequest) -> bool:
     return feature.access_status in request.access
 
 
-def _sort_key(feature: PoiFeature) -> tuple[str, str, str, str, int]:
+def _sort_key(feature: PoiFeature) -> tuple[bool, str, str, str, str, int]:
+    # Preserve the existing bounded discovery prefix when practical records grow.
     return (
+        feature.category in {"toilets", "cafe", "bakery", "picnic_area"},
         feature.group,
         feature.category,
         unicodedata.normalize("NFKC", feature.display_name).casefold(),

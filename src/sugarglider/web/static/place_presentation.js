@@ -3,6 +3,10 @@ export const ICE_CREAM_ART_URL = "/static/brand/sugarglider-ice-cream-pin.png";
 const category = (label, icon, priority = 20, minZoom = 0, labelZoom = 13, richImage = null) =>
   Object.freeze({ label, icon, priority, minZoom, labelZoom, richImage });
 export const PLACE_PRESENTATIONS = Object.freeze({
+  toilets: category("Toilets", "poi-toilets", 20, 14, 16),
+  cafe: category("Café", "poi-cafe", 20, 15, 16),
+  bakery: category("Bakery", "poi-bakery", 20, 15, 16),
+  picnic_area: category("Picnic area", "poi-picnic", 20, 13, 15),
   viewpoint: category("Viewpoint", "poi-viewpoint"),
   observation_tower: category("Observation tower", "poi-tower"),
   castle: category("Castle", "poi-historic"),

@@ -14,7 +14,7 @@ from sugarglider.pois.models import (
     ScenicConfidence,
 )
 
-CLASSIFIER_VERSION: Literal["2"] = "2"
+CLASSIFIER_VERSION: Literal["3"] = "3"
 
 SCENIC_CATEGORY_PRIORITY: tuple[PoiCategory, ...] = (
     "viewpoint",
@@ -43,6 +43,10 @@ FALLBACK_NAMES: dict[PoiCategory, str] = {
     "fountain": "Fountain — potability unknown",
     "water_tap": "Water tap — potability unknown",
     "ice_cream": "Ice cream",
+    "toilets": "Toilets",
+    "cafe": "Café",
+    "bakery": "Bakery",
+    "picnic_area": "Picnic area",
 }
 
 PUBLIC_TAG_KEYS = frozenset(
@@ -133,6 +137,19 @@ def classify_osm_tags(tags: Mapping[str, str]) -> PoiClassification | None:
         )
     ):
         categories = (*categories, "ice_cream")
+    # Classifier-2 matches keep their entire classification, including secondary
+    # classes. Practical rules are a fallback, never a new primary for old records.
+    if not categories:
+        categories = tuple(
+            category
+            for category, key, value in (
+                ("toilets", "amenity", "toilets"),
+                ("cafe", "amenity", "cafe"),
+                ("bakery", "shop", "bakery"),
+                ("picnic_area", "tourism", "picnic_site"),
+            )
+            if normalized.get(key) == value
+        )
     if not categories:
         return None
     category = categories[0]
@@ -148,9 +165,11 @@ def classify_osm_tags(tags: Mapping[str, str]) -> PoiClassification | None:
     )
     group: PoiGroup = (
         "refreshment"
-        if category == "ice_cream"
+        if category in {"ice_cream", "cafe", "bakery"}
         else "hydration"
         if category in {"drinking_water", "fountain", "water_tap"}
+        else "practical"
+        if category in {"toilets", "picnic_area"}
         else "scenic"
     )
     supplied_name = normalized.get("name", "").strip()

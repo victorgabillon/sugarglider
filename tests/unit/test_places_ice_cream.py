@@ -44,8 +44,8 @@ def test_ice_cream_index_retains_identity_metadata_and_bounded_filters(
     index_path: Path,
 ) -> None:
     index = load_poi_index(index_path)
-    assert index.metadata.classifier_version == "2"
-    assert index.metadata.build_configuration.classifier_version == "2"
+    assert index.metadata.classifier_version == "3"
+    assert index.metadata.build_configuration.classifier_version == "3"
     assert index.metadata.category_counts["ice_cream"] == 4
     request = PoiSearchRequest(bbox=BOUNDS, categories=("ice_cream",))
     result = index.search(request, limit=2)

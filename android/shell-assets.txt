@@ -76,6 +76,7 @@ outing_native_bridge.js
 outing_tracking.js
 outing_view.js
 outings.js
+place_capabilities.js
 place_presentation.js
 planner_location.js
 planner_profile.js

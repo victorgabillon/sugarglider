@@ -132,6 +132,10 @@ export const state = {
   poiAbortController: null,
   poiFilters: {
     iceCream: true,
+    toilets: true,
+    picnicAreas: true,
+    cafes: false,
+    bakeries: false,
     scenic: true,
     verifiedWater: true,
     unknownWater: false,
