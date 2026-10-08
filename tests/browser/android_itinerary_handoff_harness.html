@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Android itinerary handoff harness</title><pre id="result">running</pre>
+<script type="module">
+import { runAndroidItineraryHandoffHarness } from './android_itinerary_handoff_harness.js';
+const result=document.querySelector('#result');
+window.addEventListener('unhandledrejection',event=>{result.dataset.status='failed';result.textContent=String(event.reason)});
+try { const scenarios=await runAndroidItineraryHandoffHarness();if(result.dataset.status!=='failed'){result.dataset.status='passed';result.textContent=JSON.stringify(scenarios)} }
+catch(error){result.dataset.status='failed';result.textContent=error.stack??String(error)}
+</script></html>

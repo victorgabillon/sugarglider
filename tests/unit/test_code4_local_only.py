@@ -15,7 +15,10 @@ def test_no_sharing_component_or_deep_link_in_any_packaged_manifest() -> None:
         manifest = ET.parse(path).getroot()
         assert not manifest.findall(".//service")
         assert not manifest.findall(".//receiver")
-        assert not manifest.findall(".//data")
+        for data in manifest.findall(".//data"):
+            assert data.get(ANDROID + "scheme") in {None, "content"}
+            assert data.get(ANDROID + "mimeType") in {"text/plain", "application/json"}
+            assert set(data.attrib) <= {ANDROID + "scheme", ANDROID + "mimeType"}
         for permission in manifest.findall("uses-permission"):
             assert permission.get(ANDROID + "name") not in {
                 "android.permission.FOREGROUND_SERVICE",
@@ -33,7 +36,7 @@ def test_ui_restore_configuration_and_bridge_use_the_fixed_product_boundary() ->
             "if (!V1ReleasePolicy.sharingEnabled) { openPlanner(); return }"
         )
     assert "if (V1ReleasePolicy.sharingEnabled) serverChrome.addView" in source
-    assert "if (V1ReleasePolicy.sharingEnabled &&" in source
+    assert "!external && V1ReleasePolicy.sharingEnabled &&" in source
     assert source.split("private fun deepLinkSlug", 1)[1].splitlines()[1].strip() == (
         "if (!V1ReleasePolicy.sharingEnabled) return null"
     )

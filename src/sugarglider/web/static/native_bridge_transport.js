@@ -150,7 +150,7 @@ export function createNativeBridgeTransport({
       if (reply !== null) settle(envelope.request_id, reply);
       return;
     }
-    if (!isUnsolicitedRequestId(envelope.request_id, pageNonce)) return;
+    if (!trusted || !isUnsolicitedRequestId(envelope.request_id, pageNonce)) return;
     unsolicitedSubscribers.forEach((callback) => {
       try {
         callback(event.data);

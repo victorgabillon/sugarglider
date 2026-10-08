@@ -5,6 +5,8 @@ export function initializeItineraryDialog({ root, launcher, maximumStops, capabi
   copyText = text => navigator.clipboard.writeText(text) }) {
   const element = id => root.querySelector(`#itinerary-${id}`);
   let reviewed = null, fileOperation = 0;
+  const openSubscribers = new Set();
+  const notifyOpen = () => openSubscribers.forEach(callback => callback(root.open));
   const error = message => { element("error").textContent = message; };
   function stage(review) {
     element("input-stage").hidden = review; element("review-stage").hidden = !review;
@@ -15,14 +17,21 @@ export function initializeItineraryDialog({ root, launcher, maximumStops, capabi
   function paragraph(parent, text, tag = "p") {
     const node = document.createElement(tag); node.textContent = text; parent.append(node); return node;
   }
-  launcher.addEventListener("click", () => {
-    if (!canImport()) return;
+  function open(rawText = "", sourceKind = null) {
+    if (!sourceKind && !canImport()) return false;
     reviewed = null; fileOperation += 1; stage(false); error("");
-    element("text").value = ""; element("file").value = "";
+    element("text").value = rawText; element("file").value = "";
+    element("preview").replaceChildren();
     element("prompt-area").hidden = true; element("prompt").value = ""; element("copy-status").textContent = "";
-    root.showModal(); element("text").focus();
-  });
-  root.addEventListener("close", () => { if (root.open) return; reviewed = null; fileOperation += 1; launcher.focus({ preventScroll: true }); });
+    root.querySelector(".itinerary-prompt-helper").open = false;
+    element("source").hidden = !sourceKind;
+    element("source").textContent = sourceKind === "opened_json_file" ? "Opened JSON document" : sourceKind ? "Shared from another app" : "";
+    if (!root.open) root.showModal(); element("text").focus();
+    if (sourceKind) { element("text").setSelectionRange(0, 0); element("text").scrollTop = 0; }
+    notifyOpen(); return true;
+  }
+  launcher.addEventListener("click", () => open());
+  root.addEventListener("close", () => { if (root.open) return; reviewed = null; fileOperation += 1; notifyOpen(); launcher.focus({ preventScroll: true }); });
   root.addEventListener("cancel", () => { fileOperation += 1; });
   element("cancel").addEventListener("click", close);
   element("choose-file").addEventListener("click", () => element("file").click());
@@ -76,4 +85,16 @@ export function initializeItineraryDialog({ root, launcher, maximumStops, capabi
       if (root.open && operation === fileOperation) element("copy-status").textContent = "Prompt copied. Paste it into an assistant of your choice.";
     } catch { if (root.open && operation === fileOperation) element("copy-status").textContent = "Copy unavailable. Select the prompt text and copy it manually."; }
   });
+  return Object.freeze({
+    openWithText(rawText, { sourceKind = "shared_text" } = {}) {
+      if (typeof rawText !== "string" || rawText.length > ITINERARY_MAX_BYTES
+        || new TextEncoder().encode(rawText).byteLength > ITINERARY_MAX_BYTES
+        || !["shared_text", "shared_json_file", "opened_json_file"].includes(sourceKind)) return false;
+      return open(rawText, sourceKind);
+    },
+    isOpen: () => root.open,
+    cancel: () => { if (root.open) close(); },
+    subscribeOpenChange(callback) { openSubscribers.add(callback); return () => openSubscribers.delete(callback); },
+  });
+
 }

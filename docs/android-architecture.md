@@ -109,3 +109,19 @@ acceptance, and a source manifest does not substitute for a merged artifact inve
 Application release versions live in `android/app/build.gradle.kts`; Python package
 metadata is independent. Signing, device installation and Play operations are separate
 explicit release tasks. A documentation change must not bump or sign a version.
+
+## External itinerary handoff
+
+The launcher/singleTop activity receives ACTION_SEND text/plain or application/json
+and ACTION_VIEW content:// application/json. ExternalItineraryIntentParser enforces
+64 KiB UTF-8 and temporary readable content grants; it does not parse the draft schema.
+Drafts/URIs are never persisted or logged. Pending input is volatile/latest-only;
+recreation drops it and suppresses launch-intent replay. Warm handoff keeps the local
+WebView; a remote screen switches back to the bundled planner.
+
+After the controller declares its dialog state through the trusted bridge, one
+native envelope prefills input. The normal web Review/parser/preview/Import flow
+remains authoritative. Native clears a delivered draft; document nonce and epoch
+ownership prevent stale page delivery. Android Back first sends a scoped cancel
+message when this modal is open. No new network, permission, provider integration,
+automatic import or automatic generation is added.

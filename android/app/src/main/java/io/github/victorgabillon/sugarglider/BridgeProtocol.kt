@@ -17,6 +17,12 @@ internal sealed interface BridgeRequest {
         override val pageNonce: String,
     ) : BridgeRequest
 
+    data class ItineraryDialogState(
+        override val requestId: String,
+        override val pageNonce: String,
+        val open: Boolean,
+    ) : BridgeRequest
+
     data class SaveGpx(
         override val requestId: String,
         override val pageNonce: String,
@@ -123,6 +129,10 @@ internal object BridgeProtocol {
             } else {
                 null
             }
+            "itinerary_dialog_state" ->
+                if (hasExactly(value, baseFields + "open") && value.opt("open") is Boolean) {
+                    BridgeRequest.ItineraryDialogState(requestId, pageNonce, value.getBoolean("open"))
+                } else null
             "get_status" ->
                 if (hasExactly(value, baseFields)) {
                     BridgeRequest.GetStatus(requestId, pageNonce)
