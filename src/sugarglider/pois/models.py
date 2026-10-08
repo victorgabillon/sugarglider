@@ -18,8 +18,12 @@ type PoiCategory = Literal[
     "fountain",
     "water_tap",
     "ice_cream",
+    "toilets",
+    "cafe",
+    "bakery",
+    "picnic_area",
 ]
-type PoiGroup = Literal["scenic", "hydration", "refreshment"]
+type PoiGroup = Literal["scenic", "hydration", "refreshment", "practical"]
 type ScenicConfidence = Literal["primary", "broad", "none"]
 type Potability = Literal["verified", "unknown", "non_potable", "not_applicable"]
 type PoiPotabilityFilter = Literal["verified", "unknown", "non_potable"]
@@ -139,9 +143,11 @@ class PoiFeature(ImmutableModel):
             raise ValueError("private or restricted features cannot publish approaches")
         expected_group: PoiGroup = (
             "refreshment"
-            if self.category == "ice_cream"
+            if self.category in {"ice_cream", "cafe", "bakery"}
             else "hydration"
             if self.category in {"drinking_water", "fountain", "water_tap"}
+            else "practical"
+            if self.category in {"toilets", "picnic_area"}
             else "scenic"
         )
         if self.group != expected_group:
@@ -152,7 +158,7 @@ class PoiFeature(ImmutableModel):
 class PoiBuildConfiguration(ImmutableModel):
     """Stable builder choices recorded inside deterministic index bytes."""
 
-    classifier_version: Literal["1", "2"] = "2"
+    classifier_version: Literal["1", "2", "3"] = "2"
     geometry_policy: Literal["semantic-point_with-bounded-public-approaches"] = (
         "semantic-point_with-bounded-public-approaches"
     )
@@ -176,7 +182,7 @@ class PoiIndexMetadata(ImmutableModel):
     bounding_box: Wgs84BoundingBox
     skipped_invalid_count: Annotated[int, Field(ge=0)]
     build_configuration: PoiBuildConfiguration = PoiBuildConfiguration()
-    classifier_version: Literal["1", "2"] = "2"
+    classifier_version: Literal["1", "2", "3"] = "2"
 
     @model_validator(mode="after")
     def validate_bounds(self) -> Self:
@@ -217,6 +223,7 @@ class PoiIndexDocument(ImmutableModel):
 class PoiIndexStatus(ImmutableModel):
     """Safe runtime status that never exposes a host filesystem path."""
 
+    classifier_version: Literal["1", "2", "3"] | None = None
     configured: bool
     available: bool
     index_path_basename: str | None
@@ -253,7 +260,7 @@ class PoiBoundingBox(ImmutableModel):
 
 class PoiSearchRequest(ImmutableModel):
     bbox: PoiBoundingBox
-    groups: tuple[PoiGroup, ...] = ("scenic", "hydration", "refreshment")
+    groups: tuple[PoiGroup, ...] = ("scenic", "hydration", "refreshment", "practical")
     categories: tuple[PoiCategory, ...] | None = None
     potability: tuple[PoiPotabilityFilter, ...] = ("verified", "unknown")
     access: tuple[AccessStatus, ...] = ("public", "restricted", "unknown")

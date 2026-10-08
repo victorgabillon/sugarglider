@@ -35,6 +35,7 @@ from sugarglider.pois.models import (
     AccessStatus,
     PoiApproachCandidate,
     PoiApproachKind,
+    PoiBuildConfiguration,
     PoiCategory,
     PoiFeature,
     PoiIndexDocument,
@@ -331,6 +332,9 @@ def build_poi_index(
             bounding_box=bounds,
             skipped_invalid_count=skipped_invalid,
             classifier_version=CLASSIFIER_VERSION,
+            build_configuration=PoiBuildConfiguration(
+                classifier_version=CLASSIFIER_VERSION
+            ),
         ),
         features=ordered,
     )

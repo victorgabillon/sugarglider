@@ -302,7 +302,18 @@ def test_explicit_ice_cream_tags_are_display_only_refreshments(
 def test_ice_cream_is_not_inferred_from_names_or_general_sales(
     tags: dict[str, str],
 ) -> None:
-    assert classify_osm_tags(tags) is None
+    result = classify_osm_tags(tags)
+    expected = (
+        "cafe"
+        if tags.get("amenity") == "cafe"
+        else "bakery"
+        if tags.get("shop") == "bakery"
+        else None
+    )
+    if expected is None:
+        assert result is None
+    else:
+        assert result is not None and result.category == expected
 
 
 def test_ice_cream_preserves_address_access_and_existing_category_precedence() -> None:

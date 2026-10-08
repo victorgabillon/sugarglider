@@ -30,9 +30,10 @@ provides background for the amenity, shop and café tags. The classifier intenti
 uses a conservative subset grounded in the regional source audit. Tests use tiny synthetic OSM
 XML; runtime discovery never parses PBFs or queries a hosted POI service.
 
-Index format remains 2. New builds declare classifier 2 in both index metadata
-and the regional toolchain, changing the content identity. Readers retain support
-for classifier 1. A classifier-1 installed region explicitly reports that it does
+Index format remains 2. Ice-cream delivery introduced classifier 2; current builds
+declare classifier 3 in both index metadata and the regional toolchain, changing
+the content identity. Readers retain support
+for classifiers 1 and 2. A classifier-1 installed region explicitly reports that it does
 not include ice-cream places. Updating the application cannot add records to a
 previously installed immutable index.
 

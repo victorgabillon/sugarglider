@@ -136,6 +136,7 @@ async def test_status_available_and_safe(available_client: httpx.AsyncClient) ->
         "available": True,
         "index_path_basename": "local-pois.json.gz",
         "format_version": 2,
+        "classifier_version": "2",
         "source_basename": "region.osm.pbf",
         "feature_count": 3,
         "category_counts": {"drinking_water": 1, "fountain": 1, "viewpoint": 1},

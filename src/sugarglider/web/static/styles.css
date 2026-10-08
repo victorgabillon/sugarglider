@@ -1067,3 +1067,8 @@ body.outing-mode .route-dock { display: none; }
   .location-search-dialog { max-height: calc(100dvh - 1rem); }
   .location-search-body { max-height: calc(100dvh - 6rem); }
 }
+
+/* Ordinary practical details keep their action reachable above a short route dock. */
+.map-panel:has(.bounded-place-popup) .map-empty-state { display: none; }
+.bounded-place-popup .maplibregl-popup-close-button { width: 44px; height: 44px; background: #fffdf7; border-radius: 0 8px 0 8px; font-size: 24px; z-index: 1; }
+.bounded-place-popup .place-popup h3 { padding-right: 40px; }

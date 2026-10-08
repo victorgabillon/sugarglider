@@ -11,7 +11,7 @@ import {
 } from "./avatar.js";
 import { liveFreshness } from "./outing_live_state.js";
 import { requestedPlaceIdentifier } from "./state.js";
-import { createPassThroughAction, createPlaceDetails, ICE_CREAM_ART_URL, ICE_CREAM_ICON_SVG, isPriorityPlace, placePresentation } from "./place_presentation.js";
+import { createPassThroughAction, createPlaceDetails, ICE_CREAM_ART_URL, ICE_CREAM_ICON_SVG, isPriorityPlace, placeAddress, placePresentation } from "./place_presentation.js";
 import {
   attachOfflineBasemap,
   detachOfflineBasemap,
@@ -122,6 +122,10 @@ const DIRECTION_FOREGROUND_LAYERS = [
 
 const POI_ICON_SVGS = {
   "poi-ice-cream": ICE_CREAM_ICON_SVG,
+  "poi-toilets": '<path d="m9 16 3 16 5-10 5 10 3-16m13 1a8 8 0 1 0 0 14" fill="none" stroke="#214b3b" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  "poi-cafe": '<path d="M12 17h20v13a8 8 0 0 1-8 8h-4a8 8 0 0 1-8-8Zm20 2h4a6 6 0 0 1 0 12h-4M17 9v4m8-4v4M10 40h27" fill="none" stroke="#214b3b" stroke-width="3" stroke-linecap="round"/>',
+  "poi-bakery": '<path d="M9 25c0-16 30-16 30 0v11H9Z" fill="#f1d2a3" stroke="#214b3b" stroke-width="2.5"/><path d="m16 20 3 6m5-8 3 7m5-5 3 6" fill="none" stroke="#214b3b" stroke-width="3" stroke-linecap="round"/>',
+  "poi-picnic": '<path d="M11 18h26M16 19l-6 19m22-19 6 19M8 29h32M17 29h14" fill="none" stroke="#214b3b" stroke-width="3.5" stroke-linecap="round"/>',
   "poi-viewpoint": '<path d="M6 36 20 14l8 12 6-8 8 18Z" fill="#fff"/><path d="m13 30 7-11 7 11" fill="none" stroke="#214b3b" stroke-width="3"/>',
   "poi-historic": '<path d="M9 17h6v-5h6v5h6v-5h6v5h6v22H9Z" fill="#fff"/><path d="M18 39V28h12v11M9 21h30" fill="none" stroke="#6d4a2d" stroke-width="3"/>',
   "poi-tower": '<path d="M19 10h10l-2 7 7 22H14l7-22Z" fill="#fff"/><path d="M16 24h16M13 39h22" fill="none" stroke="#3c5268" stroke-width="3"/>',
@@ -797,8 +801,9 @@ function poiPopupContent(feature) {
   const heading = document.createElement("h3");
   heading.textContent = feature.display_name;
   content.append(heading);
-  popupRow(content, "Category", feature.category.replaceAll("_", " "));
-  popupRow(content, "Potability", feature.potability.replaceAll("_", " "));
+  popupRow(content, "Category", placePresentation(feature).label);
+  popupRow(content, "Address", placeAddress(feature));
+  if (feature.potability !== "not_applicable") popupRow(content, "Potability", feature.potability.replaceAll("_", " "));
   popupRow(
     content,
     "Access",
@@ -808,6 +813,7 @@ function poiPopupContent(feature) {
   const tags = Object.fromEntries(feature.tags ?? []);
   popupRow(content, "Operator", tags.operator);
   popupRow(content, "Opening hours", tags.opening_hours);
+  popupRow(content, "Mapped fee", tags.fee);
   popupRow(content, "Seasonal", tags.seasonal);
   popupRow(content, "Bottle filling", tags.bottle);
   const explanation = document.createElement("p");
@@ -819,7 +825,7 @@ function poiPopupContent(feature) {
   } else if (feature.potability === "non_potable") {
     explanation.textContent = "Mapped as non-potable.";
   } else {
-    explanation.textContent = "Mapped place information may be incomplete or out of date.";
+    explanation.textContent = "OpenStreetMap · Mapped place information may be incomplete or out of date.";
   }
   content.append(explanation);
   for (const warning of feature.warnings ?? []) {
@@ -857,10 +863,11 @@ function poiPopupContent(feature) {
 function showPoiPopup(feature) {
   removePoiPopup();
   const priority = isPriorityPlace(feature);
+  const practical = ["toilets", "cafe", "bakery", "picnic_area"].includes(feature.category);
   const popup = new maplibregl.Popup({ offset: feature.category === "ice_cream" ? 52 : priority ? 32 : 24,
-    ...(priority ? { anchor: "bottom" } : {}),
+    ...(priority || practical ? { anchor: "bottom" } : {}),
     closeButton: true, maxWidth: "320px",
-    className: priority ? `${feature.category === "ice_cream" ? "place-detail-popup " : ""}priority-place-popup` : "" })
+    className: priority ? `${feature.category === "ice_cream" ? "place-detail-popup " : ""}priority-place-popup` : practical ? "bounded-place-popup" : "" })
     .setLngLat([feature.coordinate.lon, feature.coordinate.lat])
     .setDOMContent(poiPopupContent(feature))
     .addTo(map);
@@ -876,10 +883,10 @@ function showPoiPopup(feature) {
   popup.getElement().addEventListener("keydown", (event) => {
     if (event.key === "Escape") { event.stopPropagation(); dismissPoi(); }
   });
-  if (priority) keepPriorityPoiPopupVisible(popup);
+  if (priority || practical) keepPoiPopupVisible(popup);
 }
 
-function keepPriorityPoiPopupVisible(popup) {
+function keepPoiPopupVisible(popup) {
   const viewport = map.getCanvas().getBoundingClientRect();
   const dock = document.querySelector("#route-dock");
   const dockTop = dock && !dock.hidden ? dock.getBoundingClientRect().top : viewport.bottom;
