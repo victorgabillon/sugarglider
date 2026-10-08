@@ -1,3 +1,5 @@
+import { createLocationSearch } from "./location_search.js";
+import { initializeLocationSearchDialog } from "./location_search_dialog.js";
 import { initializeItineraryDialog } from "./itinerary_dialog.js";
 import { validateLocalWaypointRouteRequest, LOCAL_WAYPOINT_MAX_WAYPOINTS } from "./local_waypoint_route.js";
 import { renderRouteDock } from "./route_dock.js";
@@ -7,7 +9,7 @@ import { renderWaypointEditor } from "./waypoint_editor.js";
 import { renderRouteChoices, emptyResultsMarkup } from "./route_results.js";
 import { initializeAppShell } from "./app_shell.js";
 import { ApiError, generatePlan, getConfig, getPoiStatus, getRoutingProfiles, reversePlan, searchPois, visualizeRoute } from "./api.js";
-import { createLocalPlaceSearch } from "./local_places.js";
+import { createLocalPlaceSearch, createLocalPlaceNameSearch } from "./local_places.js";
 import { createLocalGpxExporter } from "./local_gpx_client.js";
 import { isBundledAndroidApp } from "./android_app.js";
 import { createGpxFileSaver } from "./native_gpx_save.js";
@@ -103,6 +105,15 @@ function localRegionClient() {
 const searchLocalPlaces = createLocalPlaceSearch({ versions: regionVersions,
   regionClient: { loadVersion: (...args) => localRegionClient().loadVersion(...args) },
   selectedRegionId: () => selectedRegionId });
+const searchLocalPlaceNames = createLocalPlaceNameSearch({ versions: regionVersions,
+  regionClient: { loadVersion: (...args) => localRegionClient().loadPlacesVersion(...args) },
+  selectedRegionId: () => selectedRegionId });
+const locationSearch = createLocationSearch({ config: () => state.config?.geocoding, localSearch: searchLocalPlaceNames });
+let locationSearchDialog = null;
+function openLocationSearch(target, launcher) {
+  clearPointPlacement(); locationSearchDialog?.open(target, launcher);
+}
+
 const withPlanningRegion = createRegionalPlanningContext({ versions: regionVersions, bridge: localRoutingBridge,
   selectedRegionId: () => selectedRegionId,
   regionClient: { loadVersion: (...args) => localRegionClient().loadVersion(...args) },
@@ -939,6 +950,21 @@ function selectEndpoint(kind) {
   const point = activeEndpoints()[kind];
   if (point) keepCoordinateVisible([point.lon, point.lat]);
 }
+
+locationSearchDialog = initializeLocationSearchDialog({ root: byId("location-search-dialog"),
+  search: (...args) => locationSearch.searchResolvedLocations(...args), config: () => state.config?.geocoding,
+  canEdit: () => Boolean(state.config) && !isImmutableSnapshotDisplay() && !["running", "reversing"].includes(state.request.status),
+  onSelect: (target, location) => {
+    const changed = target ? replaceResolvedRouteLocation(target, location, { assignEndpoint: assignActiveEndpoint })
+      : addResolvedRouteLocation(location, { assignEndpoint: assignActiveEndpoint });
+    if (changed) { clearPointPlacement(); invalidateAndRender(); }
+    return changed;
+  },
+  restoreFocus: () => {
+    const selected = byId("route-dock").querySelector('[aria-pressed="true"]');
+    (selected ?? byId("dock-add"))?.focus({ preventScroll: true });
+  },
+});
 
 function beginPointMove(index) {
   clearPointPlacement();
@@ -1797,6 +1823,7 @@ function renderStatus() {
     onMove: beginPointMove, onRemove: removePoint, onReorder: movePoint,
     onMoveEndpoint: kind => byId(`set-hard-${kind}`).click(),
     onClearEndpoint: kind => byId(`clear-hard-${kind}`).click(),
+    onSearch: openLocationSearch,
     onChooseMap: () => {
       clearPointPlacement(); state.addPointMode = true;
       render(); appShell?.show("map", { focus: true });

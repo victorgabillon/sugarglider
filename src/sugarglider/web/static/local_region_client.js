@@ -38,6 +38,9 @@ export function createLocalRegionClient({
     const identity = await request("load", { region_id: regionId });
     return session(identity);
   }
+  async function loadPlacesVersion(manifest, directory) {
+    return session(await request("load_places_version", { manifest, directory }));
+  }
   async function loadVersion(manifest, directory) {
     const identity = await request("load_version", { manifest, directory });
     return session(identity);
@@ -46,6 +49,7 @@ export function createLocalRegionClient({
     return Object.freeze({ identity,
       queryPois: (query) => request("query_pois", { build_id: identity.build_id, query }),
       searchPois: (query) => request("search_pois", { build_id: identity.build_id, query }),
+      searchPlaceNames: (query) => request("search_place_names", { build_id: identity.build_id, query }),
       analyzeNature: (candidate) => request("analyze_nature", { build_id: identity.build_id,
         candidate: { geometry: candidate.geometry, distance_m: candidate.distance_m, pack_id: candidate.pack_id } }),
     });
@@ -56,6 +60,6 @@ export function createLocalRegionClient({
     installVersion: (url, manifest, directory) => request("install_version", { url, manifest, directory }),
     cancelInstall: () => worker.postMessage({ type: "cancel_install" }),
     remove: (regionId) => request("remove", { region_id: regionId }),
-    load, loadVersion, close,
+    load, loadVersion, loadPlacesVersion, close,
   });
 }

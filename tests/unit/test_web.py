@@ -29,6 +29,7 @@ from sugarglider.nature.models import (
     PolygonGeometry,
 )
 from sugarglider.routing.service import RouteService
+from sugarglider.web.build_android_shell import render_android_ui_config
 from sugarglider.web.routes import STATIC_DIRECTORY
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -359,6 +360,7 @@ async def test_ui_config_uses_injected_map_settings(
     assert response.json() == {
         "tile_url_template": "https://tiles.example/{z}/{x}/{y}.png",
         "tile_attribution": "Required map credit",
+        "geocoding": json.loads(render_android_ui_config())["geocoding"],
         "initial_center": [2.4, 49.1],
         "initial_zoom": 9.5,
         "max_required_points": 30,

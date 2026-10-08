@@ -4,6 +4,14 @@
   "auto_tour_scenic_corridor_radius_m": 600.0,
   "auto_tour_water_corridor_radius_m": 350.0,
   "default_planning_mode": "auto_tour",
+  "geocoding": {
+    "attribution": "IGN G\u00e9oplateforme \u00b7 BAN / BD TOPO \u00b7 Open Licence 2.0",
+    "attribution_url": "https://cartes.gouv.fr/aide/fr/guides-utilisateur/utiliser-les-services-de-la-geoplateforme/geocodage/",
+    "available": true,
+    "coverage": "Online addresses and named places in France.",
+    "endpoint": "https://data.geopf.fr/geocodage/search",
+    "provider": "ign_geoplateforme"
+  },
   "initial_center": [
     2.1,
     48.87
