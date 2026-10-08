@@ -32,13 +32,45 @@ Any other conforming HTTPS static directory can use the same bytes after prepari
 its catalog with the correct base URL. The ZIP is for publishing the static site;
 the Android client still downloads its independent component files directly.
 
-For an update, supply `--retain-directory /path/to/previous/region` to keep its
-seven immutable files while advertising the new version. Both versions must have
-the same region ID and different build IDs. The initial publisher supports one
-advertised region and one previous version, with a combined 950 MB limit. Never
-replace a published build's bytes or remove a still-supported version without
-an explicit retirement decision. An installed version remains usable locally
-when its distribution is unavailable.
+For an update, repeat `--retain-directory` for every supported immutable version:
+
+```sh
+uv run python -m sugarglider.offline_regions.distribution \
+  --region-directory /absolute/path/to/new-region \
+  --retain-directory /absolute/path/to/version-a \
+  --retain-directory /absolute/path/to/version-b \
+  --output-directory /absolute/existing/parent/new-publication \
+  --base-url https://victorgabillon.github.io/sugarglider-regions/ \
+  --description 'Reviewed regional coverage description'
+```
+
+The model is one advertised region plus zero or more retained immutable versions
+of the same region. Only the current build appears in `catalog.json`; each
+retained build remains addressable at its original immutable path. Verify every
+version independently; build IDs must be unique, but historical source hashes,
+classifiers, toolchains and component bytes may differ. Duplicate inputs are
+errors, not silently deduplicated. Each version's own manifest supplies its file
+inventory. Retained IDs in the README/report are sorted by build ID, so argument
+order does not change site, ZIP or report bytes.
+
+The Python API accepts `retain_directories: Sequence[Path] = ()`. The previous
+`retain_directory: Path | None = None` keyword remains a compatibility alias for
+zero/one retained version; supplying it together with a nonempty plural argument
+is rejected. The CLI uses repeated flags, never numbered flags or comma splitting.
+
+The complete publication plus 65,536 bytes reserved overhead must fit the unchanged
+950,000,000-byte budget. Free space must cover twice the complete regional bytes
+plus that overhead. The standalone verifier's existing 128-member metadata bound
+is checked before preparation as well; today's four root files and seven files
+per version permit up to 17 complete versions. No Yvelines-specific retention
+count is imposed. Too-large inputs are rejected without dropping any version.
+Source/retained roots and ancestors must not be symlinks, output must be new and
+outside every input tree, and a failed assembly removes its partial output.
+
+Pages replaces the complete site: include every supported version in each update.
+Never replace a published build's bytes or retire a supported version without an
+explicit retirement decision. An installed version remains usable locally when
+its distribution is unavailable. Preparation itself never authorizes publication.
 
 The standalone verifier can be copied into an otherwise empty distribution
 repository and run with Python 3.13, without installing Sugarglider:
@@ -51,6 +83,12 @@ python3 unpack_distribution.py \
 It checks the expected digest before extraction; only strictly named regular,
 uncompressed files are allowed. It rejects traversal, symlinks, duplicates,
 missing attribution/catalog or incomplete version sets, and oversize content.
+It also rejects malformed catalogs, multiple advertised rows, catalog/manifest
+value mismatches and any retained manifest whose region/build ID disagrees with
+its archive path. All complete versions must belong to the advertised region.
+These are pre-extraction checks and use only the standard library. Copy the
+reviewed standalone helper into the data repository before a later publication;
+the publication workflow itself needs no change.
 The digest must come from the locally reviewed publication report, not an
 untrusted field downloaded alongside the ZIP.
 
