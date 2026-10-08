@@ -2,7 +2,7 @@ import { createLocalRegionStore, loadLocalRegionData } from "./local_region_stor
 import { createVersionedRegionComponents } from "./region_components.js";
 
 const store = createLocalRegionStore();
-let data = null;
+let data = null, placesData = null;
 let pendingInstall = null;
 let installGeneration = 0;
 let queue = Promise.resolve();
@@ -57,6 +57,21 @@ self.onmessage = ({ data: message }) => {
           result = data.identity;
           break;
         }
+        case "load_places_version": {
+          const scoped = await createVersionedRegionComponents(message.value);
+          if (data?.identity.build_id === scoped.manifest.build_id) placesData = data;
+          else if (placesData?.identity.build_id !== scoped.manifest.build_id) {
+            placesData = null;
+            placesData = await scoped.openPlaces();
+          }
+          await scoped.verifyPlaces();
+          result = placesData.identity;
+          break;
+        }
+        case "search_place_names":
+          if (!placesData || placesData.identity.build_id !== message.value.build_id) throw new Error("regional_data_changed");
+          result = placesData.searchPlaceNames(message.value.query);
+          break;
         case "query_pois":
         case "search_pois":
         case "analyze_nature":

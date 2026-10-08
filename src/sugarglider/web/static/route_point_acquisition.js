@@ -9,7 +9,10 @@ function resolvedCoordinate(location) {
     throw new Error("Choose a valid route location.");
   }
   // Acquisition metadata is never spread into a routing constraint.
-  return { lat, lon };
+  const name = location.name;
+  if (name !== undefined && (typeof name !== "string" || !name.trim() || name.length > 200
+    || /[\u0000-\u001f\u007f-\u009f]/u.test(name))) throw new Error("Choose a valid location name.");
+  return { lat, lon, ...(name === undefined ? {} : { name: name.trim() }) };
 }
 function editable() {
   return !isImmutableSnapshotDisplay() && !["running", "reversing"].includes(state.request.status);
@@ -44,7 +47,7 @@ export function replaceResolvedRouteLocation(target, location, { assignEndpoint,
   rememberPointEdit(kind ? `${kind === "start" ? "Start" : "End"} moved` : "Stop moved");
   const point = { ...existing, ...coordinate };
   if (kind) {
-    point.name = name || existing?.name || `Hard ${kind}`;
+    point.name = name || coordinate.name || existing?.name || `Hard ${kind}`;
     assignEndpoint(kind, point);
   } else state.points[target.index] = point;
   state.selectedEndpointKind = kind ?? null;

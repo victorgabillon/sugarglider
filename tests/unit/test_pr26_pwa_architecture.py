@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v57_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v58_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v57"
+    assert generation.group(1) == "v58"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -176,6 +176,8 @@ def test_shared_shell_generation_tracks_v57_cached_assets() -> None:
             "route_dock.js",
             "route_point_drag.js",
             "route_point_acquisition.js",
+            "location_search.js",
+            "location_search_dialog.js",
             "map_viewport.js",
             "route_results.js",
             "waypoint_editor.js",
@@ -226,13 +228,13 @@ def test_shared_shell_generation_tracks_v57_cached_assets() -> None:
             "10db95da0f2417c48807aaf156163c3a97efd05b1911a25153c62e1bdf05da4f"
         ),
         "route_dock.js": (
-            "14dfa3e9d2711d5b5b65799d848505ec6e43a0c16b82ce8bdb754b40bb350344"
+            "edca98e12782a796b3b7f7d2726ad6aee68be66636760aa39a66bea89c08a00d"
         ),
         "route_point_drag.js": (
             "a61aa834611a65ca108fbedf9645ae6f5a6188c15ba48795b0417e6489808862"
         ),
         "route_point_acquisition.js": (
-            "a3d96403ec07bafb5f490dd3983670558e0f344eb4a1110e87e1c75ce4f43e28"
+            "5e05bb3a299e4db829cff750e412143407246022066347189351d4fc121d110a"
         ),
         "route_edit_history.js": (
             "7fb0be59fb37419d41bab341162c222d38f066e0c69c4037db3dcf4b3bfed58b"
@@ -244,7 +246,7 @@ def test_shared_shell_generation_tracks_v57_cached_assets() -> None:
             "e2cf0c4c179db6f0eb58ab3236747d9dceeb268eee4bf3188907f8f32005cffa"
         ),
         "local_places.js": (
-            "7c5297aa221f4b6795e3fa968b7523713d7c76b0a0a420a868141a81a303ab08"
+            "57a69909891fc671ce6d93f615ed4c7789f75afb73d8a3027087d3a62e14876c"
         ),
         "local_planner.js": (
             "849b02b8f594400956eefdd61b99cc02eead3c92e9818e064a46bf4836c3e29b"
@@ -274,9 +276,15 @@ def test_shared_shell_generation_tracks_v57_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "da838bb70e3541379eb1c000f7abf69805493a6b428b6a7b68d6a357dcb7f472"
+            "6bf6ed9a87fa919744ba75035d9df2eb6f4bd04e70fd6ac840fb4fd8f4e098b2"
         ),
-        "app.js": ("4bd9bb704c492d3b40f02c07f7def30507f1a6a62292b18ff9fcf251d00de893"),
+        "location_search.js": (
+            "635f5aaf5603cadbc3b77f035055251e54358b16a831d927e51fe6c44c031c36"
+        ),
+        "location_search_dialog.js": (
+            "60924fa83037b8de5daa90cdfbcde5ab498a2134ff9a97b2b679e11b55c55b40"
+        ),
+        "app.js": ("9cb460865d98ca456c7005d06a7d65d848af2a386b8b3846378e2c8df196b6b0"),
         "region_screen.js": (
             "0cf6d527a0ea957e0222a31a8ffa2ee1d1a24b2118628c6fd70e4dbd9d5371c5"
         ),
@@ -303,7 +311,7 @@ def test_shared_shell_generation_tracks_v57_cached_assets() -> None:
         ),
         "map.js": ("e27059d75c826693a2628cf3554427e5b01304f7dd4305ae70aa2e2c07ca73c0"),
         "styles.css": (
-            "fcf713876d3024a0dc1b396796fd017c6bc832de548d7fe6093345a21d3c784d"
+            "be23c7f1b71a177d5c568d8cacb4c3080150b0990e51cc9e96d8345d760e3cda"
         ),
         "planner_profile.js": (
             "4183a1318f3aa49df52ca0a46329caaa4f6eee1bec1b49612c446562b1b0030a"
@@ -327,16 +335,16 @@ def test_shared_shell_generation_tracks_v57_cached_assets() -> None:
             "50dcb3ec6a87cd3382dfc25d6b70b525191d6c8b310132901eb34cbd7f686efc"
         ),
         "local_region_client.js": (
-            "62b66cf3f6cbf5c5cef955343812970ca2fae49f2a277f673c6bdc13b605c2f5"
+            "712f2b6dc1602c9b20fcd0033cb11602efad24f922dedaa60fb1a311bd560a31"
         ),
         "local_region_data.js": (
-            "26a24c30d024a6d383e46eb3f90cc02246bab479851caa384c2b7ea2890b2c8a"
+            "0bb2e9ff0e97a9375b802c2b9471f27620a2025e4398d5f58de8baf48b7910b6"
         ),
         "local_region_store.js": (
             "1d031f544b27c0c38ef37efd68b2d9d107843af4bbb8e12fe7c87428bab78eb5"
         ),
         "local_region_worker.js": (
-            "65301905a7ad60dfa0bd9d19ace0006051092eb5cf4dba16f98a58bd2013e239"
+            "b27c99b264c23a105893a1d923f9a3a4a76283dad7abb2a1e11427c71384c54a"
         ),
         "local_region_panel.js": (
             "43c5119cb1cf5ed4249dc00ae8a7d30741dd78b307a9305f31ee6a3988c456f6"

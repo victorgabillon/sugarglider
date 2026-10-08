@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>Location search harness</title>
+  <script src="../../src/sugarglider/web/static/vendor/pmtiles-4.5.0/pmtiles.js"></script>
+  <pre id="result">running</pre>
+  <script type="module">
+    import { runLocationSearchHarness } from "./location_search_harness.js";
+    const result = document.getElementById("result");
+    window.addEventListener("unhandledrejection", (event) => {
+      result.dataset.status = "failed";
+      result.textContent = String(event.reason);
+    });
+    try {
+      const scenarios = await runLocationSearchHarness();
+      if (result.dataset.status !== "failed") {
+        result.dataset.status = "passed";
+        result.textContent = JSON.stringify(scenarios);
+      }
+    } catch (error) {
+      result.dataset.status = "failed";
+      result.textContent = error.stack ?? String(error);
+    }
+  </script>
+</html>

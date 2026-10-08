@@ -28,7 +28,7 @@ function attachPopover(button, popover, root) {
   };
   popover.addEventListener("toggle", toggle); popoverListeners.set(popover, toggle);
 }
-export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, onSelectEndpoint, onMove, onRemove, onReorder, onMoveEndpoint, onClearEndpoint, onChooseMap, onDetails, onClearSelection }) {
+export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, onSelectEndpoint, onMove, onRemove, onReorder, onMoveEndpoint, onClearEndpoint, onChooseMap, onDetails, onClearSelection, onSearch }) {
   const active = document.activeElement;
   const focus = root.contains(active) ? { id: active.id, action: active.dataset.dockAction, chip: active.dataset.routeChip } : null;
   const endpoints = state.planningMode === "auto_tour" ? state.autoTour : state.waypointEndpoints;
@@ -76,6 +76,9 @@ export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, on
   }
   const chooseMap = root.querySelector('[data-dock-action="choose-map"]');
   chooseMap.disabled = disabled; chooseMap.onclick = () => { root.querySelector("#route-add-menu").hidePopover(); onChooseMap(); };
+  const searchLocation = root.querySelector('[data-dock-action="search-location"]');
+  searchLocation.disabled = disabled || !onSearch;
+  searchLocation.onclick = event => { root.querySelector("#route-add-menu").hidePopover(); onSearch?.(null, event.currentTarget); };
   strip.scrollLeft = scroll;
   if (strip.clientWidth) strip.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
   const hint = root.querySelector("#route-dock-hint");
@@ -91,7 +94,16 @@ export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, on
   if (point && !placing) {
     const label = kind ? kind === "start" ? "Start" : "End" : `Stop ${stops.findIndex(stop => stop.index === index) + 1}`;
     const title = document.createElement("strong"); title.textContent = label; editor.append(title);
-    action(editor, "move", "Move", () => kind ? onMoveEndpoint(kind) : onMove(index), disabled);
+    const move = action(editor, "move", "Move", () => {}, disabled);
+    const acquisition = document.createElement("div"); acquisition.id = "route-move-menu"; acquisition.popover = "auto";
+    acquisition.className = "route-dock-popover"; acquisition.role = "dialog"; acquisition.setAttribute("aria-label", `Move ${label}`);
+    action(acquisition, "move-search", "Search place or address", event => {
+      acquisition.hidePopover(); onSearch?.(kind ? { endpoint: kind } : { index }, event.currentTarget);
+    }, disabled || !onSearch);
+    action(acquisition, "move-map", "Choose on map", () => {
+      acquisition.hidePopover(); kind ? onMoveEndpoint(kind) : onMove(index);
+    }, disabled);
+    editor.append(acquisition); attachPopover(move, acquisition, root);
     const more = action(editor, "more", "⋯", () => {}, disabled);
     more.setAttribute("aria-label", `More actions for ${label}`);
     const menu = document.createElement("div"); menu.id = "route-point-actions"; menu.popover = "auto";

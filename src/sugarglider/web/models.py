@@ -7,11 +7,26 @@ from pydantic import Field
 from sugarglider.domain.models import GeoJsonPosition, ImmutableModel
 
 
+class GeocodingConfig(ImmutableModel):
+    """Public coordinate-acquisition service; never part of a planning request."""
+
+    available: bool = True
+    provider: Literal["ign_geoplateforme"] = "ign_geoplateforme"
+    endpoint: str = "https://data.geopf.fr/geocodage/search"
+    attribution: str = "IGN Géoplateforme · BAN / BD TOPO · Open Licence 2.0"
+    attribution_url: str = (
+        "https://cartes.gouv.fr/aide/fr/guides-utilisateur/"
+        "utiliser-les-services-de-la-geoplateforme/geocodage/"
+    )
+    coverage: str = "Online addresses and named places in France."
+
+
 class UiConfig(ImmutableModel):
     """Runtime map configuration safe to expose to an unauthenticated browser."""
 
     tile_url_template: str
     tile_attribution: str
+    geocoding: GeocodingConfig = Field(default_factory=GeocodingConfig)
     initial_center: GeoJsonPosition
     initial_zoom: Annotated[float, Field(ge=0, le=22)]
     max_required_points: Annotated[int, Field(ge=2)]

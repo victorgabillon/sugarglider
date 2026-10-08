@@ -52,6 +52,8 @@ local_region_store.js
 local_region_worker.js
 local_routing.js
 local_waypoint_route.js
+location_search.js
+location_search_dialog.js
 manifest.webmanifest
 map.js
 map_pack_manifest.js

@@ -100,6 +100,25 @@
       </form>
     </dialog>
 
+    <dialog id="location-search-dialog" class="location-search-dialog" aria-labelledby="location-search-title" aria-describedby="location-search-privacy">
+      <header><h2 id="location-search-title">Search place or address</h2><button id="location-search-close" type="button" class="button secondary">Close</button></header>
+      <div class="location-search-body">
+        <form id="location-search-form">
+          <label for="location-search-query">Place or address</label>
+          <div class="location-search-input"><input id="location-search-query" name="location" type="search" minlength="3" maxlength="200" autocomplete="off" enterkeyhint="search" aria-describedby="location-search-privacy location-search-coverage"><button id="location-search-submit" type="submit" class="button primary">Search</button></div>
+        </form>
+        <p id="location-search-privacy" class="field-help">Online address search sends this search text to the geocoding provider. Search only runs when you press Search or Enter.</p>
+        <p id="location-search-coverage" class="field-help"></p>
+        <p id="location-search-status" role="status" aria-live="polite" aria-atomic="true"></p>
+        <p id="location-search-error" class="validation" role="alert" aria-atomic="true"></p>
+        <div id="location-search-results" aria-busy="false">
+          <section aria-labelledby="location-search-local-title"><h3 id="location-search-local-title">On this device</h3><p id="location-search-local-message" class="field-help"></p><ul id="location-search-local"></ul></section>
+          <section aria-labelledby="location-search-online-title"><h3 id="location-search-online-title">Online results</h3><p id="location-search-online-message" class="field-help"></p><ul id="location-search-online"></ul></section>
+        </div>
+        <p class="location-search-credit field-help"><a id="location-search-attribution" target="_blank" rel="noopener noreferrer"></a><span id="location-search-retrieved"></span></p>
+      </div>
+    </dialog>
+
     <dialog id="itinerary-dialog" class="itinerary-dialog" aria-labelledby="itinerary-title" aria-describedby="itinerary-introduction">
       <div class="itinerary-header"><h2 id="itinerary-title">Import itinerary</h2></div>
       <div class="itinerary-body">
@@ -399,7 +418,7 @@
           <div id="route-point-strip" class="route-point-strip" role="group" aria-label="Route points"></div>
           <p id="route-dock-hint" class="visually-hidden" aria-live="polite">Tap the map to choose Start</p>
           <p id="route-strip-help" class="visually-hidden"></p>
-          <div id="route-add-menu" class="route-dock-popover" popover="auto" role="dialog" aria-label="Add point"><button type="button" data-dock-action="choose-map">Choose on map</button></div>
+          <div id="route-add-menu" class="route-dock-popover" popover="auto" role="dialog" aria-label="Add point"><button type="button" data-dock-action="search-location">Search place or address</button><button type="button" data-dock-action="choose-map">Choose on map</button></div>
           <div id="route-drag-trash" class="route-drag-trash" role="region" aria-label="Remove stop drop target" hidden>Remove</div>
           <p id="route-drag-status" class="visually-hidden" role="status" aria-live="polite"></p>
           <section id="map-route-intent" class="visually-hidden" aria-label="Route summary" aria-live="polite"><strong id="map-route-summary"></strong><p id="map-route-help"></p></section>

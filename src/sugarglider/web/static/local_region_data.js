@@ -2,6 +2,7 @@ import {
   REGIONAL_INDEX_MAX_EXPANDED_BYTES, RegionalDataError, boundedText,
   containsPosition, freezeData, requireData, requireFields, verifyRegionalBytes,
 } from "./regional_manifest.js";
+import { validateLocationQuery, normalizeLocationText, LOCATION_RESULT_LIMIT } from "./location_search.js";
 
 const EARTH_RADIUS_M = 6_371_008.8;
 const MAX_FEATURES = 250_000;
@@ -66,6 +67,12 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
     return { feature, bounds: [...point, ...point] };
   }));
   const byId = new Map(poiFeatures.map((feature) => [feature.id, feature]));
+  const namedPlaces = poiFeatures.filter(feature => !["private", "restricted"].includes(feature.access_status)
+    && feature.potability !== "non_potable"
+    && containsPosition(manifest.bounds, [feature.coordinate.lon, feature.coordinate.lat]))
+    .map(feature => ({ feature, name: normalizeLocationText(feature.display_name),
+      searchable: normalizeLocationText(`${feature.display_name} ${feature.category.replaceAll("_", " ")}`) }))
+    .sort((a, b) => compareText(a.name, b.name) || compareText(a.feature.id, b.feature.id));
   const identity = freezeData({
     region_id: manifest.region_id,
     build_id: manifest.build_id,
@@ -121,6 +128,19 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
     return freezeData({ available: pois !== null, features: matches.slice(0, limit), total_matching: matches.length,
       returned_count: Math.min(limit, matches.length), truncated: matches.length > limit,
       warnings: matches.length > limit ? ["poi_results_truncated"] : [], identity });
+  }
+
+  function searchPlaceNames(value) {
+    const query = normalizeLocationText(validateLocationQuery(value));
+    const terms = query.split(/\s+/u);
+    const matches = namedPlaces.filter(row => terms.every(term => row.searchable.includes(term)));
+    matches.sort((a, b) => Number(b.name === query) - Number(a.name === query)
+      || Number(b.name.startsWith(query)) - Number(a.name.startsWith(query))
+      || compareText(a.name, b.name) || compareText(a.feature.id, b.feature.id));
+    return freezeData({ available: pois !== null, identity, results: matches.slice(0, LOCATION_RESULT_LIMIT)
+      .map(({ feature }) => ({ name: feature.display_name.slice(0, 200),
+        secondaryLabel: `${manifest.display_name ?? manifest.region_id} · ${feature.category.replaceAll("_", " ")}`,
+        lat: feature.coordinate.lat, lon: feature.coordinate.lon, source: "local" })) });
   }
 
   function analyzeNature(candidate) {
@@ -198,7 +218,7 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
     });
   }
 
-  return Object.freeze({ identity, queryPois, searchPois, analyzeNature });
+  return Object.freeze({ identity, queryPois, searchPois, searchPlaceNames, analyzeNature });
 }
 
 export function unavailableNature(distance, reason, operations = null) {

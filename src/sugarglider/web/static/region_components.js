@@ -2,6 +2,7 @@ import { MapPackStore, validateMapPackInstallUrl } from "./map_pack_store.js";
 import { createLocalRegionStore, loadLocalRegionData } from "./local_region_store.js";
 import { parseRegionalManifest, requireData } from "./regional_manifest.js";
 import { verifyRegionalFile } from "./regional_integrity.js";
+import { createLocalRegionData, decodeRegionalIndex } from "./local_region_data.js";
 
 // The caller owns either withStagedVersion or withCommittedRegions for the
 // complete operation. This is a scope adapter over the shared component formats,
@@ -67,12 +68,27 @@ export async function createVersionedRegionComponents({
     return true;
   }
 
+  // Coordinate acquisition needs only verified Places. An unrelated invalid
+  // nature index must not disable a valid local name search or weaken routing.
+  async function openPlaces() {
+    const opened = await indexes.open(manifest.region_id);
+    requireData(opened.manifest.build_id === manifest.build_id, "regional_identity_mismatch");
+    const pois = await decodeRegionalIndex(await opened.files.pois.arrayBuffer(), manifest.components.pois.files[0]);
+    return createLocalRegionData(manifest, { pois });
+  }
+  async function verifyPlaces() {
+    const opened = await indexes.open(manifest.region_id);
+    requireData(opened.manifest.build_id === manifest.build_id, "regional_identity_mismatch");
+    await verifyRegionalFile(opened.files.pois, manifest.components.pois.files[0]);
+    return true;
+  }
+
   async function installIndexes(urlText, options = {}) {
     const installed = await indexes.install(urlText, { ...options, regionalManifest: manifest });
     requireData(installed.build_id === manifest.build_id, "regional_identity_mismatch");
   }
 
-  return Object.freeze({ manifest, installMap, verifyMap, openMap, installIndexes, openIndexes, verifyIndexes });
+  return Object.freeze({ manifest, installMap, verifyMap, openMap, installIndexes, openIndexes, verifyIndexes, openPlaces, verifyPlaces });
 }
 
 function requireMapIdentity(map, region) {
