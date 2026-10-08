@@ -15,6 +15,10 @@ def test_no_sharing_component_or_deep_link_in_any_packaged_manifest() -> None:
         manifest = ET.parse(path).getroot()
         assert not manifest.findall(".//service")
         assert not manifest.findall(".//receiver")
+        activity = manifest.find("application/activity")
+        if activity is not None:
+            assert activity.get(ANDROID + "launchMode") == "singleTop"
+            assert activity.get(ANDROID + "documentLaunchMode") == "never"
         for data in manifest.findall(".//data"):
             assert data.get(ANDROID + "scheme") in {None, "content"}
             assert data.get(ANDROID + "mimeType") in {"text/plain", "application/json"}

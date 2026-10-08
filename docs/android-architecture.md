@@ -117,7 +117,9 @@ and ACTION_VIEW content:// application/json. ExternalItineraryIntentParser enfor
 64 KiB UTF-8 and temporary readable content grants; it does not parse the draft schema.
 Drafts/URIs are never persisted or logged. Pending input is volatile/latest-only;
 recreation drops it and suppresses launch-intent replay. Warm handoff keeps the local
-WebView; a remote screen switches back to the bundled planner.
+WebView; a remote screen switches back to the bundled planner. The existing singleTop
+activity uses documentLaunchMode="never" so share-sheet document flags do not create
+a second planner task.
 
 After the controller declares its dialog state through the trusted bridge, one
 native envelope prefills input. The normal web Review/parser/preview/Import flow
