@@ -268,6 +268,8 @@ input:hover:not(:disabled), select:hover:not(:disabled) { border-color: #758b7d;
 .tour-itinerary .itinerary-stop:hover,
 .tour-itinerary .itinerary-stop:focus-visible { outline: 2px solid var(--brand-leaf); outline-offset: 1px; background: #f5f4e8; }
 .popup-prefer { width: 100%; margin-top: .5rem; font-size: .72rem; }
+.place-pass-through { width: 100%; min-height: 44px; margin-top: .5rem; white-space: normal; }
+.place-pass-through[hidden] { display: none; }
 
 .map-empty-state { position: absolute; z-index: 2; top: 6.75rem; left: 50%; width: min(390px, calc(100% - 2rem)); padding: .65rem .85rem; display: grid; grid-template-columns: 82px 1fr; align-items: center; gap: .7rem; border: 1px solid rgb(172 158 132 / 70%); border-radius: 10px; background: rgb(255 250 240 / 94%); box-shadow: var(--shadow-medium); transform: translateX(-50%); pointer-events: none; }
 .map-empty-state img { width: 82px; height: 82px; object-fit: contain; }

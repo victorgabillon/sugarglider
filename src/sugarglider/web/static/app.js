@@ -5,6 +5,7 @@ import { initializeItineraryDialog } from "./itinerary_dialog.js";
 import { validateLocalWaypointRouteRequest, LOCAL_WAYPOINT_MAX_WAYPOINTS } from "./local_waypoint_route.js";
 import { renderRouteDock } from "./route_dock.js";
 import { addResolvedRouteLocation, replaceResolvedRouteLocation } from "./route_point_acquisition.js";
+import { resolvedPoiLocation } from "./poi_route_location.js";
 import { reconcileAutomaticIntent, hasDiscoveryIntent, routeIntentPresentation, rememberPointEdit, undoPointEdit, clearPointUndo, pointUndoLabel, redoPointEdit, changeMapTopology } from "./automatic_intent.js";
 import { renderWaypointEditor } from "./waypoint_editor.js";
 import { renderRouteChoices, emptyResultsMarkup } from "./route_results.js";
@@ -287,10 +288,34 @@ function selectedVisitedPoiIds() {
   return (selectedCandidate()?.poi_visits ?? []).map((visit) => visit.poi.id);
 }
 
+function canPassThroughPoi(feature) {
+  return Boolean(state.config) && !isImmutableSnapshotDisplay()
+    && !["running", "reversing"].includes(state.request.status)
+    && resolvedPoiLocation(feature) !== null;
+}
+
+function passThroughPoi(feature) {
+  if (state.selectedPoiId !== feature.id || !canPassThroughPoi(feature)) return false;
+  try {
+    const changed = addResolvedRouteLocation(resolvedPoiLocation(feature), { assignEndpoint: assignActiveEndpoint });
+    if (!changed) return false;
+    clearPointPlacement();
+    selectPoi(null);
+    invalidateAndRender();
+    (document.querySelector('#route-dock [aria-pressed="true"]') ?? byId("dock-add"))?.focus({ preventScroll: true });
+    return true;
+  } catch (error) {
+    showError(error.message);
+    return false;
+  }
+}
+
 function poiRenderOptions() {
   return {
     onDeselect: () => selectPoi(null),
     onPrefer: preferPoi,
+    onPassThrough: passThroughPoi,
+    canPassThrough: canPassThroughPoi,
     preferredIds: state.autoTour.preferredPoiIds,
     visitedIds: selectedVisitedPoiIds(),
   };

@@ -39,7 +39,22 @@ export function placeAddress(feature) {
   return [street, town].filter(Boolean).join(", ");
 }
 
-export function createPlaceDetails(feature, { onCenter = null } = {}) {
+export function createPassThroughAction(feature, { onPassThrough, canPassThrough }) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "button primary place-pass-through";
+  button.textContent = "Pass through here";
+  button.hidden = !canPassThrough(feature);
+  button.addEventListener("click", () => {
+    if (button.disabled || !canPassThrough(feature)) return;
+    button.disabled = true;
+    // Acquisition is synchronous. A rejected edit leaves the action usable.
+    if (!onPassThrough(feature)) button.disabled = false;
+  });
+  return button;
+}
+
+export function createPlaceDetails(feature, { onCenter = null, onPassThrough = null, canPassThrough = () => false } = {}) {
   const presentation = placePresentation(feature);
   const content = document.createElement("section");
   content.className = "place-details";
@@ -65,6 +80,7 @@ export function createPlaceDetails(feature, { onCenter = null } = {}) {
     if (!value) continue;
     const row = document.createElement("p"); row.textContent = `${label}: ${value}`; content.append(row);
   }
+  if (onPassThrough) content.append(createPassThroughAction(feature, { onPassThrough, canPassThrough }));
   if (onCenter) {
     const center = document.createElement("button"); center.type = "button";
     center.className = "button secondary place-center"; center.textContent = "Center on map";
