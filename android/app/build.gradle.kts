@@ -80,8 +80,8 @@ android {
         applicationId = "io.github.victorgabillon.sugarglider"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.1.1"
+        versionCode = 8
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("boolean", "ALLOW_HTTP", "false")
