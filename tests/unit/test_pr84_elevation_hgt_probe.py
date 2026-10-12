@@ -36,10 +36,12 @@ def fixture_tile(
         with gzip.GzipFile(fileobj=output, mode="wb", filename="", mtime=0) as stream:
             for row_number in range(HGT_SAMPLES_PER_SIDE):
                 value = HGT_SAMPLES_PER_SIDE - 1 - row_number if slope else height
-                row = bytearray(struct.pack(">h", value) * HGT_SAMPLES_PER_SIDE)
+                row_bytes = bytearray(
+                    struct.pack(">h", value) * HGT_SAMPLES_PER_SIDE
+                )
                 for column, override in by_row.get(row_number, []):
-                    struct.pack_into(">h", row, column * 2, override)
-                stream.write(row)
+                    struct.pack_into(">h", row_bytes, column * 2, override)
+                stream.write(row_bytes)
     return path, hashlib.sha256(path.read_bytes()).hexdigest()
 
 
