@@ -37,9 +37,12 @@ def test_yvelines_tile_plan_uses_real_spec() -> None:
     ]
 
 
-def test_integer_north_and_east_border_do_not_add_tiles() -> None:
+def test_exact_integer_upper_bounds_require_neighbor_tiles() -> None:
     assert [t.path for t in skadi_tiles_for_bounds((2.0, 48.0, 3.0, 49.0))] == [
-        "skadi/N48/N48E002.hgt.gz"
+        "skadi/N48/N48E002.hgt.gz",
+        "skadi/N48/N48E003.hgt.gz",
+        "skadi/N49/N49E002.hgt.gz",
+        "skadi/N49/N49E003.hgt.gz",
     ]
 
 
@@ -83,3 +86,8 @@ def test_cli_is_read_only(
     assert output["tile_count"] == 4
     assert "not verified" in output["limits"]
     assert list(tmp_path.iterdir()) == []
+
+
+def test_skadi_cannot_cover_inclusive_east_180_endpoint() -> None:
+    with pytest.raises(ValueError, match="180-degree east edge"):
+        skadi_tiles_for_bounds((179.0, 48.0, 180.0, 49.0))
