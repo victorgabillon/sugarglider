@@ -177,7 +177,9 @@ def probe_hgt_file(path: Path, expected_sha256: str) -> HgtProbe:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tile", type=Path, required=True)
-    parser.add_argument("--sha256", required=True, help="Expected compressed file SHA-256")
+    parser.add_argument(
+        "--sha256", required=True, help="Expected compressed file SHA-256"
+    )
     parser.add_argument("--latitude", type=float)
     parser.add_argument("--longitude", type=float)
     args = parser.parse_args()
