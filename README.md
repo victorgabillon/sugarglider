@@ -91,6 +91,7 @@ release distribution/signing is a separate operation.
 | [Regions and Places](docs/regions-and-places.md) | OSM pipeline, component installation/update, Places, ice cream and Nature. |
 | [Social service](docs/social-service.md) | Immutable saved routes, independent outing routes, current positions and deployment evidence. |
 | [Development](docs/development.md) | Setup, browser/JVM/unit checks, scripts and safe change boundaries. |
+| [Elevation feasibility (PR83)](docs/pr83-elevation-feasibility.md) | Current elevation limitations, Skadi coverage probe, sources, and staged integration gates. |
 
 PR-number documents and acceptance reports remain historical evidence and detailed
 runbooks. Start with the guides above for current behavior; use dated records for the
