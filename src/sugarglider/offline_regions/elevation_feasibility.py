@@ -29,9 +29,9 @@ class SkadiTile:
 
     @property
     def filename(self) -> str:
-        latitude = f'{"N" if self.south >= 0 else "S"}{abs(self.south):02d}'
-        longitude = f'{"E" if self.west >= 0 else "W"}{abs(self.west):03d}'
-        return f"{latitude}{longitude}.hgt.gz"
+        latitude = "N" if self.south >= 0 else "S"
+        longitude = "E" if self.west >= 0 else "W"
+        return f"{latitude}{abs(self.south):02d}{longitude}{abs(self.west):03d}.hgt.gz"
 
     @property
     def path(self) -> str:
