@@ -79,7 +79,9 @@ def elevation_feasibility_plan(region_id: str, bounds: Bounds) -> dict[str, obje
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--region", required=True, help="Existing region specification ID")
+    parser.add_argument(
+        "--region", required=True, help="Existing region specification ID"
+    )
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[3]
     spec = load_spec(root, args.region)
