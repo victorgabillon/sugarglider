@@ -6,7 +6,7 @@ This module neither downloads terrain data nor modifies any regional build.
 import argparse
 import json
 from dataclasses import dataclass
-from math import ceil, floor
+from math import floor
 from pathlib import Path
 
 from sugarglider.offline_regions.validation import load_spec
@@ -46,15 +46,17 @@ class SkadiTile:
 def skadi_tiles_for_bounds(bounds: Bounds) -> tuple[SkadiTile, ...]:
     """Plan tile coverage for an existing non-dateline regional rectangle.
 
-    Integer upper bounds share their border with the last included tile,
-    so they do not require fetching an entire additional one-degree tile.
-    This plans nominal spatial coverage, not the availability of valid DEM.
+    Valhalla 3.6.3's sampler selects tiles using floor(latitude/longitude),
+    including at exact integer upper bounds. Plan those boundary tiles too.
+    This plans nominal coverage, not availability of valid DEM.
     """
     west, south, east, north = validate_bounds(bounds)
+    if east == 180.0:
+        raise ValueError("Skadi cannot sample the inclusive 180-degree east edge")
     return tuple(
         SkadiTile(latitude, longitude)
-        for latitude in range(floor(south), ceil(north))
-        for longitude in range(floor(west), ceil(east))
+        for latitude in range(floor(south), floor(north) + 1)
+        for longitude in range(floor(west), floor(east) + 1)
     )
 
 
