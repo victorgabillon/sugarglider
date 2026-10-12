@@ -94,11 +94,14 @@ skadi/N49/N49E002.hgt.gz
 A 3601 x 3601 signed-int16 tile is 25,934,402 **decoded** bytes;
 four total **103,737,608 bytes (~98.93 MiB) uncompressed**. These are
 arithmetic estimates, **not downloads, measured compression, measured peak
-memory, proof of tile availability, or elevation coverage**. Exact integer
-north/east rectangle edges do not add an entire neighboring tile; borders
-share samples. The probe rejects invalid, non-finite and dateline-crossing
-regional bounds through the existing validator. Negative longitude/latitude
-tile naming and zero-degree seams have unit tests.
+memory, proof of tile availability, or elevation coverage**. Despite shared
+border samples, Valhalla's 3.6.3 sampler chooses a tile using
+`floor(latitude)`/`floor(longitude)`; exact integer north/east edges
+therefore **do** require the neighboring tile for inclusive coverage.
+The probe rejects invalid, non-finite and dateline-crossing regional bounds
+through the existing validator; it also rejects an inclusive east=180°
+boundary, which the Skadi sampler cannot address as a normal east tile.
+Negative longitude/latitude tile naming and zero-degree seams have unit tests.
 
 ## Recommended staged architecture (not implemented in PR83)
 
