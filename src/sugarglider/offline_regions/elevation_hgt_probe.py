@@ -188,7 +188,8 @@ def main() -> int:
     except (OSError, ValueError, EOFError) as error:
         print(f"elevation-hgt-probe: {error}", file=sys.stderr)
         return 1
-    report: dict[str, object] = probe.report()
+    report: dict[str, object] = {}
+    report.update(probe.report())
     if args.latitude is not None and args.longitude is not None:
         report["sample"] = {
             "latitude": args.latitude,
