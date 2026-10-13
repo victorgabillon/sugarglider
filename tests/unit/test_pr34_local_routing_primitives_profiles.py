@@ -80,7 +80,9 @@ def test_pack_v1_v2_semantics_and_profile_aware_selection_are_explicit() -> None
 def test_multileg_route_is_graph_derived_bounded_and_preserves_identity() -> None:
     engine = (KOTLIN / "NativeRouteEngineFactory.kt").read_text()
     boundary = (KOTLIN / "NativeRouteEngine.kt").read_text()
-    assert "localValhallaRouteRequest(request.points, policy, request.requestId)" in engine
+    assert (
+        "localValhallaRouteRequest(request.points, policy, request.requestId)" in engine
+    )
     assert "points.map" in engine
     assert "RoutingWaypoint.Type.`break`" in engine
     assert "trip.legs.size != request.points.size - 1" in engine
