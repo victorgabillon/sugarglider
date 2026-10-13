@@ -3,7 +3,6 @@ package io.github.victorgabillon.sugarglider
 import android.content.Context
 import android.os.Debug
 import android.os.SystemClock
-import com.valhalla.api.models.DirectionsOptions
 import com.valhalla.api.models.RouteRequest
 import com.valhalla.api.models.RoutingWaypoint
 import com.valhalla.config.ValhallaConfigBuilder
@@ -87,11 +86,10 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
                     costing = policy.costingModel,
                     costingOptions = policy.costingOptions,
                     id = request.requestId,
-                    directionsOptions = DirectionsOptions(
-                        directionsType = DirectionsOptions.DirectionsType.none,
-                        format = DirectionsOptions.Format.json,
-                        shapeFormat = DirectionsOptions.ShapeFormat.polyline6,
-                    ),
+                    // API models >= 0.6 place direction options at request root.
+                    directionsType = RouteRequest.DirectionsType.none,
+                    format = RouteRequest.Format.json,
+                    shapeFormat = RouteRequest.ShapeFormat.polyline6,
                 ),
             )
         } catch (error: ValhallaException.Internal) {
