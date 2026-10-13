@@ -22,8 +22,11 @@ class ValhallaLocalConfigurationTest {
 
         assertEquals(archive.absolutePath, mjolnir.getString("tile_extract"))
         assertEquals("", mjolnir.getString("tile_dir"))
-        assertFalse(mjolnir.has("tile_url"))
-        assertFalse(mjolnir.has("traffic_extract"))
+        // Models 0.6.0 serialize an empty default tile_url; only a non-empty
+        // URL enables the wrapper's network tile getter.
+        assertEquals("", mjolnir.optString("tile_url", ""))
+        assertFalse(mjolnir.optBoolean("tile_url_gz", false))
+        assertEquals("", mjolnir.optString("traffic_extract", ""))
         for (key in listOf("admin", "landmarks", "timezone", "transit_dir", "transit_feeds_dir")) {
             assertEquals("", mjolnir.getString(key))
         }
