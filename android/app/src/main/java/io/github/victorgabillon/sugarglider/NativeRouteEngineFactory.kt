@@ -194,6 +194,10 @@ internal fun localValhallaConfiguration(tileArchive: File): ValhallaConfig {
         httpd = null,
         statsd = null,
         mjolnir = requireNotNull(config.mjolnir).copy(
+            // Valhalla Mobile 0.6.4 can download graph tiles when tileUrl is
+            // non-empty. Disable that capability explicitly for offline routing.
+            tileUrl = "",
+            tileUrlGz = false,
             admin = "",
             landmarks = "",
             timezone = "",
