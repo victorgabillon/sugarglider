@@ -2,6 +2,7 @@ package io.github.victorgabillon.sugarglider
 
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import com.valhalla.api.models.RouteRequest
 import com.valhalla.config.models.ValhallaConfig
 import java.io.File
 import org.json.JSONObject
@@ -31,4 +32,26 @@ class ValhallaLocalConfigurationTest {
         assertFalse(value.has("statsd"))
         assertEquals(config, localValhallaConfiguration(archive))
     }
+    @Test
+    fun routeRequestSerializesDirectionFieldsAtRootWithModel060() {
+        val model = localValhallaRouteRequest(
+            listOf(
+                LocalRouteCoordinate(48.88, 2.08),
+                LocalRouteCoordinate(48.90, 2.11),
+            ),
+            ValhallaProfilePolicies.forProfile(LocalRouteProfile.HIKE),
+            "pr86-route-test",
+        )
+        val adapter = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+            .adapter(RouteRequest::class.java)
+        val value = JSONObject(adapter.toJson(model))
+        assertEquals("pedestrian", value.getString("costing"))
+        assertEquals("none", value.getString("directions_type"))
+        assertEquals("json", value.getString("format"))
+        assertEquals("polyline6", value.getString("shape_format"))
+        assertEquals("pr86-route-test", value.getString("id"))
+        assertFalse(value.has("directions_options"))
+        assertEquals(2, value.getJSONArray("locations").length())
+    }
+
 }
