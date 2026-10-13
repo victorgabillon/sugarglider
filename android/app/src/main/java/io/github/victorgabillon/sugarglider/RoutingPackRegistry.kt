@@ -257,6 +257,7 @@ internal data class RoutingPackActorSelection<T : Any>(
 )
 
 internal class SingleCurrentRoutingPackActor<T : Any>(
+    private val disposeActor: (T) -> Unit = {},
     private val createActor: (RoutingPack) -> T,
 ) {
     private var current: CurrentActor<T>? = null
@@ -267,11 +268,23 @@ internal class SingleCurrentRoutingPackActor<T : Any>(
         current?.takeIf { it.key == key }?.let {
             return RoutingPackActorSelection(it.actor, coldStart = false, pack.packId)
         }
+        // Valhalla Mobile 0.6.4 owns a persistent native actor/mmap per instance.
+        // Close the old actor BEFORE constructing the replacement, so a switch
+        // never retains both graph archives. A failed switch leaves no actor.
+        release()
         val created = createActor(pack)
         current = CurrentActor(key, created)
         return RoutingPackActorSelection(created, coldStart = true, pack.packId)
     }
 
+    @Synchronized
+    fun release() {
+        val previous = current ?: return
+        current = null
+        disposeActor(previous.actor)
+    }
+
+    @Synchronized
     internal fun currentPackId(): String? = current?.key?.packId
 
     private data class CurrentActor<T : Any>(
