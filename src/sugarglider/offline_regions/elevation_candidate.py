@@ -83,7 +83,9 @@ def _read_pins(path: Path, expected_paths: list[str]) -> dict[str, object]:
     return payload
 
 
-def _tile_record(path: Path, tile_path: str, digest: str, source_url: str) -> dict[str, object]:
+def _tile_record(
+    path: Path, tile_path: str, digest: str, source_url: str
+) -> dict[str, object]:
     probe = probe_hgt_file(path, digest)
     return {
         "path": tile_path,
