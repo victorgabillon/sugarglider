@@ -141,8 +141,11 @@ internal sealed interface NativeRouteResult {
     data class Failure(val code: NativeRouteFailureCode) : NativeRouteResult
 }
 
-internal interface NativeRouteEngine {
+internal interface NativeRouteEngine : AutoCloseable {
     fun capabilities(reference: RegionalRoutingPackReference?): NativeRouteCapabilities
 
     fun route(request: NativeRouteRequest): NativeRouteResult
+
+    // Release the persistent native actor once all queued requests are drained.
+    override fun close()
 }
