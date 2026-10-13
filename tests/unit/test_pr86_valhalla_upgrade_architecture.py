@@ -36,6 +36,6 @@ def test_valhalla_graph_has_no_remote_fallback_in_new_models() -> None:
     assert 'tileUrl = ""' in engine
     assert "tileUrlGz = false" in engine
     assert 'AdditionalData(elevation = "")' in engine
-    assert 'tileExtract(tileArchive.absolutePath)' in engine
+    assert '.withTileExtract(tileArchive.absolutePath)' in engine
     assert 'optString("tile_url", "")' in tests
     assert 'optBoolean("tile_url_gz", false)' in tests
