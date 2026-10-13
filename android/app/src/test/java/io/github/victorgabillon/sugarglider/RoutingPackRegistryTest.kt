@@ -250,9 +250,13 @@ class RoutingPackRegistryTest {
         installPack("paris-dev-v1", PARIS)
         val packs = registry().installedPacks().associateBy(RoutingPack::packId)
         val created = mutableListOf<String>()
-        val holder = SingleCurrentRoutingPackActor { pack ->
-            "${pack.packId}#${created.size + 1}".also(created::add)
-        }
+        val disposed = mutableListOf<String>()
+        val holder = SingleCurrentRoutingPackActor(
+            disposeActor = disposed::add,
+            createActor = { pack ->
+                "${pack.packId}#${created.size + 1}".also(created::add)
+            },
+        )
         val marly = requireNotNull(packs["marly-dev-v1"])
         val paris = requireNotNull(packs["paris-dev-v1"])
         val selections = listOf(marly, marly, paris, paris, marly).map(holder::actorFor)
@@ -270,26 +274,47 @@ class RoutingPackRegistryTest {
         )
         assertEquals("marly-dev-v1", holder.currentPackId())
         assertEquals(3, created.size)
+        assertEquals(listOf("marly-dev-v1#1", "paris-dev-v1#2"), disposed)
+        holder.close()
+        holder.close()
+        assertEquals(listOf("marly-dev-v1#1", "paris-dev-v1#2", "marly-dev-v1#3"), disposed)
+        assertNull(holder.currentPackId())
+        assertTrue(runCatching { holder.actorFor(marly) }.isFailure)
     }
 
     @Test
-    fun failedPackSwitchCannotReplaceTheCurrentActor() {
+    fun failedPackSwitchReleasesPreviousActorAndRecoversWithoutStaleCache() {
         installPack("marly-dev-v1", MARLY)
         installPack("paris-dev-v1", PARIS)
         val packs = registry().installedPacks().associateBy(RoutingPack::packId)
-        val holder = SingleCurrentRoutingPackActor { pack ->
-            if (pack.packId == "paris-dev-v1") error("synthetic initialization failure")
-            "marly-actor"
-        }
+        val order = mutableListOf<String>()
+        val holder = SingleCurrentRoutingPackActor(
+            disposeActor = { value: String -> order += "close $value" },
+            createActor = { pack ->
+                order += "create ${pack.packId}"
+                if (pack.packId == "paris-dev-v1") error("synthetic initialization failure")
+                "marly-actor"
+            },
+        )
         val marly = requireNotNull(packs["marly-dev-v1"])
         val paris = requireNotNull(packs["paris-dev-v1"])
 
         assertTrue(holder.actorFor(marly).coldStart)
         assertTrue(runCatching { holder.actorFor(paris) }.isFailure)
-        val retained = holder.actorFor(marly)
-        assertFalse(retained.coldStart)
-        assertEquals("marly-actor", retained.actor)
+        assertNull(holder.currentPackId())
+        val recreated = holder.actorFor(marly)
+        assertTrue(recreated.coldStart)
+        assertEquals("marly-actor", recreated.actor)
         assertEquals("marly-dev-v1", holder.currentPackId())
+        assertEquals(
+            listOf(
+                "create marly-dev-v1",
+                "close marly-actor",
+                "create paris-dev-v1",
+                "create marly-dev-v1",
+            ),
+            order,
+        )
     }
 
     private fun registry(): RoutingPackRegistry = RoutingPackRegistry(root)
