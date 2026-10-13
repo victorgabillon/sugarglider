@@ -15,7 +15,8 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          # Valhalla Mobile 0.6.4 / models 0.6.0 emit Java 21 bytecode.
+          java-version: "21"
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
