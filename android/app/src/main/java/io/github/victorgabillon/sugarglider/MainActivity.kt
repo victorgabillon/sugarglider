@@ -175,7 +175,11 @@ class MainActivity : Activity() {
         pendingStart = null
         pendingLocalRoute = null
         pendingLocalCapabilities = null
-        localRouteExecutor.shutdownNow()
+        // The 0.6.4 JNI actor owns a persistent mapped graph. Close it only
+        // after the serialized native route worker drains, never mid-call.
+        // The cancelled page no longer receives results: pendingLocalRoute is null.
+        localRouteExecutor.execute { nativeRouteEngine.close() }
+        localRouteExecutor.shutdown()
         gpxDocumentSaver.close()
         documentExecutor.shutdown()
         dismissOutingLeaveDialog()
