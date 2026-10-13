@@ -256,22 +256,42 @@ internal data class RoutingPackActorSelection<T : Any>(
     val packId: String,
 )
 
+// valhalla-mobile 0.6.4 owns a persistent JNI actor: only one selected pack
+// may remain open. Release the previous actor *before* opening a new archive
+// to avoid doubling native tile caches under mobile memory pressure.
 internal class SingleCurrentRoutingPackActor<T : Any>(
+    private val disposeActor: (T) -> Unit = {},
     private val createActor: (RoutingPack) -> T,
-) {
+) : AutoCloseable {
     private var current: CurrentActor<T>? = null
+    private var closed = false
 
     @Synchronized
     fun actorFor(pack: RoutingPack): RoutingPackActorSelection<T> {
+        check(!closed) { "routing actor holder is closed" }
         val key = pack.actorKey()
         current?.takeIf { it.key == key }?.let {
             return RoutingPackActorSelection(it.actor, coldStart = false, pack.packId)
         }
+        val old = current
+        current = null
+        if (old != null) disposeActor(old.actor)
+        // A failed initialization leaves no stale actor from a different pack.
         val created = createActor(pack)
         current = CurrentActor(key, created)
         return RoutingPackActorSelection(created, coldStart = true, pack.packId)
     }
 
+    @Synchronized
+    override fun close() {
+        if (closed) return
+        closed = true
+        val old = current
+        current = null
+        if (old != null) disposeActor(old.actor)
+    }
+
+    @Synchronized
     internal fun currentPackId(): String? = current?.key?.packId
 
     private data class CurrentActor<T : Any>(
