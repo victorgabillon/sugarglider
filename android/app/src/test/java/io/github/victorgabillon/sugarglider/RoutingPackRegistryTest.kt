@@ -245,12 +245,13 @@ class RoutingPackRegistryTest {
     }
 
     @Test
-    fun actorLifecycleIsBoundedAcrossAABBASequence() {
+    fun actorLifecycleClosesSupersededNativeEnginesAndReleaseIsIdempotent() {
         installPack("marly-dev-v1", MARLY)
         installPack("paris-dev-v1", PARIS)
         val packs = registry().installedPacks().associateBy(RoutingPack::packId)
         val created = mutableListOf<String>()
-        val holder = SingleCurrentRoutingPackActor { pack ->
+        val disposed = mutableListOf<String>()
+        val holder = SingleCurrentRoutingPackActor(disposeActor = { disposed += it }) { pack ->
             "${pack.packId}#${created.size + 1}".also(created::add)
         }
         val marly = requireNotNull(packs["marly-dev-v1"])
@@ -268,27 +269,39 @@ class RoutingPackRegistryTest {
             ),
             selections.map { it.actor },
         )
+        assertEquals(listOf("marly-dev-v1#1", "paris-dev-v1#2"), disposed)
         assertEquals("marly-dev-v1", holder.currentPackId())
         assertEquals(3, created.size)
+        holder.release()
+        holder.release()
+        assertEquals(listOf("marly-dev-v1#1", "paris-dev-v1#2", "marly-dev-v1#3"), disposed)
+        assertEquals(null, holder.currentPackId())
+        assertTrue(holder.actorFor(marly).coldStart)
+        assertEquals(4, created.size)
     }
 
     @Test
-    fun failedPackSwitchCannotReplaceTheCurrentActor() {
+    fun failedPackSwitchReleasesOldActorAndNextCallReinitializes() {
         installPack("marly-dev-v1", MARLY)
         installPack("paris-dev-v1", PARIS)
         val packs = registry().installedPacks().associateBy(RoutingPack::packId)
-        val holder = SingleCurrentRoutingPackActor { pack ->
+        var created = 0
+        val disposed = mutableListOf<String>()
+        val holder = SingleCurrentRoutingPackActor(disposeActor = { disposed += it }) { pack ->
             if (pack.packId == "paris-dev-v1") error("synthetic initialization failure")
-            "marly-actor"
+            created += 1
+            "marly-actor-$created"
         }
         val marly = requireNotNull(packs["marly-dev-v1"])
         val paris = requireNotNull(packs["paris-dev-v1"])
 
         assertTrue(holder.actorFor(marly).coldStart)
         assertTrue(runCatching { holder.actorFor(paris) }.isFailure)
-        val retained = holder.actorFor(marly)
-        assertFalse(retained.coldStart)
-        assertEquals("marly-actor", retained.actor)
+        assertEquals(listOf("marly-actor-1"), disposed)
+        assertEquals(null, holder.currentPackId())
+        val reinitialized = holder.actorFor(marly)
+        assertTrue(reinitialized.coldStart)
+        assertEquals("marly-actor-2", reinitialized.actor)
         assertEquals("marly-dev-v1", holder.currentPackId())
     }
 
