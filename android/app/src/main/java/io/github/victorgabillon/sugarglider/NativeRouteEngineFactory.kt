@@ -26,8 +26,14 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
     private val applicationContext = context.applicationContext
     private val repository = (applicationContext as SugargliderApplication).regionalRoutingRepository
     private val actorHolder = SingleCurrentRoutingPackActor(
-        ::initializeActor,
+        disposeActor = { actor: ValhallaActor -> actor.valhalla.close() },
+        createActor = ::initializeActor,
     )
+
+    @Synchronized
+    override fun close() {
+        actorHolder.close()
+    }
 
     override fun capabilities(reference: RegionalRoutingPackReference?): NativeRouteCapabilities {
         val installedPacks = reference?.let { repository.withPack(it) { pack -> listOf(pack) } } ?: emptyList()
@@ -174,7 +180,7 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
 
     companion object {
         private const val ENGINE_ID = "valhalla-mobile"
-        private const val ENGINE_VERSION = "0.5.1/valhalla-3.6.3"
+        private const val ENGINE_VERSION = "0.6.4/valhalla-3.9.1"
     }
 }
 
