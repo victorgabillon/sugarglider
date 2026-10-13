@@ -75,22 +75,7 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
         val started = SystemClock.elapsedRealtime()
         val response = try {
             selectedActor.actor.valhalla.route(
-                RouteRequest(
-                    locations = request.points.map { point ->
-                        RoutingWaypoint(
-                            lat = point.latitude,
-                            lon = point.longitude,
-                            type = RoutingWaypoint.Type.`break`,
-                        )
-                    },
-                    costing = policy.costingModel,
-                    costingOptions = policy.costingOptions,
-                    id = request.requestId,
-                    // API models >= 0.6 place direction options at request root.
-                    directionsType = RouteRequest.DirectionsType.none,
-                    format = RouteRequest.Format.json,
-                    shapeFormat = RouteRequest.ShapeFormat.polyline6,
-                ),
+                localValhallaRouteRequest(request.points, policy, request.requestId),
             )
         } catch (error: ValhallaException.Internal) {
             return NativeRouteResult.Failure(classifyValhallaFailure(error.message))
@@ -176,6 +161,28 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
         private const val ENGINE_VERSION = "0.6.4/valhalla-3.9.1"
     }
 }
+
+// Keep the actual native request constructor separately testable. The newer
+// generated model places all direction/shape options at the request root.
+internal fun localValhallaRouteRequest(
+    points: List<LocalRouteCoordinate>,
+    policy: ValhallaProfilePolicy,
+    requestId: String,
+): RouteRequest = RouteRequest(
+    locations = points.map { point ->
+        RoutingWaypoint(
+            lat = point.latitude,
+            lon = point.longitude,
+            type = RoutingWaypoint.Type.`break`,
+        )
+    },
+    costing = policy.costingModel,
+    costingOptions = policy.costingOptions,
+    id = requestId,
+    directionsType = RouteRequest.DirectionsType.none,
+    format = RouteRequest.Format.json,
+    shapeFormat = RouteRequest.ShapeFormat.polyline6,
+)
 
 internal fun localValhallaConfiguration(tileArchive: File): ValhallaConfig {
     val config = ValhallaConfigBuilder()
