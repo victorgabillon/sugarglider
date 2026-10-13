@@ -52,8 +52,10 @@ This branch **does not**:
 
 ### Native / Gradle / model API
 
-- [ ] Both Android build variants compile against the published 0.6.4
-  dependency on the repository's existing AGP/Gradle/JDK setup.
+- [ ] Both Android build variants compile against published 0.6.4 with
+  JDK 21, existing AGP/Gradle versions, and unmodified signing configuration.
+  CI runs Debug+Release JVM tests/lint but **only** assembles a Debug APK.
+  The workflow checks 16 KiB APK page and native ELF LOAD alignments.
 - [ ] `RouteRequest` fields, direction flags, six cost profiles,
   typed route status/summary/leg decoding and polyline6 interpretation
   are compatible with the newer model package.
