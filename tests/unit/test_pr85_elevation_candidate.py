@@ -136,7 +136,6 @@ def test_existing_output_and_symbolic_source_are_rejected(
     with pytest.raises(ValueError, match="exists"):
         build_candidate(ROOT, "marly", directory, pins, output)
     assert (output / "keep.txt").read_text() == "protected"
-    output.rmdir() if not list(output.iterdir()) else None
 
     target = tmp_path / "unchanged.hgt.gz"
     source.rename(target)
