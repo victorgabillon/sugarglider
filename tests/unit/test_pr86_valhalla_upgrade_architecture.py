@@ -4,6 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 KOTLIN = ROOT / "android/app/src/main/java/io/github/victorgabillon/sugarglider"
+TEST_KOTLIN = ROOT / "android/app/src/test/java/io/github/victorgabillon/sugarglider"
 
 
 def test_old_valhalla_engine_cannot_leak_across_activity_recreation() -> None:
@@ -28,11 +29,7 @@ def test_old_valhalla_engine_cannot_leak_across_activity_recreation() -> None:
 
 def test_valhalla_graph_has_no_remote_fallback_in_new_models() -> None:
     engine = (KOTLIN / "NativeRouteEngineFactory.kt").read_text()
-    tests = (
-        ROOT
-        / "android/app/src/test/java/io/github/victorgabillon/sugarglider/"
-        "ValhallaLocalConfigurationTest.kt"
-    ).read_text()
+    tests = (TEST_KOTLIN / "ValhallaLocalConfigurationTest.kt").read_text()
     assert 'tileUrl = ""' in engine
     assert "tileUrlGz = false" in engine
     assert 'AdditionalData(elevation = "")' in engine
