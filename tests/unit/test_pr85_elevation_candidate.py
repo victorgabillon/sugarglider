@@ -111,12 +111,13 @@ def test_pin_inventory_must_match_expected_region(
 ) -> None:
     directory, pins, _, _ = pinned_source
     output = tmp_path / "candidate"
-    for altered in (
+    changes: tuple[dict[str, object], ...] = (
         {"sources": []},
         {"sources": [{"path": "skadi/N48/N48E001.hgt.gz"}]},
         {"dataset": ""},
         {"acquired_on": "not-a-date"},
-    ):
+    )
+    for altered in changes:
         payload = json.loads(pins.read_bytes())
         payload.update(altered)
         bad_pins = tmp_path / "bad-pins.json"
