@@ -29,6 +29,11 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
         createActor = ::initializeActor,
     )
 
+    @Synchronized
+    override fun close() {
+        actorHolder.release()
+    }
+
     override fun capabilities(reference: RegionalRoutingPackReference?): NativeRouteCapabilities {
         val installedPacks = reference?.let { repository.withPack(it) { pack -> listOf(pack) } } ?: emptyList()
         return NativeRouteCapabilities(
