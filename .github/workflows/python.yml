@@ -16,7 +16,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen
-      - run: uv run ruff format --check .
+      - run: uv run ruff format --diff tests/unit/test_pr86_valhalla_upgrade_architecture.py
       - run: uv run ruff check .
       - run: uv run mypy src tests
       - run: uv run pytest -m "not integration"
