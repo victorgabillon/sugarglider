@@ -184,7 +184,9 @@ internal fun localValhallaRouteRequest(
     costing = policy.costingModel,
     costingOptions = policy.costingOptions,
     id = requestId,
-    directionsType = RouteRequest.DirectionsType.none,
+    // Models 0.6.0 require both leg maneuvers and their instruction text.
+    // `none` omits maneuvers; `maneuvers` omits the required instructions.
+    directionsType = RouteRequest.DirectionsType.instructions,
     format = RouteRequest.Format.json,
     shapeFormat = RouteRequest.ShapeFormat.polyline6,
 )

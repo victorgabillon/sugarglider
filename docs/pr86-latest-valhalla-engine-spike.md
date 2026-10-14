@@ -111,3 +111,135 @@ or public region publication is authorized.
 
 If compatibility cannot be proven, keep this PR draft and retain 0.5.1 on
 `main`; split out tests/research and only merge a proven migration.
+
+## Fairphone routing failure diagnosed and corrected — 2026-10-14
+
+The upgraded Debug app's `routing_failure` / `no_route_candidate` was reproduced
+on a physical Fairphone 6 using its existing Yvelines routing archive. Native
+actor construction and pack selection succeeded. The first failing operation
+was **typed response deserialization** inside `Valhalla.route`, before Sugarglider
+could decode the polyline or validate/publish a candidate:
+
+```text
+com.valhalla.valhalla.ValhallaException$InvalidResponse: Invalid response data
+cause: com.squareup.moshi.JsonDataException:
+Required value 'maneuvers' missing at $.trip.legs[1]
+```
+
+`localValhallaRouteRequest` moved the direction options to the new model's
+request root, including `directions_type: none`. Valhalla consequently omitted
+leg maneuvers, which the 0.6.0 `RouteLeg` model requires. `maneuvers` alone would
+also fail: `RouteManeuver.instruction` is required. Request **`instructions`**
+so the native response satisfies the wrapper's typed schema. See the
+[upstream direction-option semantics](https://github.com/valhalla/valhalla/blob/master/docs/docs/api/route/api-reference.md#directions-options).
+No raw-response compatibility adapter or fabricated fields were introduced.
+
+### Focused change
+
+- `NativeRouteEngineFactory.kt`: request instruction-bearing maneuvers.
+- `ValhallaLocalConfigurationTest.kt`: update the serialized request expectation.
+- `ValhallaRouteResponseTest.kt`: reproduce both missing-maneuver and
+  missing-instruction decoding errors, verify complete shape/summary decoding,
+  and require instruction responses for every public profile while retaining
+  all ordered break points, including loop closure. These are offline wire-schema
+  tests; physical graph evidence is recorded separately below.
+
+Temporary Debug-only exception logging was removed from the final APK/source.
+Profile policies, pack manifests, actor lifetime/close behavior, snap limits,
+geometry validation, planner ordering/budgets and GPX serialization were unchanged.
+
+### Physical results using the installed 3.6.3 archive
+
+Both installed routing-build paths retain the same unmodified 96,051,200-byte
+archive, SHA-256:
+
+```text
+988672888aa4542ad4c456faffbc75c08e5ff58c758ac34006e0081cb9aec1b4
+```
+
+Their routing manifests still truthfully declare `engine_version: 3.6.3`.
+Before the correction, Hike open, identical Hike repeat, Hike loop, City Bike
+open and the user's original Trail Run loop all returned `routing_failure`.
+A separately built pre-upgrade `main` baseline (`6c0b022`, Mobile 0.5.1 /
+Valhalla 3.6.3) was also installed in place on Debug only, under the same
+ID/certificate/manifest checks, then replaced again with the fixed APK. All five
+baseline requests succeeded. Distance, duration and snapped coordinates matched
+the fixed 3.9.1 results exactly. The four fixture shapes also matched exactly.
+The original multi-waypoint loop retained the identical ordered path after
+collapsing consecutive duplicate vertices for comparison only: both versions
+returned 1,051 vertices, but a zero-length duplicate start vertex moved from the
+end to the beginning. Runtime/export geometry was preserved exactly as returned.
+Baseline cold initialization/routing measured 1,093/939 ms and the repeated warm
+Hike route 44 ms; these are individual observations, not a benchmark.
+
+After the correction, all six public profiles routed the repository's Marly
+fixture in both open and loop form:
+
+| Profile | Open distance | Loop distance | Result |
+| --- | ---: | ---: | --- |
+| `trail_run` | 4,066 m | 8,133 m | success |
+| `hike` | 3,985 m | 7,970 m | success |
+| `city_bike` | 4,716 m | 8,757 m | success |
+| `gravel_bike` | 4,716 m | 8,757 m | success |
+| `mountain_bike` | 4,716 m | 8,757 m | success |
+| `road_bike` | 4,716 m | 8,757 m | success |
+
+The exact original request was restored through the application's JSON import
+and generated with its normal **Generate** button: one 25,353 m Trail Run loop,
+1,051 vertices, one successful backend call out of a budget of 16, and no
+rejected attempts/publications. Required-point order and coordinates were retained.
+The original flexible 20 km target was visibly missed; its warning remains in
+the canonical result and UI. No constraint or distance preference was weakened.
+Exporting that returned candidate passed the one-track/one-segment/no-route/
+no-extensions GPX contract with all 1,051 vertices.
+
+Initial Hike actor initialization took 1,168 ms, cold routing 627 ms, and the
+immediately repeated warm route 34 ms. Twenty additional warm Hike routes took
+20–27 ms each and returned identical geometry, snaps and authoritative distance.
+Process PSS fluctuated during the mixed/UI/repeat run (roughly 222–299 MiB);
+this short run is not a long-duration leak assessment. Switching between the
+two existing installed build paths produced fresh actors (49/47 ms initialization)
+and successful routes. A read-only `/proc` inspection afterward showed exactly
+one routing-archive mmap. The two paths contain identical graph bytes, so this
+does **not** complete the distinct-graph lifetime gate. No Sugarglider/Valhalla
+crash was found in the device crash buffer.
+
+### Validation
+
+From the isolated PR86 checkout:
+
+```sh
+uv run --offline make check
+cd android
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
+ANDROID_HOME=/home/pompote/Android/Sdk \
+./gradlew --offline --no-daemon testDebugUnitTest lintDebug assembleDebug \
+  testReleaseUnitTest lintRelease
+```
+
+- Ruff formatting/lint and strict mypy: passed (265 source files).
+- Python: 1,253 passed, 16 integration tests deselected.
+- Android: 220 unit tests per variant, both lints and Debug assembly passed.
+- Browser: PR34 profiles (4), PR38 waypoints (34), PR41 normal planner (19),
+  PR41 candidates (40), PR41 GPX (27), PR42 integrity (15): all 139 scenarios
+  passed with external requests blocked and an already installed Chromium.
+- `zipalign -c -P 16 4`: passed; native ELF LOAD alignments all `0x4000`.
+
+Every installed test APK was independently checked for the exact Debug
+application ID, version code 8, matching installed SHA-256 certificate
+`e84155df3a2c7ea48723876b1fe8e0e602cb600f8374d6539b9fea9aa42cfbd7`,
+and a byte-identical Android manifest. Only `adb install -r` on the Debug
+package was used. Routing archives were hashed before and after. Diagnostic
+logs, full requests/results, APKs and screenshots were kept outside Git.
+
+### Remaining migration gates
+
+The tested 3.6.3 archive can be read and routed by 3.9.1; the reported failure
+was caused by the upgraded request/model contract. This is evidence for that
+archive and those routes, not a blanket compatibility statement for all graph
+data. Keep PR86 **draft**: independently built disposable 3.9.1 graph tests,
+two genuinely distinct archives, longer memory/lifecycle tests, and height
+with verified local Skadi/missing-data cases still remain. No region migration
+or publication is justified by this decoding fix. A separate height experiment
+can now proceed against a working route engine; production elevation remains
+disabled until its own acceptance gates pass.

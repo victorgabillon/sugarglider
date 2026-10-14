@@ -52,7 +52,7 @@ class ValhallaLocalConfigurationTest {
             .adapter(RouteRequest::class.java)
         val value = JSONObject(adapter.toJson(model))
         assertEquals("pedestrian", value.getString("costing"))
-        assertEquals("none", value.getString("directions_type"))
+        assertEquals("instructions", value.getString("directions_type"))
         assertEquals("json", value.getString("format"))
         assertEquals("polyline6", value.getString("shape_format"))
         assertEquals("pr86-route-test", value.getString("id"))
