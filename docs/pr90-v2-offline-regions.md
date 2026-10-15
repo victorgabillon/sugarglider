@@ -242,3 +242,194 @@ weighted grade; mean elevations ranged from 36 to 108 m, weighted grades from
 These are embedded graph attributes, independently distinct from runtime HGT
 sampling. They establish enrichment and offline readability, not ground-truth
 vertical accuracy.
+
+## Completed Yvelines artifact (2026-10-15)
+
+The full Yvelines build completed successfully, then a **fresh Python process**
+independently verified every component, file hash, native tile header, decoded
+HGT and index. That second verification took 32.62 s (maximum host RSS
+1,058,028 KiB). No smaller substitute region was used.
+
+Build ID: `850e2b0576b49966579e1eb01dadb70fe10a9f94546352b0ece69aa92e23d3c6`.
+
+Regional manifest: 3,270 bytes, SHA-256
+`c76ec406297727a8d20791e756ddf360b34901e74dc5c21e3cebb82a44ec1553`.
+
+OSM input: `ile-de-france-latest.osm.pbf`, 335,288,680 bytes, SHA-256
+`2ac2b0d9c7ca8374af078a6f564c342a08a2634a110c1f18bae1cbd1cda5d849`; header bounds
+`[1.445097, 48.11918, 3.560409, 49.24271]`. No source URL is asserted for this existing local input.
+
+| Component | Immutable component ID | Payload bytes |
+| --- | --- | ---: |
+| map | `yvelines-ouest-parisien-map-v1` | 81,570,965 |
+| routing | `yvelines-ouest-parisien-routing-v2` | 99,481,878 |
+| pois | `yvelines-ouest-parisien-pois-v1` | 261,132 |
+| nature | `yvelines-ouest-parisien-nature-v1` | 10,634,994 |
+| elevation | `yvelines-ouest-parisien-elevation-v2` | 24,224,240 |
+
+Component payload: **216,173,209 bytes**; including the root manifest,
+**216,176,479 bytes** (216.176 MB, decimal).
+
+| Non-DEM file (DEM hashes are above) | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `map/manifest.json` | 631 | `ee0f29b2f831afdc60db4a45e50abbf412e6b4e803e4a9347d70821dbd4e63b3` |
+| `map/basemap.pmtiles` | 81,570,334 | `a5e2af1ac3785d370c84a5fc0c46e65ba764a2331d4d86b7e2c6b25de52bce3d` |
+| `nature/index.json.gz` | 10,634,994 | `abb0819a4f4b02d8ee844aa19de71c1760e0b63a1a9f7bd3410513d82dca7b90` |
+| `pois/index.json.gz` | 261,132 | `1ace12b6869ae74f97a673ac9fe6f706cb17a6b7f29b35a9b0dbafd095ea4649` |
+| `routing/manifest.json` | 278 | `3d87397c8f997cdb1a4622cd3e3ad52eb3481ff777723da7031ca14e2f71927a` |
+| `routing/valhalla_tiles.tar` | 99,481,600 | `bc0dfe06b9402c1d9ae999a5bab4765d214786505154ba64f1f221854f89931e` |
+
+Elevation manifest: 1,828 bytes, SHA-256
+`953c51ef75e0217d2476afbb5e7fb1d6b2dd2046e501897aa389304006e71694`.
+The graph archive has 22 genuine elevation-enriched tiles. Places has 4,415
+features; Nature has 62,191. Their existing component IDs/formats are retained.
+
+Successful complete rebuild: **58m 04.09s**, including map support-data acquisition
+and verification. Map generation took about 14m 38s; Valhalla's graph stage took
+112s, Places 1,594.326s and Nature 445.465s. The command's maximum host/child RSS
+was 2,877,176 KiB (2.744 GiB); independently monitored Docker cgroup peaks were
+3,221,229,568 bytes for map generation and 895,504,384 bytes for graph generation.
+Those measurements cover different processes/accounting domains and are not
+added into an invented simultaneous peak. Containers used two CPUs and a 3 GiB
+memory limit; no swap/OOM occurred. This is one measured build, not a throughput
+benchmark. Immutable output refuses an in-place rebuild.
+
+Private artifact location on the test host:
+`data/offline-regions/pr90-work/source/data/offline-regions/yvelines-ouest-parisien`
+relative to the original checkout. Detailed build, acquisition, source, device
+and timing records live beside that isolated checkout under `pr90-work/evidence`.
+Neither generated artifacts nor personal route snapshots are tracked.
+
+## Completed Fairphone acceptance
+
+Fairphone 6, Android 16, actual kernel page size 4 KiB. APK ZIP and native ELF
+16 KiB alignment were checked independently; this phone is not a physical 16 KiB
+page-size device. The research app APK is 25,826,004 bytes, SHA-256
+`276e0df4e3d9e7b602c03093094379d1a3696c0f260775671a0bd8e3d5b222b9`.
+The final test APK is 47,093 bytes, SHA-256
+`07d740e2d15a7ee0c26966181886947af7c43ff9675e37070f5c709c8ca47c95`.
+Both use the verified existing Debug certificate. Before each installation,
+application ID, certificate, version, permissions and manifest were compared.
+Only the separate research/test packages were installed or updated.
+
+The complete real artifact was downloaded through the **existing normal Regions
+installer**, not copied into application storage. Its source was a private
+HTTP server bound only to host loopback and reached through ADB USB reverse.
+A temporary CDP adapter in this isolated research WebView supplied that catalog
+and represented the development source to the existing HTTP-origin policy in
+the page/worker. The actual HTTPS appassets bridge origin, checksums, installer,
+component readers, native downloader and atomic version commit were unchanged.
+This tests the installer with a private development transport; it does not
+validate public HTTPS hosting or grant terrain redistribution permission.
+Only reference/height-plan metadata was subsequently uploaded for instrumentation.
+
+The UI stayed unavailable during transfer/verification and then displayed
+**Ready: Map ✓ · Routing ✓ · Places ✓ · Nature ✓ · Elevation ✓** for the exact
+build above. Installed native files were independently rehashed on-device;
+OPFS map/Places/Nature were rehashed through their existing bounded readers.
+All identities matched. Reopening after instrumentation killed/restarted the
+research process preserved the selected committed build and all five checks.
+The unchanged public catalog can offer its different old download as an update;
+that does not replace the selected V2 build. The private test catalog displays
+this build as Ready.
+
+Download clicked at `2026-10-15T13:00:54.077Z`; not Ready at +15.014s, and
+Ready observed at +34.148s. Thus first installation completed
+within **15.0–34.2s**, an observation interval rather than a fabricated exact
+completion time. Two-second `du -sk` observations of the isolated app's
+`files`, `app_webview` and `cache` recorded 957,440 baseline bytes,
+**217,431,040 peak/final allocated bytes** during installation, and
+216,473,600 additional bytes. These include metadata/cache and filesystem
+block rounding; the sampled peak can miss shorter transients. Native files used
+120,980 KiB, WebView storage 90,821 KiB and cache 534 KiB.
+
+Two complete six-profile × open/loop runs passed after separate process starts
+(**24 strict routes**). Requests use real common graph vertices; every returned
+snap was checked within 25 m (maximum 8.188 m, endpoints below 0.074 m).
+All snapped points occur on returned geometry; loops close exactly, open routes
+remain open, and geometry length agrees with the authoritative native summary
+within 0.16%. Distances, durations, snaps and every geometry vertex were identical
+on repetition. No online engine or straight-line fallback was used.
+
+| Profile | Open distance m / duration s | Loop distance m / duration s | Warm route ms, open / loop |
+| --- | ---: | ---: | ---: |
+| `trail_run` | 2659 / 1094.487 | 6449 / 2891.095 | 601 cold / 80 |
+| `hike` | 2655 / 1966.950 | 6451 / 5161.004 | 52 / 48 |
+| `city_bike` | 3472 / 686.293 | 7479 / 1621.495 | 31 / 53 |
+| `gravel_bike` | 3472 / 625.232 | 7479 / 1468.270 | 58 / 58 |
+| `mountain_bike` | 3472 / 776.182 | 7479 / 1809.294 | 43 / 68 |
+| `road_bike` | 3472 / 508.330 | 7479 / 1202.973 | 21 / 54 |
+
+On the second run, cold actor initialization was 1,077 ms; its first route took
+601 ms, subsequent routes 21–80 ms. All twelve routes completed in 3.510s,
+including verification, initialization, PSS readings and closure. Route-process
+PSS was 44.59 MiB initially, 103.48 MiB before closure and
+82.75 MiB afterwards. Removing files while the persistent actor held a
+lease was rejected as busy.
+
+The actual hike loop was **6451 m**, with 131 PR88 samples at
+50 m nominal spacing and preserved routed distances. Every sample was available;
+maximum absolute native/Python difference was **0.009999999988 m**,
+within the unchanged **0.010001 m** serialization tolerance. Additional fixtures
+covered all four installed tiles and an exact integer boundary; two outside
+the tile footprint remained null. These establish interpolation/serialization
+agreement, not ground-truth vertical accuracy. DEM datum/positioning/accuracy
+uncertainty remains unresolved.
+
+Cold height sampling took 168 ms; the full cold call including installed-file
+verification and initialization took 2420 ms. The first warm call took 36 ms;
+twenty further calls were exactly deterministic, 27–39 ms
+(median 32.5 ms). A 2,048-point API-budget stress fixture took
+180 ms; it repeats actual sample coordinates and is not represented as a real
+route. Over-budget, empty, NaN and wrong component/build inputs failed explicitly.
+Closing/reopening the actor reproduced the same heights with a new cold actor.
+
+Height-process PSS was 44.68 MiB initially; repeated-route-sample PSS
+rose from 131.22 to 134.47 MiB across twenty calls. After loading all four
+tiles it reached 232.56 MiB; after JNI closure it was 98.81 MiB. Native
+samplers, model/class caches and allocator retention contribute; this short test
+does **not** establish long-term leak freedom or a constant total process heap.
+
+The disposable JNI missing-directory and all-void raster tests passed: heights
+remained null and malformed native JSON was rejected. These never modified the
+installed DEM. Routing, height and void phases each recorded **zero transmit and
+receive byte delta for the research app UID**, with graph/DEM remote URLs blank.
+The device's Wi-Fi/mobile settings were not changed. No research native crash
+appeared in the crash buffer. Only one complete V2 region was built/installed,
+so physical multi-region switching is **not claimed**; deterministic ownership,
+A/B actor replacement and cross-region identity isolation are covered by unit
+tests. Existing production APK/split hashes, version/install/update timestamps,
+old Debug APK and all 83 recorded Debug private-file hashes remained unchanged.
+Production private regional contents are not readable through `run-as`; no claim
+of direct production private-file hashing is made.
+
+For another private run, build/verify a fresh V2 artifact as above, serve it through
+a reviewed private development source, and use the normal Regions installer.
+Prepare `reference.json` from its manifest using `regionalRoutingReference` (the
+same wire reference used by the installer), then upload only that metadata into
+`cache/<fresh-research-id>/` of the isolated app with `adb shell run-as`.
+Run the checked-in instrumentation:
+
+```sh
+adb shell am instrument -w -r \
+  -e research_id pr90-new-private-run -e phase routes \
+  io.github.victorgabillon.sugarglider.v2debug.test/io.github.victorgabillon.sugarglider.V2RegionInstrumentation
+```
+
+Read `cache/<research-id>/routes-result.json` through `run-as`; retain this personal
+route data privately. Select the actual hike-loop geometry and native summary
+distance, construct PR88 `ResearchRoute`, and use its unchanged `height_plan`
+with the matching verified HGT probe. Upload its `height-plan.json` to the same
+private cache directory, then run phases `height` and `void` identically. Compare
+`height-result.json` with PR88 `compare_heights` and independently probe the four
+tile/boundary fixtures. Each phase returns raw `INSTRUMENTATION_CODE: -1` and an
+explicit acceptance result on success; inspect both result JSON and status.
+`void` requires a fresh fixture directory. `switch` requires a second complete,
+legitimate V2 region and `reference-control.json`; it must never relabel Yvelines.
+
+All implementation checks listed above passed. After strengthening the endpoint
+fixture, `assembleV2DebugAndroidTest lintV2Debug` passed again in 46s. The final
+research main APK's native/runtime bytes did not change. Full CI checks are also
+required on the final PR head. Remaining release blockers are terrain provenance,
+vertical datum/attribution and redistribution review; the region and APK remain
+private. PR91/92 integration stays future work.

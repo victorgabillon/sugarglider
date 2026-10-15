@@ -10,6 +10,10 @@ import android.os.Process
 import android.os.SystemClock
 import java.io.File
 import java.util.zip.GZIPOutputStream
+import kotlin.math.asin
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -63,9 +67,10 @@ class V2RegionInstrumentation : Instrumentation() {
             val output = JSONObject().put("publication_allowed", false).put("reference", reference.toJson())
             if (phase == "routes") {
                 val results = JSONArray()
-                val start = LocalRouteCoordinate(48.8715, 2.0965)
+                // Public test endpoints on real graph vertices shared by all six profiles.
+                val start = LocalRouteCoordinate(48.871281, 2.095997)
                 val via = LocalRouteCoordinate(48.8840, 2.0830)
-                val end = LocalRouteCoordinate(48.8983, 2.0969)
+                val end = LocalRouteCoordinate(48.889384, 2.099125)
                 for (profile in LocalRouteProfile.entries) for (loop in listOf(false, true)) {
                     val points = if (loop) listOf(start, via, end, start) else listOf(start, end)
                     val result = engine.route(NativeRouteRequest(LOCAL_ROUTE_REQUEST_VERSION,
@@ -73,9 +78,12 @@ class V2RegionInstrumentation : Instrumentation() {
                     check(result is NativeRouteResult.Success) { "routing failed: $profile loop=$loop $result" }
                     check(result.engineVersion == "0.6.4/valhalla-3.9.1" && result.packId == reference.packId && result.isValid())
                     check(result.snappedPoints.size == points.size)
+                    val snapOffsets = points.zip(result.snappedPoints).map { (requested, snapped) -> distanceMeters(requested, snapped) }
+                    check(snapOffsets.all { it <= 25.0 }) { "test point exceeded 25 m: $snapOffsets" }
                     if (loop) check(result.geometry.first() == result.geometry.last())
                     results.put(JSONObject().put("profile", profile.wireValue).put("loop", loop)
                         .put("distance_m", result.distanceMeters).put("duration_s", result.durationSeconds)
+                        .put("requested_points", coordinates(points)).put("snap_distances_m", JSONArray(snapOffsets))
                         .put("geometry", coordinates(result.geometry)).put("snapped_points", coordinates(result.snappedPoints))
                         .put("cold_start", result.measurements.coldStart).put("initialization_ms", result.measurements.engineInitializationMs)
                         .put("route_ms", result.measurements.routeMs).put("pss_bytes", result.measurements.memoryAfterRouteBytes))
@@ -184,6 +192,16 @@ class V2RegionInstrumentation : Instrumentation() {
             summary.putString("stream", "V2 acceptance failed: ${error.javaClass.name}: ${error.message}\n" + error.stackTraceToString())
             finish(Activity.RESULT_CANCELED, summary)
         }
+    }
+
+    private fun distanceMeters(first: LocalRouteCoordinate, second: LocalRouteCoordinate): Double {
+        val firstLatitude = Math.toRadians(first.latitude)
+        val secondLatitude = Math.toRadians(second.latitude)
+        val latitudeDelta = secondLatitude - firstLatitude
+        val longitudeDelta = Math.toRadians(second.longitude - first.longitude)
+        val halfChord = sin(latitudeDelta / 2) * sin(latitudeDelta / 2) +
+            cos(firstLatitude) * cos(secondLatitude) * sin(longitudeDelta / 2) * sin(longitudeDelta / 2)
+        return 6_371_008.8 * 2 * asin(sqrt(halfChord.coerceIn(0.0, 1.0)))
     }
 
     private fun coordinates(points: List<LocalRouteCoordinate>): JSONArray = JSONArray(points.map {
