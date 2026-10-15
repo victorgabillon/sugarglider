@@ -1,0 +1,5 @@
+<!doctype html><meta charset="utf-8"><title>Selected route elevation</title><pre id="results">Running…</pre>
+<script type="module">
+import {runElevationHarness} from './pr91_route_elevation_harness.js';
+const el=document.getElementById('results');try{el.textContent=JSON.stringify(await runElevationHarness());el.dataset.status='passed';}catch(e){el.textContent=e.stack;el.dataset.status='failed';}
+</script>

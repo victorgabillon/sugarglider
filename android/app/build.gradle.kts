@@ -142,6 +142,8 @@ android {
         unitTests.isReturnDefaultValues = true
     }
 
+    sourceSets.getByName("androidTest").assets.srcDir(rootProject.file("../tests/fixtures/elevation"))
+    sourceSets.getByName("test").resources.srcDir(rootProject.file("../tests/fixtures/elevation"))
     sourceSets.getByName("main").assets.srcDir(bundledShellDirectory)
     sourceSets.getByName("v2Debug").java.srcDir("src/debug/java")
     sourceSets.getByName("v2Debug").manifest.srcFile("src/debug/AndroidManifest.xml")

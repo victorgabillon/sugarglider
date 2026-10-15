@@ -21,11 +21,13 @@ import org.json.JSONObject
 class V2RegionInstrumentation : Instrumentation() {
     private lateinit var researchId: String
     private lateinit var phase: String
+    private var blockWebNetwork = false
 
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
         researchId = arguments?.getString("research_id").orEmpty()
         phase = arguments?.getString("phase").orEmpty()
+        blockWebNetwork = arguments?.getString("block_web_network") == "true"
         start()
     }
 
@@ -36,6 +38,48 @@ class V2RegionInstrumentation : Instrumentation() {
             check(researchId.matches(Regex("[a-z0-9-]{1,64}")))
             val root = File(targetContext.cacheDir, researchId).canonicalFile
             check(root.parentFile == targetContext.cacheDir.canonicalFile && root.isDirectory)
+            if (phase == "planner") {
+                val uid = Process.myUid()
+                val startupTx = TrafficStats.getUidTxBytes(uid)
+                val startupRx = TrafficStats.getUidRxBytes(uid)
+                val activity = startActivitySync(Intent(targetContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                runOnMainSync {
+                    activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    if (blockWebNetwork) {
+                        val queue = java.util.ArrayDeque<android.view.View>()
+                        queue.add(activity.window.decorView)
+                        var found = false
+                        while (queue.isNotEmpty()) {
+                            val view = queue.removeFirst()
+                            if (view is android.webkit.WebView) { view.settings.blockNetworkLoads = true; found = true }
+                            if (view is android.view.ViewGroup) for (i in 0 until view.childCount) queue.add(view.getChildAt(i))
+                        }
+                        check(found)
+                    }
+                }
+                val finished = File(root, "planner-finished")
+                check(!finished.exists())
+                val deadline = SystemClock.elapsedRealtime() + 20 * 60 * 1_000
+                val ready = File(root, "planner-ready")
+                while (!ready.exists() && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(200)
+                check(ready.isFile) { "planner ready deadline" }
+                val tx = TrafficStats.getUidTxBytes(uid)
+                val rx = TrafficStats.getUidRxBytes(uid)
+                while (!finished.exists() && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(200)
+                check(finished.isFile) { "planner acceptance harness deadline" }
+                val txDelta = TrafficStats.getUidTxBytes(uid) - tx
+                val rxDelta = TrafficStats.getUidRxBytes(uid) - rx
+                File(root, "planner-result.json").writeText(JSONObject().put("publication_allowed", false)
+                    .put("normal_generate_workflow", true).put("webview_network_loads_blocked", blockWebNetwork).put("uid_tx_delta_bytes", txDelta).put("uid_rx_delta_bytes", rxDelta)
+                    .put("startup_uid_tx_delta_bytes", tx - startupTx).put("startup_uid_rx_delta_bytes", rx - startupRx)
+                    .put("initial_uid_tx_bytes", tx).put("initial_uid_rx_bytes", rx)
+                    .put("pss_final_bytes", pss()).toString())
+                check(tx >= 0 && rx >= 0 && txDelta == 0L && rxDelta == 0L) { "planner network counters: tx=$txDelta rx=$rxDelta" }
+                runOnMainSync { activity.finish() }
+                summary.putString("stream", "V2 planner acceptance passed\n")
+                finish(Activity.RESULT_OK, summary)
+                return
+            }
             if (phase == "installer") {
                 // Keep the explicitly instrumented process eligible to execute
                 // its real WebView/installer while the device is locked. This
@@ -65,7 +109,28 @@ class V2RegionInstrumentation : Instrumentation() {
             val started = SystemClock.elapsedRealtime()
             val initialPss = pss()
             val output = JSONObject().put("publication_allowed", false).put("reference", reference.toJson())
-            if (phase == "routes") {
+            if (phase == "analysis") {
+                // Synthetic coverage/gap/limit fixtures on the physical runtime;
+                // never alter installed DEM or substitute heights in the planner.
+                val results = JSONArray()
+                for (file in listOf("contract-v1.json", "runtime-v1.json")) {
+                    val cases = JSONArray(context.assets.open(file).bufferedReader().use { it.readText() })
+                    for (index in 0 until cases.length()) {
+                        val fixture = cases.getJSONObject(index)
+                        val input = fixture.getJSONObject("input")
+                        val rows = input.getJSONArray("samples")
+                        val points = (0 until rows.length()).map { i -> rows.getJSONObject(i).let { row ->
+                            ElevationPoint(row.getInt("index"), row.getDouble("distance_m"), if (row.isNull("height_m")) null else row.getDouble("height_m")) } }
+                        val profile = ElevationInput(input.getString("source_sha256"), input.getString("geometry_sha256"), input.getString("routing_profile"),
+                            input.getDouble("route_distance_m"), input.getString("height_reference"), points)
+                        val policy = fixture.getJSONObject("parameters")
+                        val result = DistanceBoxElevation.analyze(profile, ElevationPolicy(policy.getDouble("smoothing_radius_m"), policy.getDouble("maximum_gap_m")))
+                        check(result.getString("profile_sha256") == fixture.getJSONObject("expected").getString("profile_sha256"))
+                        results.put(JSONObject().put("name", fixture.getString("name")).put("analysis", result))
+                    }
+                }
+                output.put("synthetic_analysis_fixtures", results)
+            } else if (phase == "routes") {
                 val results = JSONArray()
                 // Public test endpoints on real graph vertices shared by all six profiles.
                 val start = LocalRouteCoordinate(48.871281, 2.095997)

@@ -1,3 +1,4 @@
+import { createSelectedRouteElevation } from "./route_elevation.js";
 import { placeCompatibilityMessage } from "./place_capabilities.js";
 import { initializeNativeItineraryHandoff } from "./native_itinerary_handoff.js";
 import { createLocationSearch } from "./location_search.js";
@@ -130,6 +131,9 @@ const withPlanningRegion = createRegionalPlanningContext({ versions: regionVersi
   } });
 const localPlanner = isBundledAndroidApp()
   ? createLocalPlanner({ withRegion: withPlanningRegion }) : null;
+const selectedRouteElevation = localPlanner ? createSelectedRouteElevation({versions:regionVersions,
+  onChange: value => { state.selectedElevation = value; renderElevation(value); }}) : null;
+byId("cancel-route-elevation")?.addEventListener("click",()=>selectedRouteElevation?.cancel());
 localGpxExporter.prepare();
 let pendingGpxExport = null;
 let elapsedTimer = null;
@@ -524,7 +528,7 @@ function updateProfileDescription() {
       ? "Checking the installed region’s activity profiles…"
       : !status ? "Choose an available activity after the region is ready."
       : status.available
-      ? "Uses this device’s installed region. Activity preferences depend on mapped OpenStreetMap data; elevation is unavailable."
+      ? "Uses this device’s installed region. Activity preferences depend on mapped OpenStreetMap data."
       : "Install a compatible offline region to use this activity on your device.";
     return;
   }
@@ -1876,7 +1880,22 @@ function renderEmptyState() {
   byId("planner-empty").querySelector("p").textContent = "Tap the map to choose Start, then keep tapping to add stops.";
 }
 
+function renderElevation(value) {
+  const element=byId("route-elevation-status"), cancel=byId("cancel-route-elevation");
+  if(!element)return;
+  element.hidden=!value||value.status==="idle";
+  if(cancel)cancel.hidden=value?.status!=="loading";
+  if(!value||value.status==="idle"){element.textContent="";return;}
+  if(value?.status==="loading")element.textContent="Calculating elevation… Your route is ready to use.";
+  else if(value?.status==="ready") {
+    const a=value.result.analysis;
+    element.textContent=a.coverage==="complete" ? `Elevation · D+ ${a.total_ascent_m.toFixed(0)} m · D− ${a.total_descent_m.toFixed(0)} m`
+      : a.coverage==="partial" ? "Elevation partly available. Full-route ascent and descent are unavailable." : "Elevation unavailable for this route.";
+  } else if(value?.status==="unavailable")element.textContent=value.diagnostic==="elevation_cancelled" ? "Elevation calculation cancelled. Your route remains available." : "Elevation unavailable. Your route remains available.";
+}
+
 function render() {
+  selectedRouteElevation?.sync(isImmutableSnapshotDisplay() ? null : selectedCandidate(),state.generationResult,selectedRegionId);
   regionScreen?.render();
   renderModeControls();
   renderPoiEditor();
@@ -3160,7 +3179,9 @@ async function initializeRegionScreen() {
     },
     isPlanning: () => state.request.status === "running",
     viewRegion: ([west, south, east, north]) => fitCoordinates([[west, south], [east, north]]),
-    onReady: (capabilities, code) => {
+    onReady: (capabilities, code, reference) => {
+      selectedRouteElevation?.regionChanged(reference);
+      if(code && code!=="regional_checking")selectedRouteElevation?.invalidate();
       localRouteCapabilities = capabilities; regionPlanningError = code;
       if (state.config) {
         const available = Boolean(capabilities && !code);

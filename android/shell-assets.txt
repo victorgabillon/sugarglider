@@ -21,6 +21,8 @@ brand/sugarglider-ice-cream-pin.png
 brand/sugarglider-map-pin.png
 brand/sugarglider-water-pin.png
 canonical_numbers.js
+elevation_sampling.js
+elevation_sampling_worker.js
 fonts/Open Sans Semibold/0-255.pbf
 fonts/Open Sans Semibold/256-511.pbf
 fonts/Open Sans Semibold/8192-8447.pbf
@@ -103,6 +105,7 @@ regional_planning.js
 regional_routing_reference.js
 route_dock.js
 route_edit_history.js
+route_elevation.js
 route_point_acquisition.js
 route_point_drag.js
 route_results.js
