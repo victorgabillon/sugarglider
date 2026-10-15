@@ -171,33 +171,165 @@ repository's local test/static files. The broader browser harnesses are under
 | `test_pr26_pwa_architecture.py`, `test_pr30_trail_profiles.py`, `test_pr31_private_planner_location.py`, `test_pr32_on_device_routing_architecture.py`, `test_pr36_offline_maps.py`, `test_pr38_local_waypoint_route.py`, `test_pr39_offline_regional_pipeline.py` | Updated enforced cache generation and exact asset integrity pins |
 | `README.md`, this report | Feature and validation documentation |
 
-## Fairphone status: foreground acceptance pending
+## Fairphone 6 acceptance
 
-The isolated research APK was verified before its in-place update: exact PR90/
-PR91 package ID, certificate, permissions, version 8 / `1.2.0-v2-research` and
-manifest. All **133 bundled assets** match the current source byte for byte.
-Research APK SHA-256 is
+Completed on 15 October 2026 in the isolated V2 research application, using the
+already installed complete Yvelines region. Automated actions used the **normal
+Generate workflow** and real returned canonical candidates. Touch/key events
+were sent to the actual visible research WebView; no route/elevation result was
+injected. Android-composited screenshots show the offline basemap, routed line,
+profile cursor and temporary marker. Foreground/window checks protected capture;
+interrupted attempts were excluded and repeated with the research app visible.
+
+The research APK was verified before its in-place update: exact PR90/PR91 package
+ID, certificate, permissions, version 8 / `1.2.0-v2-research` and manifest. All
+**133 bundled assets** match the tested source byte for byte. Research APK SHA-256:
 `51203364060b856f4c0a3e2633ba74db4c44965a6515a3d09685c954d82385bd`
-(25,831,459 bytes). The already installed test APK remains byte-identical to
-PR91 (`680d75492292e6f79eaac9329c20716aa3ae3589af7fda784645b67761446978`).
+(25,831,459 bytes). The installed test APK remains byte-identical to PR91:
+`680d75492292e6f79eaac9329c20716aa3ae3589af7fda784645b67761446978`.
 The unchanged ARM64 native library has all LOAD alignments at 16,384 bytes.
-Production and older Debug package/file checks passed before the update; no
-region reinstallation, signing change or connectivity change was performed.
+Actual device execution used 4 KiB pages; 16 KiB compatibility is structural
+validation, not a physical 16 KiB-device test.
 
-The physical WebView's normal Generate reproduced Hike A's exact PR91 candidate
-`geometry:9b7e9cb493acf01ae0f460a50c57bfea465b5af82673c5dfb384f5aa09bcd415`,
-9,243 m / 186 samples / complete coverage, native D+ = D− = 172.6175 m.
-The UI rendered **9.24 km, 173 m D+, 173 m D−, observed altitude 22–162 m**.
-Its initial chart construction took 6.3 ms on the actual WebView.
+### Actual routes and displayed values
 
-However, another application became foreground during the test. The research
-document reported `visibilityState=hidden`, so that attempt is **not accepted as
-foreground touch/screenshot validation**. A foreground-device session has been
-requested. The four visible route cases, screenshots, input/marker checks,
-foreground memory measurements and final offline counter assertion remain
-pending. Browser touch/style tests above do not substitute for that acceptance.
+| Normal Generate case | Routed km | Samples / spacing m | Native D+ / D− m | Displayed D+ / D− |
+| --- | ---: | --- | ---: | ---: |
+| Hike A | 9.243 | 186 / 50 | 172.6175 / 172.6175 | 173 m / 173 m |
+| Trail Run loop | 8.226 | 166 / 50 | 143.9769 / 143.9769 | 144 m / 144 m |
+| Open Hike | 2.655 | 55 / 50 | 19.585 / 74.055 | 20 m / 74 m |
+| Long Gravel loop | 151.917 | 2,048 / 74.21446018563752 | 1280.455150 / 1280.455150 | 1280 m / 1280 m |
 
-The complete feature is not declared physically validated at this commit. All
-real captures, screenshots, APKs, device logs and terrain remain outside Git.
-This feature does not resolve DEM provenance, vertical datum or redistribution
-obligations; nothing authorizes public terrain distribution or a Play release.
+For all four references, the complete native analysis and sample-coordinate
+arrays match the private PR91 captures exactly, including source, geometry and
+portable profile fingerprints. The long loop was regenerated and matched again.
+Six real captures, including an additional 155.720 km open Gravel route, also
+passed the unchanged PR89 Python comparison on every field within **1e-7 m**,
+with exact fingerprints. PR88's independent four-tile HGT probe agrees within
+**0.01 m** at every native sample. This confirms implementation/source parity,
+not independently surveyed elevation accuracy. Different geometries were never
+forced to reproduce the regression totals.
+
+Touch dragging on each reference produced these readouts, with marker coordinates
+checked against the same native-returned samples and supported-segment mapping:
+
+| Route | Inspected progress | Readout altitude |
+| --- | ---: | ---: |
+| Hike A | 8.32 km | 61.4 m |
+| Trail Run | 7.40 km | 101.7 m |
+| Open Hike | 2.39 km | 39.5 m |
+| Long Gravel loop | 136.73 km | 166.5 m |
+
+The automation's target progress matched within 0.1 m and coordinates within
+1e-6 degrees, allowing for touch coordinate conversion. Native analysis uses the
+separate 1e-7 m numeric tolerance above. Chart dragging added **zero** native route
+or height requests, retained the same SVG path nodes and preserved the exact
+canonical candidate/generation. GPX before/after inspection was byte-identical
+for every reference: one track, one segment, no elevation points or extensions.
+
+The open-route Show on map action moved to the existing Map workspace and showed
+its inspected position on the routed line; inspection alone did not move the
+viewport. Keyboard Home then Right selected the next actual sample on a
+2,048-sample route. Vertical finger dragging scrolled the Routes container from
+481.3 to 563.3 CSS px, confirming it did not trap scrolling.
+
+### Switching, cancellation and failure behavior
+
+Hike A → B → A restored the cached A profile and removed the previous marker.
+A further **20 candidate transitions** all hit PR91's existing cache, added zero
+native route/height requests, retained one SVG/slider and no stale markers, and
+left canonical data unchanged. Profile changes, open/loop changes and regeneration
+cleared obsolete chart/marker state. Repeated normal Hike, Trail Run and long-route
+generations remained usable.
+
+A new Trail Run analysis was cancelled through the actual Cancel button after
+its native height request began. Three generated candidates remained available,
+with no graph or marker and an explicit cancellation message. Actual Retry
+returned a ready chart using **one height request and zero route requests**, with
+the same candidate/generation and serialized canonical data.
+
+Coverage/failure presentation was tested with synthetic browser fixtures for
+partial, all-missing, isolated, negative and disconnected profiles. The installed
+DEM was not altered to manufacture a physical void. Actual map style reload,
+resize and destruction were tested with real MapLibre instances in Chromium;
+those lifecycle tests are distinct from the physical normal-Generate tests.
+
+### Render cost, responsiveness and memory
+
+| Device case | Native height ms | Native analysis ms | SVG construction ms | Median / maximum input-to-readout ms |
+| --- | ---: | ---: | ---: | ---: |
+| First Hike A | 184 | 14 | 8.3 | 4.35 / 10.0 |
+| Trail Run, repeated | 12 | 11 | 3.1 | 3.2 / 8.1 |
+| Open Hike | 6 | 3 | 2.6 | 2.6 / 8.8 |
+| Long loop, first | 159 | 75 | 5.5 | 1.0 / 6.5 |
+| Long loop, repeated | 122 | 61 | 19.8 | 0.65 / 11.4 |
+
+Trail Run native timings are from its first matching capture; SVG/input timings
+are from the repeated matching route. These are individual observations, not
+percentiles or a controlled benchmark. SVG duration measures synchronous
+projection/DOM construction, excluding raster/compositor completion. Input delay
+runs from the actual WebView input event to the readout mutation, with 22 records
+per listed scrub; it does not claim hardware-touch-to-photon latency. The 19.8 ms
+construction may exceed one 60 Hz frame, while subsequent inspection updates
+retained the existing paths. Native height reused the routing actor throughout
+(`cold_start=false`).
+
+A 652.9-second trace recorded 661 valid package-memory samples, about one second
+apart including collection time. It includes generation, map loading, native
+analysis, repeated selection and some background pauses:
+
+- Main-process peak PSS: **410,943,488 bytes** (391.9 MiB).
+- Associated WebView-process peak PSS: **602,204,160 bytes** (574.3 MiB), at a
+  different time from the main-process peak.
+- Simultaneous aggregate peak: **865,814,528 bytes** (825.7 MiB), comprising
+  410,943,488 main + 454,871,040 WebView bytes.
+- Aggregate final observed sample: **758,388,736 bytes** (723.3 MiB).
+
+During the 20 cached transitions, aggregate PSS went from 740,043,776 to
+730,089,472 bytes, with a 742,369,280-byte peak. The browser's coarse reported JS
+heap estimate remained 39,600,000 bytes. No DOM accumulation or monotonic PSS
+growth appeared in that short switching window. This is not an endurance/leak
+proof or an isolated chart-allocation measurement. The totals include native
+routing/data, maps, workers and WebView; they must not be compared with PR91's
+main-process-only 403 MB as if they measured the same scope. Aggregate memory is
+substantial and remains a release-readiness investigation.
+
+### Offline and preserved installations
+
+The strict planner harness passed: the research UID sent **0 bytes** and received
+**0 bytes** during the complete measured ready-to-finish suite. Startup separately
+recorded 4,039 / 2,877 bytes; as in PR91, that small startup traffic remains
+unattributed. This validates offline generation/elevation/map interaction after
+local readiness, not a globally silent Android/WebView startup. Phone connectivity
+settings were unchanged.
+
+Final checks confirmed all nine native regional files retained their exact paths
+and SHA-256, and production/older Debug package checks plus all 83 inventoried old
+Debug private-file hashes passed. No regional reinstall/removal, production or
+old Debug overwrite, signing change, public artifact/catalog update or release
+occurred. Python/native analysis, routing generation, candidate ranking and GPX
+source modules are unchanged from PR91.
+
+### Private visual evidence and limitations
+
+Actual Fairphone PNGs remain outside Git; these hashes identify the private
+acceptance artifacts without publishing route snapshots:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `hike-phone.png` | `83d7b797baa392aad1c018d30a5c819cb6d8b3c635794e37ed44cca3c79ac4f1` |
+| `trail-phone.png` | `178808b663cf44a671251cff899fdaf1a0c2047085b0bac78fe8120bd86344b6` |
+| `open-phone.png` | `dfeb3f56d73ce475e55cc3ebc659846b1727ce5bb2ae8debeb78042d6c014cf1` |
+| `open-summary-phone.png` | `d859e64a248929b3f3d14cb3c6653e32cc9676b4e8fcdddc81488b53dcdc51c3` |
+| `open-map-phone.png` | `9bb551da00015bbafe8101a9db927e71f14a49cd619be4d30f5087456f2297a3` |
+| `long-phone.png` | `5fa1d01e11e195e6879729c6786c2956c27163fd79da61130f4f6874d09264ee` |
+
+There is no profile zoom; finger precision on a 152 km route is limited by plot
+width, while keyboard navigation can inspect each actual sample. In-between
+positions use the bounded sample-to-sample approximation described above. Browser
+pinch zoom is retained. Screen-reader semantics and keyboard behavior were tested;
+this is not a human TalkBack usability study. Broader device/RAM classes,
+long-duration memory behavior, DEM provenance/datum/attribution and redistribution
+obligations remain release work. No public terrain distribution or Play release
+is authorized by this feature. CI status and final commit are recorded on draft
+PR92 so its exact head remains reviewable.
