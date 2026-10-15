@@ -151,7 +151,8 @@ def validate_tar(path: Path) -> None:
                 assert stream is not None
                 header = stream.read(32)
                 if (
-                    len(header) != 32
+                    entry.size < 272
+                    or len(header) != 32
                     or not struct.unpack_from("<Q", header)[0] & (1 << 62)
                     or (header[16:32].split(b"\0", 1)[0] != b"3.9.1")
                 ):
@@ -160,6 +161,8 @@ def validate_tar(path: Path) -> None:
                     )
                 level, tile = name[:-4].split("/", 1)
                 tile_id = int(level) | (int(tile.replace("/", "")) << 3)
+                if struct.unpack_from("<Q", header)[0] & ((1 << 46) - 1) != tile_id:
+                    raise ValueError("Valhalla header/index tile identity mismatch")
                 tiles.append((entry.offset_data, tile_id, entry.size))
             else:
                 raise ValueError("unexpected Valhalla tar entry")

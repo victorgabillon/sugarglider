@@ -109,6 +109,9 @@ class RegionalElevationTest {
         val old = archive.copyOf().also { "3.6.3".toByteArray().copyInto(it, 1552) }
         file.writeBytes(old)
         assertFalse(validV2ValhallaArchive(file))
+        val wrongTile = archive.copyOf().also { it[1536] = 3 }
+        file.writeBytes(wrongTile)
+        assertFalse(validV2ValhallaArchive(file))
     }
 
     private fun install(): RoutingPack = store.stage(reference, graph, { ByteArrayInputStream(archive) },

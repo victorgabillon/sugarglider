@@ -24,7 +24,7 @@ internal fun validV2ValhallaArchive(file: File): Boolean = try {
             fun text(start: Int, length: Int): String = header.copyOfRange(start, start + length)
                 .toString(Charsets.US_ASCII).substringBefore('\u0000').trim()
             fun octal(start: Int, length: Int): Long = text(start, length).ifEmpty { "0" }.toLong(8)
-            check(text(257, 5) == "ustar")
+            check(text(257, 5) == "ustar" && text(345, 155).isEmpty())
             check(octal(108, 8) == 0L && octal(116, 8) == 0L && octal(136, 12) == 0L)
             val checksum = header.indices.sumOf { if (it in 148..155) 32 else header[it].toInt() and 255 }
             check(octal(148, 8) == checksum.toLong())
@@ -47,7 +47,7 @@ internal fun validV2ValhallaArchive(file: File): Boolean = try {
                     indexEntries = size / 16
                 } else {
                     check(indexOffset >= 0 && tiles < indexEntries)
-                    check(Regex("[0-3]/(?:[0-9]{3}/)*[0-9]{3}\\.gph").matches(name) && size >= 32)
+                    check(Regex("[0-3]/(?:[0-9]{3}/)*[0-9]{3}\\.gph").matches(name) && size >= 272)
                     val tileId = (name.substringAfter('/').removeSuffix(".gph").replace("/", "").toLong() shl 3) or
                         name.substringBefore('/').toLong()
                     archive.seek(indexOffset + tiles * 16)
@@ -59,7 +59,9 @@ internal fun validV2ValhallaArchive(file: File): Boolean = try {
                     archive.seek(data)
                     val tile = ByteArray(32)
                     archive.readFully(tile)
-                    check(ByteBuffer.wrap(tile).order(ByteOrder.LITTLE_ENDIAN).long and (1L shl 62) != 0L)
+                    val identity = ByteBuffer.wrap(tile).order(ByteOrder.LITTLE_ENDIAN).long
+                    check(identity and (1L shl 62) != 0L)
+                    check(identity and ((1L shl 46) - 1) == tileId)
                     check(tile.copyOfRange(16, 32).toString(Charsets.US_ASCII).substringBefore('\u0000') == "3.9.1")
                     tiles++
                 }

@@ -66,8 +66,8 @@ internal fun syntheticValhallaArchive(size: Int = 256 * 1_024 + 512): ByteArray 
         (checksum.toString(8).padStart(6, '0') + "\u0000 ").toByteArray().copyInto(result, offset + 148)
     }
     header(0, "index.bin", 16)
-    ByteBuffer.wrap(result, 512, 16).order(ByteOrder.LITTLE_ENDIAN).putLong(1536).putInt(2).putInt(32)
-    header(1024, "2/000/000.gph", 32)
+    ByteBuffer.wrap(result, 512, 16).order(ByteOrder.LITTLE_ENDIAN).putLong(1536).putInt(2).putInt(272)
+    header(1024, "2/000/000.gph", 272)
     ByteBuffer.wrap(result, 1536, 8).order(ByteOrder.LITTLE_ENDIAN).putLong((1L shl 62) or 2)
     "3.9.1".toByteArray().copyInto(result, 1552)
     return result

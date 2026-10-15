@@ -109,10 +109,10 @@ def fake_components(
         directory / "routing/valhalla_tiles.tar", "w", format=tarfile.USTAR_FORMAT
     ) as tar:
         for name, data in (
-            ("index.bin", struct.pack("<QLL", 1536, 2, 32)),
+            ("index.bin", struct.pack("<QLL", 1536, 2, 272)),
             (
                 "2/000/000.gph",
-                struct.pack("<Q", (1 << 62) | 2) + bytes(8) + b"3.9.1" + bytes(11),
+                struct.pack("<Q", (1 << 62) | 2) + bytes(8) + b"3.9.1" + bytes(251),
             ),
         ):
             info = tarfile.TarInfo(name)

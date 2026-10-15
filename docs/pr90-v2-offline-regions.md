@@ -47,7 +47,8 @@ antimeridian wrapping. Descriptor limits are 16 KiB for map/routing manifests,
 2 GiB per map/routing archive, 32 MiB per compressed index, 64 KiB for the elevation
 manifest, and 26,982,978 bytes per compressed HGT. The regional manifest is limited
 to 32 KiB. Native graph verification reads bounded headers/index entries and
-requires real 3.9.1 tile headers plus their elevation flag, with at most 100,000
+requires complete 272-byte 3.9.1 tile headers, matching header/index tile IDs
+and the elevation flag, with at most 100,000
 tiles. Flags alone do not prove meaningful embedded values; the real-data
 inspection below also checks edge attributes.
 
@@ -225,3 +226,19 @@ and the DEM/filtering uncertainty rather than treating missing values as zero.
 Upstream implementation references: [Skadi gzip/cache behavior](https://github.com/valhalla/valhalla/blob/3.9.1/src/skadi/sample.cc),
 [elevation graph enrichment](https://github.com/valhalla/valhalla/blob/3.9.1/src/mjolnir/elevationbuilder.cc),
 and [standalone elevation CLI](https://github.com/valhalla/valhalla/blob/3.9.1/src/mjolnir/valhalla_add_elevation.cc).
+
+
+Completed checks on the implementation: `uv run --offline make check` passed
+Ruff, strict mypy and 1,376 tests (16 service integration tests deselected).
+Required Android checks passed 233 Debug and 228 Release tests plus both lint
+variants. Fifteen relevant browser harnesses passed 298 scenarios, including
+V2 transactions, old-metadata retention, corruption, identity vectors and PWA
+behavior. The isolated instrumentation variant also compiled and passed lint.
+
+An independent trace on the real new Yvelines graph, run with `--network none`
+and **without mounting any DEM**, traversed 107 edges. Forty-eight had nonzero
+weighted grade; mean elevations ranged from 36 to 108 m, weighted grades from
+−8.333% to +8.333%, and maximum uphill/downhill grades reached +15% / −16%.
+These are embedded graph attributes, independently distinct from runtime HGT
+sampling. They establish enrichment and offline readability, not ground-truth
+vertical accuracy.
