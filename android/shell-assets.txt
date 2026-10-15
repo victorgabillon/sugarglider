@@ -21,8 +21,11 @@ brand/sugarglider-ice-cream-pin.png
 brand/sugarglider-map-pin.png
 brand/sugarglider-water-pin.png
 canonical_numbers.js
+elevation_map_marker.js
+elevation_profile.js
 elevation_sampling.js
 elevation_sampling_worker.js
+elevation_view.js
 fonts/Open Sans Semibold/0-255.pbf
 fonts/Open Sans Semibold/256-511.pbf
 fonts/Open Sans Semibold/8192-8447.pbf

@@ -1,4 +1,6 @@
 import { createSelectedRouteElevation } from "./route_elevation.js";
+import { createElevationView } from "./elevation_view.js";
+import { clearElevationMapPosition, showElevationMapPosition } from "./map.js";
 import { placeCompatibilityMessage } from "./place_capabilities.js";
 import { initializeNativeItineraryHandoff } from "./native_itinerary_handoff.js";
 import { createLocationSearch } from "./location_search.js";
@@ -131,9 +133,22 @@ const withPlanningRegion = createRegionalPlanningContext({ versions: regionVersi
   } });
 const localPlanner = isBundledAndroidApp()
   ? createLocalPlanner({ withRegion: withPlanningRegion }) : null;
+const elevationView = createElevationView({root:byId("route-elevation"),
+  isCurrent:(value, candidate) => !isImmutableSnapshotDisplay()
+    && candidate === selectedCandidate() && selectedRouteElevation?.owns(value,candidate,state.generationResult,selectedRegionId),
+  onPosition:position => position ? showElevationMapPosition(position) : clearElevationMapPosition(),
+  onShowMap:position => {
+    appShell?.show("map", {focus:true});
+    requestAnimationFrame(() => {
+      if (position === elevationView.diagnostics().position
+        && selectedRouteElevation?.owns(state.selectedElevation,selectedCandidate(),state.generationResult,selectedRegionId)) {
+        focusCoordinate(position.coordinate);
+      }
+    });
+  },
+  onCancel:() => selectedRouteElevation?.cancel(), onRetry:() => selectedRouteElevation?.retry()});
 const selectedRouteElevation = localPlanner ? createSelectedRouteElevation({versions:regionVersions,
   onChange: value => { state.selectedElevation = value; renderElevation(value); }}) : null;
-byId("cancel-route-elevation")?.addEventListener("click",()=>selectedRouteElevation?.cancel());
 localGpxExporter.prepare();
 let pendingGpxExport = null;
 let elapsedTimer = null;
@@ -1881,21 +1896,12 @@ function renderEmptyState() {
 }
 
 function renderElevation(value) {
-  const element=byId("route-elevation-status"), cancel=byId("cancel-route-elevation");
-  if(!element)return;
-  element.hidden=!value||value.status==="idle";
-  if(cancel)cancel.hidden=value?.status!=="loading";
-  if(!value||value.status==="idle"){element.textContent="";return;}
-  if(value?.status==="loading")element.textContent="Calculating elevation… Your route is ready to use.";
-  else if(value?.status==="ready") {
-    const a=value.result.analysis;
-    element.textContent=a.coverage==="complete" ? `Elevation · D+ ${a.total_ascent_m.toFixed(0)} m · D− ${a.total_descent_m.toFixed(0)} m`
-      : a.coverage==="partial" ? "Elevation partly available. Full-route ascent and descent are unavailable." : "Elevation unavailable for this route.";
-  } else if(value?.status==="unavailable")element.textContent=value.diagnostic==="elevation_cancelled" ? "Elevation calculation cancelled. Your route remains available." : "Elevation unavailable. Your route remains available.";
+  elevationView.render(value,selectedCandidate());
 }
 
 function render() {
   selectedRouteElevation?.sync(isImmutableSnapshotDisplay() ? null : selectedCandidate(),state.generationResult,selectedRegionId);
+  renderElevation(state.selectedElevation);
   regionScreen?.render();
   renderModeControls();
   renderPoiEditor();
