@@ -12,16 +12,16 @@ export const REGIONAL_INDEX_MAX_BYTES = 32 * 1024 * 1024;
 export const REGIONAL_INDEX_MAX_EXPANDED_BYTES = 128 * 1024 * 1024;
 const FILES = Object.freeze({
   map: [["map/manifest.json", "map-manifest-v1"], ["map/basemap.pmtiles", "pmtiles-v3-mvt"]],
-  routing: [["routing/manifest.json", "routing-manifest-v2"], ["routing/valhalla_tiles.tar", "valhalla-3.6.3-tar"]],
+  routing: [["routing/manifest.json", "routing-manifest-v2"], ["routing/valhalla_tiles.tar", "valhalla-3.9.1-elevation-tar"]],
   pois: [["pois/index.json.gz", "poi-index-v2-gzip-json"]],
   nature: [["nature/index.json.gz", "nature-index-v1-gzip-json"]],
 });
 const TOOLS = Object.freeze({
-  pipeline_version: 1,
+  pipeline_version: 2,
   protomaps_revision: "3ea8293a28131c3dc63f1bb20827bdb8a76df06f",
   protomaps_archive_sha256: "7b8e71f18627754af756923f6613a9008b5f1ff82377fff4e617157d053fc807",
   map_build_image: "maven:3.9.13-eclipse-temurin-21-alpine@sha256:194053d8f204a39710e564b49ba4d22188159fd29f073b8da1715aac61503132",
-  valhalla_image: "ghcr.io/valhalla/valhalla:3.6.3",
+  valhalla_image: "ghcr.io/valhalla/valhalla:3.9.1@sha256:18cb42988e03c70dc4bc4ca095a259ec4db5e5df928be65956fc1c64c280b47a",
   poi_index_schema: 2,
   poi_classifier: "1",
   nature_index_schema: 1,
@@ -32,8 +32,9 @@ export async function parseRegionalManifest(text) {
     && new TextEncoder().encode(text).length <= REGIONAL_MANIFEST_MAX_BYTES, "invalid_regional_manifest");
   let value;
   try { value = JSON.parse(text); } catch { throw new RegionalDataError("invalid_regional_manifest"); }
-  requireFields(value, ["schema_version", "region_id", "display_name", "bounds", "source", "tools", "components", "build_id"]);
-  requireData(value.schema_version === 1 && safeRegionalId(value.region_id)
+  if (value?.schema_version === 1) throw new RegionalDataError("regional_v2_install_required");
+  requireFields(value, ["schema_version", "publication_allowed", "region_id", "display_name", "bounds", "source", "tools", "components", "build_id"]);
+  requireData(value.schema_version === 2 && value.publication_allowed === false && safeRegionalId(value.region_id)
     && boundedText(value.display_name, 120) && validBounds(value.bounds)
     && validSha256(value.build_id), "invalid_regional_manifest");
   requireFields(value.source, ["basename", "byte_size", "sha256", "header_bounds", "coverage_evidence", "source_url"]);
@@ -50,9 +51,11 @@ export async function parseRegionalManifest(text) {
     ? ["1", "2", "3"].includes(value.tools[key]) : value.tools[key] === expected)
     && ["python_version", "osmium_version", "shapely_version"].every((key) => boundedText(value.tools[key], 80)),
   "unsupported_regional_toolchain");
-  requireFields(value.components, Object.keys(FILES));
+  const files = { ...FILES, elevation: [["elevation/manifest.json", "elevation-manifest-v1"],
+    ...regionalElevationPaths(value.bounds).map((path) => [path, "skadi-hgt-gzip-v1"])] };
+  requireFields(value.components, Object.keys(files));
   const ids = new Set();
-  for (const [kind, expected] of Object.entries(FILES)) {
+  for (const [kind, expected] of Object.entries(files)) {
     const component = value.components[kind];
     requireFields(component, ["component_id", "files"]);
     requireData(safeRegionalId(component.component_id) && !ids.has(component.component_id)
@@ -60,7 +63,8 @@ export async function parseRegionalManifest(text) {
     ids.add(component.component_id);
     component.files.forEach((file, index) => {
       requireFields(file, ["path", "byte_size", "sha256", "format"]);
-      const maximum = kind === "pois" || kind === "nature" ? REGIONAL_INDEX_MAX_BYTES : 2 ** 31;
+      const maximum = kind === "pois" || kind === "nature" ? REGIONAL_INDEX_MAX_BYTES
+        : kind === "elevation" ? (index === 0 ? 65_536 : 26_982_978) : (index === 0 ? 16_384 : 2 ** 31);
       requireData(file.path === expected[index][0] && file.format === expected[index][1]
         && positiveInteger(file.byte_size) && file.byte_size <= maximum
         && validSha256(file.sha256), "invalid_regional_file");
@@ -68,6 +72,19 @@ export async function parseRegionalManifest(text) {
   }
   requireData(await regionalBuildIdentity(value) === value.build_id, "regional_build_identity_mismatch");
   return freezeData(value);
+}
+
+export function regionalElevationPaths(bounds) {
+  requireData(validBounds(bounds) && bounds[2] < 180, "invalid_elevation_bounds");
+  const [west, south, east, north] = bounds.map(Math.floor);
+  requireData((east - west + 1) * (north - south + 1) <= 16, "regional_elevation_limit");
+  const result = [];
+  for (let lat = south; lat <= north; lat++) for (let lon = west; lon <= east; lon++) {
+    const prefix = `${lat < 0 ? "S" : "N"}${String(Math.abs(lat)).padStart(2, "0")}`;
+    const name = `${prefix}${lon < 0 ? "W" : "E"}${String(Math.abs(lon)).padStart(3, "0")}.hgt.gz`;
+    result.push(`elevation/skadi/${prefix}/${name}`);
+  }
+  return Object.freeze(result.sort());
 }
 
 export async function regionalBuildIdentity(manifest) {
@@ -86,7 +103,7 @@ function canonicalJson(value, floats = false) {
     )).join(",")}}`;
   }
   if (floats && typeof value === "number") {
-    if (Object.is(value, -0)) return "-0.0";
+    if (Object.is(value, -0)) return "0.0";
     if (Number.isInteger(value)) return `${value}.0`;
     if (Math.abs(value) < 0.0001) {
       return value.toExponential().replace(/e([+-])(\d)$/u, "e$10$2");

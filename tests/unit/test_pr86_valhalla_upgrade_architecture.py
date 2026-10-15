@@ -17,7 +17,8 @@ def test_old_valhalla_engine_cannot_leak_across_activity_recreation() -> None:
     assert "override fun close()" in boundary
     assert "override fun close()" in engine
     assert "actorHolder.release()" in engine
-    assert "disposeActor = { actor -> actor.valhalla.close() }" in engine
+    assert "actor.valhalla.close()" in engine
+    assert "actor.lease.close()" in engine
     assert "disposeActor(previous.actor)" in registry
 
     # The same serial executor runs native route calls and queued disposal.
@@ -32,7 +33,7 @@ def test_valhalla_graph_has_no_remote_fallback_in_new_models() -> None:
     tests = (TEST_KOTLIN / "ValhallaLocalConfigurationTest.kt").read_text()
     assert 'tileUrl = ""' in engine
     assert "tileUrlGz = false" in engine
-    assert 'AdditionalData(elevation = "")' in engine
-    assert ".withTileExtract(tileArchive.absolutePath)" in engine
+    assert "AdditionalData(elevation = elevationDirectory.absolutePath)" in engine
+    assert ".withTileExtract(tileArchive?.absolutePath.orEmpty())" in engine
     assert 'optString("tile_url", "")' in tests
     assert 'optBoolean("tile_url_gz", false)' in tests

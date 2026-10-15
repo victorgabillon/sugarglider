@@ -46,15 +46,17 @@ def test_valhalla_is_pinned_arm64_with_one_shared_production_implementation() ->
     assert 'ENGINE_VERSION = "0.6.4/valhalla-3.9.1"' in engine
     assert '"routing-packs"' not in engine
     assert "regionalRoutingRepository" in engine
-    assert "localValhallaConfiguration(pack.tileArchive)" in engine
-    assert "disposeActor = { actor -> actor.valhalla.close() }" in engine
+    assert "localValhallaConfiguration(pack.tileArchive, " in engine
+    assert "requireNotNull(pack.elevationDirectory)" in engine
+    assert "actor.valhalla.close()" in engine
+    assert "actor.lease.close()" in engine
     assert 'implementation("io.github.rallista:valhalla-models:0.6.0")' in build
     assert 'implementation("io.github.rallista:valhalla-models-config:0.6.0")' in build
-    assert ".withTileExtract(tileArchive.absolutePath)" in engine
+    assert ".withTileExtract(tileArchive?.absolutePath.orEmpty())" in engine
     assert '.withTileDir("")' in engine
     assert "httpd = null" in engine and "statsd = null" in engine
-    assert 'AdditionalData(elevation = "")' in engine
-    assert 'ROUTING_PACK_ENGINE_VERSION = "3.6.3"' in registry
+    assert "AdditionalData(elevation = elevationDirectory.absolutePath)" in engine
+    assert 'ROUTING_PACK_ENGINE_VERSION = "3.9.1"' in registry
 
 
 def test_native_boundary_is_bounded_explicit_and_has_no_fallback() -> None:
@@ -156,14 +158,16 @@ def test_pack_is_reproducible_ignored_and_not_embedded() -> None:
     docs = (ROOT / "docs/pr32-on-device-routing-spike.md").read_text()
     assert "data/valhalla/" in ignore
     assert "build_pr33_valhalla_pack.sh" in builder
-    assert "marly-dev-v1 2.00 48.80 2.16 48.94" in builder
-    assert "ghcr.io/valhalla/valhalla:3.6.3" in regional_builder
+    assert "marly-dev-v2 2.00 48.80 2.16 48.94" in builder
+    assert "ghcr.io/valhalla/valhalla:3.9.1" in regional_builder
     assert "valhalla_build_tiles" in regional_builder
     assert "valhalla_build_extract" in regional_builder
     assert "normalize_pr32_valhalla_tar.py" in regional_builder
     assert "write_pr33_routing_pack_manifest.py" in regional_builder
     assert 'header[148:156] = b"        "' in normalizer
-    assert "sha256sum" in regional_builder and "stat -c" in regional_builder
+    assert "SUGARGLIDER_DEM_DIR" in regional_builder
+    assert "valhalla_add_elevation -c" not in regional_builder
+    assert "--additional-data-elevation /dem" in regional_builder
     assert "class Bounds" in extractor
     assert "bounds.west <= node.location.lon <= bounds.east" in extractor
     assert "No routing pack is embedded in the APK" in docs
@@ -201,7 +205,7 @@ def test_pr32_browser_harness_covers_required_failure_and_ownership_cases() -> N
 
 def test_pr32_shell_generation_precaches_local_bridge() -> None:
     worker = (STATIC / "service-worker.js").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v62`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v90`" in worker
     assert '"/static/native_bridge_transport.js"' in worker
     assert '"/static/local_routing.js"' in worker
     assert '"/static/local_auto_tour.js"' in worker

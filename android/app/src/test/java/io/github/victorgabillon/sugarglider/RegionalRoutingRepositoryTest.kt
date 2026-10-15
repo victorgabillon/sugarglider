@@ -12,8 +12,9 @@ import org.junit.Test
 class RegionalRoutingRepositoryTest {
     private val reference = RegionalRoutingPackReference("fixture", "a".repeat(64), "fixture-routing",
         RoutingPackBounds(1.0, 48.0, 2.0, 49.0), RegionalFileIdentity(270, "b".repeat(64)),
-        RegionalFileIdentity(512, "c".repeat(64)))
-    private val pack = RoutingPack(RoutingPackManifest(2, reference.packId, "valhalla", "3.6.3",
+        RegionalFileIdentity(512, "c".repeat(64)),
+        V2ElevationFixture(RoutingPackBounds(1.0, 48.0, 2.0, 49.0)).reference)
+    private val pack = RoutingPack(RoutingPackManifest(2, reference.packId, "valhalla", "3.9.1",
         reference.bounds, LocalRouteAccessMode.entries), File("synthetic-unused-path"), 512, 0)
 
     @Test
@@ -61,7 +62,7 @@ class RegionalRoutingRepositoryTest {
     }
 
     @Test
-    fun concurrentLeasesAreBoundedAndNoPackIsSelectedOrCachedImplicitly() {
+    fun concurrentLeasesAreBoundedAndVerificationIsSharedOnlyDuringOwnedLeases() {
         val opened = mutableListOf<RegionalRoutingPackReference>()
         val repository = RegionalRoutingRepository({ opened += it; pack }, {}, {}, {})
         fun nested(depth: Int) {
@@ -69,9 +70,9 @@ class RegionalRoutingRepositoryTest {
             repository.withPack(reference) { nested(depth + 1) }
         }
         nested(0)
-        assertEquals(16, opened.size)
+        assertEquals(1, opened.size)
         repository.withPack(reference) {}
-        assertEquals(17, opened.size)
+        assertEquals(2, opened.size)
         assertTrue(opened.all { it == reference })
     }
 

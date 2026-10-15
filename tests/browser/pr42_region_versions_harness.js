@@ -13,9 +13,9 @@ export async function runPr42RegionVersionsHarness() {
 
   const checked = [];
   await store.activate(ticket, { verifyComponent: async (kind) => { checked.push(kind); return true; } });
-  equal(checked, ["map", "routing", "pois", "nature"], "all components checked before commit");
+  equal(checked, ["map", "routing", "pois", "nature", "elevation"], "all components checked before commit");
   equal((await createRegionVersionStore(memory).read(original.region_id)).build_id, original.build_id, "restart retains commit");
-  cases.push("four_component_commit_and_restart");
+  cases.push("five_component_commit_and_restart");
 
   const next = await store.stage(JSON.stringify(updated));
   await rejects(() => store.activate(next, { verifyComponent: async (kind) => kind !== "nature" }), "regional_components_unavailable");

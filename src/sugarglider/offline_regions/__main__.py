@@ -16,6 +16,7 @@ def main() -> int:
     parser.add_argument("--region", required=True)
     parser.add_argument("--pbf", type=Path)
     parser.add_argument("--source-url")
+    parser.add_argument("--elevation-sources", type=Path)
     values = parser.parse_args()
     root = Path(__file__).resolve().parents[3]
     try:
@@ -29,7 +30,11 @@ def main() -> int:
             if values.pbf is None:
                 parser.error("build requires an explicit --pbf")
             directory = build_region(
-                root, spec.region_id, values.pbf, source_url=values.source_url
+                root,
+                spec.region_id,
+                values.pbf,
+                source_url=values.source_url,
+                elevation_sources=values.elevation_sources,
             )
         else:
             directory = contained_path(root, f"data/offline-regions/{spec.region_id}")

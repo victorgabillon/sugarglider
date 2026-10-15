@@ -5,7 +5,7 @@ import { regionalRoutingReference } from "./regional_routing_reference.js";
 
 const OPERATION_LOCK = "sugarglider-region-product-operation";
 
-// The product operation coordinates four independent component formats. Only
+// The product operation coordinates five mandatory components. Only
 // the version store's final commit changes availability to planners and maps.
 export function createRegionProduct({ versions, native, installerClient,
   locks = globalThis.navigator?.locks,
@@ -69,12 +69,15 @@ export function createRegionProduct({ versions, native, installerClient,
           });
         }
         report("verifying");
-        let scoped, indexesVerified = false;
+        let scoped, indexesVerified = false, nativeVerified = false;
         const activated = await versions.activate(ticket, { signal,
           verifyComponent: async (kind, captured, directory) => {
             scoped ??= await components({ manifest: captured, directory });
             if (kind === "map") return scoped.verifyMap({ signal });
-            if (kind === "routing") return (await native.inspect(reference, { signal })).status === "ready";
+            if (kind === "routing" || kind === "elevation") {
+              if (!nativeVerified) nativeVerified = (await native.inspect(reference, { signal })).status === "ready";
+              return nativeVerified;
+            }
             if (!indexesVerified) indexesVerified = await scoped.verifyIndexes();
             return indexesVerified;
           } });

@@ -38,7 +38,7 @@ def main() -> None:
         "schema_version": 2,
         "pack_id": args.pack_id,
         "engine": "valhalla",
-        "engine_version": "3.6.3",
+        "engine_version": "3.9.1",
         "access_modes": ["foot", "bicycle"],
         "bounds": {
             "west": args.west,

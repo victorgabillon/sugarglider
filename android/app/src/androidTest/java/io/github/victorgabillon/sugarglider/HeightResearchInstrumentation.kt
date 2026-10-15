@@ -94,9 +94,9 @@ class HeightResearchInstrumentation : Instrumentation() {
             }
             require(void.all { it == null })
             // Bounds and malformed local input reject before a JNI request.
-            require(runCatching { researchHeightRequest(emptyList(), "empty") }.isFailure)
+            require(runCatching { localValhallaHeightRequest(emptyList(), "empty") }.isFailure)
             require(runCatching {
-                researchHeightRequest(List(MAX_RESEARCH_HEIGHT_SAMPLES + 1) { fixture.first() }, "oversized")
+                localValhallaHeightRequest(List(MAX_RESEARCH_HEIGHT_SAMPLES + 1) { fixture.first() }, "oversized")
             }.isFailure)
             val txAfter = TrafficStats.getUidTxBytes(uid)
             val rxAfter = TrafficStats.getUidRxBytes(uid)

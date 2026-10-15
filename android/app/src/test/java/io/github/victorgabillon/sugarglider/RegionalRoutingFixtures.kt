@@ -6,4 +6,5 @@ internal fun syntheticRegionalRoutingReference() = RegionalRoutingPackReference(
     bounds = RoutingPackBounds(2.0, 48.8, 2.16, 48.94),
     manifest = RegionalFileIdentity(270, "b".repeat(64)),
     archive = RegionalFileIdentity(512, "c".repeat(64)),
+    elevation = V2ElevationFixture(RoutingPackBounds(2.0, 48.8, 2.16, 48.94)).reference,
 )

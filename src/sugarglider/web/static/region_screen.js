@@ -1,7 +1,7 @@
 import { loadRegionCatalog } from "./region_catalog.js";
 import { selectCommittedRegion } from "./regional_planning.js";
 
-const PHASES = { checking: "Checking the download", map: "Downloading the map", routing: "Downloading routing data",
+const PHASES = { checking: "Checking the download", map: "Downloading the map", routing: "Downloading routing and elevation data",
   places_nature: "Downloading and checking places and nature", verifying: "Verifying all regional data", ready: "Region installed" };
 
 export function regionFailureMessage(code) {
@@ -20,6 +20,8 @@ export function regionFailureMessage(code) {
     regional_checksum_mismatch: "The regional data failed its integrity check. Remove the affected version and download it again.",
     regional_corrupt_remove_and_reinstall: "The stored data is damaged. Remove the affected version and download it again.",
     regional_install_incomplete: "The installation is incomplete. Resume its download or remove it below.",
+    regional_v2_install_required: "This region needs a new V2 installation. Its existing files have been kept.",
+    regional_elevation_invalid: "The region's elevation data failed verification. Install a complete V2 region.",
     regional_metadata_recovery_required: "The stored region details are damaged. Recovery is required before this version can be removed.",
     regional_active_record_invalid: "The stored region selection is damaged. Remove this region and download it again.",
     regional_native_outcome_uncertain: "The app could not confirm that file work finished. Existing data has been retained. Reopen the app to check it before retrying.",
@@ -97,7 +99,7 @@ export function createRegionScreen({ elements, versions, product, withRegion,
         appendText(item, offering.description);
         appendText(item, `About ${bytes(offering.download_bytes)} to download, plus small region details. All six activities are included.`);
       }
-      appendText(item, verified ? "Map ✓ · Routing ✓ · Places ✓ · Nature ✓"
+      appendText(item, verified ? "Map ✓ · Routing ✓ · Places ✓ · Nature ✓ · Elevation ✓"
         : stored?.status === "committed" ? "Installed on this device. Select this region to check it is ready."
         : stored ? regionFailureMessage(stored.code ?? "regional_install_incomplete") : "Not installed. Download once to use this region offline.");
       if (installed && offering && !same) appendText(item, "A newer download is available. Your installed region stays available until the update is ready.");

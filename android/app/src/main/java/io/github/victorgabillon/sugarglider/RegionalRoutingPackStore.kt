@@ -33,6 +33,7 @@ internal enum class RegionalPackFailure(val wireValue: String) {
     INVALID_SOURCE("invalid_regional_source"),
     TRANSFER_TIMEOUT("regional_transfer_timeout"),
     ENCODED_TRANSFER("regional_encoded_download"),
+    INVALID_ELEVATION("regional_elevation_invalid"),
 }
 
 internal class RegionalPackException(val code: RegionalPackFailure) :
@@ -50,6 +51,8 @@ internal class RegionalRoutingPackStore(
         reference: RegionalRoutingPackReference,
         manifestBytes: ByteArray,
         archiveSource: () -> InputStream,
+        elevationManifestBytes: ByteArray,
+        elevationSource: (RegionalElevationTile) -> InputStream,
         cancelled: () -> Boolean = { false },
         onProgress: (Long) -> Unit = {},
     ): RoutingPack {
@@ -59,6 +62,7 @@ internal class RegionalRoutingPackStore(
         val manifest = manifestBytes.copyOf()
         verifyBytes(manifest, reference.manifest)
         validateManifest(manifest, reference)
+        verifyBytes(elevationManifestBytes, reference.elevation.manifest)
         return mutate {
             val directory = packDirectory(reference, create = false)
             if (directory != null) {
@@ -67,7 +71,7 @@ internal class RegionalRoutingPackStore(
             }
             val free = availableBytes()
             requireCondition(free >= 0, RegionalPackFailure.STORAGE_UNAVAILABLE)
-            requireCondition(free >= reference.archive.byteSize + manifest.size + 4_096L,
+            requireCondition(free >= reference.nativeByteSize + 4_096L * (reference.elevation.tiles.size + 4),
                 RegionalPackFailure.INSUFFICIENT_STORAGE)
             val owned = packDirectory(reference, create = true)
                 ?: throw RegionalPackException(RegionalPackFailure.STORAGE_UNAVAILABLE)
@@ -75,6 +79,7 @@ internal class RegionalRoutingPackStore(
             try {
                 requireCondition(!cancelled(), RegionalPackFailure.CANCELLED)
                 writeFile(owned, MANIFEST, manifest)
+                onProgress(manifest.size.toLong())
                 val part = confinedFile(owned, "$ARCHIVE.part")
                 FileOutputStream(part).use { output ->
                     prepareArchive(output, reference.archive.byteSize)
@@ -94,7 +99,7 @@ internal class RegionalRoutingPackStore(
                             requireCondition(count <= reference.archive.byteSize, RegionalPackFailure.SIZE_MISMATCH)
                             output.write(buffer, 0, length)
                             hash.update(buffer, 0, length)
-                            onProgress(count)
+                            onProgress(count + manifest.size)
                         }
                         requireCondition(count == reference.archive.byteSize, RegionalPackFailure.SIZE_MISMATCH)
                         requireCondition(hex(hash.digest()) == reference.archive.sha256, RegionalPackFailure.CHECKSUM_MISMATCH)
@@ -103,13 +108,46 @@ internal class RegionalRoutingPackStore(
                 }
                 requireCondition(!cancelled(), RegionalPackFailure.CANCELLED)
                 Files.move(part.toPath(), confinedFile(owned, ARCHIVE).toPath(), StandardCopyOption.ATOMIC_MOVE)
+                val elevation = confinedFile(owned, "elevation")
+                requireCondition(elevation.mkdir(), RegionalPackFailure.STORAGE_UNAVAILABLE)
+                writeFile(elevation, MANIFEST, elevationManifestBytes)
+                var received = manifest.size + reference.archive.byteSize + elevationManifestBytes.size
+                onProgress(received)
+                for (tile in reference.elevation.tiles) {
+                    val file = File(elevation, tile.path)
+                    requireCondition(file.parentFile!!.mkdirs() || file.parentFile!!.isDirectory, RegionalPackFailure.STORAGE_UNAVAILABLE)
+                    val temporary = confinedFile(file.parentFile!!, file.name + ".part")
+                    FileOutputStream(temporary).use { output ->
+                        prepareArchive(output, tile.identity.byteSize)
+                        output.channel.position(0)
+                        elevationSource(tile).use { input ->
+                            val buffer = ByteArray(READ_BYTES)
+                            var count = 0L
+                            while (true) {
+                                requireCondition(!cancelled(), RegionalPackFailure.CANCELLED)
+                                val length = input.read(buffer)
+                                if (length < 0) break
+                                requireCondition(length > 0, RegionalPackFailure.TRANSFER_FAILED)
+                                count += length
+                                requireCondition(count <= tile.identity.byteSize, RegionalPackFailure.SIZE_MISMATCH)
+                                output.write(buffer, 0, length)
+                                onProgress(received + count)
+                            }
+                            requireCondition(count == tile.identity.byteSize, RegionalPackFailure.SIZE_MISMATCH)
+                        }
+                        output.fd.sync()
+                    }
+                    Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE)
+                    received += tile.identity.byteSize
+                }
+                verifyElevation(owned, reference, cancelled)
                 val pack = RoutingPackRegistry(requireNotNull(owned.parentFile)).installedPacks()
                     .singleOrNull { it.packId == reference.packId }
                     ?: throw RegionalPackException(RegionalPackFailure.INVALID_ARCHIVE)
                 requireCondition(!cancelled(), RegionalPackFailure.CANCELLED)
                 writeFile(owned, COMPLETION, reference.toJson().toString().toByteArray(Charsets.UTF_8))
                 complete = true
-                pack
+                pack.copy(elevationDirectory = File(elevation, "skadi"), regionalReference = reference)
             } catch (error: Exception) {
                 if (cancelled()) throw RegionalPackException(RegionalPackFailure.CANCELLED)
                 if (error is RegionalPackException) throw error
@@ -162,9 +200,11 @@ internal class RegionalRoutingPackStore(
                 requireCondition(count == reference.archive.byteSize, RegionalPackFailure.SIZE_MISMATCH)
             }
             requireCondition(hex(hash.digest()) == reference.archive.sha256, RegionalPackFailure.CHECKSUM_MISMATCH)
+            verifyElevation(directory, reference, cancelled)
             requireCondition(!cancelled(), RegionalPackFailure.CANCELLED)
             return RoutingPackRegistry(requireNotNull(directory.parentFile)).installedPacks()
                 .singleOrNull { it.packId == reference.packId }
+                ?.copy(elevationDirectory = File(directory, "elevation/skadi"), regionalReference = reference)
                 ?: throw RegionalPackException(RegionalPackFailure.INVALID_ARCHIVE)
         } catch (error: Exception) {
             if (error is RegionalPackException) throw error
@@ -208,7 +248,7 @@ internal class RegionalRoutingPackStore(
             val directory = confinedFile(region, version.buildId)
             if (directory.exists()) {
                 requireCondition(directory.isDirectory, RegionalPackFailure.STORAGE_UNAVAILABLE)
-                requireRemovalTree(directory, 3, MAX_DIRECTORY_ENTRIES)
+                requireRemovalTree(directory, 7, MAX_DIRECTORY_ENTRIES)
                 removeTree(directory)
             }
             region.delete() // Empty only; another immutable version is retained.
@@ -221,7 +261,7 @@ internal class RegionalRoutingPackStore(
             val region = confinedFile(root(), regionId)
             if (!region.exists()) return@mutate
             requireCondition(region.isDirectory, RegionalPackFailure.STORAGE_UNAVAILABLE)
-            requireRemovalTree(region, 4, MAX_DIRECTORY_ENTRIES * MAX_VERSIONS + 1)
+            requireRemovalTree(region, 8, MAX_DIRECTORY_ENTRIES * MAX_VERSIONS + 1)
             removeTree(region)
         }
     }
@@ -272,6 +312,7 @@ internal class RegionalRoutingPackStore(
     }
 
     private fun root(): File {
+        requireCondition(!Files.isSymbolicLink(rootDirectory.toPath()), RegionalPackFailure.STORAGE_UNAVAILABLE)
         if (!rootDirectory.exists()) requireCondition(rootDirectory.mkdirs(), RegionalPackFailure.STORAGE_UNAVAILABLE)
         requireCondition(rootDirectory.isDirectory, RegionalPackFailure.STORAGE_UNAVAILABLE)
         return rootDirectory.canonicalFile
@@ -295,6 +336,15 @@ internal class RegionalRoutingPackStore(
         val manifest = RoutingPackManifest.parse(bytes.toString(Charsets.UTF_8), reference.packId)
         requireCondition(manifest != null && manifest.schemaVersion == 2 && manifest.bounds == reference.bounds
             && manifest.accessModes == LocalRouteAccessMode.entries, RegionalPackFailure.UNSUPPORTED)
+    }
+
+    private fun verifyElevation(directory: File, reference: RegionalRoutingPackReference, cancelled: () -> Boolean) {
+        try { RegionalElevationValidation.verify(confinedFile(directory, "elevation"), reference, cancelled) }
+        catch (error: Exception) {
+            if (cancelled()) throw RegionalPackException(RegionalPackFailure.CANCELLED)
+            if (error is RegionalPackException) throw error
+            throw RegionalPackException(RegionalPackFailure.INVALID_ELEVATION)
+        }
     }
 
     private fun verifyBytes(bytes: ByteArray, identity: RegionalFileIdentity) {
@@ -343,7 +393,7 @@ internal class RegionalRoutingPackStore(
 
     private companion object {
         const val READ_BYTES = 64 * 1_024
-        const val MAX_COMPLETION_BYTES = 4_096L
+        const val MAX_COMPLETION_BYTES = 16_384L
         const val MAX_DIRECTORY_ENTRIES = 64
         const val MAX_REGIONS = 8
         const val MAX_VERSIONS = 2

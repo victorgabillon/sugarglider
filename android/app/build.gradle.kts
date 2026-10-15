@@ -83,7 +83,9 @@ android {
         versionCode = 8
         versionName = "1.2.0"
 
-        testInstrumentationRunner = "io.github.victorgabillon.sugarglider.HeightResearchInstrumentation"
+        testInstrumentationRunner = if (providers.gradleProperty("sugargliderV2Research").isPresent)
+            "io.github.victorgabillon.sugarglider.V2RegionInstrumentation"
+        else "io.github.victorgabillon.sugarglider.HeightResearchInstrumentation"
         buildConfigField("boolean", "ALLOW_HTTP", "false")
         buildConfigField("String", "PRIVACY_POLICY_URL", "\"$publicPrivacyPolicy\"")
         ndk.abiFilters += "arm64-v8a"
@@ -105,6 +107,12 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             buildConfigField("boolean", "ALLOW_HTTP", "true")
+        }
+        create("v2Debug") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".v2debug"
+            versionNameSuffix = "-v2-research"
+            matchingFallbacks += "debug"
         }
         release {
             signingConfig = externalSigning?.let { signingConfigs.getByName("externalUpload") }
@@ -135,6 +143,9 @@ android {
     }
 
     sourceSets.getByName("main").assets.srcDir(bundledShellDirectory)
+    sourceSets.getByName("v2Debug").java.srcDir("src/debug/java")
+    sourceSets.getByName("v2Debug").manifest.srcFile("src/debug/AndroidManifest.xml")
+    testBuildType = if (providers.gradleProperty("sugargliderV2Research").isPresent) "v2Debug" else "debug"
 }
 
 tasks.named("preBuild").configure { dependsOn(bundleSharedWebShell) }
@@ -155,8 +166,8 @@ dependencies {
     implementation("io.github.rallista:valhalla-models:0.6.0")
     implementation("io.github.rallista:valhalla-models-config:0.6.0")
 
-    // Research instrumentation/config serialization is absent from Release.
-    debugImplementation("com.squareup.moshi:moshi-kotlin:1.15.1")
+    // Serialize owned offline actor settings absent from the typed config model.
+    implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.moshi:moshi-kotlin:1.15.1")

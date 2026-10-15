@@ -8,6 +8,7 @@ const CODES = new Set([
   "regional_identity_mismatch", "regional_routing_unsupported", "regional_routing_invalid",
   "regional_insufficient_storage", "regional_storage_unavailable", "regional_storage_limit",
   "regional_transfer_failed", "invalid_regional_source", "regional_transfer_timeout", "regional_encoded_download",
+  "regional_elevation_invalid",
 ]);
 const FIELDS = ["schema_version", "request_id", "type", "operation_id", "state", "received_bytes", "total_bytes", "code"];
 
@@ -21,7 +22,8 @@ export function parseRegionalNativeReply(payload) {
     || !/^[a-f0-9]{32}$/.test(value.operation_id ?? "")
     || !["running", "ready", "removed", "failed"].includes(value.state)
     || !Number.isSafeInteger(value.received_bytes) || !Number.isSafeInteger(value.total_bytes)
-    || value.received_bytes < 0 || value.total_bytes < value.received_bytes || value.total_bytes > 2 ** 31
+    || value.received_bytes < 0 || value.total_bytes < value.received_bytes
+    || value.total_bytes > 2 ** 31 + 16 * 26_982_978 + 81_920
     || (value.state === "failed" ? !CODES.has(value.code) : value.code !== null)) return null;
   return freezeData(value);
 }

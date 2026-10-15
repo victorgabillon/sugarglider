@@ -26,7 +26,7 @@ class RoutingPackRegistryTest {
     }
 
     @Test
-    fun v1AndV2ManifestsAreStrictVersionedAndDirectoryBound() {
+    fun v2ManifestIsStrictAndV1RequiresNewInstallation() {
         val payload = manifest("marly-dev-v1", MARLY)
         val parsed = requireNotNull(RoutingPackManifest.parse(payload, "marly-dev-v1"))
         assertEquals(ROUTING_PACK_MANIFEST_SCHEMA_VERSION, parsed.schemaVersion)
@@ -37,17 +37,7 @@ class RoutingPackRegistryTest {
             listOf(LocalRouteAccessMode.FOOT, LocalRouteAccessMode.BICYCLE),
             parsed.accessModes,
         )
-        val v1 = requireNotNull(
-            RoutingPackManifest.parse(
-                manifest(
-                    "marly-dev-v1",
-                    MARLY,
-                    schemaVersion = ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1,
-                ),
-                "marly-dev-v1",
-            ),
-        )
-        assertEquals(listOf(LocalRouteAccessMode.FOOT), v1.accessModes)
+        assertNull(RoutingPackManifest.parse(manifest("marly-dev-v1", MARLY, schemaVersion = 1), "marly-dev-v1"))
 
         assertNull(RoutingPackManifest.parse("not-json", "marly-dev-v1"))
         assertNull(
@@ -91,7 +81,7 @@ class RoutingPackRegistryTest {
             manifest(
                 "marly-dev-v1",
                 MARLY,
-                schemaVersion = ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1,
+                schemaVersion = 1,
             ),
         ).put("access_modes", JSONArray(listOf("foot")))
         assertNull(RoutingPackManifest.parse(v1WithModes.toString(), "marly-dev-v1"))
@@ -201,21 +191,18 @@ class RoutingPackRegistryTest {
     }
 
     @Test
-    fun v1PackIsFootOnlyAndV2PackCanSupportBicycle() {
+    fun oldPackCannotBecomeAvailableAndV2SupportsBothAccessModes() {
         installPack(
             "foot-only-dev-v1",
             MARLY,
-            schemaVersion = ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1,
+            schemaVersion = 1,
         )
         val registry = registry()
         val points = listOf(MARLY_ORIGIN, MARLY_DESTINATION)
-        assertEquals(
-            "foot-only-dev-v1",
-            selectedPackId(registry.select(points, LocalRouteAccessMode.FOOT)),
-        )
+        assertTrue(registry.select(points, LocalRouteAccessMode.FOOT) is RoutingPackSelection.NoGeographicCoverage)
         assertTrue(
             registry.select(points, LocalRouteAccessMode.BICYCLE) is
-                RoutingPackSelection.NoCompatibleAccessMode,
+                RoutingPackSelection.NoGeographicCoverage,
         )
 
         installPack("foot-bike-dev-v2", MARLY)
@@ -352,10 +339,7 @@ class RoutingPackRegistryTest {
         .put("east", value.east)
         .put("north", value.north)
 
-    private fun validTileArchive(): ByteArray = ByteArray(512).also { header ->
-        "index.bin".toByteArray().copyInto(header)
-        "ustar".toByteArray().copyInto(header, destinationOffset = 257)
-    }
+    private fun validTileArchive(): ByteArray = syntheticValhallaArchive()
 
     private companion object {
         val MARLY = RoutingPackBounds(2.00, 48.80, 2.16, 48.94)

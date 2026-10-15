@@ -3,13 +3,10 @@ package io.github.victorgabillon.sugarglider
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.RandomAccessFile
-import java.nio.charset.StandardCharsets
 
-internal const val ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1 = 1
 internal const val ROUTING_PACK_MANIFEST_SCHEMA_VERSION = 2
 internal const val ROUTING_PACK_ENGINE = "valhalla"
-internal const val ROUTING_PACK_ENGINE_VERSION = "3.6.3"
+internal const val ROUTING_PACK_ENGINE_VERSION = "3.9.1"
 
 private const val ROUTING_PACK_MANIFEST_NAME = "manifest.json"
 private const val ROUTING_PACK_TILE_ARCHIVE_NAME = "valhalla_tiles.tar"
@@ -51,21 +48,14 @@ internal data class RoutingPackManifest(
     val accessModes: List<LocalRouteAccessMode>,
 ) {
     fun isSupported(directoryPackId: String): Boolean =
-        schemaVersion in setOf(
-            ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1,
-            ROUTING_PACK_MANIFEST_SCHEMA_VERSION,
-        ) &&
+        schemaVersion == ROUTING_PACK_MANIFEST_SCHEMA_VERSION &&
             packId == directoryPackId &&
             isRoutingPackId(packId) &&
             engine == ROUTING_PACK_ENGINE &&
             engineVersion == ROUTING_PACK_ENGINE_VERSION &&
             bounds.isValid() &&
             accessModes.isNotEmpty() &&
-            accessModes == LocalRouteAccessMode.entries.filter(accessModes::contains) &&
-            (
-                schemaVersion != ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1 ||
-                    accessModes == listOf(LocalRouteAccessMode.FOOT)
-                )
+            accessModes == LocalRouteAccessMode.entries
 
     companion object {
         fun parse(payload: String, directoryPackId: String): RoutingPackManifest? {
@@ -73,7 +63,6 @@ internal data class RoutingPackManifest(
                 val value = JSONObject(payload)
                 val schemaVersion = value.strictInteger("schema_version") ?: return null
                 val manifestFields = when (schemaVersion) {
-                    ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1 -> MANIFEST_V1_FIELDS
                     ROUTING_PACK_MANIFEST_SCHEMA_VERSION -> MANIFEST_V2_FIELDS
                     else -> return null
                 }
@@ -91,13 +80,7 @@ internal data class RoutingPackManifest(
                         east = boundsValue.strictDouble("east") ?: return null,
                         north = boundsValue.strictDouble("north") ?: return null,
                     ),
-                    accessModes = if (
-                        schemaVersion == ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1
-                    ) {
-                        listOf(LocalRouteAccessMode.FOOT)
-                    } else {
-                        value.strictAccessModes("access_modes") ?: return null
-                    },
+                    accessModes = value.strictAccessModes("access_modes") ?: return null,
                 )
                 manifest.takeIf { it.isSupported(directoryPackId) }
             } catch (_: Exception) {
@@ -105,14 +88,14 @@ internal data class RoutingPackManifest(
             }
         }
 
-        private val MANIFEST_V1_FIELDS = setOf(
+        private val BASE_MANIFEST_FIELDS = setOf(
             "schema_version",
             "pack_id",
             "engine",
             "engine_version",
             "bounds",
         )
-        private val MANIFEST_V2_FIELDS = MANIFEST_V1_FIELDS + "access_modes"
+        private val MANIFEST_V2_FIELDS = BASE_MANIFEST_FIELDS + "access_modes"
         private val BOUNDS_FIELDS = setOf("west", "south", "east", "north")
     }
 }
@@ -122,6 +105,8 @@ internal data class RoutingPack(
     val tileArchive: File,
     val tileArchiveLength: Long,
     val tileArchiveLastModified: Long,
+    val elevationDirectory: File? = null,
+    val regionalReference: RegionalRoutingPackReference? = null,
 ) {
     val packId: String
         get() = manifest.packId
@@ -136,6 +121,8 @@ internal data class RoutingPack(
         tileArchivePath = tileArchive.absolutePath,
         tileArchiveLength = tileArchiveLength,
         tileArchiveLastModified = tileArchiveLastModified,
+        elevationPath = elevationDirectory?.absolutePath,
+        elevationIdentity = regionalReference?.elevation?.manifest?.sha256,
     )
 }
 
@@ -213,24 +200,7 @@ internal class RoutingPackRegistry(private val rootDirectory: File) {
             length < TAR_BLOCK_BYTES ||
             length % TAR_BLOCK_BYTES != 0L
         ) return false
-        return try {
-            val header = ByteArray(TAR_BLOCK_BYTES.toInt())
-            RandomAccessFile(file, "r").use { archive ->
-                if (archive.read(header) != header.size) return false
-            }
-            val nameEnd = header.indexOf(0.toByte()).takeIf { it in 1..TAR_NAME_BYTES }
-                ?: TAR_NAME_BYTES
-            val firstEntry = String(header, 0, nameEnd, StandardCharsets.US_ASCII)
-            val magic = String(
-                header,
-                TAR_MAGIC_OFFSET,
-                TAR_MAGIC.length,
-                StandardCharsets.US_ASCII,
-            )
-            firstEntry == VALHALLA_INDEX_ENTRY && magic == TAR_MAGIC
-        } catch (_: Exception) {
-            false
-        }
+        return validV2ValhallaArchive(file)
     }
 
     private companion object {
@@ -300,6 +270,8 @@ internal data class RoutingPackActorKey(
     val tileArchivePath: String,
     val tileArchiveLength: Long,
     val tileArchiveLastModified: Long,
+    val elevationPath: String?,
+    val elevationIdentity: String?,
 )
 
 private fun File.canonicalFileOrNull(): File? = try {
@@ -322,6 +294,7 @@ private fun JSONObject.strictString(name: String): String? = opt(name) as? Strin
 private fun JSONObject.strictDouble(name: String): Double? = (opt(name) as? Number)
     ?.toDouble()
     ?.takeIf(Double::isFinite)
+    ?.canonicalCoordinate()
 
 private fun JSONObject.strictAccessModes(name: String): List<LocalRouteAccessMode>? {
     val values = opt(name) as? JSONArray ?: return null

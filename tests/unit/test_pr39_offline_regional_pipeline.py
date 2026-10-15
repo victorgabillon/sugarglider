@@ -17,6 +17,7 @@ from pathlib import Path
 
 import osmium
 import pytest
+from elevation_test_support import synthetic_sources, write_synthetic_elevation
 from pydantic import ValidationError
 
 from sugarglider.nature.build import build_nature_index
@@ -97,7 +98,7 @@ def fake_components(
         "schema_version": 2,
         "pack_id": spec.routing.pack_id,
         "engine": "valhalla",
-        "engine_version": "3.6.3",
+        "engine_version": "3.9.1",
         "access_modes": ["foot", "bicycle"],
         "bounds": dict(
             zip(("west", "south", "east", "north"), spec.bounds, strict=True)
@@ -108,21 +109,27 @@ def fake_components(
         directory / "routing/valhalla_tiles.tar", "w", format=tarfile.USTAR_FORMAT
     ) as tar:
         for name, data in (
-            ("index.bin", struct.pack("<QLL", 1536, 2, 4)),
-            ("2/000/000.gph", b"tile"),
+            ("index.bin", struct.pack("<QLL", 1536, 2, 32)),
+            (
+                "2/000/000.gph",
+                struct.pack("<Q", (1 << 62) | 2) + bytes(8) + b"3.9.1" + bytes(11),
+            ),
         ):
             info = tarfile.TarInfo(name)
             info.size = len(data)
             tar.addfile(info, io.BytesIO(data))
     build_poi_index(source, directory / "pois/index.json.gz", bounds=spec.bounds)
     build_nature_index(source, directory / "nature/index.json.gz", bounds=spec.bounds)
+    write_synthetic_elevation(
+        directory / "elevation", spec.elevation.component_id, spec.bounds
+    )
 
 
 @pytest.mark.parametrize(
     "region,bounds,ids",
     [
-        ("marly", (2.0, 48.8, 2.16, 48.94), ("marly-map-dev-v1", "marly-dev-v1")),
-        ("paris", (2.25, 48.8, 2.42, 48.92), ("paris-map-dev-v1", "paris-dev-v1")),
+        ("marly", (2.0, 48.8, 2.16, 48.94), ("marly-map-dev-v1", "marly-routing-v2")),
+        ("paris", (2.25, 48.8, 2.42, 48.92), ("paris-map-dev-v1", "paris-routing-v2")),
     ],
 )
 def test_specs_match_existing_templates(
@@ -154,9 +161,9 @@ def test_specs_match_existing_templates(
         ("bounds", [2, 48, "3", 49]),
         ("bounds", [2, 48, float("inf"), 49]),
         ("bounds", [2, -86, 3, 49]),
-        ("schema_version", 2),
+        ("schema_version", 1),
         ("schema_version", True),
-        ("schema_version", 1.0),
+        ("schema_version", 2.0),
     ],
 )
 def test_strict_spec_rejections(field: str, value: object) -> None:
@@ -169,7 +176,7 @@ def test_strict_spec_rejections(field: str, value: object) -> None:
 def test_nested_fields_duplicate_ids_and_template_mismatch(repository: Path) -> None:
     path = repository / "offline-regions/marly.json"
     original = json.loads(path.read_bytes())
-    for patch in ({"extra": True}, {"component_id": "marly-dev-v1"}):
+    for patch in ({"extra": True}, {"component_id": "marly-routing-v2"}):
         changed = json.loads(json.dumps(original))
         changed["pois"].update(patch)
         with pytest.raises(ValidationError):
@@ -270,7 +277,13 @@ def test_atomic_publication_deterministic_manifest_and_hashes(
 ) -> None:
     output = build_region(repository, "marly", pbf, builder=fake_components)
     manifest = verify_region(output)
-    assert set(Components.model_fields) == {"map", "routing", "pois", "nature"}
+    assert set(Components.model_fields) == {
+        "map",
+        "routing",
+        "pois",
+        "nature",
+        "elevation",
+    }
     for component in manifest.components.ordered:
         for file in component.files:
             data = (output / file.path).read_bytes()
@@ -454,7 +467,16 @@ def test_command_runner_receives_explicit_source_and_isolated_destinations(
 
     output = repository / "staging"
     output.mkdir()
-    build_components(repository, load_spec(repository, "marly"), pbf, output, runner)
+    build_components(
+        repository,
+        load_spec(repository, "marly"),
+        pbf,
+        output,
+        runner,
+        elevation_sources=synthetic_sources(
+            repository, load_spec(repository, "marly").bounds
+        ),
+    )
     assert len(calls) == 4
     assert calls[0][0][-2:] == (str(pbf), str(output / "map"))
     assert calls[1][0][-1] == str(output / "routing")
@@ -495,7 +517,14 @@ def test_isolated_index_failure_aborts_publication_and_following_phases(
                 raise subprocess.CalledProcessError(1, arguments)
 
     def builder(root: Path, spec: RegionSpec, source: Path, directory: Path) -> None:
-        build_components(root, spec, source, directory, runner)
+        build_components(
+            root,
+            spec,
+            source,
+            directory,
+            runner,
+            elevation_sources=synthetic_sources(root, spec.bounds),
+        )
 
     with pytest.raises(subprocess.CalledProcessError):
         build_region(repository, "marly", pbf, builder=builder)
@@ -515,7 +544,7 @@ def test_make_cli_ignore_and_runtime_isolation() -> None:
     map_builder = (ROOT / "scripts/build_pr36_map_pack.sh").read_text()
     routing_builder = (ROOT / "scripts/build_pr33_valhalla_pack.sh").read_text()
     assert 'BUILD_ROOT=$(dirname -- "$REQUESTED_OUTPUT")' in map_builder
-    assert 'BUILD_ROOT=$(dirname -- "$ISOLATED_OUTPUT")' in routing_builder
+    assert "--additional-data-elevation /dem" in routing_builder
     assert '"$BUILD_DIRECTORY/planetiler-tmp:/work/data/tmp"' in map_builder
     provenance = toolchain()
     for pin in (
@@ -526,7 +555,7 @@ def test_make_cli_ignore_and_runtime_isolation() -> None:
         assert pin in map_builder
     assert provenance.valhalla_image in routing_builder
     worker = (ROOT / "src/sugarglider/web/static/service-worker.js").read_text()
-    assert "const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v62`;" in worker
+    assert "const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v90`;" in worker
     assert "offline_regions" not in worker
     for folder in (ROOT / "src/sugarglider/web", ROOT / "src/sugarglider/planning"):
         for path in folder.rglob("*.py"):
@@ -554,7 +583,7 @@ def test_make_cli_ignore_and_runtime_isolation() -> None:
         check=True,
     )
     assert "data/offline-regions/marly/manifest.json" in ignored.stdout
-    assert toolchain().pipeline_version == 1
+    assert toolchain().pipeline_version == 2
 
 
 @pytest.mark.parametrize(
@@ -851,6 +880,20 @@ def test_static_update_retains_multiple_versions_deterministically(
     shutil.copyfile(
         ROOT / "src/sugarglider/offline_regions/unpack_distribution.py", standalone
     )
+    blocked = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            str(standalone),
+            str(archive),
+            str(tmp_path / "blocked-publication"),
+            report["archive_sha256"],
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert blocked.returncode != 0 and "publication blocked" in blocked.stderr
+    assert not (tmp_path / "blocked-publication").exists()
     subprocess.run(
         [
             sys.executable,
@@ -859,6 +902,7 @@ def test_static_update_retains_multiple_versions_deterministically(
             str(archive),
             str(tmp_path / "standalone-site"),
             report["archive_sha256"],
+            "--private",
         ],
         check=True,
         capture_output=True,

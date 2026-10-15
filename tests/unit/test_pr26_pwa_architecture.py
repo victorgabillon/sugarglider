@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v62_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v90_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v62"
+    assert generation.group(1) == "v90"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -285,7 +285,7 @@ def test_shared_shell_generation_tracks_v62_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "203e137ad4974376c9f8338ca08a803b3a601dbf5bb4bd837aa3a0cda6226b2f"
+            "7046458f3b7ee8fb077aac0dc118960a3b73296ca19512f62219f58cf3d3ee82"
         ),
         "location_search.js": (
             "635f5aaf5603cadbc3b77f035055251e54358b16a831d927e51fe6c44c031c36"
@@ -295,7 +295,7 @@ def test_shared_shell_generation_tracks_v62_cached_assets() -> None:
         ),
         "app.js": ("648a04ced3146c52c36221a1e53cd93f458b9382f9aedce2ea0128660a1c2adf"),
         "region_screen.js": (
-            "0cf6d527a0ea957e0222a31a8ffa2ee1d1a24b2118628c6fd70e4dbd9d5371c5"
+            "4f0607cba47e701b8c0d6b8e8bd73376f0b0bced7fdf5c9ca948d8f6499acda5"
         ),
         "pwa_view.js": (
             "b5f8919ea0c0b40b27559f3b506b2839731baea871554cfe3db7f5dc8c20b479"
@@ -341,7 +341,7 @@ def test_shared_shell_generation_tracks_v62_cached_assets() -> None:
             "45f94090ef1cf08fb405243cc610f366bc370c8dcc1ed12f7e929d6b0e271a8b"
         ),
         "regional_manifest.js": (
-            "3caa6e68fcaa0bed590d55de57f25f79a712e651043c301772cf20d92f9524e7"
+            "9c01a3873d45298538ba27d629e8ed6d017a00bce16df7cbe0ead285854bd146"
         ),
         "local_region_client.js": (
             "712f2b6dc1602c9b20fcd0033cb11602efad24f922dedaa60fb1a311bd560a31"

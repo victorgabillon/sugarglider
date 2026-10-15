@@ -11,22 +11,39 @@ internal class RegionalRoutingRepository(
     private val removeRegionFiles: (String) -> Unit,
 ) {
     private val gate = Any()
-    private val leases = mutableMapOf<IdentityPath, Int>()
+    private val leases = mutableMapOf<IdentityPath, LeaseState>()
 
     fun <T> withPack(reference: RegionalRoutingPackReference, action: (RoutingPack) -> T): T {
+        return acquire(reference).use { action(it.pack) }
+    }
+
+    fun acquire(reference: RegionalRoutingPackReference): RegionalPackLease {
         if (!reference.isValid()) throw RegionalPackException(RegionalPackFailure.INVALID_REFERENCE)
         val path = IdentityPath(reference.regionId, reference.buildId, reference.packId)
         synchronized(gate) {
-            if (leases.values.sum() >= MAX_LEASES) throw RegionalPackException(RegionalPackFailure.BUSY)
-            leases[path] = (leases[path] ?: 0) + 1
+            if (leases.values.sumOf { it.count } >= MAX_LEASES) throw RegionalPackException(RegionalPackFailure.BUSY)
+            val state = leases.getOrPut(path) { LeaseState(reference) }
+            if (state.reference != reference) throw RegionalPackException(RegionalPackFailure.IDENTITY_MISMATCH)
+            state.count++
         }
-        try { return action(openPack(reference)) }
-        finally {
+        fun release() {
             synchronized(gate) {
-                val remaining = requireNotNull(leases[path]) - 1
-                if (remaining == 0) leases.remove(path) else leases[path] = remaining
+                val state = requireNotNull(leases[path])
+                state.count--
+                if (state.count == 0) leases.remove(path)
             }
         }
+        try {
+            // Verification happens once during a lease lifetime. Immutable
+            // private files cannot be replaced/removed while an actor owns one.
+            val existing = synchronized(gate) { leases[path]?.pack }
+            val opened = existing ?: openPack(reference)
+            val pack = synchronized(gate) {
+                val state = requireNotNull(leases[path])
+                state.pack ?: opened.also { state.pack = it }
+            }
+            return RegionalPackLease(pack, ::release)
+        } catch (error: Exception) { release(); throw error }
     }
 
     fun remove(reference: RegionalRoutingPackReference) {
@@ -58,6 +75,12 @@ internal class RegionalRoutingRepository(
     }
 
     private data class IdentityPath(val regionId: String, val buildId: String, val packId: String)
+    private class LeaseState(val reference: RegionalRoutingPackReference, var count: Int = 0, var pack: RoutingPack? = null)
 
     private companion object { const val MAX_LEASES = 16 }
+}
+
+internal class RegionalPackLease(val pack: RoutingPack, private val release: () -> Unit) : AutoCloseable {
+    private val closed = java.util.concurrent.atomic.AtomicBoolean(false)
+    override fun close() { if (closed.compareAndSet(false, true)) release() }
 }

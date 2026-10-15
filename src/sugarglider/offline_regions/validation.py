@@ -10,6 +10,7 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, model_validator
 
 from sugarglider.nature.models import NatureIndexDocument
+from sugarglider.offline_regions.elevation_component import verify_elevation
 from sugarglider.offline_regions.map_manifest import file_sha256, validate_archive
 from sugarglider.offline_regions.models import (
     Identifier,
@@ -62,7 +63,7 @@ class RoutingManifest(StrictModel):
     schema_version: Literal[2]
     pack_id: Identifier
     engine: Literal["valhalla"]
-    engine_version: Literal["3.6.3"]
+    engine_version: Literal["3.9.1"]
     access_modes: tuple[Literal["foot"], Literal["bicycle"]]
     bounds: RoutingBounds
 
@@ -127,7 +128,9 @@ def validate_tar(path: Path) -> None:
     index: bytes | None = None
     names: set[str] = set()
     with tarfile.open(path, "r:") as archive:
-        for entry in archive:
+        for count, entry in enumerate(archive, 1):
+            if count > 100_001:
+                raise ValueError("Valhalla tile count exceeds runtime budget")
             name = entry.name.removeprefix("./").rstrip("/")
             contained_path(path.parent, name)
             if not entry.isfile() or entry.size <= 0:
@@ -138,10 +141,23 @@ def validate_tar(path: Path) -> None:
                 raise ValueError("Valhalla tar is not normalized")
             names.add(name)
             if name == "index.bin":
+                if entry.size > 1_600_000 or tiles:
+                    raise ValueError("Valhalla index exceeds runtime budget/order")
                 stream = archive.extractfile(entry)
                 assert stream is not None
                 index = stream.read()
             elif re.fullmatch(r"[0-3]/(?:[0-9]{3}/)*[0-9]{3}\.gph", name):
+                stream = archive.extractfile(entry)
+                assert stream is not None
+                header = stream.read(32)
+                if (
+                    len(header) != 32
+                    or not struct.unpack_from("<Q", header)[0] & (1 << 62)
+                    or (header[16:32].split(b"\0", 1)[0] != b"3.9.1")
+                ):
+                    raise ValueError(
+                        "V2 requires genuine 3.9.1 tiles with embedded elevation"
+                    )
                 level, tile = name[:-4].split("/", 1)
                 tile_id = int(level) | (int(tile.replace("/", "")) << 3)
                 tiles.append((entry.offset_data, tile_id, entry.size))
@@ -190,6 +206,17 @@ def validate_components(directory: Path, manifest: RegionalManifest) -> None:
     ):
         raise ValueError("routing identity/bounds mismatch")
     validate_tar(directory / "routing/valhalla_tiles.tar")
+    elevation = verify_elevation(directory / "elevation")
+    if (
+        elevation.component_id != manifest.components.elevation.component_id
+        or elevation.bounds != manifest.bounds
+    ):
+        raise ValueError("elevation identity/bounds mismatch")
+    for descriptor, tile in zip(
+        manifest.components.elevation.files[1:], elevation.tiles, strict=True
+    ):
+        if (descriptor.byte_size, descriptor.sha256) != (tile.byte_size, tile.sha256):
+            raise ValueError("elevation descriptor/source mismatch")
     pois = PoiIndexDocument.model_validate_json(
         gzip.decompress((directory / "pois/index.json.gz").read_bytes())
     )

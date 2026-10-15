@@ -108,7 +108,7 @@ export async function runPr42RegionProductHarness() {
     equal(ready, "ready", "all components ready through actual UI");
     equal(elements.status.dataset.state, "regional_ready", "finished verification replaces checking status");
     equal((await versions.read(first.manifest.region_id)).build_id, first.manifest.build_id, "committed exact version");
-    assert(elements.list.textContent.includes("Map ✓ · Routing ✓ · Places ✓ · Nature ✓"), "checks reflect verified components");
+    assert(elements.list.textContent.includes("Map ✓ · Routing ✓ · Places ✓ · Nature ✓ · Elevation ✓"), "checks reflect verified components");
     equal(requests.map((entry) => new URL(entry.url).pathname), ["/manifest.json", "/map/manifest.json", "/map/basemap.pmtiles", "/pois/index.json.gz", "/nature/index.json.gz"], "single top-level manifest and independent web files");
     assert(requests.every(({ options }) => options.credentials === "omit" && options.redirect === "error" && options.cache === "no-store"), "component requests carry no credentials or redirects");
     const map = (await mapStore.scanInstalledPacks()).packs[0];

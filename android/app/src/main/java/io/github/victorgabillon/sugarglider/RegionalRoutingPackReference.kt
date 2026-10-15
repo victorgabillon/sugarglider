@@ -35,12 +35,14 @@ internal data class RegionalRoutingPackReference(
     val bounds: RoutingPackBounds,
     val manifest: RegionalFileIdentity,
     val archive: RegionalFileIdentity,
+    val elevation: RegionalElevationReference,
 ) {
+    val nativeByteSize: Long get() = manifest.byteSize + archive.byteSize + elevation.byteSize
     fun isValid(): Boolean = isRoutingPackId(regionId) && !regionId.contains("..") && REGIONAL_SHA256.matches(buildId) &&
         isRoutingPackId(packId) && !packId.contains("..") && bounds.isValid() &&
         bounds.south >= -85.0511287798066 && bounds.north <= 85.0511287798066 &&
         manifest.isValid(MAX_REGIONAL_ROUTING_MANIFEST_BYTES) &&
-        archive.isValid(MAX_REGIONAL_ROUTING_PACK_BYTES) && archive.byteSize % 512L == 0L
+        archive.isValid(MAX_REGIONAL_ROUTING_PACK_BYTES) && archive.byteSize % 512L == 0L && elevation.isValid(bounds)
 
     fun toJson(): JSONObject = JSONObject()
         .put("region_id", regionId)
@@ -49,6 +51,7 @@ internal data class RegionalRoutingPackReference(
         .put("bounds", JSONArray(listOf(bounds.west, bounds.south, bounds.east, bounds.north)))
         .put("manifest", manifest.toJson())
         .put("archive", archive.toJson())
+        .put("elevation", elevation.toJson())
 
     companion object {
         fun parse(value: JSONObject?): RegionalRoutingPackReference? {
@@ -56,7 +59,7 @@ internal data class RegionalRoutingPackReference(
             val coordinates = value.optJSONArray("bounds") ?: return null
             if (coordinates.length() != 4) return null
             val bounds = (0..3).map { index ->
-                (coordinates.opt(index) as? Number)?.toDouble()?.takeIf(Double::isFinite)
+                (coordinates.opt(index) as? Number)?.toDouble()?.takeIf(Double::isFinite)?.canonicalCoordinate()
                     ?: return null
             }
             return RegionalRoutingPackReference(
@@ -66,9 +69,13 @@ internal data class RegionalRoutingPackReference(
                 bounds = RoutingPackBounds(bounds[0], bounds[1], bounds[2], bounds[3]),
                 manifest = RegionalFileIdentity.parse(value.optJSONObject("manifest")) ?: return null,
                 archive = RegionalFileIdentity.parse(value.optJSONObject("archive")) ?: return null,
+                elevation = RegionalElevationReference.parse(value.optJSONObject("elevation")) ?: return null,
             ).takeIf(RegionalRoutingPackReference::isValid)
         }
 
-        private val FIELDS = setOf("region_id", "build_id", "pack_id", "bounds", "manifest", "archive")
+        private val FIELDS = setOf("region_id", "build_id", "pack_id", "bounds", "manifest", "archive", "elevation")
     }
 }
+
+// JSON round trips normalize IEEE signed zero, as does the V2 build identity.
+internal fun Double.canonicalCoordinate(): Double = if (this == 0.0) 0.0 else this

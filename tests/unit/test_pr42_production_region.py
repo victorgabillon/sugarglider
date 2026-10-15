@@ -29,7 +29,7 @@ def test_region_uses_one_matching_region_and_map_contract(
     assert spec.display_name == name
     assert spec.bounds == bounds
     assert spec.routing.access_modes == ("foot", "bicycle")
-    assert len(set(spec.component_ids)) == 4
+    assert len(set(spec.component_ids)) == 5
     assert not any("dev" in identity for identity in spec.component_ids)
 
 
@@ -85,11 +85,12 @@ def test_invalid_resource_configuration_stops_before_tools(
         if builder == "map"
         else (
             "scripts/build_pr33_valhalla_pack.sh",
-            "ile-de-france-v1",
+            "ile-de-france-v2",
             "1",
             "48",
             "3",
             "49",
+            "/new-output",
         )
     )
     result = subprocess.run(
