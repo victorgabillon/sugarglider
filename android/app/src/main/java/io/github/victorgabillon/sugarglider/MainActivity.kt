@@ -175,7 +175,11 @@ class MainActivity : Activity() {
         pendingStart = null
         pendingLocalRoute = null
         pendingLocalCapabilities = null
-        localRouteExecutor.shutdownNow()
+        // Drain the one bounded native routing operation before closing its
+        // persistent Valhalla actor. Do not block the main thread or interrupt
+        // JNI work halfway through: closure is queued on the same executor.
+        localRouteExecutor.execute { nativeRouteEngine.close() }
+        localRouteExecutor.shutdown()
         gpxDocumentSaver.close()
         documentExecutor.shutdown()
         dismissOutingLeaveDialog()

@@ -70,7 +70,7 @@ Open `http://localhost:8000` after GraphHopper imports its graph. Index building
 local API startup and integration checks are covered in [development](docs/development.md).
 These steps run the reference environment; they are not Android prerequisites.
 
-For Android, install JDK 17 and Android SDK 36, configure the SDK location, and run:
+For the experimental Valhalla Mobile 0.6.4 upgrade, install JDK 21 and Android SDK 36, configure the SDK location, and run:
 
 ```sh
 make android-check

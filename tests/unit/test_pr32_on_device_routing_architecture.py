@@ -32,7 +32,7 @@ def test_valhalla_is_pinned_arm64_with_one_shared_production_implementation() ->
     engine = (KOTLIN / "NativeRouteEngineFactory.kt").read_text()
     policy = (KOTLIN / "ValhallaProfilePolicy.kt").read_text()
     registry = (KOTLIN / "RoutingPackRegistry.kt").read_text()
-    assert 'implementation("io.github.rallista:valhalla-mobile:0.5.1")' in build
+    assert 'implementation("io.github.rallista:valhalla-mobile:0.6.4")' in build
     assert 'ndk.abiFilters += "arm64-v8a"' in build.split("buildTypes", 1)[0]
     assert "LOCAL_ROUTING_EXPERIMENT" not in build + engine
     assert "enabled = true" in engine
@@ -43,10 +43,13 @@ def test_valhalla_is_pinned_arm64_with_one_shared_production_implementation() ->
             / "NativeRouteEngineFactory.kt"
         ).exists()
     assert "CostingModel.pedestrian" in policy
-    assert 'ENGINE_VERSION = "0.5.1/valhalla-3.6.3"' in engine
+    assert 'ENGINE_VERSION = "0.6.4/valhalla-3.9.1"' in engine
     assert '"routing-packs"' not in engine
     assert "regionalRoutingRepository" in engine
     assert "localValhallaConfiguration(pack.tileArchive)" in engine
+    assert "disposeActor = { actor -> actor.valhalla.close() }" in engine
+    assert 'implementation("io.github.rallista:valhalla-models:0.6.0")' in build
+    assert 'implementation("io.github.rallista:valhalla-models-config:0.6.0")' in build
     assert ".withTileExtract(tileArchive.absolutePath)" in engine
     assert '.withTileDir("")' in engine
     assert "httpd = null" in engine and "statsd = null" in engine

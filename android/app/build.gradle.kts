@@ -150,9 +150,10 @@ dependencies {
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.webkit:webkit:1.15.0")
 
-    implementation("io.github.rallista:valhalla-mobile:0.5.1")
-    implementation("io.github.rallista:valhalla-models:0.1.1")
-    implementation("io.github.rallista:valhalla-models-config:0.1.1")
+    // Experimental Valhalla 3.9.1 migration (PR86); no Play or region publication.
+    implementation("io.github.rallista:valhalla-mobile:0.6.4")
+    implementation("io.github.rallista:valhalla-models:0.6.0")
+    implementation("io.github.rallista:valhalla-models-config:0.6.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.moshi:moshi-kotlin:1.15.1")

@@ -85,7 +85,7 @@ canonical schema 1 only.
 
 ## Android checks
 
-Install JDK 17 and Android SDK 36/build-tools 36.0.0; point `ANDROID_HOME` or a local
+For the Valhalla Mobile 0.6.4 migration, install JDK 21 and Android SDK 36/build-tools 36.0.0; point `ANDROID_HOME` or a local
 `android/local.properties` at the SDK. Use the checked-in wrapper:
 
 ```sh

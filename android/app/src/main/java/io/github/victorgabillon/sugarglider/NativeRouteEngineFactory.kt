@@ -3,7 +3,6 @@ package io.github.victorgabillon.sugarglider
 import android.content.Context
 import android.os.Debug
 import android.os.SystemClock
-import com.valhalla.api.models.DirectionsOptions
 import com.valhalla.api.models.RouteRequest
 import com.valhalla.api.models.RoutingWaypoint
 import com.valhalla.config.ValhallaConfigBuilder
@@ -26,8 +25,14 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
     private val applicationContext = context.applicationContext
     private val repository = (applicationContext as SugargliderApplication).regionalRoutingRepository
     private val actorHolder = SingleCurrentRoutingPackActor(
-        ::initializeActor,
+        disposeActor = { actor -> actor.valhalla.close() },
+        createActor = ::initializeActor,
     )
+
+    @Synchronized
+    override fun close() {
+        actorHolder.release()
+    }
 
     override fun capabilities(reference: RegionalRoutingPackReference?): NativeRouteCapabilities {
         val installedPacks = reference?.let { repository.withPack(it) { pack -> listOf(pack) } } ?: emptyList()
@@ -75,23 +80,7 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
         val started = SystemClock.elapsedRealtime()
         val response = try {
             selectedActor.actor.valhalla.route(
-                RouteRequest(
-                    locations = request.points.map { point ->
-                        RoutingWaypoint(
-                            lat = point.latitude,
-                            lon = point.longitude,
-                            type = RoutingWaypoint.Type.`break`,
-                        )
-                    },
-                    costing = policy.costingModel,
-                    costingOptions = policy.costingOptions,
-                    id = request.requestId,
-                    directionsOptions = DirectionsOptions(
-                        directionsType = DirectionsOptions.DirectionsType.none,
-                        format = DirectionsOptions.Format.json,
-                        shapeFormat = DirectionsOptions.ShapeFormat.polyline6,
-                    ),
-                ),
+                localValhallaRouteRequest(request.points, policy, request.requestId),
             )
         } catch (error: ValhallaException.Internal) {
             return NativeRouteResult.Failure(classifyValhallaFailure(error.message))
@@ -174,9 +163,33 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
 
     companion object {
         private const val ENGINE_ID = "valhalla-mobile"
-        private const val ENGINE_VERSION = "0.5.1/valhalla-3.6.3"
+        private const val ENGINE_VERSION = "0.6.4/valhalla-3.9.1"
     }
 }
+
+// Keep the actual native request constructor separately testable. The newer
+// generated model places all direction/shape options at the request root.
+internal fun localValhallaRouteRequest(
+    points: List<LocalRouteCoordinate>,
+    policy: ValhallaProfilePolicy,
+    requestId: String,
+): RouteRequest = RouteRequest(
+    locations = points.map { point ->
+        RoutingWaypoint(
+            lat = point.latitude,
+            lon = point.longitude,
+            type = RoutingWaypoint.Type.`break`,
+        )
+    },
+    costing = policy.costingModel,
+    costingOptions = policy.costingOptions,
+    id = requestId,
+    // Models 0.6.0 require both leg maneuvers and their instruction text.
+    // `none` omits maneuvers; `maneuvers` omits the required instructions.
+    directionsType = RouteRequest.DirectionsType.instructions,
+    format = RouteRequest.Format.json,
+    shapeFormat = RouteRequest.ShapeFormat.polyline6,
+)
 
 internal fun localValhallaConfiguration(tileArchive: File): ValhallaConfig {
     val config = ValhallaConfigBuilder()
@@ -188,6 +201,10 @@ internal fun localValhallaConfiguration(tileArchive: File): ValhallaConfig {
         httpd = null,
         statsd = null,
         mjolnir = requireNotNull(config.mjolnir).copy(
+            // Valhalla Mobile 0.6.4 can download graph tiles when tileUrl is
+            // non-empty. Disable that capability explicitly for offline routing.
+            tileUrl = "",
+            tileUrlGz = false,
             admin = "",
             landmarks = "",
             timezone = "",
