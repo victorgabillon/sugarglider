@@ -5,7 +5,7 @@ Base: PR92, `313d0cb934a80291a4103f7ce08b26052c4f6b53`, on
 Main reviewed: `6c0b022f48c110467c920fed6570f91daf6c4c75` (124 changed files
 through PR92; most added lines are deterministic synthetic test vectors).
 
-This review adds no elevation functionality or parameter changes. It fixes a
+This review adds no elevation functionality or parameter changes. It fixes
 confirmed regional-index and map-archive retention paths and strengthens Release CI. Private
 terrain, regions, route captures, APKs and device logs remain outside Git.
 Physical distinct-region acceptance is blocked by device availability. The
@@ -81,6 +81,9 @@ is absent from Release.
   Nature released and name-search output unchanged.
 - `tests/browser/pr92_elevation_acceptance.cjs`: actual mouse/keyboard/touch,
   scrolling and real MapLibre style/resize/remove passed at 360/390/420/1280 px.
+- Existing bundled-origin Android itinerary handoff acceptance: **50 checks over
+  five viewports**, zero external requests and no page errors. This is browser
+  envelope simulation, not a physical Android Intent/IME claim.
 - Android **238 Debug + 233 Release** tests, both lint variants, normal Debug and
   unsigned Release assembly, research main/test assembly and research lint passed.
   Normal Debug/Release were also rebuilt and tested without the research property.
