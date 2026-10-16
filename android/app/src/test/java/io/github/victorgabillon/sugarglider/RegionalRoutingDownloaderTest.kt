@@ -25,20 +25,23 @@ class RegionalRoutingDownloaderTest {
     private lateinit var store: RegionalRoutingPackStore
     private val connections = mutableListOf<FakeConnection>()
     private var configure: (FakeConnection) -> Unit = {}
-    private val archive = ByteArray(128 * 1_024 + 512).also {
-        "index.bin".toByteArray().copyInto(it)
-        "ustar".toByteArray().copyInto(it, 257)
-    }
+    private val archive = syntheticValhallaArchive(128 * 1_024 + 512)
     private val manifest = JSONObject().put("schema_version", 2).put("pack_id", "fixture-routing")
-        .put("engine", "valhalla").put("engine_version", "3.6.3")
+        .put("engine", "valhalla").put("engine_version", "3.9.1")
         .put("access_modes", JSONArray(listOf("foot", "bicycle")))
         .put("bounds", JSONObject().put("west", 1.0).put("south", 48.0).put("east", 2.0).put("north", 49.0))
         .toString().toByteArray()
     private val reference = RegionalRoutingPackReference("fixture", "a".repeat(64), "fixture-routing",
-        RoutingPackBounds(1.0, 48.0, 2.0, 49.0), identity(manifest), identity(archive))
+        RoutingPackBounds(1.0, 48.0, 2.0, 49.0), identity(manifest), identity(archive),
+        V2ElevationFixture(RoutingPackBounds(1.0, 48.0, 2.0, 49.0)).reference)
     private val source = "https://packs.example/regions/fixture/manifest.json"
     private val factory = RegionalConnectionFactory { url ->
-        FakeConnection(url, if (url.path.endsWith("/manifest.json")) manifest else archive)
+        FakeConnection(url, when {
+            url.path.endsWith("/routing/manifest.json") -> manifest
+            url.path.endsWith("/elevation/manifest.json") -> V2ElevationFixture(reference.bounds).manifest
+            url.path.endsWith(".hgt.gz") -> SyntheticHgt.bytes
+            else -> archive
+        })
             .also { configure(it); connections += it }
     }
 
@@ -76,8 +79,9 @@ class RegionalRoutingDownloaderTest {
         val progress = mutableListOf<Long>()
         val result = downloader().install(reference, source, onProgress = progress::add)
         assertArrayEquals(archive, result.tileArchive.readBytes())
-        assertEquals(archive.size.toLong(), progress.last())
-        assertEquals(listOf("/regions/fixture/routing/manifest.json", "/regions/fixture/routing/valhalla_tiles.tar"),
+        assertEquals(reference.nativeByteSize, progress.last())
+        assertEquals(listOf("/regions/fixture/routing/manifest.json", "/regions/fixture/elevation/manifest.json", "/regions/fixture/routing/valhalla_tiles.tar") +
+            reference.elevation.tiles.map { "/regions/fixture/elevation/" + it.path },
             connections.map { it.url.path })
         for (connection in connections) {
             assertEquals("GET", connection.requestMethod)
@@ -134,7 +138,7 @@ class RegionalRoutingDownloaderTest {
 
     @Test
     fun manifestHashFailureNeverStartsArchiveAndArchiveFailurePreservesPreviousVersion() {
-        val previous = store.stage(reference, manifest, { ByteArrayInputStream(archive) })
+        val previous = store.stageFixture(reference, manifest, { ByteArrayInputStream(archive) })
         val next = reference.copy(buildId = "b".repeat(64))
         configure = { if (it.url.path.endsWith("manifest.json")) it.bytes = manifest.copyOf().also { b -> b[0] = 0 } }
         expect(RegionalPackFailure.CHECKSUM_MISMATCH) { downloader().install(next, source) }
@@ -174,7 +178,7 @@ class RegionalRoutingDownloaderTest {
 
     @Test
     fun corruptedCompletedArchiveIsNotSilentlyOverwrittenOrDownloadedAgain() {
-        val pack = store.stage(reference, manifest, { ByteArrayInputStream(archive) })
+        val pack = store.stageFixture(reference, manifest, { ByteArrayInputStream(archive) })
         pack.tileArchive.writeBytes(archive.copyOf().also { it[it.lastIndex] = 1 })
         expect(RegionalPackFailure.CHECKSUM_MISMATCH) { downloader().install(reference, source) }
         assertTrue(connections.isEmpty())

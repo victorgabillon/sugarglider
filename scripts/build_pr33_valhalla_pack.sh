@@ -1,122 +1,51 @@
 #!/bin/sh
+# V2 only: explicit source, verified private DEM, fresh output directory.
 set -eu
-
-if [ "$#" -ne 5 ] && [ "$#" -ne 6 ]; then
-    echo "Usage: $0 PACK_ID WEST SOUTH EAST NORTH [NEW_OUTPUT_DIRECTORY]" >&2
-    exit 2
-fi
-
+[ "$#" -eq 6 ] || { echo "Usage: $0 PACK_ID WEST SOUTH EAST NORTH NEW_OUTPUT_DIRECTORY" >&2; exit 2; }
 PACK_ID=$1
 WEST=$2
 SOUTH=$3
 EAST=$4
 NORTH=$5
-case "$PACK_ID" in
-    ""|[!a-z0-9]*|*[!a-z0-9._-]*)
-        echo "Invalid routing-pack ID: $PACK_ID" >&2
-        exit 2
-        ;;
-esac
-
+OUTPUT=$6
+case "$PACK_ID" in ""|[!a-z0-9]*|*[!a-z0-9._-]*|*..*) exit 2;; esac
 REPOSITORY_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 . "$REPOSITORY_ROOT/scripts/offline_build_resources.sh"
-if [ "$#" -eq 6 ] && [ -z "${OSM_PBF:-}" ]; then
-    echo "Isolated builds require explicit OSM_PBF" >&2
-    exit 2
-fi
-OSM_PBF=${OSM_PBF:-$REPOSITORY_ROOT/data/osm/ile-de-france-latest.osm.pbf}
-PACK_DIRECTORY=$REPOSITORY_ROOT/data/valhalla/$PACK_ID
-ISOLATED_OUTPUT=${6:-}
-if [ -n "$ISOLATED_OUTPUT" ]; then
-    [ ! -e "$ISOLATED_OUTPUT" ] && [ ! -L "$ISOLATED_OUTPUT" ] || {
-        echo "Isolated output already exists: $ISOLATED_OUTPUT" >&2
-        exit 1
-    }
-    [ -n "${OSM_PBF:-}" ] && [ -f "$OSM_PBF" ] || exit 1
-fi
-VALHALLA_IMAGE=ghcr.io/valhalla/valhalla:3.6.3
-UV_CACHE_DIR=${UV_CACHE_DIR:-/tmp/sugarglider-uv-cache}
-export UV_CACHE_DIR
-
-BUILD_ROOT="$REPOSITORY_ROOT/data/valhalla"
-if [ -n "$ISOLATED_OUTPUT" ]; then
-    BUILD_ROOT=$(dirname -- "$ISOLATED_OUTPUT")
-fi
-mkdir -p "$BUILD_ROOT"
-BUILD_DIRECTORY=$(mktemp -d "$BUILD_ROOT/.${PACK_ID}.build.XXXXXX")
+: "${OSM_PBF:?V2 build requires explicit OSM_PBF}"
+: "${SUGARGLIDER_DEM_DIR:?V2 build requires verified regional DEM directory}"
+[ -f "$OSM_PBF" ] && [ -d "$SUGARGLIDER_DEM_DIR" ]
+[ ! -e "$OUTPUT" ] && [ ! -L "$OUTPUT" ] || { echo "Refusing immutable output replacement" >&2; exit 1; }
+VALHALLA_IMAGE=ghcr.io/valhalla/valhalla:3.9.1@sha256:18cb42988e03c70dc4bc4ca095a259ec4db5e5df928be65956fc1c64c280b47a
+BUILD_DIRECTORY=$(mktemp -d "$(dirname -- "$OUTPUT")/.${PACK_ID}.build.XXXXXX")
 trap 'rm -rf "$BUILD_DIRECTORY"' EXIT HUP INT TERM
-REGION_PBF=$BUILD_DIRECTORY/$PACK_ID.osm.pbf
-
-uv run python "$REPOSITORY_ROOT/scripts/extract_pr33_regional_pbf.py" \
-    --input "$OSM_PBF" \
-    --output "$REGION_PBF" \
-    --west "$WEST" \
-    --south "$SOUTH" \
-    --east "$EAST" \
-    --north "$NORTH"
-
-docker run --rm \
+uv run --offline python "$REPOSITORY_ROOT/scripts/extract_pr33_regional_pbf.py" \
+    --input "$OSM_PBF" --output "$BUILD_DIRECTORY/input.osm.pbf" \
+    --west "$WEST" --south "$SOUTH" --east "$EAST" --north "$NORTH"
+docker run --rm --network none --platform linux/amd64 --entrypoint /bin/sh \
     --label io.github.victorgabillon.sugarglider.build=offline-region \
-    --memory "${SUGARGLIDER_BUILD_MEMORY_MB}m" \
-    --memory-swap "${SUGARGLIDER_BUILD_MEMORY_MB}m" \
-    --cpus "$SUGARGLIDER_BUILD_CPUS" \
-    --user "$(id -u):$(id -g)" \
-    --volume "$BUILD_DIRECTORY:/work" \
-    "$VALHALLA_IMAGE" \
-    sh -eu -c "
-        valhalla_build_config \\
-            --mjolnir-tile-dir /work/tiles \\
-            --mjolnir-tile-extract /work/valhalla_tiles.tar \\
-            --mjolnir-concurrency 1 \\
-            --mjolnir-include-driving false \\
-            --mjolnir-include-bicycle true \\
-            --mjolnir-include-pedestrian true \\
-            --mjolnir-data-processing-use-admin-db false \\
-            --additional-data-elevation \"\" \\
-            -o /work/valhalla.json
-        valhalla_build_tiles -c /work/valhalla.json /work/$PACK_ID.osm.pbf
+    --memory "${SUGARGLIDER_BUILD_MEMORY_MB}m" --memory-swap "${SUGARGLIDER_BUILD_MEMORY_MB}m" \
+    --cpus "$SUGARGLIDER_BUILD_CPUS" --user "$(id -u):$(id -g)" \
+    --volume "$BUILD_DIRECTORY:/work" --volume "$SUGARGLIDER_DEM_DIR:/dem:ro" \
+    "$VALHALLA_IMAGE" -eu -c '
+        test "$(valhalla_build_tiles --version)" = 3.9.1
+        valhalla_build_config --mjolnir-tile-dir /work/tiles \
+            --mjolnir-tile-extract /work/valhalla_tiles.tar --mjolnir-concurrency 1 \
+            --mjolnir-include-driving false --mjolnir-include-bicycle true \
+            --mjolnir-include-pedestrian true --mjolnir-data-processing-use-admin-db false \
+            --mjolnir-tile-url "" --additional-data-elevation /dem \
+            --additional-data-elevation-url "" --additional-data-elevation-url-user-pw "" \
+            --output /work/valhalla.json
+        valhalla_build_tiles -c /work/valhalla.json /work/input.osm.pbf
+        # build_tiles runs ElevationBuilder once because /dem is configured.
+        # Do not run valhalla_add_elevation on this already enriched, finalized
+        # graph: 3.9.1 rewrites it non-idempotently and can corrupt edge records.
         valhalla_build_extract -c /work/valhalla.json
-    "
-
-uv run python "$REPOSITORY_ROOT/scripts/normalize_pr32_valhalla_tar.py" \
-    "$BUILD_DIRECTORY/valhalla_tiles.tar"
-
-uv run python "$REPOSITORY_ROOT/scripts/write_pr33_routing_pack_manifest.py" \
-    --output "$BUILD_DIRECTORY/manifest.json" \
-    --pack-id "$PACK_ID" \
-    --west "$WEST" \
-    --south "$SOUTH" \
-    --east "$EAST" \
-    --north "$NORTH"
-
-if [ -n "$ISOLATED_OUTPUT" ]; then
-    # PR39 owns publication. Never touch legacy packs or distribute source PBFs.
-    mkdir "$BUILD_DIRECTORY/output"
-    mv "$BUILD_DIRECTORY/manifest.json" "$BUILD_DIRECTORY/valhalla_tiles.tar" \
-        "$BUILD_DIRECTORY/output/"
-    mv "$BUILD_DIRECTORY/output" "$ISOLATED_OUTPUT"
-    exit 0
-fi
-
-if [ -L "$PACK_DIRECTORY" ]; then
-    echo "Refusing symbolic-link routing-pack directory: $PACK_DIRECTORY" >&2
-    exit 1
-fi
-mkdir -p "$PACK_DIRECTORY"
-
-# Publish only after the clean staging build has completed.
-cp "$REGION_PBF" "$PACK_DIRECTORY/$PACK_ID.osm.pbf"
-cp "$BUILD_DIRECTORY/manifest.json" "$PACK_DIRECTORY/manifest.json"
-cp "$BUILD_DIRECTORY/valhalla_tiles.tar" "$PACK_DIRECTORY/valhalla_tiles.tar"
-
-# Remove only fixed, known PR32 work outputs after successful publication.
-rm -f -- "$PACK_DIRECTORY/valhalla.json"
-rm -rf -- "$PACK_DIRECTORY/tiles"
-if [ "$PACK_ID" = "marly-dev-v1" ]; then
-    rm -f -- "$PACK_DIRECTORY/marly.osm.pbf"
-fi
-
-sha256sum "$PACK_DIRECTORY/manifest.json" "$PACK_DIRECTORY/valhalla_tiles.tar"
-stat -c '%n %s bytes' "$PACK_DIRECTORY/$PACK_ID.osm.pbf" \
-    "$PACK_DIRECTORY/manifest.json" \
-    "$PACK_DIRECTORY/valhalla_tiles.tar"
+        if [ -r /sys/fs/cgroup/memory.peak ]; then cat /sys/fs/cgroup/memory.peak; fi
+    '
+uv run --offline python "$REPOSITORY_ROOT/scripts/normalize_pr32_valhalla_tar.py" "$BUILD_DIRECTORY/valhalla_tiles.tar"
+uv run --offline python "$REPOSITORY_ROOT/scripts/write_pr33_routing_pack_manifest.py" \
+    --output "$BUILD_DIRECTORY/manifest.json" --pack-id "$PACK_ID" \
+    --west "$WEST" --south "$SOUTH" --east "$EAST" --north "$NORTH"
+mkdir "$BUILD_DIRECTORY/output"
+mv "$BUILD_DIRECTORY/manifest.json" "$BUILD_DIRECTORY/valhalla_tiles.tar" "$BUILD_DIRECTORY/output/"
+mv "$BUILD_DIRECTORY/output" "$OUTPUT"

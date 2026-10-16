@@ -1,4 +1,4 @@
-"""Strict PR39 region specifications and distribution manifests (not pack schemas)."""
+"""Strict V2 five-component regions; independent pack schemas remain separate."""
 
 import hashlib
 import json
@@ -12,6 +12,7 @@ from pydantic import (
     ConfigDict,
     Field,
     StrictFloat,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
@@ -46,6 +47,23 @@ type RegionBounds = Annotated[
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
+    @model_validator(mode="after")
+    def explicit_wire_fields(self, info: ValidationInfo) -> Self:
+        # Constructors may use defaults; serialized regional data must state every
+        # field, matching the browser's exact field sets at each nested object.
+        if info.mode == "json" and self.model_fields_set != set(
+            type(self).model_fields
+        ):
+            raise ValueError("serialized component fields must be explicit")
+        return self
+
+    @field_validator("publication_allowed", mode="before", check_fields=False)
+    @classmethod
+    def boolean_publication_flag(cls, value: object) -> bool:
+        if type(value) is not bool:
+            raise ValueError("publication flag must be a boolean")
+        return value
+
     @field_validator(
         "schema_version",
         "pipeline_version",
@@ -70,7 +88,7 @@ class MapSpec(StrictModel):
 class RoutingSpec(StrictModel):
     pack_id: Identifier
     engine: Literal["valhalla"] = "valhalla"
-    engine_version: Literal["3.6.3"] = "3.6.3"
+    engine_version: Literal["3.9.1"] = "3.9.1"
     access_modes: tuple[Literal["foot"], Literal["bicycle"]] = ("foot", "bicycle")
 
 
@@ -79,7 +97,7 @@ class IndexSpec(StrictModel):
 
 
 class RegionSpec(StrictModel):
-    schema_version: Literal[1]
+    schema_version: Literal[2]
     region_id: Identifier
     display_name: Annotated[str, Field(min_length=1, max_length=120)]
     bounds: RegionBounds
@@ -87,30 +105,32 @@ class RegionSpec(StrictModel):
     routing: RoutingSpec
     pois: IndexSpec
     nature: IndexSpec
+    elevation: IndexSpec
 
     @model_validator(mode="after")
     def unique_ids(self) -> Self:
-        if len(set(self.component_ids)) != 4:
+        if len(set(self.component_ids)) != 5:
             raise ValueError("duplicate component identities")
         return self
 
     @property
-    def component_ids(self) -> tuple[str, str, str, str]:
+    def component_ids(self) -> tuple[str, str, str, str, str]:
         return (
             self.map.pack_id,
             self.routing.pack_id,
             self.pois.component_id,
             self.nature.component_id,
+            self.elevation.component_id,
         )
 
 
 class SourceIdentity(StrictModel):
     basename: RelativePath
-    byte_size: Annotated[int, Field(gt=0)]
+    byte_size: Annotated[int, Field(gt=0, le=9_007_199_254_740_991)]
     sha256: Sha256
     header_bounds: tuple[StrictFloat, StrictFloat, StrictFloat, StrictFloat]
     coverage_evidence: Literal["osm-header-bounds"] = "osm-header-bounds"
-    source_url: str | None = None
+    source_url: Annotated[str, Field(max_length=2048)] | None = None
 
     @model_validator(mode="after")
     def basename_only(self) -> Self:
@@ -124,7 +144,7 @@ class SourceIdentity(StrictModel):
 
 
 class Toolchain(StrictModel):
-    pipeline_version: Literal[1] = 1
+    pipeline_version: Literal[2] = 2
     protomaps_revision: Literal["3ea8293a28131c3dc63f1bb20827bdb8a76df06f"] = (
         "3ea8293a28131c3dc63f1bb20827bdb8a76df06f"
     )
@@ -138,24 +158,30 @@ class Toolchain(StrictModel):
         "maven:3.9.13-eclipse-temurin-21-alpine@sha256:"
         "194053d8f204a39710e564b49ba4d22188159fd29f073b8da1715aac61503132"
     )
-    valhalla_image: Literal["ghcr.io/valhalla/valhalla:3.6.3"] = (
-        "ghcr.io/valhalla/valhalla:3.6.3"
+    valhalla_image: Literal[
+        "ghcr.io/valhalla/valhalla:3.9.1@sha256:"
+        "18cb42988e03c70dc4bc4ca095a259ec4db5e5df928be65956fc1c64c280b47a"
+    ] = (
+        "ghcr.io/valhalla/valhalla:3.9.1@sha256:"
+        "18cb42988e03c70dc4bc4ca095a259ec4db5e5df928be65956fc1c64c280b47a"
     )
     poi_index_schema: Literal[2] = 2
     poi_classifier: Literal["1", "2", "3"] = "3"
     nature_index_schema: Literal[1] = 1
-    python_version: str
-    osmium_version: str
-    shapely_version: str
+    python_version: Annotated[str, Field(min_length=1, max_length=80)]
+    osmium_version: Annotated[str, Field(min_length=1, max_length=80)]
+    shapely_version: Annotated[str, Field(min_length=1, max_length=80)]
 
 
 type FileFormat = Literal[
     "map-manifest-v1",
     "pmtiles-v3-mvt",
     "routing-manifest-v2",
-    "valhalla-3.6.3-tar",
+    "valhalla-3.9.1-elevation-tar",
     "poi-index-v2-gzip-json",
     "nature-index-v1-gzip-json",
+    "elevation-manifest-v1",
+    "skadi-hgt-gzip-v1",
 ]
 
 
@@ -168,7 +194,7 @@ class FileDescriptor(StrictModel):
 
 class Component(StrictModel):
     component_id: Identifier
-    files: Annotated[tuple[FileDescriptor, ...], Field(min_length=1, max_length=2)]
+    files: Annotated[tuple[FileDescriptor, ...], Field(min_length=1, max_length=17)]
 
 
 class Components(StrictModel):
@@ -176,9 +202,23 @@ class Components(StrictModel):
     routing: Component
     pois: Component
     nature: Component
+    elevation: Component
 
     @model_validator(mode="after")
     def fixed_layout(self) -> Self:
+        for kind, component in zip(
+            ("map", "routing", "pois", "nature", "elevation"), self.ordered, strict=True
+        ):
+            for index, file in enumerate(component.files):
+                maximum = (
+                    32 * 1024 * 1024
+                    if kind in ("pois", "nature")
+                    else (65_536 if index == 0 else 26_982_978)
+                    if kind == "elevation"
+                    else (16_384 if index == 0 else 2**31)
+                )
+                if file.byte_size > maximum:
+                    raise ValueError("regional file exceeds component budget")
         expected = (
             ("map/manifest.json", "map/basemap.pmtiles"),
             ("routing/manifest.json", "routing/valhalla_tiles.tar"),
@@ -187,29 +227,40 @@ class Components(StrictModel):
         )
         formats = (
             ("map-manifest-v1", "pmtiles-v3-mvt"),
-            ("routing-manifest-v2", "valhalla-3.6.3-tar"),
+            ("routing-manifest-v2", "valhalla-3.9.1-elevation-tar"),
             ("poi-index-v2-gzip-json",),
             ("nature-index-v1-gzip-json",),
         )
         for component, paths, types in zip(
-            self.ordered, expected, formats, strict=True
+            self.ordered[:4], expected, formats, strict=True
         ):
             if (
                 tuple(file.path for file in component.files) != paths
                 or tuple(file.format for file in component.files) != types
             ):
                 raise ValueError("incorrect component paths/formats")
-        if len({component.component_id for component in self.ordered}) != 4:
+        elevation = self.elevation.files
+        if (
+            len(elevation) < 2
+            or (elevation[0].path, elevation[0].format)
+            != ("elevation/manifest.json", "elevation-manifest-v1")
+            or any(file.format != "skadi-hgt-gzip-v1" for file in elevation[1:])
+            or tuple(file.path for file in elevation[1:])
+            != tuple(sorted({file.path for file in elevation[1:]}))
+        ):
+            raise ValueError("invalid elevation component layout")
+        if len({component.component_id for component in self.ordered}) != 5:
             raise ValueError("duplicate component identities")
         return self
 
     @property
-    def ordered(self) -> tuple[Component, Component, Component, Component]:
-        return self.map, self.routing, self.pois, self.nature
+    def ordered(self) -> tuple[Component, Component, Component, Component, Component]:
+        return self.map, self.routing, self.pois, self.nature, self.elevation
 
 
 class RegionalManifest(StrictModel):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
+    publication_allowed: Literal[False] = False
     region_id: Identifier
     display_name: Annotated[str, Field(min_length=1, max_length=120)]
     bounds: RegionBounds
@@ -220,6 +271,12 @@ class RegionalManifest(StrictModel):
 
     @model_validator(mode="after")
     def content_identity(self) -> Self:
+        from sugarglider.offline_regions.elevation_layout import elevation_paths
+
+        if tuple(file.path for file in self.components.elevation.files[1:]) != (
+            elevation_paths(self.bounds)
+        ):
+            raise ValueError("elevation tiles do not exactly cover regional bounds")
         if self.build_id != build_identity(
             self.model_dump(mode="json", exclude={"build_id"})
         ):
@@ -231,10 +288,22 @@ class RegionalManifest(StrictModel):
         return self
 
 
+def _canonical_value(value: object) -> object:
+    # V2 treats signed zero as the same coordinate. JSON.stringify erases its
+    # sign on message/worker boundaries; it must not change a build identity.
+    if isinstance(value, float) and value == 0:
+        return 0.0
+    if isinstance(value, dict):
+        return {key: _canonical_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_canonical_value(item) for item in value]
+    return value
+
+
 def canonical_json(value: object) -> bytes:
     return (
         json.dumps(
-            value,
+            _canonical_value(value),
             sort_keys=True,
             ensure_ascii=False,
             allow_nan=False,

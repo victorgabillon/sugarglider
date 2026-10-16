@@ -18,7 +18,7 @@ internal data class RegionalRoutingCommand(
     val reference: RegionalRoutingPackReference,
     val manifestUrl: String? = null,
 ) : RegionalOperationCommand {
-    override val totalBytes: Long get() = if (action == RegionalRoutingAction.INSTALL) reference.archive.byteSize else 0
+    override val totalBytes: Long get() = if (action == RegionalRoutingAction.INSTALL) reference.nativeByteSize else 0
     override val removesData: Boolean get() = action == RegionalRoutingAction.REMOVE
     override fun isValid(): Boolean = reference.isValid() &&
         (action == RegionalRoutingAction.INSTALL) == (manifestUrl != null)

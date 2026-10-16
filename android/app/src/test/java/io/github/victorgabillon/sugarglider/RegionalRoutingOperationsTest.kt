@@ -68,7 +68,7 @@ class RegionalRoutingOperationsTest {
         val manager = RegionalRoutingOperations(queue, { throw IllegalStateException("private source") }, { _, _, _, _ -> }, {}, {}, {})
         manager.start(owner, RegionalRoutingCommand(id, RegionalRoutingAction.INSTALL, reference, "https://example.org/manifest.json"))
         queue.run()
-        assertEquals(reference.archive.byteSize, manager.status(owner, id).receivedBytes)
+        assertEquals(reference.nativeByteSize, manager.status(owner, id).receivedBytes)
         assertEquals("ready", manager.status(owner, id).state)
         val next = "b".repeat(32)
         manager.start(owner, RegionalRoutingCommand(next, RegionalRoutingAction.INSPECT, reference))

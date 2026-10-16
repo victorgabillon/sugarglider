@@ -158,6 +158,7 @@ class SugargliderApplication : Application() {
         private set
     internal val statusRepository = NativeStatusRepository()
     internal val regionalPackStore by lazy { createRegionalRoutingPackStore(this) }
+    internal val nativeOfflineEngine by lazy { NativeRouteEngineFactory.createOwned(this) }
     internal val regionalRoutingRepository by lazy {
         RegionalRoutingRepository({ regionalPackStore.open(it) }, { regionalPackStore.remove(it) },
             { regionalPackStore.removeVersion(it) }, { regionalPackStore.removeRegion(it) })
@@ -171,9 +172,9 @@ class SugargliderApplication : Application() {
                     .install(reference, url, cancelled, progress)
                 Unit
             },
-            remove = { reference -> regionalRoutingRepository.remove(reference) },
-            removeVersion = { version -> regionalRoutingRepository.removeVersion(version) },
-            removeRegion = { regionId -> regionalRoutingRepository.removeRegion(regionId) },
+            remove = { reference -> nativeOfflineEngine.close(); regionalRoutingRepository.remove(reference) },
+            removeVersion = { version -> nativeOfflineEngine.close(); regionalRoutingRepository.removeVersion(version) },
+            removeRegion = { regionId -> nativeOfflineEngine.close(); regionalRoutingRepository.removeRegion(regionId) },
         )
     }
 

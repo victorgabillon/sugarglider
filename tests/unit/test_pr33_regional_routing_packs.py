@@ -24,17 +24,19 @@ def test_manifest_registry_is_strict_confined_and_deterministic() -> None:
         '"north"',
     ):
         assert field in registry
-    assert "ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1 = 1" in registry
+    assert "ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1" not in registry
     assert "ROUTING_PACK_MANIFEST_SCHEMA_VERSION = 2" in registry
     assert '"access_modes"' in registry
     assert 'ROUTING_PACK_ENGINE = "valhalla"' in registry
-    assert 'ROUTING_PACK_ENGINE_VERSION = "3.6.3"' in registry
+    assert 'ROUTING_PACK_ENGINE_VERSION = "3.9.1"' in registry
     assert 'ROUTING_PACK_MANIFEST_NAME = "manifest.json"' in registry
     assert 'ROUTING_PACK_TILE_ARCHIVE_NAME = "valhalla_tiles.tar"' in registry
     assert "packId == directoryPackId" in registry
     assert "it.parentFile == directory" in registry
     assert "directory.parentFile != canonicalRoot" in registry
-    assert "length < TAR_BLOCK_BYTES" in registry
+    archive = (KOTLIN / "ValhallaArchiveValidation.kt").read_text()
+    assert "archive.length() >= 2_048" in archive
+    assert "3.9.1" in archive
     assert 'VALHALLA_INDEX_ENTRY = "index.bin"' in registry
     assert 'TAR_MAGIC = "ustar"' in registry
     assert "coordinate.longitude in west..east" in registry
@@ -63,7 +65,9 @@ def test_shared_engine_selects_one_pack_and_keeps_one_current_wrapper() -> None:
     assert "private var current: CurrentActor<T>? = null" in registry
     assert "current = CurrentActor(key, created)" in registry
     assert "MutableMap" not in registry
-    assert ".withTileExtract(tileArchive.absolutePath)" in engine
+    assert ".withTileExtract(tileArchive?.absolutePath.orEmpty())" in engine
+    assert "requireNotNull(pack.elevationDirectory)" in engine
+    assert "repository.acquire(requireNotNull(pack.regionalReference))" in engine
     assert "ValhallaProfilePolicies.forProfile(request.profile)" in engine
     assert "Executors" not in engine
 
@@ -88,7 +92,8 @@ def test_public_bridge_reports_pack_ids_without_paths_with_shared_release_engine
     assert "RoutingPackRegistry" not in release
     assert "installedPacks.any { it.supports(profile.accessMode) }" in release
     assert "NativeRouteFailureCode.ROUTING_PACK_UNAVAILABLE" in release
-    assert "localValhallaConfiguration(pack.tileArchive)" in release
+    assert "localValhallaConfiguration(pack.tileArchive, " in release
+    assert "requireNotNull(pack.elevationDirectory)" in release
 
 
 def test_debug_browser_has_fixed_regional_actions_and_strict_replies() -> None:
@@ -121,21 +126,22 @@ def test_tooling_builds_two_ignored_manifest_backed_packs() -> None:
     extractor = (ROOT / "scripts/extract_pr33_regional_pbf.py").read_text()
     ignore = (ROOT / ".gitignore").read_text()
     assert "data/valhalla/" in ignore
-    assert "ghcr.io/valhalla/valhalla:3.6.3" in generic
-    assert "PACK_DIRECTORY=$REPOSITORY_ROOT/data/valhalla/$PACK_ID" in generic
-    assert 'if [ -L "$PACK_DIRECTORY" ]' in generic
-    assert 'rm -f -- "$PACK_DIRECTORY/valhalla.json"' in generic
-    assert 'rm -rf -- "$PACK_DIRECTORY/tiles"' in generic
-    assert 'rm -f -- "$PACK_DIRECTORY/marly.osm.pbf"' in generic
-    assert '"$PACK_DIRECTORY/manifest.json"' in generic
+    assert "ghcr.io/valhalla/valhalla:3.9.1" in generic
+    assert '[ ! -e "$OUTPUT" ] && [ ! -L "$OUTPUT" ]' in generic
+    assert "Refusing immutable output replacement" in generic
+    assert "SUGARGLIDER_DEM_DIR" in generic
+    assert "valhalla_add_elevation -c" not in generic
+    assert "--additional-data-elevation /dem" in generic
+    assert "--network none" in generic
+    assert '"$BUILD_DIRECTORY/manifest.json"' in generic
     assert "write_pr33_routing_pack_manifest.py" in generic
-    assert "marly-dev-v1 2.00 48.80 2.16 48.94" in both
-    assert "paris-dev-v1 2.25 48.80 2.42 48.92" in both
+    assert "marly-dev-v2 2.00 48.80 2.16 48.94" in both
+    assert "paris-dev-v2 2.25 48.80 2.42 48.92" in both
     assert '"schema_version": 2' in writer
     assert '"access_modes": ["foot", "bicycle"]' in writer
     assert "mjolnir-include-bicycle true" in generic
     assert '"engine": "valhalla"' in writer
-    assert '"engine_version": "3.6.3"' in writer
+    assert '"engine_version": "3.9.1"' in writer
     assert "class RegionalExtractHandler" in extractor
     assert "http" not in generic.lower()
 

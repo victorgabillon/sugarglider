@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from math import floor
 from pathlib import Path
 
-from sugarglider.offline_regions.validation import load_spec
 from sugarglider.osm_build_bounds import Bounds, validate_bounds
 
 # Valhalla 3.6.3 Skadi uses a 3601 x 3601 big-endian signed-int16 HGT grid.
@@ -80,6 +79,8 @@ def elevation_feasibility_plan(region_id: str, bounds: Bounds) -> dict[str, obje
 
 
 def main() -> int:
+    from sugarglider.offline_regions.validation import load_spec
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--region", required=True, help="Existing region specification ID"

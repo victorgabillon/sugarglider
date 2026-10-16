@@ -12,6 +12,8 @@ from typing import Protocol
 
 import osmium
 
+from sugarglider.offline_regions.elevation_component import build_elevation
+from sugarglider.offline_regions.elevation_layout import elevation_paths
 from sugarglider.offline_regions.map_manifest import file_sha256
 from sugarglider.offline_regions.models import (
     Component,
@@ -68,10 +70,21 @@ def build_components(
     source: Path,
     directory: Path,
     runner: CommandRunner = run_command,
+    *,
+    elevation_sources: Path | None = None,
 ) -> None:
+    if elevation_sources is None:
+        raise ValueError("V2 build requires explicit verified elevation source pins")
+    build_elevation(
+        directory / "elevation",
+        spec.elevation.component_id,
+        spec.bounds,
+        elevation_sources,
+    )
     environment = dict(os.environ)
     # Never allow the legacy routing script to choose its implicit source.
     environment["OSM_PBF"] = str(source)
+    environment["SUGARGLIDER_DEM_DIR"] = str(directory / "elevation/skadi")
     runner(
         (
             "sh",
@@ -124,10 +137,14 @@ def describe_components(directory: Path, spec: RegionSpec) -> Components:
         ),
         (
             ("routing/manifest.json", "routing-manifest-v2"),
-            ("routing/valhalla_tiles.tar", "valhalla-3.6.3-tar"),
+            ("routing/valhalla_tiles.tar", "valhalla-3.9.1-elevation-tar"),
         ),
         (("pois/index.json.gz", "poi-index-v2-gzip-json"),),
         (("nature/index.json.gz", "nature-index-v1-gzip-json"),),
+        (
+            ("elevation/manifest.json", "elevation-manifest-v1"),
+            *((path, "skadi-hgt-gzip-v1") for path in elevation_paths(spec.bounds)),
+        ),
     )
     components: list[Component] = []
     for identity, layout in zip(spec.component_ids, layouts, strict=True):
@@ -146,6 +163,7 @@ def describe_components(directory: Path, spec: RegionSpec) -> Components:
         routing=components[1],
         pois=components[2],
         nature=components[3],
+        elevation=components[4],
     )
 
 
@@ -156,7 +174,8 @@ def make_manifest(
     tools: Toolchain,
 ) -> RegionalManifest:
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "publication_allowed": False,
         "region_id": spec.region_id,
         "display_name": spec.display_name,
         "bounds": spec.bounds,
@@ -175,6 +194,7 @@ def build_region(
     *,
     source_url: str | None = None,
     builder: ComponentBuilder = build_components,
+    elevation_sources: Path | None = None,
 ) -> Path:
     """Publish a new regional directory only after every component verifies.
 
@@ -202,7 +222,12 @@ def build_region(
         ) as temporary:
             staging = Path(temporary) / "region"
             staging.mkdir()
-            builder(root, spec, source, staging)
+            if builder is build_components:
+                build_components(
+                    root, spec, source, staging, elevation_sources=elevation_sources
+                )
+            else:
+                builder(root, spec, source, staging)
             if source_identity(source, spec, source_url) != identity:
                 raise ValueError("source changed during build")
             manifest = make_manifest(staging, spec, identity, toolchain())

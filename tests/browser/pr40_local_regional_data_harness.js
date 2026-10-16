@@ -19,7 +19,7 @@ export async function runPr40LocalRegionalDataHarness() {
   for (const mutation of [
     (m) => { m.extra = true; }, (m) => { m.components.nature.files[0].path = "../secret"; },
     (m) => { m.components.pois.component_id = m.components.nature.component_id; },
-    (m) => { m.bounds[0] = -1; }, (m) => { m.schema_version = 2; },
+    (m) => { m.bounds[0] = -1; }, (m) => { m.schema_version = 1; },
     (m) => { m.tools.poi_classifier = "old"; }, (m) => { m.source.sha256 = "invalid"; },
     (m) => { m.components.nature.files[0].byte_size = 2 ** 32; },
     (m) => { m.display_name = "changed without updating content identity"; },

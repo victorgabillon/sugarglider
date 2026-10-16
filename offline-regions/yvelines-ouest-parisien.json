@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "region_id": "yvelines-ouest-parisien",
   "display_name": "Yvelines et ouest parisien",
   "bounds": [
@@ -13,9 +13,9 @@
     "template": "map-packs/yvelines-ouest-parisien-map-v1.template.json"
   },
   "routing": {
-    "pack_id": "yvelines-ouest-parisien-v1",
+    "pack_id": "yvelines-ouest-parisien-routing-v2",
     "engine": "valhalla",
-    "engine_version": "3.6.3",
+    "engine_version": "3.9.1",
     "access_modes": [
       "foot",
       "bicycle"
@@ -26,5 +26,8 @@
   },
   "nature": {
     "component_id": "yvelines-ouest-parisien-nature-v1"
+  },
+  "elevation": {
+    "component_id": "yvelines-ouest-parisien-elevation-v2"
   }
 }

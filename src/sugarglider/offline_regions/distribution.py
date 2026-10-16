@@ -83,6 +83,10 @@ No source timestamp, download URL or completeness beyond that record is asserted
 The build/transformation source is available at {SOURCE_URL}
 (offline_regions, map-packs, routing extraction, pois and nature build modules).
 
+The fifth component contains private elevation data with unresolved provenance,
+vertical datum and redistribution rights. publication_allowed is false. This
+directory is for local validation and never authorizes public terrain distribution.
+
 HTTP delivery must preserve the exact stored file bytes. Serve gzip index files
 as files, without Content-Encoding transformation. Public CORS access is needed
 for the bundled Android web origin. See docs/pr42-static-distribution.md in the

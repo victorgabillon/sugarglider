@@ -5,7 +5,6 @@ import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.valhalla.api.models.HeightRequest
 import com.valhalla.api.models.HeightResponse
 import com.valhalla.api.models.RouteRequest
-import com.valhalla.config.models.ValhallaConfig
 import com.valhalla.valhalla.Valhalla
 import java.io.File
 import org.json.JSONObject
@@ -15,12 +14,10 @@ import org.junit.Test
 
 class ValhallaLocalConfigurationTest {
     @Test
-    fun serializedConfigurationUsesOnlyTheSelectedArchiveWithoutAuxiliaryData() {
+    fun serializedConfigurationUsesOnlyTheSelectedArchiveAndElevation() {
         val archive = File("/selected-region/valhalla_tiles.tar")
-        val config = localValhallaConfiguration(archive)
-        val adapter = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
-            .adapter(ValhallaConfig::class.java)
-        val value = JSONObject(adapter.toJson(config))
+        val config = localValhallaConfiguration(archive, File("/selected-region/elevation/skadi"))
+        val value = offlineValhallaJson(config)
         val mjolnir = value.getJSONObject("mjolnir")
 
         assertEquals(archive.absolutePath, mjolnir.getString("tile_extract"))
@@ -33,10 +30,13 @@ class ValhallaLocalConfigurationTest {
         for (key in listOf("admin", "landmarks", "timezone", "transit_dir", "transit_feeds_dir")) {
             assertEquals("", mjolnir.getString(key))
         }
-        assertEquals("", value.getJSONObject("additional_data").getString("elevation"))
+        assertEquals("/selected-region/elevation/skadi", value.getJSONObject("additional_data").getString("elevation"))
+        for (key in listOf("elevation_url", "elevation_url_user_pw", "elevation_dir")) {
+            assertEquals("", value.getJSONObject("additional_data").getString(key))
+        }
         assertFalse(value.has("httpd"))
         assertFalse(value.has("statsd"))
-        assertEquals(config, localValhallaConfiguration(archive))
+        assertEquals(config, localValhallaConfiguration(archive, File("/selected-region/elevation/skadi")))
     }
     @Test
     fun routeRequestSerializesDirectionFieldsAtRootWithModel060() {

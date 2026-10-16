@@ -25,14 +25,11 @@ class RegionalRoutingPackStoreTest {
     private lateinit var root: File
     private lateinit var store: RegionalRoutingPackStore
     // Synthetic header-shaped bytes exercise storage only, never native routing.
-    private val archive = ByteArray(256 * 1_024 + 512).also {
-        "index.bin".toByteArray().copyInto(it)
-        "ustar".toByteArray().copyInto(it, 257)
-    }
+    private val archive = syntheticValhallaArchive()
     private val bounds = RoutingPackBounds(1.0, 48.0, 2.0, 49.0)
     private val manifest get() = JSONObject()
         .put("schema_version", 2).put("pack_id", "test-region-v1")
-        .put("engine", "valhalla").put("engine_version", "3.6.3")
+        .put("engine", "valhalla").put("engine_version", "3.9.1")
         .put("access_modes", JSONArray(listOf("foot", "bicycle")))
         .put("bounds", JSONObject().put("west", bounds.west).put("south", bounds.south)
             .put("east", bounds.east).put("north", bounds.north))
@@ -55,9 +52,9 @@ class RegionalRoutingPackStoreTest {
 
     @Test fun explicitVersionRemovalWorksWithDamagedMetadataAndPreservesOtherVersions() {
         val reference = reference()
-        store.stage(reference, manifest, { ByteArrayInputStream(archive) })
+        store.stageFixture(reference, manifest, { ByteArrayInputStream(archive) })
         val retained = reference.copy(buildId = "d".repeat(64))
-        store.stage(retained, manifest, { ByteArrayInputStream(archive) })
+        store.stageFixture(retained, manifest, { ByteArrayInputStream(archive) })
         val pack = File(root, "${reference.regionId}/${reference.buildId}/${reference.packId}")
         File(pack, "complete.json").writeText("damaged")
         File(pack, "manifest.json").delete()
@@ -95,7 +92,7 @@ class RegionalRoutingPackStoreTest {
         val second = File(root, "${reference.regionId}/${"d".repeat(64)}/damaged").also { it.mkdirs() }
         File(second, "complete.json").writeText("damaged metadata")
         val other = reference.copy(regionId = "other-region")
-        store.stage(other, manifest, { ByteArrayInputStream(archive) })
+        store.stageFixture(other, manifest, { ByteArrayInputStream(archive) })
         store.removeRegion(reference.regionId)
         assertFalse(File(root, reference.regionId).exists())
         assertEquals(other.packId, store.open(other).packId)
@@ -139,10 +136,10 @@ class RegionalRoutingPackStoreTest {
             }
             override fun close() { closed = true; super.close() }
         }
-        val pack = store.stage(reference, manifest, { input }, onProgress = progress::add)
+        val pack = store.stageFixture(reference, manifest, { input }, onProgress = progress::add)
         assertTrue(closed)
         assertEquals(64 * 1_024, maximumRead)
-        assertEquals(archive.size.toLong(), progress.last())
+        assertEquals(reference.nativeByteSize, progress.last())
         assertTrue(progress.zipWithNext().all { (before, after) -> after > before })
         assertArrayEquals(archive, pack.tileArchive.readBytes())
         assertArrayEquals(manifest, File(directory(reference), "manifest.json").readBytes())
@@ -150,7 +147,7 @@ class RegionalRoutingPackStoreTest {
             File(directory(reference), "complete.json").readText())))
         assertEquals(pack, RegionalRoutingPackStore(root) { Long.MAX_VALUE }.open(reference))
         expect(RegionalPackFailure.UNAVAILABLE) { store.open(reference.copy(buildId = "b".repeat(64))) }
-        assertEquals(pack, store.stage(reference, manifest, { error("Completed bytes must be reused") }))
+        assertEquals(pack, store.stageFixture(reference, manifest, { error("Completed bytes must be reused") }))
     }
 
     @Test
@@ -160,7 +157,7 @@ class RegionalRoutingPackStoreTest {
         val next = previous.copy(buildId = "b".repeat(64))
         val corrupt = archive.copyOf().also { it[it.lastIndex] = 1 }
         expect(RegionalPackFailure.CHECKSUM_MISMATCH) {
-            store.stage(next, manifest, { ByteArrayInputStream(corrupt) })
+            store.stageFixture(next, manifest, { ByteArrayInputStream(corrupt) })
         }
         assertFalse(directory(next).exists())
         assertEquals(previousPack, store.open(previous))
@@ -175,7 +172,7 @@ class RegionalRoutingPackStoreTest {
             archive.copyOf(archive.size - 1) to RegionalPackFailure.SIZE_MISMATCH,
             archive.copyOf(archive.size + 1) to RegionalPackFailure.SIZE_MISMATCH,
         )) {
-            expect(expected) { store.stage(reference(), manifest, { ByteArrayInputStream(bytes) }) }
+            expect(expected) { store.stageFixture(reference(), manifest, { ByteArrayInputStream(bytes) }) }
             assertFalse(directory(reference()).exists())
         }
         for (throws in listOf(false, true)) {
@@ -188,7 +185,7 @@ class RegionalRoutingPackStoreTest {
                 }
                 override fun close() { closed = true }
             }
-            expect(RegionalPackFailure.TRANSFER_FAILED) { store.stage(reference(), manifest, { input }) }
+            expect(RegionalPackFailure.TRANSFER_FAILED) { store.stageFixture(reference(), manifest, { input }) }
             assertTrue(closed)
             assertFalse(directory(reference()).exists())
         }
@@ -197,13 +194,13 @@ class RegionalRoutingPackStoreTest {
     @Test
     fun cancellationBeforeDuringAndAfterTransferNeverCommits() {
         expect(RegionalPackFailure.CANCELLED) {
-            store.stage(reference(), manifest, { error("Pre-cancelled source") }, cancelled = { true })
+            store.stageFixture(reference(), manifest, { error("Pre-cancelled source") }, cancelled = { true })
         }
         assertFalse(root.exists())
         for (threshold in listOf(1L, archive.size.toLong())) {
             var cancelled = false
             expect(RegionalPackFailure.CANCELLED) {
-                store.stage(reference(), manifest, { ByteArrayInputStream(archive) },
+                store.stageFixture(reference(), manifest, { ByteArrayInputStream(archive) },
                     cancelled = { cancelled }, onProgress = { if (it >= threshold) cancelled = true })
             }
             assertFalse(directory(reference()).exists())
@@ -218,10 +215,10 @@ class RegionalRoutingPackStoreTest {
     fun manifestMustMatchHashIdentityBoundsVersionAndBothAccessModesBeforeTransfer() {
         val reference = reference()
         expect(RegionalPackFailure.SIZE_MISMATCH) {
-            store.stage(reference, manifest + 0, { error("Source must not open") })
+            store.stageFixture(reference, manifest + 0, { error("Source must not open") })
         }
         expect(RegionalPackFailure.CHECKSUM_MISMATCH) {
-            store.stage(reference.copy(manifest = reference.manifest.copy(sha256 = "0".repeat(64))),
+            store.stageFixture(reference.copy(manifest = reference.manifest.copy(sha256 = "0".repeat(64))),
                 manifest, { error("Source must not open") })
         }
         for (changed in listOf(
@@ -233,7 +230,7 @@ class RegionalRoutingPackStoreTest {
         )) {
             val bytes = changed.toString().toByteArray()
             expect(RegionalPackFailure.UNSUPPORTED) {
-                store.stage(reference.copy(manifest = identity(bytes)), bytes, { error("Source must not open") })
+                store.stageFixture(reference.copy(manifest = identity(bytes)), bytes, { error("Source must not open") })
             }
         }
         assertFalse(root.exists())
@@ -243,7 +240,7 @@ class RegionalRoutingPackStoreTest {
     fun matchingHashDoesNotMakeAnUnsupportedArchiveValid() {
         val invalid = ByteArray(512)
         expect(RegionalPackFailure.INVALID_ARCHIVE) {
-            store.stage(reference().copy(archive = identity(invalid)), manifest, { ByteArrayInputStream(invalid) })
+            store.stageFixture(reference().copy(archive = identity(invalid)), manifest, { ByteArrayInputStream(invalid) })
         }
         assertFalse(directory(reference()).exists())
     }
@@ -304,7 +301,7 @@ class RegionalRoutingPackStoreTest {
     fun storageLimitsAreIndependentOfBrowserAndOldVersionsRemainIntact() {
         val reference = reference()
         expect(RegionalPackFailure.INSUFFICIENT_STORAGE) {
-            RegionalRoutingPackStore(root) { archive.size.toLong() }.stage(reference, manifest, { error("No space") })
+            RegionalRoutingPackStore(root) { archive.size.toLong() }.stageFixture(reference, manifest, { error("No space") })
         }
         assertFalse(directory(reference).exists())
         install(reference)
@@ -336,7 +333,7 @@ class RegionalRoutingPackStoreTest {
             allocated = true
         }, availableBytes = { Long.MAX_VALUE })
         expect(RegionalPackFailure.SIZE_MISMATCH) {
-            reserved.stage(reference(), manifest, {
+            reserved.stageFixture(reference(), manifest, {
                 assertTrue(allocated)
                 ByteArrayInputStream(archive.copyOf(archive.size - 512))
             })
@@ -346,7 +343,7 @@ class RegionalRoutingPackStoreTest {
             throw RegionalPackException(RegionalPackFailure.STORAGE_UNAVAILABLE)
         }, availableBytes = { Long.MAX_VALUE })
         expect(RegionalPackFailure.STORAGE_UNAVAILABLE) {
-            failed.stage(reference(), manifest, { error("Allocation failure must not open the network") })
+            failed.stageFixture(reference(), manifest, { error("Allocation failure must not open the network") })
         }
         assertFalse(directory(reference()).exists())
     }
@@ -377,7 +374,7 @@ class RegionalRoutingPackStoreTest {
         val next = previous.copy(buildId = "b".repeat(64))
         try {
             val pending = executor.submit<RoutingPack> {
-                store.stage(next, manifest, {
+                store.stageFixture(next, manifest, {
                     entered.countDown()
                     check(release.await(5, TimeUnit.SECONDS))
                     ByteArrayInputStream(archive)
@@ -386,7 +383,7 @@ class RegionalRoutingPackStoreTest {
             assertTrue(entered.await(5, TimeUnit.SECONDS))
             val other = RegionalRoutingPackStore(root) { Long.MAX_VALUE }
             expect(RegionalPackFailure.BUSY) { other.remove(previous) }
-            expect(RegionalPackFailure.BUSY) { other.stage(next, manifest, { error("Busy source") }) }
+            expect(RegionalPackFailure.BUSY) { other.stageFixture(next, manifest, { error("Busy source") }) }
             // Completed immutable data remains readable during unrelated staging.
             assertArrayEquals(archive, other.open(previous).tileArchive.readBytes())
             release.countDown()
@@ -400,6 +397,7 @@ class RegionalRoutingPackStoreTest {
     private fun reference() = RegionalRoutingPackReference(
         regionId = "test-region", buildId = "a".repeat(64), packId = "test-region-v1",
         bounds = bounds, manifest = identity(manifest), archive = identity(archive),
+        elevation = V2ElevationFixture(bounds).reference,
     )
 
     private fun identity(bytes: ByteArray) = RegionalFileIdentity(bytes.size.toLong(),
@@ -409,7 +407,7 @@ class RegionalRoutingPackStoreTest {
         File(root, "${reference.regionId}/${reference.buildId}/${reference.packId}")
 
     private fun install(reference: RegionalRoutingPackReference) =
-        store.stage(reference, manifest, { ByteArrayInputStream(archive) })
+        store.stageFixture(reference, manifest, { ByteArrayInputStream(archive) })
 
     private fun expect(code: RegionalPackFailure, action: () -> Any?) {
         try {

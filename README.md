@@ -18,9 +18,11 @@ GraphHopper process**. Ordinary Android planning does not need that server.
   intent chooses between them as you edit; imported requests retain their explicit mode.
 - Use six public activities: `hike`, `trail_run`, `city_bike`, `gravel_bike`,
   `mountain_bike`, and `road_bike`.
-- Download an explicit versioned region containing maps, routing, Places and Nature.
-  The bundled catalog advertises Yvelines and western Paris coverage; its manifest
-  defines the bounds. Installed Android regions support local planning and maps.
+- Install complete V2 development regions containing maps, routing, Places, Nature
+  and Elevation. Existing V1 downloads require a new V2 installation; their data
+  is retained. The new terrain-backed packs remain private pending source and
+  redistribution review; the public catalog has not been updated. See the
+  [V2 contract, private build instructions and validation](docs/pr90-v2-offline-regions.md).
 - Inspect scenic places, mapped water and ice-cream shops from local OSM-derived data.
   Inspecting a Place does not add a route stop. An explicit preference/edit is separate.
 - Export the already selected candidate, or inspect an imported GPX locally while
@@ -35,7 +37,7 @@ See [planning capabilities](docs/planning-model.md#platform-capabilities).
 
 | Surface | Routing and storage | Current role |
 | --- | --- | --- |
-| Android bundled app | Local Valhalla; native routing archive plus browser OPFS map/index storage | Ordinary offline regional planning, Places and GPX. Sharing, outings and live publication are disabled by packaged policy. |
+| Android bundled app | Local Valhalla; native routing archive and DEM plus browser OPFS map/index storage | Ordinary offline regional planning, Places and GPX. Sharing, outings and live publication are disabled by packaged policy. |
 | Python reference app | External GraphHopper; startup-loaded local indexes; optional SQLite persistence | Full canonical planning API and shared browser UI. |
 | Static regional host | Immutable manifests and downloadable component files | Region distribution only; no planner or social database. |
 | Optional social service | SQLite route/outing snapshots and latest live positions | Deployable sharing service without routing. Repository CI validates/smokes it; that is not evidence of a live deployment. |

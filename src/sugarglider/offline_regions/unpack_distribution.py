@@ -22,6 +22,7 @@ REGIONAL_FILES = {
     "routing/valhalla_tiles.tar",
     "pois/index.json.gz",
     "nature/index.json.gz",
+    "elevation/manifest.json",
 }
 ROOT_FILES = {".nojekyll", "README.txt", "index.html", "catalog.json"}
 
@@ -61,7 +62,9 @@ def _text(value: object, maximum: int) -> bool:
     )
 
 
-def _verify_identities(bundle: zipfile.ZipFile, regions: dict[str, set[str]]) -> None:
+def _verify_identities(
+    bundle: zipfile.ZipFile, regions: dict[str, set[str]], publication: bool = False
+) -> None:
     """Check the one advertised row and every version's immutable path identity."""
     catalog = _read_object(bundle, "catalog.json")
     offerings = catalog.get("regions")
@@ -129,9 +132,33 @@ def _verify_identities(bundle: zipfile.ZipFile, regions: dict[str, set[str]]) ->
             or manifest.get("region_id") != region_id
             or manifest.get("build_id") != build_id
             or type(manifest.get("schema_version")) is not int
-            or manifest["schema_version"] != 1
+            or manifest["schema_version"] != 2
         ):
             raise ValueError("regional manifest path/build identity mismatch")
+        if publication and manifest.get("publication_allowed") is not True:
+            raise ValueError(
+                "V2 DEM publication blocked pending provenance "
+                "and redistribution review"
+            )
+        components = manifest.get("components")
+        if not isinstance(components, dict) or set(components) != {
+            "map",
+            "routing",
+            "pois",
+            "nature",
+            "elevation",
+        }:
+            raise ValueError("V2 requires five mandatory components")
+        descriptors = [
+            descriptor
+            for component in components.values()
+            for descriptor in component.get("files", [])
+        ]
+        if files != {
+            "manifest.json",
+            *(descriptor["path"] for descriptor in descriptors),
+        }:
+            raise ValueError("publication has an incomplete regional version")
         if relative == current and (
             manifest.get("bounds") != bounds
             or manifest.get("display_name") != offering["display_name"]
@@ -144,7 +171,9 @@ def _verify_identities(bundle: zipfile.ZipFile, regions: dict[str, set[str]]) ->
             raise ValueError("catalog differs from advertised manifest/content")
 
 
-def unpack_distribution(archive: Path, output: Path, expected_sha256: str) -> Path:
+def unpack_distribution(
+    archive: Path, output: Path, expected_sha256: str, *, publication: bool = False
+) -> Path:
     if not re.fullmatch(r"[a-f0-9]{64}", expected_sha256):
         raise ValueError(
             "expected SHA-256 must contain 64 lowercase hexadecimal digits"
@@ -181,7 +210,13 @@ def unpack_distribution(archive: Path, output: Path, expected_sha256: str) -> Pa
                 match = re.fullmatch(
                     r"(regions/[a-z0-9][a-z0-9_-]{0,63}/[a-f0-9]{64})/(.+)", name
                 )
-                if match is None or match[2] not in REGIONAL_FILES:
+                if match is None or (
+                    match[2] not in REGIONAL_FILES
+                    and not re.fullmatch(
+                        r"elevation/skadi/[NS][0-9]{2}/[NS][0-9]{2}[EW][0-9]{3}\.hgt\.gz",
+                        match[2],
+                    )
+                ):
                     raise ValueError("unexpected publication path")
                 regions.setdefault(match[1], set()).add(match[2])
             total += member.file_size
@@ -191,9 +226,7 @@ def unpack_distribution(archive: Path, output: Path, expected_sha256: str) -> Pa
                 )
         if not ROOT_FILES <= names or not regions:
             raise ValueError("publication is missing its catalog or attribution")
-        if any(files != REGIONAL_FILES for files in regions.values()):
-            raise ValueError("publication has an incomplete regional version")
-        _verify_identities(bundle, regions)
+        _verify_identities(bundle, regions, publication)
         output.mkdir()  # Exclusive output ownership; extraction never replaces data.
         try:
             for member in members:
@@ -212,8 +245,18 @@ def main() -> None:
     parser.add_argument("archive", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("expected_sha256")
+    parser.add_argument(
+        "--private",
+        action="store_true",
+        help="local verification only; never authorize publication",
+    )
     arguments = parser.parse_args()
-    unpack_distribution(arguments.archive, arguments.output, arguments.expected_sha256)
+    unpack_distribution(
+        arguments.archive,
+        arguments.output,
+        arguments.expected_sha256,
+        publication=not arguments.private,
+    )
     print("Approved archive checksum and confined static files verified.")
 
 

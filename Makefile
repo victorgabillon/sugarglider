@@ -38,7 +38,7 @@ map-pack:
 	./scripts/build_pr36_map_pack.sh "$(REGION)" "$(PBF_INPUT)"
 
 offline-region:
-	uv run python -m sugarglider.offline_regions build --region "$(REGION)" --pbf "$(PBF_INPUT)"
+	uv run python -m sugarglider.offline_regions build --region "$(REGION)" --pbf "$(PBF_INPUT)" --elevation-sources "$(ELEVATION_SOURCES)"
 
 offline-region-verify:
 	uv run python -m sugarglider.offline_regions verify --region "$(REGION)"

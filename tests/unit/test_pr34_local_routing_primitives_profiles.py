@@ -58,13 +58,13 @@ def test_typed_profile_policies_are_complete_and_not_aliases() -> None:
     assert "JSONObject" not in policy
 
 
-def test_pack_v1_v2_semantics_and_profile_aware_selection_are_explicit() -> None:
+def test_only_new_pack_semantics_and_profile_aware_selection_are_explicit() -> None:
     registry = (KOTLIN / "RoutingPackRegistry.kt").read_text()
     engine = (KOTLIN / "NativeRouteEngineFactory.kt").read_text()
-    assert "ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1 = 1" in registry
+    assert "ROUTING_PACK_MANIFEST_SCHEMA_VERSION_V1" not in registry
     assert "ROUTING_PACK_MANIFEST_SCHEMA_VERSION = 2" in registry
-    assert 'MANIFEST_V2_FIELDS = MANIFEST_V1_FIELDS + "access_modes"' in registry
-    assert "listOf(LocalRouteAccessMode.FOOT)" in registry
+    assert 'MANIFEST_V2_FIELDS = BASE_MANIFEST_FIELDS + "access_modes"' in registry
+    assert "accessModes == LocalRouteAccessMode.entries" in registry
     assert "strictAccessModes" in registry
     assert "points.all(manifest.bounds::contains)" in registry
     assert ".filter { it.supports(accessMode) }" in registry
@@ -125,7 +125,8 @@ def test_release_uses_shared_engine_and_bridge_security_is_unchanged() -> None:
     assert "RoutingPackRegistry" not in release
     assert "installedPacks.any { it.supports(profile.accessMode) }" in release
     assert "NativeRouteFailureCode.ROUTING_PACK_UNAVAILABLE" in release
-    assert "localValhallaConfiguration(pack.tileArchive)" in release
+    assert "localValhallaConfiguration(pack.tileArchive, " in release
+    assert "requireNotNull(pack.elevationDirectory)" in release
     combined = activity + release
     assert "addJavascriptInterface" not in combined
     assert "sourceOrigin.toString()," in activity

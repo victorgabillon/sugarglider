@@ -7,11 +7,15 @@ import java.net.HttpURLConnection
 import java.net.SocketTimeoutException
 import java.net.URI
 import java.net.URL
+import java.security.MessageDigest
 
 internal class RegionalDownloadLocation private constructor(
     val manifest: URL,
     val archive: URL,
+    private val base: URI,
 ) {
+    val elevationManifest: URL get() = base.resolve("elevation/manifest.json").toURL()
+    fun elevationTile(tile: RegionalElevationTile): URL = base.resolve("elevation/" + tile.path).toURL()
     companion object {
         fun parse(value: String, allowDevelopmentHttp: Boolean = false): RegionalDownloadLocation? {
             if (value.length !in 1..2_048 || value != value.trim()) return null
@@ -28,7 +32,7 @@ internal class RegionalDownloadLocation private constructor(
                 if (segments.any { it.isEmpty() || it == "." || it.contains("..") || !SEGMENT.matches(it) }) return null
                 val base = URI(origin.normalized + path)
                 RegionalDownloadLocation(base.resolve("routing/manifest.json").toURL(),
-                    base.resolve("routing/valhalla_tiles.tar").toURL())
+                    base.resolve("routing/valhalla_tiles.tar").toURL(), base)
             } catch (_: Exception) { null }
         }
 
@@ -75,8 +79,8 @@ internal class RegionalRoutingDownloader(
         } catch (error: RegionalPackException) {
             if (error.code != RegionalPackFailure.UNAVAILABLE) throw error
         }
-        val manifest = open(location.manifest, reference.manifest, ::check).use { input ->
-            val output = ByteArrayOutputStream(reference.manifest.byteSize.toInt())
+        fun readManifest(url: URL, identity: RegionalFileIdentity): ByteArray = open(url, identity, ::check).use { input ->
+            val output = ByteArrayOutputStream(identity.byteSize.toInt())
             val buffer = ByteArray(4_096)
             var size = 0L
             while (true) {
@@ -84,15 +88,23 @@ internal class RegionalRoutingDownloader(
                 if (length < 0) break
                 if (length == 0) throw RegionalPackException(RegionalPackFailure.TRANSFER_FAILED)
                 size += length
-                if (size > reference.manifest.byteSize) throw RegionalPackException(RegionalPackFailure.SIZE_MISMATCH)
+                if (size > identity.byteSize) throw RegionalPackException(RegionalPackFailure.SIZE_MISMATCH)
                 output.write(buffer, 0, length)
             }
-            if (size != reference.manifest.byteSize) throw RegionalPackException(RegionalPackFailure.SIZE_MISMATCH)
+            if (size != identity.byteSize) throw RegionalPackException(RegionalPackFailure.SIZE_MISMATCH)
             output.toByteArray()
         }
+        val manifest = readManifest(location.manifest, reference.manifest)
+        val digest = MessageDigest.getInstance("SHA-256").digest(manifest).joinToString("") { "%02x".format(it) }
+        if (digest != reference.manifest.sha256) throw RegionalPackException(RegionalPackFailure.CHECKSUM_MISMATCH)
+        val routing = RoutingPackManifest.parse(manifest.toString(Charsets.UTF_8), reference.packId)
+        if (routing == null || routing.bounds != reference.bounds) throw RegionalPackException(RegionalPackFailure.UNSUPPORTED)
+        val elevationManifest = readManifest(location.elevationManifest, reference.elevation.manifest)
         check()
         return store.stage(reference, manifest,
             archiveSource = { open(location.archive, reference.archive, ::check) },
+            elevationManifestBytes = elevationManifest,
+            elevationSource = { tile -> open(location.elevationTile(tile), tile.identity, ::check) },
             cancelled = interrupted, onProgress = onProgress)
     }
 

@@ -5,7 +5,7 @@ import {
 
 const ROOT_DIRECTORY = "sugarglider-installed-regions";
 const MUTATION_LOCK = "sugarglider-region-version-mutation";
-const COMPONENTS = Object.freeze(["map", "routing", "pois", "nature"]);
+const COMPONENTS = Object.freeze(["map", "routing", "pois", "nature", "elevation"]);
 const MAX_REGIONS = 8;
 const MAX_VERSIONS = 2;
 
@@ -66,7 +66,10 @@ export function createRegionVersionStore({
       const manifest = await parseRegionalManifest(await file.text());
       requireData(manifest.region_id === regionId && manifest.build_id === buildId, "regional_install_incomplete");
       return { manifest, directory: version };
-    } catch { throw new RegionalDataError("regional_install_incomplete"); }
+    } catch (error) {
+      if (error instanceof RegionalDataError && error.code === "regional_v2_install_required") throw error;
+      throw new RegionalDataError("regional_install_incomplete");
+    }
   }
 
   async function read(regionId) {

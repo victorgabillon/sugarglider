@@ -35,16 +35,16 @@ class NativeHeightResearchTest {
 
     @Test
     fun typedNativeNullRemainsUnavailableWhileActualZeroIsPreserved() {
-        val request = researchHeightRequest(listOf(point, point), "null-and-zero")
+        val request = localValhallaHeightRequest(listOf(point, point), "null-and-zero")
         val response = requireNotNull(moshi.adapter(HeightResponse::class.java).fromJson(
             """{"id":"null-and-zero","shape":[{"lat":48.8715,"lon":2.0965},{"lat":48.8715,"lon":2.0965}],"height":[null,0]}""",
         ))
-        assertEquals(listOf(null, 0.0), researchHeightValues(request, response))
+        assertEquals(listOf(null, 0.0), localValhallaHeightValues(request, response))
     }
 
     @Test
     fun typedRequestUsesTheNativeMaximumTwoDecimalHeightPrecision() {
-        val request = researchHeightRequest(listOf(point), "height-test")
+        val request = localValhallaHeightRequest(listOf(point), "height-test")
         val json = org.json.JSONObject(moshi.adapter(HeightRequest::class.java).toJson(request))
         assertEquals("height-test", json.getString("id"))
         assertEquals(1, json.getJSONArray("shape").length())
@@ -57,13 +57,13 @@ class NativeHeightResearchTest {
     fun malformedOrOversizedLocalRequestsAreRejectedBeforeNativeWork() {
         for (points in listOf(emptyList(), List(MAX_RESEARCH_HEIGHT_SAMPLES + 1) { point },
             listOf(LocalRouteCoordinate(Double.NaN, 2.0)), listOf(LocalRouteCoordinate(91.0, 2.0)))) {
-            assertThrows(IllegalArgumentException::class.java) { researchHeightRequest(points, "invalid") }
+            assertThrows(IllegalArgumentException::class.java) { localValhallaHeightRequest(points, "invalid") }
         }
     }
 
     @Test
     fun responseIdentityCountShapeAndNonfiniteValuesAreNeverAccepted() {
-        val request = researchHeightRequest(listOf(point), "owned")
+        val request = localValhallaHeightRequest(listOf(point), "owned")
         val valid = HeightResponse(id = "owned", shape = requireNotNull(request.shape), height = listOf(100.0))
         val responses = listOf(
             valid.copy(id = "other"), valid.copy(height = emptyList()),
@@ -71,7 +71,7 @@ class NativeHeightResearchTest {
             valid.copy(height = listOf(-32_768.0)), valid.copy(rangeHeight = listOf(listOf(0.0, 100.0))),
         )
         responses.forEach { response ->
-            assertThrows(IllegalArgumentException::class.java) { researchHeightValues(request, response) }
+            assertThrows(IllegalArgumentException::class.java) { localValhallaHeightValues(request, response) }
         }
     }
 }

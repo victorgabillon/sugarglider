@@ -1,0 +1,8 @@
+<!doctype html><meta charset="utf-8"><title>V2 region contract</title>
+<pre id="results">Running…</pre>
+<script type="module">
+import {runV2RegionsHarness} from './pr90_v2_regions_harness.js';
+const result=document.getElementById('results');
+try { result.textContent=JSON.stringify(await runV2RegionsHarness());result.dataset.status='passed'; }
+catch(error){result.textContent=error.stack;result.dataset.status='failed';}
+</script>

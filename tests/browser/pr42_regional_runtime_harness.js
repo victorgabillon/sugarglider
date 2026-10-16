@@ -35,7 +35,7 @@ export async function runPr42RegionalRuntimeHarness() {
   const cases = [];
   for (const mutation of [
     { extra: "private" }, { code: "private-source" }, { state: "started" }, { operation_id: "../other" },
-    { total_bytes: 2 ** 31 + 1 }, { received_bytes: -1 }, { received_bytes: 1 }, { schema_version: 2 },
+    { total_bytes: 2 ** 33 }, { received_bytes: -1 }, { received_bytes: 1 }, { schema_version: 2 },
     { state: "failed", code: null },
   ]) assert(parseRegionalNativeReply(JSON.stringify({ ...reply("ready"), ...mutation })) === null, "strict native status boundary");
   assert(parseRegionalNativeReply(JSON.stringify(reply("failed", { code: "regional_checksum_mismatch" }))), "bounded failure accepted");

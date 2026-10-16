@@ -15,23 +15,44 @@ import java.io.File
 
 /** Both build variants route on-device; no server URL selects an alternate engine. */
 internal object NativeRouteEngineFactory {
-    fun create(context: Context): NativeRouteEngine = ValhallaMobileRouteEngine(context)
+    fun create(context: Context): NativeOfflineEngine =
+        (context.applicationContext as SugargliderApplication).nativeOfflineEngine
+    fun createOwned(context: Context): NativeOfflineEngine = ValhallaMobileRouteEngine(context)
 }
 
-private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
+private class ValhallaMobileRouteEngine(context: Context) : NativeOfflineEngine {
     // The application repository leases immutable regional files. Keep at most
     // one current-pack actor; selecting a new pack must release the old actor's
     // native resources rather than accumulating a process-wide graph cache.
     private val applicationContext = context.applicationContext
     private val repository = (applicationContext as SugargliderApplication).regionalRoutingRepository
     private val actorHolder = SingleCurrentRoutingPackActor(
-        disposeActor = { actor -> actor.valhalla.close() },
+        disposeActor = { actor ->
+            try { actor.valhalla.close() }
+            finally { try { actor.configuration.delete() } finally { actor.lease.close() } }
+        },
         createActor = ::initializeActor,
     )
 
     @Synchronized
     override fun close() {
         actorHolder.release()
+    }
+
+    @Synchronized
+    override fun height(reference: RegionalRoutingPackReference, points: List<LocalRouteCoordinate>, id: String): NativeHeightResult {
+        val request = try { localValhallaHeightRequest(points, id) }
+        catch (_: Exception) { return NativeHeightResult.Failure("invalid_height_request") }
+        return try {
+            repository.withPack(reference) { pack ->
+                val selected = actorHolder.actorFor(pack)
+                val started = SystemClock.elapsedRealtime()
+                val heights = localValhallaHeightValues(request, selected.actor.valhalla.height(request))
+                NativeHeightResult.Success(reference, heights, SystemClock.elapsedRealtime() - started,
+                    processPssBytes(), selected.coldStart)
+            }
+        } catch (_: RegionalPackException) { NativeHeightResult.Failure("height_region_unavailable") }
+        catch (_: Exception) { NativeHeightResult.Failure("native_height_failed") }
     }
 
     override fun capabilities(reference: RegionalRoutingPackReference?): NativeRouteCapabilities {
@@ -136,22 +157,37 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeRouteEngine {
     private fun initializeActor(pack: RoutingPack): ValhallaActor {
         val before = processPssBytes()
         val started = SystemClock.elapsedRealtime()
-        val config = localValhallaConfiguration(pack.tileArchive)
-        val created = Valhalla(applicationContext, config)
-        return ValhallaActor(
-            valhalla = created,
-            measurement = InitializationMeasurement(
-                elapsedMs = SystemClock.elapsedRealtime() - started,
-                memoryBeforeBytes = before,
-                memoryAfterBytes = processPssBytes(),
-            ),
-        )
+        val lease = repository.acquire(requireNotNull(pack.regionalReference))
+        var configuration: File? = null
+        try {
+            val owned = File.createTempFile("valhalla-v2-", ".json", applicationContext.cacheDir)
+            configuration = owned
+            val config = localValhallaConfiguration(pack.tileArchive, requireNotNull(pack.elevationDirectory))
+            owned.writeText(offlineValhallaJson(config).toString())
+            val created = Valhalla(owned.absolutePath)
+            return ValhallaActor(
+                valhalla = created,
+                configuration = owned,
+                lease = lease,
+                measurement = InitializationMeasurement(
+                    elapsedMs = SystemClock.elapsedRealtime() - started,
+                    memoryBeforeBytes = before,
+                    memoryAfterBytes = processPssBytes(),
+                ),
+            )
+        } catch (error: Exception) {
+            runCatching { configuration?.delete() }
+            lease.close()
+            throw error
+        }
     }
 
     private fun processPssBytes(): Long = Debug.getPss() * 1_024L
 
     private data class ValhallaActor(
         val valhalla: Valhalla,
+        val configuration: File,
+        val lease: RegionalPackLease,
         val measurement: InitializationMeasurement,
     )
 
@@ -191,13 +227,13 @@ internal fun localValhallaRouteRequest(
     shapeFormat = RouteRequest.ShapeFormat.polyline6,
 )
 
-internal fun localValhallaConfiguration(tileArchive: File): ValhallaConfig {
+internal fun localValhallaConfiguration(tileArchive: File?, elevationDirectory: File): ValhallaConfig {
     val config = ValhallaConfigBuilder()
-        .withTileExtract(tileArchive.absolutePath)
+        .withTileExtract(tileArchive?.absolutePath.orEmpty())
         .withTileDir("")
         .build()
     return config.copy(
-        additionalData = AdditionalData(elevation = ""),
+        additionalData = AdditionalData(elevation = elevationDirectory.absolutePath),
         httpd = null,
         statsd = null,
         mjolnir = requireNotNull(config.mjolnir).copy(

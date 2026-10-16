@@ -1,6 +1,6 @@
 {
   "manifest": {
-    "schema_version": 1,
+    "schema_version": 2,
     "region_id": "fixture",
     "display_name": "Synthetic test region",
     "bounds": [
@@ -23,11 +23,11 @@
       "source_url": null
     },
     "tools": {
-      "pipeline_version": 1,
+      "pipeline_version": 2,
       "protomaps_revision": "3ea8293a28131c3dc63f1bb20827bdb8a76df06f",
       "protomaps_archive_sha256": "7b8e71f18627754af756923f6613a9008b5f1ff82377fff4e617157d053fc807",
       "map_build_image": "maven:3.9.13-eclipse-temurin-21-alpine@sha256:194053d8f204a39710e564b49ba4d22188159fd29f073b8da1715aac61503132",
-      "valhalla_image": "ghcr.io/valhalla/valhalla:3.6.3",
+      "valhalla_image": "ghcr.io/valhalla/valhalla:3.9.1@sha256:18cb42988e03c70dc4bc4ca095a259ec4db5e5df928be65956fc1c64c280b47a",
       "poi_index_schema": 2,
       "poi_classifier": "1",
       "nature_index_schema": 1,
@@ -64,9 +64,9 @@
           },
           {
             "path": "routing/valhalla_tiles.tar",
-            "format": "valhalla-3.6.3-tar",
-            "byte_size": 23,
-            "sha256": "716ede4186bbaf2ae111dcc11616b8aea3ca16d97d45d1d5aea562e3121df5ae"
+            "format": "valhalla-3.9.1-elevation-tar",
+            "byte_size": 512,
+            "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560"
           }
         ]
       },
@@ -91,9 +91,27 @@
             "sha256": "502ec1cfc5bd8e19dff57ce7a1d10e587d17156cf97fb15f955821522e221cba"
           }
         ]
+      },
+      "elevation": {
+        "component_id": "fixture-elevation",
+        "files": [
+          {
+            "path": "elevation/manifest.json",
+            "format": "elevation-manifest-v1",
+            "byte_size": 23,
+            "sha256": "ff219ef9f075af47a9fdb691ab419292ead90c99531ffdda6824de13e57b4ae5"
+          },
+          {
+            "path": "elevation/skadi/N00/N00E000.hgt.gz",
+            "format": "skadi-hgt-gzip-v1",
+            "byte_size": 23,
+            "sha256": "ff219ef9f075af47a9fdb691ab419292ead90c99531ffdda6824de13e57b4ae5"
+          }
+        ]
       }
     },
-    "build_id": "6a8dc19f016293452b0a3ffaae5af797fe02eaf965233b2cf93fb72966dcba08"
+    "build_id": "8ad4ae6a47df7c508b0b7b93ee13fb4565bfcb676b58c686d1755950407e8877",
+    "publication_allowed": false
   },
   "pois": {
     "metadata": {
