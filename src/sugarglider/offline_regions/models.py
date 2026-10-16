@@ -260,7 +260,7 @@ class Components(StrictModel):
 
 class RegionalManifest(StrictModel):
     schema_version: Literal[2] = 2
-    publication_allowed: Literal[False] = False
+    publication_allowed: bool = False
     region_id: Identifier
     display_name: Annotated[str, Field(min_length=1, max_length=120)]
     bounds: RegionBounds

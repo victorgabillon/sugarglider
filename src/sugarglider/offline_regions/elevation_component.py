@@ -74,13 +74,18 @@ class ElevationManifest(StrictModel):
     component_id: Identifier
     bounds: RegionBounds
     format: Literal["skadi-hgt-gzip-v1"] = "skadi-hgt-gzip-v1"
-    publication_allowed: Literal[False] = False
-    provenance_status: Literal["unresolved"] = "unresolved"
-    vertical_datum: Literal["unresolved"] = "unresolved"
+    publication_allowed: bool = False
+    provenance_status: Literal["unresolved", "documented"] = "unresolved"
+    vertical_datum: Literal["unresolved", "EGM96"] = "unresolved"
     tiles: Annotated[tuple[ElevationTile, ...], Field(min_length=1, max_length=16)]
 
     @model_validator(mode="after")
     def exact_coverage(self) -> Self:
+        if (self.provenance_status, self.vertical_datum) not in (
+            ("unresolved", "unresolved"),
+            ("documented", "EGM96"),
+        ) or (self.publication_allowed and self.provenance_status != "documented"):
+            raise ValueError("publication requires documented EGM96 provenance")
         if tuple(f"elevation/{tile.path}" for tile in self.tiles) != elevation_paths(
             self.bounds
         ):

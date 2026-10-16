@@ -24,6 +24,10 @@ export async function runElevationHarness(){
   return {schema_version:1,request_id:'web-'+ 'a'.repeat(32)+'-1',type:'local_elevation_result',elevation_version:1,operation_id:fields.operation_id,candidate_id:fields.candidate_id,regional_reference:structuredClone(reference),sampling_interval_m:50,sample_coordinates:fields.samples.map(s=>[s[2],s[1]]),analysis,measurements:{native_height_ms:1,analysis_ms:1,total_ms:2,pss_bytes:0,cold_start:false}};
  }
  const fields={elevation_version:1,operation_id:'e'.repeat(32),candidate_id:'geometry:'+'a'.repeat(64),profile:'hike',distance_m:100,regional_reference:reference,...await sampleElevationGeometry(geometry,100)};
+ const documented=reply(fields);documented.analysis.height_reference="EGM96 orthometric metres; verified V2 elevation component manifest";
+ assert(parseRouteElevationReply(JSON.stringify(documented))?.analysis.height_reference===documented.analysis.height_reference,'verified EGM96 reference accepted');
+ documented.analysis.height_reference="guessed datum";assert(parseRouteElevationReply(JSON.stringify(documented))===null,'unknown datum rejected');
+ cases.push('documented_egm96_and_research_height_references_remain_explicit');
  assert(parseRouteElevationReply(JSON.stringify(reply(fields)))!==null,'valid reply');
  for(const change of [r=>r.analysis.total_ascent_m=-1,r=>r.analysis.samples[1].height_m=null,r=>r.analysis.segments[0].last_index=100,r=>r.regional_reference.elevation.component_id='../escape',r=>r.analysis.parameters.maximum_gap_m=500,r=>r.analysis.coverage='partial',r=>r.analysis.samples.push(r.analysis.samples[0])]){const r=reply(fields);change(r);assert(parseRouteElevationReply(JSON.stringify(r))===null,'bad reply rejected');}
  cases.push('strict_versioned_reply_null_coverage_parameters_and_segment_validation');

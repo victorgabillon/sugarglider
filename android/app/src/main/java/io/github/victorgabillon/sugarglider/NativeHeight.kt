@@ -63,6 +63,7 @@ internal interface NativeOfflineEngine : NativeRouteEngine {
 
 internal sealed interface NativeHeightResult {
     data class Success(val reference: RegionalRoutingPackReference, val heights: List<Double?>,
-        val elapsedMs: Long, val pssBytes: Long, val coldStart: Boolean) : NativeHeightResult
+        val elapsedMs: Long, val pssBytes: Long, val coldStart: Boolean,
+        val heightReference: String = ELEVATION_HEIGHT_REFERENCE) : NativeHeightResult
     data class Failure(val code: String) : NativeHeightResult
 }
