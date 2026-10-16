@@ -83,7 +83,7 @@ android {
         versionCode = 8
         versionName = "1.2.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "io.github.victorgabillon.sugarglider.HeightResearchInstrumentation"
         buildConfigField("boolean", "ALLOW_HTTP", "false")
         buildConfigField("String", "PRIVACY_POLICY_URL", "\"$publicPrivacyPolicy\"")
         ndk.abiFilters += "arm64-v8a"
@@ -154,6 +154,9 @@ dependencies {
     implementation("io.github.rallista:valhalla-mobile:0.6.4")
     implementation("io.github.rallista:valhalla-models:0.6.0")
     implementation("io.github.rallista:valhalla-models-config:0.6.0")
+
+    // Research instrumentation/config serialization is absent from Release.
+    debugImplementation("com.squareup.moshi:moshi-kotlin:1.15.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.moshi:moshi-kotlin:1.15.1")
