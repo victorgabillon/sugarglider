@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Regional session retention regression</title>
+<pre id="result">Running</pre>
+<script type="module">
+  import { run } from "./pr93_regional_retention_harness.js";
+  const result = document.getElementById("result");
+  try { result.textContent = JSON.stringify(await run()); result.dataset.status = "passed"; }
+  catch (error) { result.textContent = error.stack ?? String(error); result.dataset.status = "failed"; }
+</script>
+</html>

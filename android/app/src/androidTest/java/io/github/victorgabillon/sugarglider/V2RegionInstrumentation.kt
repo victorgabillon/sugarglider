@@ -109,7 +109,9 @@ class V2RegionInstrumentation : Instrumentation() {
             val started = SystemClock.elapsedRealtime()
             val initialPss = pss()
             val output = JSONObject().put("publication_allowed", false).put("reference", reference.toJson())
-            if (phase == "analysis") {
+            if (phase == "endurance") {
+                output.put("endurance", V2EnduranceReview.run(application, root, reference))
+            } else if (phase == "analysis") {
                 // Synthetic coverage/gap/limit fixtures on the physical runtime;
                 // never alter installed DEM or substitute heights in the planner.
                 val results = JSONArray()

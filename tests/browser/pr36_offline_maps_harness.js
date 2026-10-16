@@ -517,7 +517,7 @@ function createTestStore({ storageManager, archive, fetchLog = [], archiveChunks
   });
 }
 
-function mapStoreStub(packs) {
+export function mapStoreStub(packs) {
   const sorted = [...packs].sort((left, right) => (
     left.pack_id < right.pack_id ? -1 : left.pack_id > right.pack_id ? 1 : 0
   ));
@@ -559,7 +559,8 @@ function eventTargetStub() {
   return { addEventListener() {} };
 }
 
-function createFakeMap(center, style = null) {
+export function createFakeMap(center, style = null) {
+  const subscriptions = new Map();
   const sources = new Map(Object.entries(style?.sources ?? { osm: { type: "raster" } }));
   const layers = (style?.layers ?? [
     { id: "offline-background", type: "background" },
@@ -571,8 +572,12 @@ function createFakeMap(center, style = null) {
     layers,
     events,
     getCenter: () => ({ lng: center.lon, lat: center.lat }),
-    on() {},
-    off() {},
+    on(name, callback) {
+      if (!subscriptions.has(name)) subscriptions.set(name, new Set());
+      subscriptions.get(name).add(callback);
+    },
+    off(name, callback) { subscriptions.get(name)?.delete(callback); },
+    remove() { for (const callback of [...(subscriptions.get("remove") ?? [])]) callback(); },
     getStyle: () => ({ layers, sources: Object.fromEntries(sources) }),
     getLayer: (id) => layers.find((layer) => layer.id === id),
     getSource: (id) => sources.get(id),
