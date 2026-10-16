@@ -60,6 +60,14 @@ def _sha256(path: Path) -> str:
 
 
 def _notice(manifest: RegionalManifest, relative: str) -> str:
+    terrain_status = (
+        "The fifth component is documented EGM96 terrain. Publication requires the\n"
+        "separate exact-build operator authorization retained below.\n"
+        if manifest.publication_allowed
+        else "The fifth component is PRIVATE elevation research data.\n"
+        "publication_allowed "
+        "is false. This directory never authorizes public terrain distribution.\n"
+    )
     return f"""Sugarglider regional data: {manifest.display_name}
 
 Map data © OpenStreetMap contributors.
@@ -83,9 +91,7 @@ No source timestamp, download URL or completeness beyond that record is asserted
 The build/transformation source is available at {SOURCE_URL}
 (offline_regions, map-packs, routing extraction, pois and nature build modules).
 
-The fifth component contains private elevation data with unresolved provenance,
-vertical datum and redistribution rights. publication_allowed is false. This
-directory is for local validation and never authorizes public terrain distribution.
+{terrain_status}
 
 HTTP delivery must preserve the exact stored file bytes. Serve gzip index files
 as files, without Content-Encoding transformation. Public CORS access is needed
@@ -102,6 +108,9 @@ def prepare_distribution(
     description: str,
     retain_directories: Sequence[Path] = (),
     retain_directory: Path | None = None,
+    evidence_path: Path | None = None,
+    approval_path: Path | None = None,
+    trusted_approval_sha256: str | None = None,
 ) -> Path:
     """Package current and sorted retained versions; singular retention is an alias."""
     base = distribution_base_url(base_url)
@@ -125,10 +134,58 @@ def prepare_distribution(
     if not output.parent.is_dir() or output.resolve().is_relative_to(source.resolve()):
         raise ValueError("output requires an existing parent outside the source region")
     manifest = verify_region(source)
+    publication_notice = ""
+    if manifest.publication_allowed:
+        from sugarglider.offline_regions.publication import (
+            PublicationEvidence,
+            authorize_release_manifest,
+        )
+
+        if (
+            evidence_path is None
+            or approval_path is None
+            or trusted_approval_sha256 is None
+        ):
+            raise ValueError(
+                "public V2 preparation requires exact-build operator approval"
+            )
+        if evidence_path.stat().st_size > 32_768 or approval_path.stat().st_size > 4096:
+            raise ValueError("oversized publication evidence/approval")
+        evidence = PublicationEvidence.model_validate_json(evidence_path.read_bytes())
+        authorize_release_manifest(
+            manifest, evidence, approval_path.read_bytes(), trusted_approval_sha256
+        )
+        publication_notice = (
+            "\nTerrain license, provenance, transformation and "
+            "authorization evidence:\n"
+            + canonical_json(evidence.model_dump(mode="json")).decode("utf-8")
+            + "\nOperator authorization:\n"
+            + approval_path.read_text(encoding="utf-8")
+        )
+    if not manifest.publication_allowed and evidence_path is not None:
+        from sugarglider.offline_regions.publication import PublicationEvidence
+
+        if evidence_path.stat().st_size > 32_768:
+            raise ValueError("oversized private evidence")
+        evidence = PublicationEvidence.model_validate_json(evidence_path.read_bytes())
+        if (
+            evidence.private_build_id != manifest.build_id
+            or evidence.graph_sha256 != manifest.components.routing.files[1].sha256
+            or evidence.derived_tiles != manifest.components.elevation.files[1:]
+        ):
+            raise ValueError("private attribution/evidence identity mismatch")
+        publication_notice = (
+            "\nDocumented terrain evidence; operator approval ABSENT:\n"
+            + canonical_json(evidence.model_dump(mode="json")).decode("utf-8")
+        )
     retained_sources: list[tuple[Path, RegionalManifest]] = []
     build_ids = {manifest.build_id}
     for directory in retained_directories:
         retained = verify_region(directory)
+        if manifest.publication_allowed or retained.publication_allowed:
+            raise ValueError(
+                "approved publication needs separate approval per retained build"
+            )
         if retained.region_id != manifest.region_id:
             raise ValueError("retained versions must belong to the same region")
         if retained.build_id in build_ids:
@@ -187,7 +244,9 @@ def prepare_distribution(
         (site / "catalog.json").write_bytes(
             canonical_json({"schema_version": 1, "regions": [offering]})
         )
-        (site / "README.txt").write_text(_notice(manifest, relative), encoding="utf-8")
+        (site / "README.txt").write_text(
+            _notice(manifest, relative) + publication_notice, encoding="utf-8"
+        )
         if len(sources) > 1:
             with (site / "README.txt").open("a", encoding="utf-8") as notice:
                 notice.write(

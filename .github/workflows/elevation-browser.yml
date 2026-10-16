@@ -25,3 +25,5 @@ jobs:
         env:
           ELEVATION_EVIDENCE_DIR: ${{ runner.temp }}/elevation-browser
         run: node tests/browser/pr92_elevation_acceptance.cjs
+      - name: Check V2 release, source attribution and datum contracts
+        run: node tests/browser/pr94_release_acceptance.cjs

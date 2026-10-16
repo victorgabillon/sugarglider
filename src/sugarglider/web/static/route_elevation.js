@@ -6,7 +6,10 @@ import { ELEVATION_SAMPLING_VERSION } from "./elevation_sampling.js";
 
 const ALGORITHM = "distance-box-v1";
 const REQUEST_LIMIT = 262144, REPLY_LIMIT = 1048576;
-const HEIGHT_REFERENCE = "unresolved vertical datum; verified V2 elevation component manifest";
+const HEIGHT_REFERENCES = Object.freeze([
+  "unresolved vertical datum; verified V2 elevation component manifest",
+  "EGM96 orthometric metres; verified V2 elevation component manifest",
+]);
 
 // Bounded one-worker preparation. Termination owns cancellation during sampling.
 export function prepareRouteElevation(geometry, distance, signal) {
@@ -161,7 +164,7 @@ export function parseRouteElevationReply(payload) {
     const a=v.analysis;
     if(!exact(a,["schema_version","algorithm_version","parameters","source_sha256","geometry_sha256","profile_sha256","routing_profile","route_distance_m","height_reference","coverage","available_sample_count","analyzed_distance_m","unknown_distance_m","raw_observed_ascent_m","raw_observed_descent_m","observed_ascent_m","observed_descent_m","total_ascent_m","total_descent_m","minimum_height_m","maximum_height_m","segments","samples"]) || a.schema_version!==1 || a.algorithm_version!==ALGORITHM
       || !["complete","partial","unavailable"].includes(a.coverage) || a.source_sha256!==v.regional_reference.elevation.manifest.sha256
-      || !/^[a-f0-9]{64}$/.test(a.geometry_sha256) || !/^[a-f0-9]{64}$/.test(a.profile_sha256) || a.height_reference!==HEIGHT_REFERENCE
+      || !/^[a-f0-9]{64}$/.test(a.geometry_sha256) || !/^[a-f0-9]{64}$/.test(a.profile_sha256) || !HEIGHT_REFERENCES.includes(a.height_reference)
       || !Object.hasOwn(PUBLIC_PROFILE_METADATA,a.routing_profile)
       || !Number.isFinite(a.route_distance_m) || a.route_distance_m<=0 || a.route_distance_m>200000) return null;
     if(!exact(a.parameters,["smoothing_radius_m","maximum_gap_m","boundary_policy","missing_policy"]) || a.parameters.smoothing_radius_m!==50 || a.parameters.maximum_gap_m!==100

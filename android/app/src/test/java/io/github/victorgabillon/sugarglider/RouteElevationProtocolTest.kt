@@ -38,12 +38,13 @@ class RouteElevationProtocolTest {
         val parsed=BridgeProtocol.parse(value().toString()) as BridgeRequest.RouteElevation
         var calls=0;var cancelled=false
         var heights:List<Double?> = listOf(0.0,30.0,0.0)
+        var heightReference = ELEVATION_HEIGHT_REFERENCE
         val engine=object:NativeOfflineEngine {
             override fun close()=Unit
             override fun capabilities(reference:RegionalRoutingPackReference?):NativeRouteCapabilities=error("unused")
             override fun route(request:NativeRouteRequest):NativeRouteResult=error("elevation must never reroute")
             override fun height(reference:RegionalRoutingPackReference,points:List<LocalRouteCoordinate>,id:String):NativeHeightResult {
-                calls++;return NativeHeightResult.Success(reference,heights,1,0,false)
+                calls++;return NativeHeightResult.Success(reference,heights,1,0,false,heightReference)
             }
         }
         val result=JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){cancelled})
@@ -51,6 +52,11 @@ class RouteElevationProtocolTest {
         assertEquals(parsed.elevation.reference.elevation.manifest.sha256,analysis.getString("source_sha256"))
         assertEquals(15.0,analysis.getDouble("total_ascent_m"),1e-7)
         assertEquals(parsed.elevation.candidateId,result.getString("candidate_id"))
+        assertEquals(ELEVATION_HEIGHT_REFERENCE, analysis.getString("height_reference"))
+        heightReference = ELEVATION_EGM96_REFERENCE
+        val documented = JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){false}).getJSONObject("analysis")
+        assertEquals(ELEVATION_EGM96_REFERENCE, documented.getString("height_reference"))
+        assertEquals(analysis.getDouble("total_ascent_m"), documented.getDouble("total_ascent_m"), 0.0)
         heights=listOf(0.0,null,0.0)
         val partial=JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){false}).getJSONObject("analysis")
         assertEquals("partial",partial.getString("coverage"));assertTrue(partial.isNull("total_ascent_m"));assertTrue(partial.getJSONArray("samples").getJSONObject(1).isNull("height_m"))
@@ -58,8 +64,8 @@ class RouteElevationProtocolTest {
         val absent=JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){false}).getJSONObject("analysis")
         assertEquals("unavailable",absent.getString("coverage"));assertTrue(absent.isNull("minimum_height_m"))
         cancelled=true
-        assertEquals("elevation_cancelled",JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){cancelled}).getString("code"));assertEquals(3,calls)
+        assertEquals("elevation_cancelled",JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){cancelled}).getString("code"));assertEquals(4,calls)
         var checks=0
-        assertEquals("elevation_cancelled",JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){++checks>=2}).getString("code"));assertEquals(4,calls)
+        assertEquals("elevation_cancelled",JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){++checks>=2}).getString("code"));assertEquals(5,calls)
     }
 }

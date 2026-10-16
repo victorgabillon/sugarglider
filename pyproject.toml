@@ -16,6 +16,11 @@ dependencies = [
 sugarglider-migrate-plan = "sugarglider.migrate_plan_json:main"
 
 [dependency-groups]
+dem = [
+    "numpy==2.5.1",
+    "pyproj==3.7.2",
+    "rasterio==1.4.3",
+]
 dev = [
     "mypy>=1.14.0",
     "osmium>=4.3,<5",

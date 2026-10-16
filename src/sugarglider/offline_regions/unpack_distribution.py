@@ -1,4 +1,4 @@
-"""Standalone, standard-library verifier for an explicitly approved site archive."""
+"""Verify a confined site archive and its separate exact-build authorization."""
 
 import argparse
 import hashlib
@@ -172,7 +172,14 @@ def _verify_identities(
 
 
 def unpack_distribution(
-    archive: Path, output: Path, expected_sha256: str, *, publication: bool = False
+    archive: Path,
+    output: Path,
+    expected_sha256: str,
+    *,
+    publication: bool = False,
+    evidence_path: Path | None = None,
+    approval_path: Path | None = None,
+    trusted_approval_sha256: str | None = None,
 ) -> Path:
     if not re.fullmatch(r"[a-f0-9]{64}", expected_sha256):
         raise ValueError(
@@ -227,6 +234,37 @@ def unpack_distribution(
         if not ROOT_FILES <= names or not regions:
             raise ValueError("publication is missing its catalog or attribution")
         _verify_identities(bundle, regions, publication)
+        if publication:
+            if (
+                evidence_path is None
+                or approval_path is None
+                or trusted_approval_sha256 is None
+                or len(regions) != 1
+            ):
+                raise ValueError(
+                    "public V2 export requires exact-build operator approval"
+                )
+            from sugarglider.offline_regions.models import RegionalManifest
+            from sugarglider.offline_regions.publication import (
+                PublicationEvidence,
+                authorize_release_manifest,
+            )
+
+            if (
+                evidence_path.stat().st_size > 32_768
+                or approval_path.stat().st_size > 4096
+            ):
+                raise ValueError("oversized publication evidence/approval")
+            evidence = PublicationEvidence.model_validate_json(
+                evidence_path.read_bytes()
+            )
+            relative = next(iter(regions))
+            manifest = RegionalManifest.model_validate_json(
+                bundle.read(f"{relative}/manifest.json")
+            )
+            authorize_release_manifest(
+                manifest, evidence, approval_path.read_bytes(), trusted_approval_sha256
+            )
         output.mkdir()  # Exclusive output ownership; extraction never replaces data.
         try:
             for member in members:
@@ -234,6 +272,10 @@ def unpack_distribution(
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with bundle.open(member) as reader, target.open("xb") as writer:
                     shutil.copyfileobj(reader, writer, length=1_048_576)
+            if publication:
+                from sugarglider.offline_regions.validation import verify_region
+
+                verify_region(output / next(iter(regions)))
             return output
         except BaseException:
             shutil.rmtree(output)
@@ -250,14 +292,24 @@ def main() -> None:
         action="store_true",
         help="local verification only; never authorize publication",
     )
+    parser.add_argument("--evidence", type=Path)
+    parser.add_argument("--approval", type=Path)
+    parser.add_argument("--trusted-approval-sha256")
     arguments = parser.parse_args()
     unpack_distribution(
         arguments.archive,
         arguments.output,
         arguments.expected_sha256,
         publication=not arguments.private,
+        evidence_path=arguments.evidence,
+        approval_path=arguments.approval,
+        trusted_approval_sha256=arguments.trusted_approval_sha256,
     )
-    print("Approved archive checksum and confined static files verified.")
+    print(
+        "Private archive verified; publication remains blocked."
+        if arguments.private
+        else "Authorized exact-build archive verified; nothing published."
+    )
 
 
 if __name__ == "__main__":

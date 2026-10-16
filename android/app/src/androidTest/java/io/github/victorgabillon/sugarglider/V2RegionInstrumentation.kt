@@ -34,7 +34,7 @@ class V2RegionInstrumentation : Instrumentation() {
     override fun onStart() {
         val summary = Bundle()
         try {
-            check(BuildConfig.DEBUG && targetContext.packageName == "io.github.victorgabillon.sugarglider.v2debug")
+            check(BuildConfig.DEBUG && targetContext.packageName in setOf("io.github.victorgabillon.sugarglider.v2debug", "io.github.victorgabillon.sugarglider.v2staging"))
             check(researchId.matches(Regex("[a-z0-9-]{1,64}")))
             val root = File(targetContext.cacheDir, researchId).canonicalFile
             check(root.parentFile == targetContext.cacheDir.canonicalFile && root.isDirectory)

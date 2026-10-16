@@ -1,0 +1,110 @@
+"""Pinned public-source acquisition. Download permission is not publication approval."""
+
+import hashlib
+from pathlib import Path
+from typing import Annotated, Literal, Self
+
+import httpx
+from pydantic import Field, model_validator
+
+from sugarglider.offline_regions.models import RelativePath, Sha256, StrictModel
+
+COPERNICUS_ATTRIBUTION = (
+    "produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus "
+    "Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European "
+    "Union and ESA; all rights reserved"
+)
+COPERNICUS_DISCLAIMER = (
+    "The organisations in charge of the Copernicus programme by law or by "
+    "delegation do not incur any liability for any use of the Copernicus WorldDEM-30"
+)
+COPERNICUS_LICENSE = (
+    "https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/DEM/"
+    "resources/license/License-COPDEM-30.pdf"
+)
+
+
+class SourceFile(StrictModel):
+    filename: RelativePath
+    url: Annotated[str, Field(pattern=r"^https://[^\s?#@]+$", max_length=2048)]
+    byte_size: Annotated[int, Field(gt=0, le=90_000_000)]
+    sha256: Sha256
+    acquired_at: str
+    last_modified: str | None
+    etag: str | None
+    version_id: str | None
+
+
+class TerrainSources(StrictModel):
+    schema_version: Literal[1] = 1
+    product: Literal["COP-DEM_GLO-30-DGED-COG"]
+    release: Literal["2021"]
+    horizontal_crs: Literal["EPSG:4326"]
+    vertical_crs: Literal["EPSG:3855"]
+    surface: Literal["DSM"]
+    license_url: Literal[
+        "https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/DEM/"
+        "resources/license/License-COPDEM-30.pdf"
+    ]
+    files: Annotated[tuple[SourceFile, ...], Field(min_length=11, max_length=11)]
+
+    @model_validator(mode="after")
+    def complete_product(self) -> Self:
+        expected = {}
+        for lat in (47, 48, 49):
+            for lon in (1, 2, 3):
+                name = f"Copernicus_DSM_COG_10_N{lat}_00_E{lon:03}_00_DEM"
+                expected[name + ".tif"] = (
+                    f"https://copernicus-dem-30m.s3.amazonaws.com/{name}/{name}.tif"
+                )
+        for name in ("us_nga_egm08_25.tif", "us_nga_egm96_15.tif"):
+            expected[name] = "https://cdn.proj.org/" + name
+        if {p.filename: p.url for p in self.files} != expected or len(
+            {p.filename for p in self.files}
+        ) != 11:
+            raise ValueError("incomplete, duplicate or mismatched product source URLs")
+        return self
+
+
+def verify_source(directory: Path, pin: SourceFile) -> Path:
+    from sugarglider.offline_regions.models import contained_path
+
+    path = contained_path(directory, pin.filename)
+    if not path.is_file() or path.stat().st_size != pin.byte_size:
+        raise ValueError("source size mismatch")
+    with path.open("rb") as stream:
+        if hashlib.file_digest(stream, "sha256").hexdigest() != pin.sha256:
+            raise ValueError("source hash mismatch")
+    return path
+
+
+def acquire_sources(pins: TerrainSources, output: Path) -> None:
+    """Explicit bounded HTTPS GETs, fresh directory, no auth, redirects or cookies."""
+    if len({pin.filename for pin in pins.files}) != len(pins.files):
+        raise ValueError("duplicate source files")
+    if output.is_symlink() or any(p.is_symlink() for p in output.absolute().parents):
+        raise ValueError("symlink acquisition output")
+    output.mkdir()  # An incomplete acquisition is never reused implicitly.
+    with httpx.Client(follow_redirects=False, trust_env=False, timeout=90.0) as client:
+        for pin in pins.files:
+            target = output / pin.filename
+            if "/" in pin.filename:
+                raise ValueError("source filename must be a basename")
+            with client.stream(
+                "GET", pin.url, headers={"Accept-Encoding": "identity"}
+            ) as response:
+                if (
+                    response.status_code != 200
+                    or response.headers.get("content-encoding")
+                    or response.headers.get("set-cookie")
+                    or response.headers.get("content-length") != str(pin.byte_size)
+                ):
+                    raise ValueError("unexpected source HTTPS response")
+                count = 0
+                with target.open("xb") as stream:
+                    for chunk in response.iter_raw(65_536):
+                        count += len(chunk)
+                        if count > pin.byte_size:
+                            raise ValueError("source exceeds pin")
+                        stream.write(chunk)
+            verify_source(output, pin)

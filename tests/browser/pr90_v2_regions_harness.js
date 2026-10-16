@@ -19,11 +19,16 @@ export async function runV2RegionsHarness(){
  cases.push('exactly_five_components_no_missing_elevation');
  for(const mutate of [m=>m.components.elevation.files.pop(),m=>m.components.elevation.files[1].path='../escape',
    m=>m.components.elevation.files[1].format='raw-height',m=>m.components.elevation.files[1].byte_size=26_982_979,
-   m=>m.publication_allowed=0,m=>m.publication_allowed=true]){
+   m=>m.publication_allowed=0,m=>m.publication_allowed=1,m=>m.publication_allowed="true",m=>m.publication_allowed=null]){
   const changed=structuredClone(fixture);mutate(changed);changed.build_id=await regionalBuildIdentity(changed);
   await rejects(()=>parseRegionalManifest(JSON.stringify(changed)));
  }
- cases.push('strict_elevation_layout_sizes_formats_and_private_publication');
+ cases.push('strict_elevation_layout_sizes_formats_and_boolean_publication');
+ const approved=structuredClone(fixture);approved.publication_allowed=true;
+ approved.build_id=await regionalBuildIdentity(approved);
+ assert(approved.build_id!==fixture.build_id,'approval flag is part of immutable identity');
+ assert((await parseRegionalManifest(JSON.stringify(approved))).publication_allowed===true,'approved V2 reader compatibility; publication authorization is a separate export gate');
+ cases.push('private_and_approved_v2_wire_identity_without_v1_compatibility');
  const vectors=await(await fetch('../fixtures/v2_manifest_identity_vectors.json')).json();
  for(const vector of vectors) assert((await parseRegionalManifest(JSON.stringify(vector.manifest))).build_id===vector.manifest.build_id,vector.name);
  cases.push('python_js_float_unicode_and_southern_tile_identity_vectors');

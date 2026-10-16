@@ -89,8 +89,11 @@ internal object RegionalElevationValidation {
         check(manifest.keys().asSequence().toSet() == setOf("schema_version", "component_id", "bounds", "format",
             "publication_allowed", "provenance_status", "vertical_datum", "tiles"))
         check(manifest.opt("schema_version") == 1 && manifest.opt("component_id") == elevation.componentId)
-        check(manifest.opt("format") == "skadi-hgt-gzip-v1" && manifest.opt("publication_allowed") == false)
-        check(manifest.opt("provenance_status") == "unresolved" && manifest.opt("vertical_datum") == "unresolved")
+        check(manifest.opt("format") == "skadi-hgt-gzip-v1" && manifest.opt("publication_allowed") is Boolean)
+        val documented = manifest.opt("provenance_status") == "documented" && manifest.opt("vertical_datum") == "EGM96"
+        val research = manifest.opt("provenance_status") == "unresolved" && manifest.opt("vertical_datum") == "unresolved"
+        check(documented || research)
+        check(manifest.opt("publication_allowed") != true || documented)
         val bounds = manifest.getJSONArray("bounds")
         check(bounds.length() == 4 && (0..3).map { (bounds.opt(it) as? Number)?.toDouble()?.canonicalCoordinate() } ==
             listOf(reference.bounds.west, reference.bounds.south, reference.bounds.east, reference.bounds.north))
