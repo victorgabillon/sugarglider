@@ -8,12 +8,12 @@ through PR92; most added lines are deterministic synthetic test vectors).
 This review adds no elevation functionality or parameter changes. It fixes
 confirmed regional-index and map-archive retention paths and strengthens Release CI. Private
 terrain, regions, route captures, APKs and device logs remain outside Git.
-Physical distinct-region acceptance is blocked by device availability. The
-Fairphone disconnected from ADB after the first fixed-APK native checks; the final
-map-resource fix APK has been built and verified but could not be installed.
-The app was previously in another foreground task, so no further touch/screen
-capture was attempted. This is an incomplete acceptance report, not a claim that
-the mandatory two-region physical work passed.
+The final research APK is installed and independently byte-verified. Marly was
+installed through the normal private Regions workflow, and the packaged app passed
+Yvelines → Marly → Yvelines after restart with WebView network loads blocked.
+The physical native two-region endurance test passed. An uninterrupted final
+foreground UI workload and background/foreground cleanup measurements remain in
+progress; the earlier attempt stopped when another app became foreground.
 
 ## Confirmed defects and changes
 
@@ -134,8 +134,46 @@ from foreground interaction/latency acceptance. Post-idle/background intervals
 are not silently treated as comparable foreground baselines. The later monitor
 records an explicit foreground Boolean.
 
-Comparable final-APK long-route, background/foreground, cleanup/post-idle and
-Yvelines/Marly/Yvelines whole-process baselines remain pending reconnection.
+### Final-APK foreground routing and elevation
+
+The normal packaged page was restarted after installation, removing the temporary
+USB catalog adapter. Both installed regions remained available; with two regions,
+explicit selection is correctly required. Yvelines → Marly → Yvelines each became
+ready with all five components and completed normal Generate. Every switch cleared
+the previous analysis; all three results were fresh (`cache_hit=false`) and bound
+to their selected build, graph and elevation manifest. The short route is identical
+within the overlapping graph coverage and uses the same verified N48E002 source;
+this is expected and is not evidence that the complete graphs are identical.
+
+| Physical normal Generate case | Distance | Native samples | D+ / D− | Height / analysis / total |
+| --- | ---: | ---: | ---: | ---: |
+| Yvelines, first Hike | 9.243 km | 186 | 172.6175 / 172.6175 m | 135 / 13 / 168 ms |
+| Marly, Hike | 9.243 km | 186 | 172.6175 / 172.6175 m | 95 / 11 / 129 ms |
+| Yvelines, returned Hike | 9.243 km | 186 | 172.6175 / 172.6175 m | 92 / 12 / 123 ms |
+| Yvelines, long Gravel loop | 151.917 km | 2,048 | 1,280.455150 / 1,280.455150 m | 147 / 77 / 246 ms |
+
+These are actual Valhalla routes and nullable native samples, not injected profiles.
+All four complete analyses match unchanged Python on every field (numeric tolerance
+1e-7); geometry/source/profile digests match. Independently resampled coordinates
+and distances match, and bilinear HGT checks differ by at most 0.01 m (allowance
+0.010001 m for native rounding). This validates implementation/source consistency,
+not physical survey accuracy or the unresolved datum.
+
+The long route uses 74.21446018563752 m sampling to respect the 2,048 cap. Raw
+observed D+/D− are 1,639.74 m; unchanged `distance-box-v1`, 50 m radius / 100 m
+maximum gap, gives the totals above. Its SVG rendered in 7.3 ms; sampled touch
+readout delays were at most 7.6 ms. Actual touch in both regions and on the long
+route preserved candidate/generation identity, the same SVG path, byte-identical
+GPX (one track/segment, no extensions/elevation) and zero native requests while
+inspecting. Keyboard sample navigation and vertical touch scrolling also passed.
+
+The offline planner interval recorded **0 transmitted / 0 received research-UID
+bytes**, including startup, with WebView network loads explicitly blocked. Private
+USB installation happened in an earlier, separate session. A notification-shade
+interval is excluded from foreground memory statistics. The paced UI workload
+paused when Chrome became foreground and is not counted as completed endurance.
+A fresh uninterrupted run and explicit background/foreground/cleanup baselines
+remain pending.
 
 ## Native resource attribution (physical, no WebView)
 
@@ -172,6 +210,49 @@ Physical mapping checks below test actual closure across distinct regions.
 Eight small owned configuration JSONs remained from earlier hard-stopped
 processes; these are cache files, not live native mappings or installed regional
 data. Normal closure removes its own configuration. They were not deleted.
+
+### Sustained native two-region endurance
+
+The final APK completed **40 operations over 748.483 s**, with a fixed Y/M/M/Y
+sequence, 15 s steady intervals, **20 actual region switches / 21 cold actor
+starts**, warm repeats, explicit closure, four 30 s idle intervals, a cold Yvelines
+reopen and final closure. Every operation routes, samples native heights twice,
+checks selected-component coverage and attempts leased removal, which returns
+BUSY before mutation. There is no region deletion. Identical graph hashes are
+rejected before the test; the installed graphs differ.
+
+Yvelines supplies N48E001 at the public diagnostic point (48.5, 1.5); Marly does
+not. All iterations returned available/null respectively, never a cached height
+from the other region. Repeated public-point heights agreed within each region.
+Only the selected build's graph and compressed DEM mappings existed: five paths
+for Yvelines, two for Marly, and **zero after every explicit close**. Threads stayed
+at **14** throughout. Reopening reproduced Yvelines heights. Research UID traffic
+was **0 / 0 bytes**. A separate Marly native suite also passed all six profiles ×
+open/loop, so both real graphs have physical six-profile routing coverage.
+
+| Native-only stage | Main-process PSS | Native allocated heap |
+| --- | ---: | ---: |
+| Initial closed | 47,859,712 bytes | 7,072,160 bytes |
+| Yvelines steady median (20 samples) | 164,230,144 bytes | 217,842,944 bytes |
+| Marly steady median (20 samples) | 129,029,120 bytes | 191,903,584 bytes |
+| Immediately after close | 80,489,472 bytes | 13,967,088 bytes |
+| After 120 s closed idle | 79,594,496 bytes | 13,966,304 bytes |
+| Reopened then finally closed | 79,156,224 bytes | 14,133,856 bytes |
+
+The observed native-only PSS peak was 173,630,464 bytes. First/last same-region
+steady PSS were 170,408,960 / 164,342,784 bytes (Yvelines) and 135,170,048 /
+129,039,360 bytes (Marly). No continuing growth or accumulated native mappings
+appeared in this workload; this is not proof of leak freedom for every route or
+region. Residual PSS/heap after closure includes loaded code, Java results and
+allocator state; it is not evidence that the actor survives.
+
+The first height/coverage calls added 51,957,648 native allocated bytes in Yvelines
+and 25,987,552 in Marly, consistent with decoding two versus one 25,934,402-byte
+HGT grids plus small allocations. Native allocation counts are not resident PSS.
+The whole-app trace separately includes every associated WebView process; none is
+present in this headless native test. The Fairphone has 7,579,252 KiB physical RAM,
+Android API 36 and 4 KiB pages. 16 KiB support is structurally checked in APK/ELF,
+not claimed as exercised on a physical 16 KiB device.
 
 ## Distribution evidence and launch gates
 
@@ -236,7 +317,7 @@ S3 and a software license for Joerd are not terrain redistribution approval.
 No rights approval is inferred by this review.
 
 
-## Distinct Marly artifact — built and verified, not yet installed
+## Distinct Marly artifact — built, installed and verified
 
 The normal V2 builder used the same explicitly pinned local Île-de-France PBF
 and verified private DEM pins. A fresh Python verification process repeated the
@@ -259,17 +340,22 @@ two paths to one graph. The single HGT tile is correctly shared source data with
 Yvelines; its region-specific manifest/component identity differs. All five
 mandatory components are present. The artifact remains private and unpublished.
 
-Normal private Debug installation, Yvelines → Marly → Yvelines, restart/readiness,
-correct native DEM selection and sustained cross-region mapping/lease checks are
-**pending the reconnected phone**. No physical second-region success is inferred
-from successful building, unit tests or CI.
+The normal private Debug workflow installed Marly without reinstalling/removing
+Yvelines. Loopback-only hosting and USB forwarding supplied the existing temporary
+Debug source adapter; manifest/component/hash verification, workers, native
+installation and atomic activation remained the production implementation. This
+is private Debug transport acceptance, not public HTTPS distribution acceptance.
+The adapter was removed by restarting the packaged page before offline testing.
+Both regions survived restart and became ready; physical normal Generate and
+native mappings confirmed Yvelines → Marly → Yvelines. Native graph mappings never
+coexisted across region identities. The sustained headless test above additionally
+checked selected DEM coverage, closure/recreation and active leases.
 
 ## Current acceptance decisions
 
 - **Code integration: NO-GO pending required physical acceptance.** The confirmed
   resource fixes, full automated regression and packaging checks pass, but the
-  mandatory distinct-region installation/switch/endurance and final fixed-APK
-  foreground review must finish before changing this decision.
+  final uninterrupted foreground/endurance and background/cleanup review must finish before changing this decision.
 - **Public distribution: NO-GO.** Incompatible public V1 regional offerings and
   unresolved historical DEM provenance/rights remain independent blockers even
   if code acceptance subsequently passes. Device/RAM/API coverage and a coordinated
@@ -278,32 +364,23 @@ from successful building, unit tests or CI.
 Production and older Debug have not been installed over or cleared; all commands
 that write APKs target only the verified isolated research IDs/certificate. No
 region removal, signing change, connectivity setting, public artifact, Play or
-social release was performed. The final after-test preservation hash comparison
-also remains pending reconnection; the pre-test inventory is retained privately.
+social release was performed. A hash comparison after Marly installation confirmed unchanged production/older
+Debug APK paths, hashes, versions and install timestamps; all 83 older Debug
+private files and all nine original native regional files were unchanged. Five
+Marly native files were added. The comparison also passed after native endurance with the same counts and hashes.
 
 
-## Final built artifact and resumption
+## Final tested artifact
 
 The final isolated main APK including both fixes is SHA-256
 `e635d160574ade24e710924118cf6ebf7a7f2fe074d5fcf9af2f915dee97c02a`.
-Its assets and normal Debug/Release variants have passed the independent APK audit.
-Its attempted guarded installation stopped when ADB reported the phone absent;
-it has **not** been accepted as installed or physically tested. The last confirmed
-installed research main was `9f3ecb364bed7d2edd66bff4be7ebb30019f678fbecf4b0abaf9d4eddeabb92a`
-(the Places/Nature fix), with test APK
+Its actually installed bytes independently match; test APK is
 `f27d025e5e04cbd78beaa29e832af91eb7bef8455144dc7f9d37afed3acf25ba`.
-All use the unchanged certificate
+Both use the unchanged research certificate
 `e84155df3a2c7ea48723876b1fe8e0e602cb600f8374d6539b9fea9aa42cfbd7`.
-
-On reconnection: verify/install only the final isolated APK, install the verified
-Marly artifact through the normal private Regions workflow, remove the temporary
-development transport by reloading the normal packaged page, then complete
-foreground/offline and two-region measurements. The new test-only `endurance`
-phase consumes `reference.json` and `reference-control.json` for the two *installed*
-regions under an explicitly owned research cache directory. Its fixed 40-iteration
-Y/M/M/Y sequence includes 15-second steady intervals, warm checks, rejected active
-removals, two-minute closed idle, reopening and final zero regional mappings.
-It must not be reported passed until actually executed.
+The package is `io.github.victorgabillon.sugarglider.v2debug` / `.test`, version
+8 / `1.2.0-v2-research`. Normal Debug/Release packaging and all 133 shared assets
+passed independent inspection. Neither normal package was installed on the phone.
 
 Private evidence includes the raw aggregate trace and an initial-baseline plot/CSV,
 full test logs, independent artifact/source reports, before/after controlled-GC
