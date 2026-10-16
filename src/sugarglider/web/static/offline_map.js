@@ -64,6 +64,7 @@ export function createOfflineMapRuntime({
   let installController = null;
   let networkAvailable = globalThis.navigator?.onLine !== false;
   let moveHandler = null;
+  let removeHandler = null;
   let status = Object.freeze({ state: "map_pack_initializing", message: "Checking offline map storage…" });
 
   async function initialize() {
@@ -115,6 +116,8 @@ export function createOfflineMapRuntime({
       void applyForCurrentCenter();
     };
     map.on?.("moveend", moveHandler);
+    removeHandler = () => detachMap(map);
+    map.on?.("remove", removeHandler);
     await applyForCurrentCenter(epoch);
     return snapshot();
   }
@@ -139,11 +142,14 @@ export function createOfflineMapRuntime({
   function detachMap(map) {
     if (!map || map !== currentMap) return;
     if (moveHandler) map.off?.("moveend", moveHandler);
+    if (removeHandler) map.off?.("remove", removeHandler);
     currentMap = null;
     mapConfig = null;
     activePack = null;
     activeSource = null;
     moveHandler = null;
+    removeHandler = null;
+    clearProtocolArchives();
     mapEpoch += 1;
     render();
   }
@@ -183,6 +189,7 @@ export function createOfflineMapRuntime({
       try {
         const opened = await store.openPackSource(selected.pack_id);
         if (!currentMap || expectedEpoch !== mapEpoch) return null;
+        clearProtocolArchives();
         protocol.add(opened.archive);
         installLocalBasemap(currentMap, opened);
         activePack = opened.manifest;
@@ -195,6 +202,7 @@ export function createOfflineMapRuntime({
         activePack = null;
         activeSource = null;
         removeLocalBasemap(currentMap);
+        clearProtocolArchives();
         if (offlineMode()) removeOnlineBasemap(currentMap);
         else ensureOnlineBasemap(currentMap, mapConfig);
         setStatus("map_pack_invalid", `Installed map pack ${selected.pack_id} is invalid.`);
@@ -205,6 +213,7 @@ export function createOfflineMapRuntime({
     activePack = null;
     activeSource = null;
     removeLocalBasemap(currentMap);
+    clearProtocolArchives();
     if (offlineMode()) {
       removeOnlineBasemap(currentMap);
       setStatus("no_covering_map_pack", "Offline: no installed map pack covers the current map center.");
@@ -312,12 +321,27 @@ export function createOfflineMapRuntime({
     if (typeof Protocol !== "function" || typeof maplibregl?.addProtocol !== "function") return false;
     try {
       protocol = new Protocol();
-      maplibregl.addProtocol("pmtiles", protocol.tile);
+      maplibregl.addProtocol("pmtiles", async (request, controller) => {
+        const key = request.type === "json" ? request.url.slice(10)
+          : request.url.match(/^pmtiles:\/\/(.+)\/\d+\/\d+\/\d+(?:\.[a-z0-9]+)?$/)?.[1];
+        // Upstream otherwise constructs a FetchSource for unknown keys. A
+        // retired local source must fail locally after replacement/detachment.
+        if (!request.url.startsWith("pmtiles://sugarglider-map-pack/") || !key || !protocol.get(key)) {
+          throw new Error("Local map archive is unavailable.");
+        }
+        return protocol.tile(request, controller);
+      });
       return true;
     } catch {
       protocol = null;
       return false;
     }
+  }
+
+  function clearProtocolArchives() {
+    // PMTiles 4.5.0 exposes this registry; add() alone retains every old version.
+    // In-flight reads retain their own archive only until completion/cancellation.
+    protocol?.tiles.clear();
   }
 
   function bindNetworkHints() {
@@ -426,6 +450,7 @@ export function createOfflineMapRuntime({
       active_source_diagnostics: activeSource?.diagnostics?.() ?? null,
       status,
       protocol_available: protocolAvailable,
+      protocol_archive_count: protocol?.tiles.size ?? 0,
     });
   }
 

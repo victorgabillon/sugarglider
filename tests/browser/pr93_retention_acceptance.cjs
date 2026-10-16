@@ -14,7 +14,7 @@ const assert = require('node:assert/strict');
       const file = path.resolve(root, '.' + pathname);
       if (!file.startsWith(root + path.sep)) throw Error('Invalid path');
       const body = await fs.readFile(file);
-      response.setHeader('Content-Type', file.endsWith('.js') ? 'text/javascript'
+      response.setHeader('Content-Type', /\.(?:m?js)$/.test(file) ? 'text/javascript'
         : file.endsWith('.html') ? 'text/html' : 'application/json');
       response.end(body);
     } catch { response.writeHead(404); response.end(); }
@@ -42,7 +42,11 @@ const assert = require('node:assert/strict');
     }));
     assert.equal(after.nature_retained, false, 'Name search must not retain the full Nature context');
     assert.deepEqual(after.names, before.expected);
-    console.log(JSON.stringify({ status: 'passed', nature_released: true, name_search_unchanged: true }));
+    await page.goto(origin + '/tests/browser/pr93_map_retention_harness.html');
+    await page.waitForFunction(() => ['passed', 'failed'].includes(document.querySelector('pre').dataset.status));
+    assert.equal(await page.locator('pre').getAttribute('data-status'), 'passed', await page.locator('pre').textContent());
+    console.log(JSON.stringify({ status: 'passed', nature_released: true, name_search_unchanged: true,
+      retired_map_archives_released: true, no_unknown_source_network_fallback: true }));
   } finally {
     await browser?.close();
     await new Promise(resolve => server.close(resolve));
