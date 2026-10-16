@@ -195,6 +195,8 @@ val prepareV2StagingResources by tasks.registering {
     val destination = layout.buildDirectory.dir("generated/pr94-staging")
     inputs.property("certificate", certificate.orElse(""))
     inputs.property("catalog", catalog.orElse(""))
+    certificate.orNull?.let { inputs.file(it).withPropertyName("stagingCertificateBytes") }
+    catalog.orNull?.let { inputs.file(it).withPropertyName("stagingCatalogBytes") }
     outputs.dir(destination)
     doLast {
         val cert = File(certificate.orNull ?: error("Private staging requires an explicit local CA"))

@@ -71,8 +71,8 @@ def _notice(manifest: RegionalManifest, relative: str) -> str:
     return f"""Sugarglider regional data: {manifest.display_name}
 
 Map data © OpenStreetMap contributors.
-Regional map, routing, places and nature databases are available under the
-Open Data Commons Open Database License (ODbL) 1.0: {ODBL_URL}
+The OSM-derived regional databases carry the Open Data Commons Open Database
+License (ODbL) 1.0 obligations: {ODBL_URL}
 Attribution and source licensing information: {OSM_URL}
 
 Region ID: {manifest.region_id}
@@ -84,7 +84,11 @@ Coverage follows these rectangular bounds, not administrative borders. Mapped
 data does not establish current access, opening, conditions, potability or safe
 passage. Routing profiles are preferences over mapped data, not guarantees.
 
-All four generated databases are supplied in the format used by the app. The
+The routing graph also contains DEM-derived elevations and grades. Its terrain
+rights and exact-build publication authorization must be reviewed alongside the
+raw elevation component; ODbL does not itself clear those terrain rights.
+
+All generated databases are supplied in the format used by the app. The
 manifest records the configured local OSM PBF input's SHA-256, header coverage,
 build tools and every component's size and SHA-256. No input PBF is included.
 No source timestamp, download URL or completeness beyond that record is asserted.
@@ -250,7 +254,8 @@ def prepare_distribution(
         if len(sources) > 1:
             with (site / "README.txt").open("a", encoding="utf-8") as notice:
                 notice.write(
-                    "\nPrevious versions retained under the same data license:\n"
+                    "\nPrevious private versions retained for local validation;\n"
+                    "each version keeps its own terrain provenance and rights status:\n"
                     + "\n".join(f"- {item.build_id}" for _, item in sources[1:])
                     + "\n"
                 )

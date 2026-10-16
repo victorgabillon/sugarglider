@@ -194,6 +194,16 @@ def test_exact_authorization_can_prepare_and_verify_an_approved_copy(
     preflight_catalog(
         output / "site/catalog.json", output / "site", base_url=BASE, **kwargs
     )
+    from sugarglider.offline_regions.terrain_source import (
+        COPERNICUS_ATTRIBUTION,
+        COPERNICUS_DISCLAIMER,
+    )
+
+    notice = (output / "site/README.txt").read_text()
+    assert COPERNICUS_ATTRIBUTION in notice and COPERNICUS_DISCLAIMER in notice
+    assert "DEM-derived elevations and grades" in notice
+    assert "same data license" not in notice
+
     archive = output / "sugarglider-regions-static.zip"
     checksum = digest(archive.read_bytes())
     with pytest.raises(ValueError, match="operator approval"):

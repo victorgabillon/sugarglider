@@ -56,9 +56,15 @@ source installation, phone routing, chart or GPX result is claimed yet.
   actual operator records. Approved retained builds require separate future
   per-build authorization; this implementation rejects them rather than applying
   one approval to several versions.
+- Static distribution notices keep DEM-enriched graph rights separate from ODbL
+  database obligations; retained private versions do not inherit a newer DEM's
+  licence or approval. Required Copernicus notices remain in the prepared artifact.
 - Dedicated `.v2staging` Debug package, explicit external CA/catalog inputs and a
   localhost-only trust rule. Default Debug/Release need neither input and receive
   neither the CA nor staging catalog. No device/system certificate settings change.
+  Gradle fingerprints certificate/catalog **bytes**, so same-path replacements
+  cannot reuse stale generated resources. A real same-path catalog-change task
+  experiment re-executed and copied the changed bytes; canonical inputs were restored.
 - Normal Regions UI exposes exact-source terrain attribution. The active public
   catalog, versionCode/versionName, signing, production and historical regions are
   unchanged. No data or APK is committed.
