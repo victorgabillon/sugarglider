@@ -11,8 +11,9 @@ not publication approval. See the [rights dossier](pr94-terrain-rights.md).
   bare-earth hiking terrain; the independent source differences below remain.
 - **Terrain redistribution: evidence prepared; NO-GO for actual publication.**
   The reviewed licence and notices are documented, but affirmative exact-build
-  operator acceptance/approval is absent. Every actual regional manifest is false.
-- **V2 distribution engineering: host staging passes; Android acceptance pending.**
+  operator acceptance/approval is absent. Every actual regional manifest retains
+  `publication_allowed=false`.
+- **V2 distribution engineering: NO-GO for complete acceptance; host staging passes.**
   Real TLS byte/range/CORS checks pass. The phone became disconnected after the
   new isolated APK was installed, before installing its new region. Native HTTPS
   installation, failure/restart tests and new-source physical UI remain gates.
@@ -68,11 +69,16 @@ The source ledger records product/release, original HTTPS locator, byte size,
 SHA-256, acquisition time and observed Last-Modified/ETag/object version.
 **489,501,031 bytes** were acquired: nine 2021-release COGs and two NGA grids.
 Hashes pin observed HTTPS-authenticated bytes, not provider-signed checksums.
+The implemented downloader was also run again against all eleven official
+endpoints: **11.56 s**, peak RSS **48,104 KiB**, all pinned hashes reproduced.
 The mutable mirror's 2021 release identity is documented; the original COG object
 Last-Modified dates are May 2022, not fabricated terrain acquisition dates.
 
-Tools: Python 3.13.5, NumPy 2.4.4, Rasterio 1.4.3 / GDAL 3.9.3,
-pyproj 3.7.2 / PROJ 9.5.1; gzip metadata fixed to empty filename/mtime zero.
+The initial artifact experiments used Python 3.13.5, NumPy 2.4.4, Rasterio 1.4.3 /
+GDAL 3.9.3 and pyproj 3.7.2 / PROJ 9.5.1; gzip metadata is fixed to empty
+filename/mtime zero. The optional build group retains main's unchanged NumPy
+2.5.1 instead of downgrading the normal Python environment. Each conversion
+record identifies its actual toolchain.
 Full transformation records retain source hashes, pipeline, software versions,
 void/range counters and all derived hashes outside Git.
 
@@ -80,8 +86,9 @@ void/range counters and all derived hashes outside Git.
 | --- | --- |
 | First four-tile conversion | 420.52 s, peak RSS 525,560 KiB |
 | Repeat with explicit 32 MiB GDAL cache | 465.89 s, peak RSS 162,576 KiB |
-| Final CLI, including generated source pins | 405.08 s, peak RSS 211,344 KiB; same HGT/record hashes |
-| Reproducibility | All four compressed HGT files and transformation records byte-identical |
+| Full CLI, including generated source pins (NumPy 2.4.4) | 405.08 s, peak RSS 211,344 KiB; same HGT/record hashes |
+| Locked NumPy 2.5.1 replay | 426.15 s, peak RSS 179,468 KiB; every compressed HGT byte identical |
+| Reproducibility | Same-toolchain records identical; 2.5.1 record differs only in declared NumPy version |
 | Independent boundary/source checks | 14,404 shared-seam samples identical; 100 original-COG/manual-geoid checks pass |
 | Largest checked integer quantization error | 0.494683 m; theoretical bound 0.5 m, not terrain accuracy |
 | Full regional rebuild/verification | 542.26 s, maximum process RSS 2,677,700 KiB, including OSM extraction |
@@ -108,6 +115,9 @@ The selected PBF is unchanged, SHA-256
 All four decoded tiles have **zero void/invalid cells**. Their available integer
 ranges are respectively 10–307, −1–209, −3–272 and 6–261 m. Real zero/negative
 heights remain distinct from the missing-data sentinel.
+
+Independent GNU `sha256sum` and full regional-format verification also passed for
+the original inputs, final HGT, new region and both historical regions.
 
 The previous private Yvelines build `850e2b…e23d3c6` (216,176,479 bytes) and Marly
 `36e42e…e51d8e` are preserved. The new region adds approximately 2.50 MB / 1.16%,
@@ -167,7 +177,7 @@ surface. The long-route Copernicus/IGN difference is about 40%; it must remain
 visible in the source decision. Neither a 1 m grid nor a smooth chart proves metre
 accuracy. Canopy, buildings, mixed source ages/infill, horizontal placement,
 interpolation, geoid models and integer quantization remain uncertainty sources.
-No independent surveyed route/control-point validation was available.
+No independently surveyed route/control-point validation was provided or verified.
 
 ## Native host validation of the actual rebuilt graph
 
@@ -185,6 +195,13 @@ native polylines and native total distances, with continuous leg boundaries.
 | Gravel bike | 3.472 km / 28.78 m / 80.53 m | 7.399 km / 146.43 m / 146.43 m |
 | Mountain bike | 3.472 km / 28.78 m / 80.53 m | 7.399 km / 146.43 m / 146.43 m |
 | Road bike | 3.472 km / 28.78 m / 80.53 m | 7.399 km / 146.43 m / 146.43 m |
+
+A native map-matching diagnostic inspected **154 graph edges** with genuine
+nonzero mean elevations and grades, independently of the tile header flag. Exact
+edge-walk matching rejected the rounded polyline; the explicit map-match is an
+attribute diagnostic, not an exact-route oracle or a route-generation fallback.
+Native spatial probes also passed all four tiles, integer seams and neighboring
+positions, with two missing outer-tile positions returning null.
 
 Profile policies can legitimately return the same geometry. The above routes use
 the new graph; they differ from the fixed historical geometries in the source
@@ -237,25 +254,27 @@ Existing synthetic installer/security regressions do not substitute for these.
 
 ## Regression status and reproduction
 
-Initial complete check: `uv run --offline make check` — Ruff, strict mypy,
-**1,395 passed / 16 external-service tests deselected**, 201.97 s. The subsequent
-complete run passed **1,404 / 16 deselected**, 189.05 s. Added focused
-conversion/approval/transport/catalog tests: **24 passed** before the final per-file metadata regression, including deterministic
-synthetic HGT, signed/no-data/orientation checks, known terms and exact approval,
-source corruption, graph/DEM binding and mocked HTTPS failures. Unit tests use no
-network, real DEM, Docker or external services. Final complete counts and packaging
-checks are recorded after the final code validation below.
+Final `uv run --offline make check`: Ruff, strict mypy, **1,405 passed / 16
+external-service tests deselected**, 179.01 s under main's retained NumPy version.
+All **25 focused tests** pass, including deterministic synthetic HGT,
+signed/no-data/orientation checks, known terms and exact approval, source
+corruption, graph/DEM binding, per-file provenance, APK catalog binding and mocked
+HTTPS failures. Unit tests use no network, real DEM, Docker or external services.
+The real TLS/source/build/native experiments are recorded separately above.
 
 Browser: **48 harnesses pass**, including source-matched attribution, both V2 wire
 modes and explicit EGM96 replies. Existing cancellation/identity/storage/GPX suites
 remain. Normal Android Debug/Release tests, lint and assembly passed; isolated
-staging APK/test assembly and lint passed. Final normal reruns pass **239 Debug + 234 Release tests**, both lint variants
+staging APK/test assembly and lint passed. Final normal
+reruns pass **239 Debug + 234 Release tests**, both lint variants
 and assembly (110 s), including the new datum tests. All **134** declared shared
 assets match their sources; the staging variant has only its explicit catalog
 override. Normal Release contains no private CA, terrain, research classes or
 custom trust rule. All three APKs pass ZIP/ELF **16 KiB** alignment; the native
 SO hash remains `09b6d312b19caa5410561b804213641f5f8a772d1b3db570cc17bac8a55fb878`.
 Static 16 KiB packaging checks are separate from a physical 16 KiB-device claim.
+The implementation head `05ea8cdc27e46fea0a8fcb3624620c23571e1551` passed all seven
+push/PR CI runs. The delivered PR head is checked again after this report update.
 
 Install optional build dependencies with `uv sync --frozen --group dem`. The normal
 application runtime does not import or require the converter's Rasterio/PROJ tools.
