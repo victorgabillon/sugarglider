@@ -67,12 +67,6 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
     return { feature, bounds: [...point, ...point] };
   }));
   const byId = new Map(poiFeatures.map((feature) => [feature.id, feature]));
-  const namedPlaces = poiFeatures.filter(feature => !["private", "restricted"].includes(feature.access_status)
-    && feature.potability !== "non_potable"
-    && containsPosition(manifest.bounds, [feature.coordinate.lon, feature.coordinate.lat]))
-    .map(feature => ({ feature, name: normalizeLocationText(feature.display_name),
-      searchable: normalizeLocationText(`${feature.display_name} ${feature.category.replaceAll("_", " ")}`) }))
-    .sort((a, b) => compareText(a.name, b.name) || compareText(a.feature.id, b.feature.id));
   const identity = freezeData({
     region_id: manifest.region_id,
     build_id: manifest.build_id,
@@ -132,18 +126,7 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
       warnings: matches.length > limit ? ["poi_results_truncated"] : [], identity });
   }
 
-  function searchPlaceNames(value) {
-    const query = normalizeLocationText(validateLocationQuery(value));
-    const terms = query.split(/\s+/u);
-    const matches = namedPlaces.filter(row => terms.every(term => row.searchable.includes(term)));
-    matches.sort((a, b) => Number(b.name === query) - Number(a.name === query)
-      || Number(b.name.startsWith(query)) - Number(a.name.startsWith(query))
-      || compareText(a.name, b.name) || compareText(a.feature.id, b.feature.id));
-    return freezeData({ available: pois !== null, identity, results: matches.slice(0, LOCATION_RESULT_LIMIT)
-      .map(({ feature }) => ({ name: feature.display_name.slice(0, 200),
-        secondaryLabel: `${manifest.display_name ?? manifest.region_id} · ${feature.category.replaceAll("_", " ")}`,
-        lat: feature.coordinate.lat, lon: feature.coordinate.lon, source: "local" })) });
-  }
+  const searchPlaceNames = createPlaceNameSearch(manifest, poiFeatures, identity, pois !== null);
 
   function analyzeNature(candidate) {
     requireData(Number.isFinite(candidate.distance_m) && candidate.distance_m > 0
@@ -223,6 +206,10 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
   return Object.freeze({ identity, queryPois, searchPois, searchPlaceNames, analyzeNature });
 }
 
+export function createLocalPlacesSession(data) {
+  return Object.freeze({ identity: data.identity, searchPlaceNames: data.searchPlaceNames });
+}
+
 export function unavailableNature(distance, reason, operations = null) {
   const zero = { distance_m: 0, share: 0 };
   return freezeData({ available: false, identity: null, method: null, woodland: zero, open_natural: zero,
@@ -240,6 +227,30 @@ export function eligibleLocalPoi(feature, bounds) {
   if (!containsPosition(bounds, [feature.coordinate.lon, feature.coordinate.lat])) return "poi_outside_region";
   if (!feature.approach_candidates.some((approach) => containsPosition(bounds, [approach.coordinate.lon, approach.coordinate.lat]))) return "poi_no_covered_meaningful_approach";
   return null;
+}
+
+// This separate closure must own only Places data. A name-search session can
+// outlive the full regional analysis session after selecting another region.
+// Defining it inside createLocalRegionData retains the shared Nature context.
+function createPlaceNameSearch(manifest, poiFeatures, identity, available) {
+  const namedPlaces = poiFeatures.filter(feature => !["private", "restricted"].includes(feature.access_status)
+    && feature.potability !== "non_potable"
+    && containsPosition(manifest.bounds, [feature.coordinate.lon, feature.coordinate.lat]))
+    .map(feature => ({ feature, name: normalizeLocationText(feature.display_name),
+      searchable: normalizeLocationText(`${feature.display_name} ${feature.category.replaceAll("_", " ")}`) }))
+    .sort((a, b) => compareText(a.name, b.name) || compareText(a.feature.id, b.feature.id));
+  return function searchPlaceNames(value) {
+    const query = normalizeLocationText(validateLocationQuery(value));
+    const terms = query.split(/\s+/u);
+    const matches = namedPlaces.filter(row => terms.every(term => row.searchable.includes(term)));
+    matches.sort((a, b) => Number(b.name === query) - Number(a.name === query)
+      || Number(b.name.startsWith(query)) - Number(a.name.startsWith(query))
+      || compareText(a.name, b.name) || compareText(a.feature.id, b.feature.id));
+    return freezeData({ available, identity, results: matches.slice(0, LOCATION_RESULT_LIMIT)
+      .map(({ feature }) => ({ name: feature.display_name.slice(0, 200),
+        secondaryLabel: `${manifest.display_name ?? manifest.region_id} · ${feature.category.replaceAll("_", " ")}`,
+        lat: feature.coordinate.lat, lon: feature.coordinate.lon, source: "local" })) });
+  };
 }
 
 function validateDocument(document, manifest, version, metadataFields) {

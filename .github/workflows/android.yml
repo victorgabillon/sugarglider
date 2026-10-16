@@ -25,14 +25,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Test both build variants, lint, and build debug APK
         working-directory: android
-        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest testReleaseUnitTest lintRelease
-      - name: Check native 16 KiB compatibility in debug APK
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest testReleaseUnitTest lintRelease assembleRelease
+      - name: Check native 16 KiB compatibility in Debug and Release APKs
         working-directory: android
         run: |
           set -euo pipefail
-          APK=app/build/outputs/apk/debug/app-debug.apk
-          "${ANDROID_HOME}/build-tools/36.0.0/zipalign" -c -P 16 4 "$APK"
-          unzip -p "$APK" lib/arm64-v8a/libvalhalla-wrapper.so > "$RUNNER_TEMP/valhalla-wrapper.so"
+          for APK in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release-unsigned.apk; do
+            "${ANDROID_HOME}/build-tools/36.0.0/zipalign" -c -P 16 4 "$APK"
+            unzip -p "$APK" lib/arm64-v8a/libvalhalla-wrapper.so > "$RUNNER_TEMP/valhalla-wrapper.so"
           python3 - <<'PY'
           import subprocess
           import os
@@ -49,6 +49,7 @@ jobs:
           assert alignments and min(alignments) >= 0x4000, alignments
           print("16 KiB ELF LOAD and APK page alignment checks passed")
           PY
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: sugarglider-debug-apk

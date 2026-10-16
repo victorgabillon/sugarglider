@@ -1,5 +1,6 @@
 import { createLocalRegionStore, loadLocalRegionData } from "./local_region_store.js";
 import { createVersionedRegionComponents } from "./region_components.js";
+import { createLocalPlacesSession } from "./local_region_data.js";
 
 const store = createLocalRegionStore();
 let data = null, placesData = null;
@@ -59,8 +60,10 @@ self.onmessage = ({ data: message }) => {
         }
         case "load_places_version": {
           const scoped = await createVersionedRegionComponents(message.value);
-          if (data?.identity.build_id === scoped.manifest.build_id) placesData = data;
-          else if (placesData?.identity.build_id !== scoped.manifest.build_id) {
+          if (data?.identity.build_id === scoped.manifest.build_id) {
+            // Reuse the name index without pinning the full Nature analysis.
+            placesData = createLocalPlacesSession(data);
+          } else if (placesData?.identity.build_id !== scoped.manifest.build_id) {
             placesData = null;
             placesData = await scoped.openPlaces();
           }
