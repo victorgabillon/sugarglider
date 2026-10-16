@@ -28,6 +28,10 @@ and measurements below will be completed before delivery.
    native alignment. CI now builds unsigned Release and checks both Debug and
    Release APK ZIP/ELF 16 KiB alignment. No upload signing credentials are required.
 
+The focused controlled-GC and elevation input/map lifecycle regressions also run
+in their own CI workflow with pinned Playwright 1.58.2, matching the locally tested
+tooling. Synthetic screenshots remain in runner temporary storage.
+
 Shell cache generation advances to v93; exact asset pins remain enforced.
 The opt-in Android-test endurance phase requires two installed references with
 *different graph hashes*, checks native mappings and active-file removal safety,

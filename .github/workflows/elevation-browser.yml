@@ -1,0 +1,27 @@
+name: Elevation browser regressions
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pinned test tooling
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.58.2
+          ./node_modules/.bin/playwright install --with-deps chromium
+      - name: Check regional retention with explicit garbage collection
+        run: node tests/browser/pr93_retention_acceptance.cjs
+      - name: Check elevation input and map lifecycle
+        env:
+          ELEVATION_EVIDENCE_DIR: ${{ runner.temp }}/elevation-browser
+        run: node tests/browser/pr92_elevation_acceptance.cjs
