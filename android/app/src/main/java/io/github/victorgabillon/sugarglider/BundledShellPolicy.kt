@@ -36,6 +36,7 @@ internal object BundledShellPolicy {
         is BridgeRequest.Hello, is BridgeRequest.SaveGpx, is BridgeRequest.ItineraryDialogState,
         is BridgeRequest.GetLocalRouteCapabilities, is BridgeRequest.LocalRoute,
         is BridgeRequest.RegionalWork, is BridgeRequest.RegionalStatus,
+        is BridgeRequest.RouteElevation, is BridgeRequest.CancelRouteElevation, is BridgeRequest.RejectedRouteElevation,
         is BridgeRequest.RejectedLocalRoute -> true
         else -> false
     }
@@ -43,6 +44,7 @@ internal object BundledShellPolicy {
     fun acceptsOrigin(request: BridgeRequest, origin: String): Boolean = when (request) {
         is BridgeRequest.GetLocalRouteCapabilities, is BridgeRequest.LocalRoute,
         is BridgeRequest.ItineraryDialogState, is BridgeRequest.RejectedLocalRoute, is BridgeRequest.RegionalWork,
+        is BridgeRequest.RouteElevation, is BridgeRequest.CancelRouteElevation, is BridgeRequest.RejectedRouteElevation,
         is BridgeRequest.RegionalStatus -> origin == ORIGIN
         else -> origin != ORIGIN || acceptsRequest(request)
     }

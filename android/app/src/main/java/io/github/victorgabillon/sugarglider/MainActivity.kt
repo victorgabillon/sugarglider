@@ -15,6 +15,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
+import android.os.SystemClock
 import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
@@ -57,7 +58,7 @@ import java.util.concurrent.Executors
  */
 class MainActivity : Activity() {
     private lateinit var application: SugargliderApplication
-    private lateinit var nativeRouteEngine: NativeRouteEngine
+    private lateinit var nativeRouteEngine: NativeOfflineEngine
     private lateinit var bundledShellAssets: BundledShellAssets
     private var configuredOrigin: String? = null
     private var webView: WebView? = null
@@ -69,6 +70,9 @@ class MainActivity : Activity() {
     private var pendingStart: PendingStart? = null
     private var pendingLocalRoute: PendingLocalRoute? = null
     private var pendingLocalCapabilities: BridgeRequest.GetLocalRouteCapabilities? = null
+    private var pendingElevation: PendingElevation? = null
+    private data class PendingElevation(val request: BridgeRequest.RouteElevation,
+        val cancelled: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false))
     private var localRouteWorkerBusy = false
     private var pendingDeepLinkSlug: String? = null
     private var backInvokedCallback: OnBackInvokedCallback? = null
@@ -771,6 +775,14 @@ class MainActivity : Activity() {
                         broadcastTerminalFailure(channel, it)
                     }
                 }
+                is BridgeRequest.RouteElevation -> beginRouteElevation(request, payload, channel)
+                is BridgeRequest.RejectedRouteElevation -> completeBridgePayload(request, payload, channel,
+                    RouteElevationProtocol.failure(request.requestId, null, "invalid_elevation_request"))
+                is BridgeRequest.CancelRouteElevation -> {
+                    val owned = pendingElevation?.takeIf { it.request.pageNonce == request.pageNonce && it.request.elevation.operationId == request.operationId }
+                    owned?.cancelled?.set(true)
+                    completeBridgePayload(request, payload, channel, RouteElevationProtocol.cancelled(request.requestId, request.operationId, owned != null))
+                }
                 is BridgeRequest.GetLocalRouteCapabilities -> beginLocalCapabilities(request, payload, channel)
                 is BridgeRequest.RegionalWork -> {
                     val status = application.regionalRoutingOperations.start(request.pageNonce, request.command)
@@ -850,6 +862,27 @@ class MainActivity : Activity() {
                         application.statusRepository.current(),
                     )
                 }
+            }
+        }
+    }
+
+    private fun beginRouteElevation(request: BridgeRequest.RouteElevation, payload: String, channel: BridgeChannel) {
+        if (pendingElevation != null || localRouteWorkerBusy) {
+            completeBridgePayload(request, payload, channel, RouteElevationProtocol.failure(request.requestId, request.elevation.operationId, "elevation_busy"))
+            return
+        }
+        val owned = PendingElevation(request)
+        pendingElevation = owned
+        val deadline = SystemClock.elapsedRealtime() + 60_000
+        // Optional work shares the native executor. A new route may queue behind
+        // this bounded call; elevation never reserves the routing busy flag.
+        localRouteExecutor.execute {
+            val reply = try { RouteElevationProtocol.execute(request.requestId, request.elevation, nativeRouteEngine) {
+                owned.cancelled.get() || SystemClock.elapsedRealtime() >= deadline
+            } } catch (_: Exception) { RouteElevationProtocol.failure(request.requestId, request.elevation.operationId, "elevation_unavailable") }
+            runOnUiThread {
+                if (pendingElevation === owned) pendingElevation = null
+                completeBridgePayload(request, payload, channel, reply)
             }
         }
     }
@@ -1279,6 +1312,7 @@ class MainActivity : Activity() {
     }
 
     private fun invalidateBridgePage() {
+        pendingElevation?.cancelled?.set(true)
         activeBridgeChannel?.let { application.regionalRoutingOperations.cancelOwner(it.pageNonce) }
         gpxDocumentSaver.invalidate()
         webGeolocationPermissions.invalidate()

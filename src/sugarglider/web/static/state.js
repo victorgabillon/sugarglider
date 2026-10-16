@@ -107,6 +107,7 @@ export const state = {
   participantRemembered: false,
   durableOutboxPresent: false,
   selectedSignature: null,
+  selectedElevation: null,
   selectedPointIndex: null,
   selectedEndpointKind: null, // Endpoint selection; mutually exclusive with selectedPointIndex.
   movingPointIndex: null, // One-shot map edit, not a second point store.

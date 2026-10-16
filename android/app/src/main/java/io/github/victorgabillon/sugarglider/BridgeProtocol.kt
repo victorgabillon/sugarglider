@@ -46,6 +46,12 @@ internal sealed interface BridgeRequest {
         val routeRequest: NativeRouteRequest,
     ) : BridgeRequest
 
+    data class RouteElevation(override val requestId: String, override val pageNonce: String,
+        val elevation: RouteElevationRequest) : BridgeRequest
+    data class CancelRouteElevation(override val requestId: String, override val pageNonce: String,
+        val operationId: String) : BridgeRequest
+    data class RejectedRouteElevation(override val requestId: String, override val pageNonce: String) : BridgeRequest
+
     data class RejectedLocalRoute(
         override val requestId: String,
         override val pageNonce: String,
@@ -114,12 +120,13 @@ internal object BridgeProtocol {
     private val coordinateFields = setOf("lat", "lon")
 
     fun parse(payload: String): BridgeRequest? {
-        if (payload.length !in 2..8_192) return null
+        if (payload.length !in 2..MAX_ELEVATION_REQUEST_CHARS) return null
         val value = try {
             JSONObject(payload)
         } catch (_: JSONException) {
             return null
         }
+        if (payload.length > 8_192 && value.optString("type") != "route_elevation") return null
         if (value.optInt("schema_version", -1) != SCHEMA_VERSION) return null
         val requestId = value.optString("request_id", "")
         val pageNonce = pageNonce(requestId) ?: return null
@@ -148,6 +155,7 @@ internal object BridgeProtocol {
                 } else {
                     null
                 }
+            "route_elevation", "cancel_route_elevation" -> RouteElevationProtocol.parse(value, requestId, pageNonce)
             "local_route" -> parseLocalRoute(value, requestId, pageNonce)
             "regional_routing_inspect", "regional_routing_install", "regional_routing_remove",
             "regional_routing_remove_version",
