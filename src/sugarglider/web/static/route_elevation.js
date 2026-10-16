@@ -45,9 +45,11 @@ export function createSelectedRouteElevation({versions, client = createRouteElev
   onChange = () => {}, lifecycleTarget = globalThis, operationId = randomOperationId} = {}) {
   let epoch = 0, context = null, selected = null, active = null, desired = null, destroyed = false;
   let snapshot = deepFreeze({status:"idle",candidate_id:null,result:null,diagnostic:null});
+  let publishedBinding = null;
   const cache = new Map();
   let knownRegionKey=null;
-  function publish(status, candidate, result = null, diagnostic = null, cacheHit = false) {
+  function publish(status, candidate, result = null, diagnostic = null, cacheHit = false, binding = null) {
+    publishedBinding = binding;
     snapshot = deepFreeze({status,candidate_id:candidate?.id ?? null,result,diagnostic,cache_hit:cacheHit}); onChange(snapshot);
   }
   function invalidate() {
@@ -95,7 +97,9 @@ export function createSelectedRouteElevation({versions, client = createRouteElev
           if (!current()) return;
           cache.set(key,result); while(cache.size>8) cache.delete(cache.keys().next().value);
         }
-        if (current()) publish("ready",job.candidate,result,null,cacheHit);
+        if (current()) publish("ready",job.candidate,result,null,cacheHit,
+          {epoch, geometry:job.candidate.route.geometry, digest:prepared.geometry_sha256, reference:referenceKey(reference),
+            result, component:reference.elevation.component_id, source:reference.elevation.manifest.sha256, key});
       });
     } catch(error) { if(current()) publish("unavailable",job.candidate,null,error.message); }
     finally { if(active===owned) active=null; if(desired&&!destroyed) void pump(); }
@@ -112,7 +116,33 @@ export function createSelectedRouteElevation({versions, client = createRouteElev
     if(knownRegionKey!==null&&knownRegionKey!==key)invalidate();
     knownRegionKey=key;
   }
-  return Object.freeze({sync,invalidate,cancel,regionChanged,snapshot:()=>snapshot});
+  // Presentation asks the same owner that validated/prepared this result. It
+  // must not hash the whole route again on render or invent a competing cache.
+  function owns(value, candidate, generation, regionId) {
+    if (destroyed || !candidate || !generation || value !== snapshot || selected?.candidate !== candidate
+      || context !== generation || selected.regionId !== regionId || !generation.candidates?.includes(candidate)) return false;
+    if (value.status !== "ready") return value.candidate_id === candidate.id;
+    const binding = publishedBinding, result = value.result, analysis = result?.analysis;
+    const pinned = candidate.diagnostics?.details?.local_routing?.regional_version;
+    return Boolean(binding && binding.epoch === epoch && binding.geometry === candidate.route.geometry
+      && result.candidate_id === candidate.id && analysis.routing_profile === candidate.route.routing_profile
+      && analysis.route_distance_m === candidate.route.summary.distance_m && analysis.geometry_sha256 === binding.digest
+      && binding.result === result
+      && (knownRegionKey === null || knownRegionKey === binding.reference)
+      && result.regional_reference.region_id === pinned?.region_id && result.regional_reference.build_id === pinned?.build_id
+      && result.regional_reference.pack_id === pinned?.routing_pack_id
+      && result.regional_reference.elevation.component_id === binding.component && analysis.source_sha256 === binding.source
+      && analysis.source_sha256 === result.regional_reference.elevation.manifest.sha256);
+  }
+  function retry() {
+    if (destroyed || !selected || !(snapshot.status === "unavailable"
+      || snapshot.status === "ready" && snapshot.result.analysis.coverage === "unavailable")) return false;
+    if (publishedBinding) cache.delete(publishedBinding.key);
+    const previous = selected; selected = null;
+    sync(previous.candidate, context, previous.regionId);
+    return true;
+  }
+  return Object.freeze({sync,invalidate,cancel,regionChanged,owns,retry,snapshot:()=>snapshot});
 }
 
 export function parseRouteElevationReply(payload) {

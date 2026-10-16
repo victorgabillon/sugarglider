@@ -1072,3 +1072,34 @@ body.outing-mode .route-dock { display: none; }
 .map-panel:has(.bounded-place-popup) .map-empty-state { display: none; }
 .bounded-place-popup .maplibregl-popup-close-button { width: 44px; height: 44px; background: #fffdf7; border-radius: 0 8px 0 8px; font-size: 24px; z-index: 1; }
 .bounded-place-popup .place-popup h3 { padding-right: 40px; }
+
+/* Selected-route elevation uses the existing panel palette and action language. */
+.route-elevation { margin: .85rem 0; padding: .85rem 0; border-block: 1px solid var(--border); min-width: 0; }
+.route-elevation [hidden] { display: none !important; }
+.elevation-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
+.elevation-heading h3 { margin: 0; font-size: 1rem; }
+.elevation-coverage { padding: .2rem .5rem; border-radius: 1rem; font-size: .75rem; font-weight: 750; color: var(--primary-action); background: #e7eee2; }
+.elevation-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem 1rem; margin: .85rem 0; }
+.elevation-summary > div { min-width: 0; }
+.elevation-summary dt { color: #45564c; font-size: .8rem; }
+.elevation-summary dd { margin: .2rem 0 0; font-size: 1rem; font-weight: 750; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.elevation-summary .elevation-total dd { color: var(--primary-action); font-size: 1.45rem; }
+.elevation-total dt { color: var(--primary-action); font-weight: 800; }
+.elevation-total dt span { color: #45564c; margin-left: .25rem; font-weight: 500; }
+.elevation-chart { width: 100%; min-width: 0; margin-top: .7rem; }
+.elevation-profile-control { width: 100%; border-radius: 8px; touch-action: pan-y pinch-zoom; cursor: crosshair; background: var(--elevated-surface); }
+.elevation-profile-control:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
+.elevation-profile-control svg { display: block; width: 100%; height: auto; overflow: visible; user-select: none; -webkit-user-select: none; }
+.elevation-axis-title, .elevation-axis-tick { fill: #45564c; font-size: 12px; }
+.elevation-axis-title { font-weight: 650; }
+.elevation-grid-line { stroke: var(--border); stroke-width: 1; }
+.elevation-profile-line { fill: none; stroke: var(--primary-action); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.elevation-isolated-point { fill: var(--primary-action); }
+.elevation-cursor { stroke: #245d90; stroke-width: 1.5; stroke-dasharray: 3 3; }
+.elevation-cursor-point { fill: #245d90; stroke: #fffef9; stroke-width: 2; }
+.elevation-readout { margin: .6rem 0 .3rem; min-height: 2.5em; font-size: .9rem; font-weight: 750; color: var(--primary-action); font-variant-numeric: tabular-nums; }
+.elevation-help { margin: .25rem 0 .65rem; color: #45564c; font-size: .75rem; line-height: 1.5; }
+.elevation-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.elevation-actions:empty { display: none; }
+.elevation-actions .button, .elevation-actions .text-button { min-height: 44px; font-size: .85rem; }
+.elevation-map-marker { width: 19px; height: 19px; border: 3px solid #fffef9; border-radius: 50%; background: #245d90; box-shadow: 0 0 0 2px #173d31, 0 2px 7px #0005; pointer-events: none; }

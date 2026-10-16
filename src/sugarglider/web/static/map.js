@@ -1,4 +1,5 @@
 import { routeColor } from "./route_results.js";
+import { createElevationMapMarker } from "./elevation_map_marker.js";
 import { keepMapCoordinateVisible } from "./map_viewport.js";
 import * as maplibregl from "./vendor/maplibre-gl-6.4.1/maplibre-gl.mjs";
 import { gpxFeatureCollection } from "./gpx.js";
@@ -135,6 +136,7 @@ const POI_ICON_SVGS = {
 };
 
 let map = null;
+const elevationMapMarker = createElevationMapMarker({createMarker:element => new maplibregl.Marker({element, anchor:"center"})});
 let ready = false;
 let requiredMarkers = [];
 let endpointMarkers = [];
@@ -209,6 +211,7 @@ export function initializeMap(config, handlers) {
     handlers.onError("MapLibre loaded, but this browser could not initialize WebGL. Route controls remain available.");
     return false;
   }
+  elevationMapMarker.attach(map);
   map.addControl(new maplibregl.NavigationControl(), "top-left");
   map.on("load", async () => {
     const loadedMap = map;
@@ -368,6 +371,7 @@ export function initializeMap(config, handlers) {
 }
 
 function resetMapInstance() {
+  elevationMapMarker.destroy();
   ready = false;
   for (const marker of [
     ...requiredMarkers,
@@ -2308,6 +2312,7 @@ export function renderVisualization(collection, showNature = false) {
 }
 
 export function clearRoutes() {
+  clearElevationMapPosition();
   if (!ready) return;
   clearByPrefix("candidate-");
   clearByPrefix("outing-route-");
@@ -2323,6 +2328,12 @@ export function clearRoutes() {
   clearLocalExperimentalRoute();
   clearLocalWaypointRouteCandidates();
 }
+
+// Chart inspection updates only this one marker. It never renders route layers
+// or changes the viewport; explicit Show on map uses the existing focus action.
+export function showElevationMapPosition(position) { elevationMapMarker.show(position); }
+export function clearElevationMapPosition() { elevationMapMarker.clear(); }
+export function elevationMapPositionDiagnostics() { return elevationMapMarker.diagnostics(); }
 
 export function renderLocalExperimentalRoute(geometry) {
   if (!ready || !map) return;

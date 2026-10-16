@@ -24,7 +24,9 @@ GraphHopper process**. Ordinary Android planning does not need that server.
   redistribution review; the public catalog has not been updated. See the
   [V2 contract, private build instructions and validation](docs/pr90-v2-offline-regions.md).
 - Obtain optional native elevation and PR89 D+/D− for the selected Android route,
-  with explicit coverage and cancellation. See the [runtime contract and validation](docs/pr91-native-elevation.md).
+  with an interactive profile linked to the map, keyboard/touch inspection,
+  explicit coverage and cancellation. See the [elevation UI and validation](docs/pr92-interactive-elevation.md)
+  and [native analysis contract](docs/pr91-native-elevation.md).
 - Inspect scenic places, mapped water and ice-cream shops from local OSM-derived data.
   Inspecting a Place does not add a route stop. An explicit preference/edit is separate.
 - Export the already selected candidate, or inspect an imported GPX locally while

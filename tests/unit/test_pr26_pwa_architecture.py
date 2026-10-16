@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v91_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v92_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v91"
+    assert generation.group(1) == "v92"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -220,6 +220,9 @@ def test_shared_shell_generation_tracks_v91_cached_assets() -> None:
             "local_gpx_export.js",
             "local_gpx_client.js",
             "local_gpx_worker.js",
+            "elevation_profile.js",
+            "elevation_view.js",
+            "elevation_map_marker.js",
             "elevation_sampling.js",
             "elevation_sampling_worker.js",
             "route_elevation.js",
@@ -227,6 +230,15 @@ def test_shared_shell_generation_tracks_v91_cached_assets() -> None:
             "public_profile_metadata.js",
         )
     } == {
+        "elevation_profile.js": (
+            "319176cc644c0c80ba464133c969de558e65e75d084e1ed699646301e3ee7b1b"
+        ),
+        "elevation_view.js": (
+            "2268ac60acd3d18b658573c7a5dc28bca07f120734f0b8d6d13589812d0d1095"
+        ),
+        "elevation_map_marker.js": (
+            "3e064a2be298eda3d3d64e335e478e35a9a0c3a23ff417d905ebe73314c641ba"
+        ),
         "elevation_sampling.js": (
             "0b1d871c06793a74520622131405a85d8e533dffece1e89548e1f72651ae8959"
         ),
@@ -234,7 +246,7 @@ def test_shared_shell_generation_tracks_v91_cached_assets() -> None:
             "a2c0a6fa37dec239e634a59816dc3ca3ea12819557cecc0341e68f1d1ab59511"
         ),
         "route_elevation.js": (
-            "4447f5668d15ecdf75d7c79055ea8fc827342cb619583de2e3e47495b480ace4"
+            "f0eb1e3223f430cadc75b22d71fe16614276802f21384d788151e631f5fd88cd"
         ),
         "itinerary_draft.js": (
             "d637856e680a5f29511e568daaec73043690f6ffb3e2d721c7f5399e3d42f366"
@@ -297,7 +309,7 @@ def test_shared_shell_generation_tracks_v91_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "3c7a8300cf1c357245c28abd5b7f99f58f33da549fc11571725d015bb0e05023"
+            "5e68d4a49e2d3396469f60ad02169d0f9b63d9684c60c329ce65526ee80b4879"
         ),
         "location_search.js": (
             "635f5aaf5603cadbc3b77f035055251e54358b16a831d927e51fe6c44c031c36"
@@ -305,7 +317,7 @@ def test_shared_shell_generation_tracks_v91_cached_assets() -> None:
         "location_search_dialog.js": (
             "60924fa83037b8de5daa90cdfbcde5ab498a2134ff9a97b2b679e11b55c55b40"
         ),
-        "app.js": ("b14fc3d34d867152021543262184ea8b2c69c1fe6c57fa48f92613157a117b07"),
+        "app.js": ("202ea57fb21309179059cc9af5acab77e8fff7a1af30f5dc0102c4937b490215"),
         "region_screen.js": (
             "4f0607cba47e701b8c0d6b8e8bd73376f0b0bced7fdf5c9ca948d8f6499acda5"
         ),
@@ -330,9 +342,9 @@ def test_shared_shell_generation_tracks_v91_cached_assets() -> None:
         "state.js": (
             "74ff475a504f253708888509af61530d59cfc5736edba28649d9462f3690e53e"
         ),
-        "map.js": ("45142121323e17c5292be5c370ff1a852838950817e5b9ff38804baba90b2555"),
+        "map.js": ("e537d6bda14ebb1942e404b54250ab13eaf224f6dfa159b12e7738714b08f0c6"),
         "styles.css": (
-            "b3e62695742e2c209c356025575793ad4cc349bd70c54456895845fe81f4a2ae"
+            "a3aac84487dcd00c7f9c5010a6e9ec8d054f398e11b7ae6b91c6abe8c084bef8"
         ),
         "planner_profile.js": (
             "4183a1318f3aa49df52ca0a46329caaa4f6eee1bec1b49612c446562b1b0030a"

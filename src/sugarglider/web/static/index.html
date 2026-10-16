@@ -646,8 +646,28 @@
             <button id="download-gpx" class="button primary wide" type="button" data-icon="download" disabled>Export GPX</button>
             <p id="export-status" class="context-note" role="status"></p>
           </div>
-          <p id="route-elevation-status" class="context-note" role="status" aria-live="polite" hidden></p>
-          <button id="cancel-route-elevation" class="button secondary" type="button" hidden>Cancel elevation</button>
+          <section id="route-elevation" class="route-elevation" aria-labelledby="route-elevation-title" hidden>
+            <div class="elevation-heading"><h3 id="route-elevation-title">Elevation</h3><span class="elevation-coverage" data-elevation-coverage></span></div>
+            <dl class="elevation-summary" data-elevation-summary hidden>
+              <div><dt>Distance</dt><dd data-elevation-distance></dd></div>
+              <div><dt>Observed altitude</dt><dd data-elevation-altitude></dd></div>
+              <div class="elevation-total"><dt>D+ <span>Ascent</span></dt><dd data-elevation-ascent></dd></div>
+              <div class="elevation-total"><dt>D− <span>Descent</span></dt><dd data-elevation-descent></dd></div>
+            </dl>
+            <p id="route-elevation-status" class="context-note" role="status" aria-live="polite" hidden></p>
+            <p class="context-note" data-elevation-observed hidden></p>
+            <div class="elevation-chart" data-elevation-chart hidden></div>
+            <div data-elevation-note hidden>
+              <p id="elevation-position-readout" class="elevation-readout" aria-live="off">Touch the profile or use arrow keys to inspect a position.</p>
+              <p id="elevation-chart-help" class="elevation-help">Drag across the profile, or use ← → keys. Gaps have no elevation. Heights are filtered estimates.</p>
+            </div>
+            <div class="elevation-actions">
+              <button id="cancel-route-elevation" class="button secondary" type="button" hidden>Cancel elevation</button>
+              <button id="retry-route-elevation" class="button secondary" type="button" hidden>Retry elevation</button>
+              <button id="show-elevation-on-map" class="button secondary" type="button" hidden>Show on map</button>
+              <button id="clear-elevation-position" class="text-button" type="button" hidden>Clear position</button>
+            </div>
+          </section>
           <details class="metrics-disclosure">
             <summary>Route details</summary>
             <div id="metrics-content" class="hidden"></div>

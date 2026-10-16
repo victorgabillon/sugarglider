@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elevation presentation acceptance</title><link rel="stylesheet" href="../../src/sugarglider/web/static/styles.css">
+<style>body{padding:12px}#fixture{width:360px;max-width:100%;margin:auto}#results{white-space:pre-wrap;overflow-wrap:anywhere}</style>
+</head><body><div id="fixture"></div><pre id="results">Running…</pre>
+<script type="module">
+import {runElevationUiHarness} from './pr92_elevation_ui_harness.js';
+const results=document.getElementById('results');
+try{results.textContent=JSON.stringify(await runElevationUiHarness());results.dataset.status='passed';}
+catch(error){results.textContent=error.stack;results.dataset.status='failed';}
+</script></body></html>
