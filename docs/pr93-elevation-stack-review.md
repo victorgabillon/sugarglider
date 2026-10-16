@@ -9,11 +9,12 @@ This review adds no elevation functionality or parameter changes. It fixes
 confirmed regional-index and map-archive retention paths and strengthens Release CI. Private
 terrain, regions, route captures, APKs and device logs remain outside Git.
 The final research APK is installed and independently byte-verified. Marly was
-installed through the normal private Regions workflow, and the packaged app passed
-Yvelines → Marly → Yvelines after restart with WebView network loads blocked.
-The physical native two-region endurance test passed. An uninterrupted final
-foreground UI workload and background/foreground cleanup measurements remain in
-progress; the earlier attempt stopped when another app became foreground.
+installed through the normal private Regions workflow. Physical acceptance now
+passes distinct-region routing/DEM/lease checks, sustained native and UI workloads,
+background/foreground, cancellation/retry, real 2,048-sample profiles and cleanup.
+**Code integration: GO for the reviewed unreleased stack. Public distribution:
+NO-GO**, independently, for the catalog/provenance/rights and release-validation
+gates below. No merge or release is performed by this review.
 
 ## Confirmed defects and changes
 
@@ -104,8 +105,7 @@ selections and 12 regenerations over 554.606 s**. Seed changes repeated three
 valid searches; each step waited for its current owned analysis. Exactly one
 SVG/control remained, inspection markers cleared, canonical generation data
 remained unchanged, and DOM counts alternated only with two/three candidate
-cards (1,366 / 1,374 nodes). This is sustained single-region testing, not the
-still-pending distinct-region acceptance.
+cards (1,366 / 1,374 nodes). This is the pre-fix single-region comparison; final distinct-region checks follow below.
 
 The host sampled `dumpsys meminfo --package` for the research package and every
 associated WebView process, approximately every 1.5 seconds plus collection time.
@@ -153,7 +153,7 @@ this is expected and is not evidence that the complete graphs are identical.
 | Yvelines, long Gravel loop | 151.917 km | 2,048 | 1,280.455150 / 1,280.455150 m | 147 / 77 / 246 ms |
 
 These are actual Valhalla routes and nullable native samples, not injected profiles.
-All four complete analyses match unchanged Python on every field (numeric tolerance
+All eight captured complete analyses match unchanged Python on every field (numeric tolerance
 1e-7); geometry/source/profile digests match. Independently resampled coordinates
 and distances match, and bilinear HGT checks differ by at most 0.01 m (allowance
 0.010001 m for native rounding). This validates implementation/source consistency,
@@ -167,13 +167,99 @@ route preserved candidate/generation identity, the same SVG path, byte-identical
 GPX (one track/segment, no extensions/elevation) and zero native requests while
 inspecting. Keyboard sample navigation and vertical touch scrolling also passed.
 
-The offline planner interval recorded **0 transmitted / 0 received research-UID
-bytes**, including startup, with WebView network loads explicitly blocked. Private
-USB installation happened in an earlier, separate session. A notification-shade
-interval is excluded from foreground memory statistics. The paced UI workload
-paused when Chrome became foreground and is not counted as completed endurance.
-A fresh uninterrupted run and explicit background/foreground/cleanup baselines
-remain pending.
+### Final whole-app endurance, lifecycle and memory
+
+The final APK completed **144 paced selection actions and 12 normal Generate
+calls over 570.689 s**, using the same three repeating seeds and two-second
+selection cadence as the initial workload. All **304** package-wide observations
+were research-foreground observations with one main and one WebView process.
+Exactly one SVG/control and one protocol archive remained; inspection markers
+cleared, canonical generation objects remained unchanged and every round's GPX
+was byte-identical (one track/segment, no route/elevation/extensions). DOM counts
+were 1,376/1,384 for two/three candidate cards; the main-page heap estimate stayed
+27.6 MB. That estimate excludes worker/native/graphics memory.
+
+This first final-APK workload used programmatic control activation with the
+Tools/Regions disclosures open. It is a real state/render/native workload, not
+continuous physical dragging or proof of unobscured controls. A subsequent touch
+miss exposed the driver's open-menu setup. The driver closed both disclosures and
+added actual hit-target checks. A separate corrected run then passed **36 further
+paced selections / three regenerations over 120.345 s**, with all chart heights
+checked for visibility, **64** foreground observations, one chart/archive and the
+same invariants. Actual DevTools touch on the physical WebView, reviewed native
+screenshots, keyboard navigation and vertical scrolling independently cover input;
+they are not claimed to be manual finger operation. Clean Hike and long-profile
+screenshots were inspected with both menus closed and map attribution visible.
+No product defect is inferred from the driver's initially open menus.
+
+Three explicit Home/return cycles (10 s background / 15 s foreground each) kept
+the same process, JavaScript candidate/generation/elevation object identities and
+GPX bytes. Native elevation was cancelled via its real Cancel control; its late
+response remained discarded after 1.5 s. Routing remained successful and GPX
+available. Retry produced a fresh uncached analysis without rerouting or mutating
+the candidate. Post-workload Marly → Yvelines again used the correct build/DEM and
+one current map archive; native mappings contained only the selected region.
+
+The genuine 151.917 km / 2,048-sample route was repeated after endurance and in
+the clean-menu session. D+/D− remained **1,280.4551501148646 m each**. Post-endurance
+height/analysis/total times were 209/52/287 ms; the clean repeat measured
+148/72/240 ms. All three long captures have the same geometry/profile/source
+identities and agree with Python and independent HGT checks. The differing timings
+are observations, not a claimed performance regression or improvement.
+
+| Final APK state/window | Median aggregate PSS | Observed peak aggregate PSS |
+| --- | ---: | ---: |
+| Fresh startup, no selected region; last 15 s | 365,413,376 bytes | 365,418,496 bytes |
+| Map opened, no selected region; last 15 s | 358,517,760 bytes | 358,521,856 bytes |
+| Yvelines ready, before generation; last 15 s | 579,372,032 bytes | 579,855,360 bytes |
+| First Generate + native heights + graph; six observations | 623,782,912 bytes | 711,271,424 bytes |
+| Paced state/render workload; all 570.689 s | 735,247,872 bytes | 814,916,608 bytes |
+| Corrected visible-chart workload; all 120.345 s | 795,208,704 bytes | 902,026,240 bytes |
+| Region return / long generation, profile and interactions | 945,160,192 bytes | 989,039,616 bytes |
+| Long profile settled; last 15 s | 802,825,216 bytes | 803,632,128 bytes |
+| After Clear results and 77.853 s idle; last 15 s | 793,837,568 bytes | 793,841,664 bytes |
+
+The largest recorded foreground sum was **989,039,616 bytes** during the region
+return/long-route phase: **395,136,000 main + 593,903,616 WebView bytes in the same
+observation**. Do not replace it with the lower paced-workload peak. Sampling is
+approximately 1.5 s plus collection time, so subsecond peaks can be missed; native
+height/analysis timing and PSS snapshots provide separate boundaries rather than
+pretending to isolate their peak with the coarse aggregate trace.
+
+Beginning/ending 30 s medians in the 570.689 s workload were **763,412,480 /
+726,582,272 bytes**. There was no sustained growth in this workload. Background
+medians across the three cycles were **649,189,376 / 633,072,640 / 631,205,888**;
+foreground medians were **681,257,984 / 680,067,072 / 680,096,768 bytes**. These
+short lifecycle windows are distinct from the long-workload baseline.
+
+Clear results removed the generation, elevation SVG/control and map marker.
+Test-owned route/GPX references were released before the 77.853 s idle interval;
+no forced GC was used. Idle PSS does not return to fresh startup: the selected
+region's Nature/Places, basemap/renderer pools, one warm native actor, graph and
+decoded DEM caches remain available. Current-only mappings and explicit native
+closure are verified separately below. PSS alone cannot attribute each retained
+byte to MapLibre, workers, JNI or allocator state, nor prove a leak. The controlled
+Nature experiment isolates a particular retention defect; native heap/mapping
+measurements isolate actor ownership. No whole-app memory saving is inferred from
+that desktop GC experiment or from unmatched initial/final traces.
+
+This remains a large footprint. No arbitrary PSS threshold or cache tuning is
+introduced. Lower-RAM devices, other supported APIs, larger regions and a normal
+Release build need equivalent sustained profiling and memory-pressure/OOM review
+before public distribution. A WebView process includes map code, workers and
+rendering; its PSS is not exclusively MapLibre heap.
+
+Both final ready-to-finish planner intervals recorded **0 transmitted / 0 received
+research-UID bytes** with WebView network loads blocked. The corrected interval
+also covered a complete packaged-page reload/readiness *after* blocking was active,
+proving that routing/elevation/page startup need no network fallback. Private USB
+installation was a separate earlier session and its server/forwarding was removed.
+Do not claim zero traffic from Activity creation: the pre-ready/pre-block windows
+measured **5,276 TX / 12,171 RX bytes** and **4,047 TX / 3,115 RX bytes**, respectively.
+Those UID counters do not identify URLs; their source was not captured. An earlier
+session recorded zero even at startup. Attribute this early traffic with capture
+from before WebView creation before a public release; it is not evidence of
+network-based routing/elevation, and no route generation occurred in that window.
 
 ## Native resource attribution (physical, no WebView)
 
@@ -351,24 +437,35 @@ native mappings confirmed Yvelines → Marly → Yvelines. Native graph mappings
 coexisted across region identities. The sustained headless test above additionally
 checked selected DEM coverage, closure/recreation and active leases.
 
-## Current acceptance decisions
+## Final acceptance decisions
 
-- **Code integration: NO-GO pending required physical acceptance.** The confirmed
-  resource fixes, full automated regression and packaging checks pass, but the
-  final uninterrupted foreground/endurance and background/cleanup review must finish before changing this decision.
-- **Public distribution: NO-GO.** Incompatible public V1 regional offerings and
-  unresolved historical DEM provenance/rights remain independent blockers even
-  if code acceptance subsequently passes. Device/RAM/API coverage and a coordinated
-  approved V2 catalog/artifact/app launch remain release gates.
+- **Code integration: GO for the reviewed unreleased stack.** Both confirmed
+  resource defects have regressions; automated checks, real native/source parity,
+  distinct-region leases/mappings, sustained workloads, physical input, offline
+  reload/generation, cancellation and cleanup passed. Integrate in parent-stack
+  order while retaining the explicit release hold. This is not approval to ship
+  the current app against the incompatible public catalog or to publish terrain.
+- **Public distribution: NO-GO.** V1 public offerings and unresolved historical
+  DEM provenance/datum/rights independently block distribution. Broader RAM/API/
+  16 KiB-device and Release profiling, early-startup traffic attribution, approved
+  signing/version policy and coordinated V2 HTTPS app/catalog/artifact validation
+  remain release gates. Passing this one 8 GB/4 KiB Fairphone is not universal
+  device acceptance.
 
-Production and older Debug have not been installed over or cleared; all commands
-that write APKs target only the verified isolated research IDs/certificate. No
-region removal, signing change, connectivity setting, public artifact, Play or
-social release was performed. A hash comparison after Marly installation confirmed unchanged production/older
-Debug APK paths, hashes, versions and install timestamps; all 83 older Debug
-private files and all nine original native regional files were unchanged. Five
-Marly native files were added. The comparison also passed after native endurance with the same counts and hashes.
+Retain the current optional selected-route elevation owner in Android/WebView:
+route generation/export must remain usable when height sampling fails or is
+cancelled. Preserve the build/component/geometry/profile binding, algorithm version,
+coverage and visible unknown values; do not derive a second analysis/scoring policy
+in JavaScript. Keep the one-current-actor and map/archive lifecycle, and profile
+memory pressure before choosing any cache limit. No further UI functionality or
+filter parameter change is required by this review.
 
+The final preservation comparison passed after all physical sessions: production
+and older Debug APK paths/hashes/versions/install timestamps, **all 83** older Debug
+private files and **all nine** original native regional files are unchanged. Five
+Marly native files were added. APK writes targeted only the verified isolated
+research IDs/certificate. No region removal, signing/connectivity setting change,
+public terrain/catalog update, Google Play/social release or merge occurred.
 
 ## Final tested artifact
 
@@ -382,7 +479,7 @@ The package is `io.github.victorgabillon.sugarglider.v2debug` / `.test`, version
 8 / `1.2.0-v2-research`. Normal Debug/Release packaging and all 133 shared assets
 passed independent inspection. Neither normal package was installed on the phone.
 
-Private evidence includes the raw aggregate trace and an initial-baseline plot/CSV,
+Private evidence includes initial/final aggregate traces, plots/CSVs and the native endurance plot/CSV,
 full test logs, independent artifact/source reports, before/after controlled-GC
 results and immutable APK metadata. No screenshot, route snapshot, generated GPX,
 DEM, PBF, graph or region archive is committed. The additional legacy manual
