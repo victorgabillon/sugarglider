@@ -1,0 +1,515 @@
+[
+  {
+    "name": "flat",
+    "input": {
+      "schema_version": 1,
+      "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "geometry_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "routing_profile": "hike",
+      "route_distance_m": 100.0,
+      "height_reference": "synthetic contract fixture; no terrain data",
+      "samples": [
+        {
+          "index": 0,
+          "distance_m": 0.0,
+          "height_m": 0.0
+        },
+        {
+          "index": 1,
+          "distance_m": 50.0,
+          "height_m": 0.0
+        },
+        {
+          "index": 2,
+          "distance_m": 100.0,
+          "height_m": 0.0
+        }
+      ]
+    },
+    "parameters": {
+      "smoothing_radius_m": 50.0,
+      "maximum_gap_m": 100.0,
+      "boundary_policy": "constant-extension-retain-endpoints",
+      "missing_policy": "split-no-fill"
+    },
+    "expected": {
+      "schema_version": 1,
+      "algorithm_version": "distance-box-v1",
+      "parameters": {
+        "smoothing_radius_m": 50.0,
+        "maximum_gap_m": 100.0,
+        "boundary_policy": "constant-extension-retain-endpoints",
+        "missing_policy": "split-no-fill"
+      },
+      "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "geometry_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "profile_sha256": "cbac97a35389add1095b5be3a1080b8a2dd169335fa01c0a8509209516b6ac4e",
+      "routing_profile": "hike",
+      "route_distance_m": 100.0,
+      "height_reference": "synthetic contract fixture; no terrain data",
+      "coverage": "complete",
+      "available_sample_count": 3,
+      "analyzed_distance_m": 100.0,
+      "unknown_distance_m": 0.0,
+      "raw_observed_ascent_m": 0.0,
+      "raw_observed_descent_m": 0.0,
+      "observed_ascent_m": 0.0,
+      "observed_descent_m": 0.0,
+      "total_ascent_m": 0.0,
+      "total_descent_m": 0.0,
+      "minimum_height_m": 0.0,
+      "maximum_height_m": 0.0,
+      "segments": [
+        {
+          "first_index": 0,
+          "last_index": 2,
+          "distance_m": 100.0
+        }
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "distance_m": 0.0,
+          "height_m": 0.0,
+          "filtered_height_m": 0.0,
+          "segment_index": 0
+        },
+        {
+          "index": 1,
+          "distance_m": 50.0,
+          "height_m": 0.0,
+          "filtered_height_m": 0.0,
+          "segment_index": 0
+        },
+        {
+          "index": 2,
+          "distance_m": 100.0,
+          "height_m": 0.0,
+          "filtered_height_m": 0.0,
+          "segment_index": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "uphill",
+    "input": {
+      "schema_version": 1,
+      "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "geometry_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "routing_profile": "hike",
+      "route_distance_m": 100.0,
+      "height_reference": "synthetic contract fixture; no terrain data",
+      "samples": [
+        {
+          "index": 0,
+          "distance_m": 0.0,
+          "height_m": 0.0
+        },
+        {
+          "index": 1,
+          "distance_m": 50.0,
+          "height_m": 10.0
+        },
+        {
+          "index": 2,
+          "distance_m": 100.0,
+          "height_m": 20.0
+        }
+      ]
+    },
+    "parameters": {
+      "smoothing_radius_m": 50.0,
+      "maximum_gap_m": 100.0,
+      "boundary_policy": "constant-extension-retain-endpoints",
+      "missing_policy": "split-no-fill"
+    },
+    "expected": {
+      "schema_version": 1,
+      "algorithm_version": "distance-box-v1",
+      "parameters": {
+        "smoothing_radius_m": 50.0,
+        "maximum_gap_m": 100.0,
+        "boundary_policy": "constant-extension-retain-endpoints",
+        "missing_policy": "split-no-fill"
+      },
+      "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "geometry_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "profile_sha256": "3f0f279aea806a7d5f6b0dda5e3d595f7c91d519147f40c00ae8e14b48af5e3b",
+      "routing_profile": "hike",
+      "route_distance_m": 100.0,
+      "height_reference": "synthetic contract fixture; no terrain data",
+      "coverage": "complete",
+      "available_sample_count": 3,
+      "analyzed_distance_m": 100.0,
+      "unknown_distance_m": 0.0,
+      "raw_observed_ascent_m": 20.0,
+      "raw_observed_descent_m": 0.0,
+      "observed_ascent_m": 20.0,
+      "observed_descent_m": 0.0,
+      "total_ascent_m": 20.0,
+      "total_descent_m": 0.0,
+      "minimum_height_m": 0.0,
+      "maximum_height_m": 20.0,
+      "segments": [
+        {
+          "first_index": 0,
+          "last_index": 2,
+          "distance_m": 100.0
+        }
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "distance_m": 0.0,
+          "height_m": 0.0,
+          "filtered_height_m": 0.0,
+          "segment_index": 0
+        },
+        {
+          "index": 1,
+          "distance_m": 50.0,
+          "height_m": 10.0,
+          "filtered_height_m": 10.0,
+          "segment_index": 0
+        },
+        {
+          "index": 2,
+          "distance_m": 100.0,
+          "height_m": 20.0,
+          "filtered_height_m": 20.0,
+          "segment_index": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "summit",
+    "input": {
+      "schema_version": 1,
+      "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "geometry_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "routing_profile": "hike",
+      "route_distance_m": 100.0,
+      "height_reference": "synthetic contract fixture; no terrain data",
+      "samples": [
+        {
+          "index": 0,
+          "distance_m": 0.0,
+          "height_m": 0.0
+        },
+        {
+          "index": 1,
+          "distance_m": 50.0,
+          "height_m": 30.0
+        },
+        {
+          "index": 2,
+          "distance_m": 100.0,
+          "height_m": 0.0
+        }
+      ]
+    },
+    "parameters": {
+      "smoothing_radius_m": 50.0,
+      "maximum_gap_m": 100.0,
+      "boundary_policy": "constant-extension-retain-endpoints",
+      "missing_policy": "split-no-fill"
+    },
+    "expected": {
+      "schema_version": 1,
+      "algorithm_version": "distance-box-v1",
+      "parameters": {
+        "smoothing_radius_m": 50.0,
+        "maximum_gap_m": 100.0,
+        "boundary_policy": "constant-extension-retain-endpoints",
+        "missing_policy": "split-no-fill"
+      },
+      "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "geometry_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "profile_sha256": "75e6c6ee09474fd06968051627f5b2a825af023d68470612475be8332e4f75e3",
+      "routing_profile": "hike",
+      "route_distance_m": 100.0,
+      "height_reference": "synthetic contract fixture; no terrain data",
+      "coverage": "complete",
+      "available_sample_count": 3,
+      "analyzed_distance_m": 100.0,
+      "unknown_distance_m": 0.0,
+      "raw_observed_ascent_m": 30.0,
+      "raw_observed_descent_m": 30.0,
+      "observed_ascent_m": 15.0,
+      "observed_descent_m": 15.0,
+      "total_ascent_m": 15.0,
+      "total_descent_m": 15.0,
+      "minimum_height_m": 0.0,
+      "maximum_height_m": 30.0,
+      "segments": [
+        {
+          "first_index": 0,
+          "last_index": 2,
+          "distance_m": 100.0
+        }
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "distance_m": 0.0,
+          "height_m": 0.0,
+          "filtered_height_m": 0.0,
+          "segment_index": 0
+        },
+        {
+          "index": 1,
+          "distance_m": 50.0,
+          "height_m": 30.0,
+          "filtered_height_m": 15.0,
+          "segment_index": 0
+        },
+        {
+          "index": 2,
+          "distance_m": 100.0,
+          "height_m": 0.0,
+          "filtered_height_m": 0.0,
+          "segment_index": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "missing",
+    "input": {
+      "schema_version": 1,
+      "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "geometry_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "routing_profile": "hike",
+      "route_distance_m": 200.0,
+      "height_reference": "synthetic contract fixture; no terrain data",
+      "samples": [
+        {
+          "index": 0,
+          "distance_m": 0.0,
+          "height_m": 0.0
+        },
+        {
+          "index": 1,
+          "distance_m": 50.0,
+          "height_m": 20.0
+        },
+        {
+          "index": 2,
+          "distance_m": 100.0,
+          "height_m": null
+        },
+        {
+          "index": 3,
+          "distance_m": 150.0,
+          "height_m": 10.0
+        },
+        {
+          "index": 4,
+          "distance_m": 200.0,
+          "height_m": 0.0
+        }
+      ]
+    },
+    "parameters": {
+      "smoothing_radius_m": 50.0,
+      "maximum_gap_m": 100.0,
+      "boundary_policy": "constant-extension-retain-endpoints",
+      "missing_policy": "split-no-fill"
+    },
+    "expected": {
+      "schema_version": 1,
+      "algorithm_version": "distance-box-v1",
+      "parameters": {
+        "smoothing_radius_m": 50.0,
+        "maximum_gap_m": 100.0,
+        "boundary_policy": "constant-extension-retain-endpoints",
+        "missing_policy": "split-no-fill"
+      },
+      "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "geometry_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "profile_sha256": "05278976934ba4901c45eedd2198f1ced9cb07ce301142493fac94ba8868a7dc",
+      "routing_profile": "hike",
+      "route_distance_m": 200.0,
+      "height_reference": "synthetic contract fixture; no terrain data",
+      "coverage": "partial",
+      "available_sample_count": 4,
+      "analyzed_distance_m": 100.0,
+      "unknown_distance_m": 100.0,
+      "raw_observed_ascent_m": 20.0,
+      "raw_observed_descent_m": 10.0,
+      "observed_ascent_m": 20.0,
+      "observed_descent_m": 10.0,
+      "total_ascent_m": null,
+      "total_descent_m": null,
+      "minimum_height_m": 0.0,
+      "maximum_height_m": 20.0,
+      "segments": [
+        {
+          "first_index": 0,
+          "last_index": 1,
+          "distance_m": 50.0
+        },
+        {
+          "first_index": 3,
+          "last_index": 4,
+          "distance_m": 50.0
+        }
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "distance_m": 0.0,
+          "height_m": 0.0,
+          "filtered_height_m": 0.0,
+          "segment_index": 0
+        },
+        {
+          "index": 1,
+          "distance_m": 50.0,
+          "height_m": 20.0,
+          "filtered_height_m": 20.0,
+          "segment_index": 0
+        },
+        {
+          "index": 2,
+          "distance_m": 100.0,
+          "height_m": null,
+          "filtered_height_m": null,
+          "segment_index": null
+        },
+        {
+          "index": 3,
+          "distance_m": 150.0,
+          "height_m": 10.0,
+          "filtered_height_m": 10.0,
+          "segment_index": 1
+        },
+        {
+          "index": 4,
+          "distance_m": 200.0,
+          "height_m": 0.0,
+          "filtered_height_m": 0.0,
+          "segment_index": 1
+        }
+      ]
+    }
+  },
+  {
+    "name": "irregular",
+    "input": {
+      "schema_version": 1,
+      "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "geometry_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "routing_profile": "hike",
+      "route_distance_m": 100.0,
+      "height_reference": "synthetic contract fixture; no terrain data",
+      "samples": [
+        {
+          "index": 0,
+          "distance_m": 0.0,
+          "height_m": 0.0
+        },
+        {
+          "index": 1,
+          "distance_m": 20.0,
+          "height_m": 8.0
+        },
+        {
+          "index": 2,
+          "distance_m": 50.0,
+          "height_m": 20.0
+        },
+        {
+          "index": 3,
+          "distance_m": 60.0,
+          "height_m": 16.0
+        },
+        {
+          "index": 4,
+          "distance_m": 100.0,
+          "height_m": 0.0
+        }
+      ]
+    },
+    "parameters": {
+      "smoothing_radius_m": 50.0,
+      "maximum_gap_m": 100.0,
+      "boundary_policy": "constant-extension-retain-endpoints",
+      "missing_policy": "split-no-fill"
+    },
+    "expected": {
+      "schema_version": 1,
+      "algorithm_version": "distance-box-v1",
+      "parameters": {
+        "smoothing_radius_m": 50.0,
+        "maximum_gap_m": 100.0,
+        "boundary_policy": "constant-extension-retain-endpoints",
+        "missing_policy": "split-no-fill"
+      },
+      "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "geometry_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "profile_sha256": "dbb1f5d478f93f2ece214209d7bf00586d4b0f7533932285cc141c39dcb2559a",
+      "routing_profile": "hike",
+      "route_distance_m": 100.0,
+      "height_reference": "synthetic contract fixture; no terrain data",
+      "coverage": "complete",
+      "available_sample_count": 5,
+      "analyzed_distance_m": 100.0,
+      "unknown_distance_m": 0.0,
+      "raw_observed_ascent_m": 20.0,
+      "raw_observed_descent_m": 20.0,
+      "observed_ascent_m": 10.0,
+      "observed_descent_m": 10.0,
+      "total_ascent_m": 10.0,
+      "total_descent_m": 10.0,
+      "minimum_height_m": 0.0,
+      "maximum_height_m": 20.0,
+      "segments": [
+        {
+          "first_index": 0,
+          "last_index": 4,
+          "distance_m": 100.0
+        }
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "distance_m": 0.0,
+          "height_m": 0.0,
+          "filtered_height_m": 0.0,
+          "segment_index": 0
+        },
+        {
+          "index": 1,
+          "distance_m": 20.0,
+          "height_m": 8.0,
+          "filtered_height_m": 8.2,
+          "segment_index": 0
+        },
+        {
+          "index": 2,
+          "distance_m": 50.0,
+          "height_m": 20.0,
+          "filtered_height_m": 10.0,
+          "segment_index": 0
+        },
+        {
+          "index": 3,
+          "distance_m": 60.0,
+          "height_m": 16.0,
+          "filtered_height_m": 9.8,
+          "segment_index": 0
+        },
+        {
+          "index": 4,
+          "distance_m": 100.0,
+          "height_m": 0.0,
+          "filtered_height_m": 0.0,
+          "segment_index": 0
+        }
+      ]
+    }
+  }
+]
