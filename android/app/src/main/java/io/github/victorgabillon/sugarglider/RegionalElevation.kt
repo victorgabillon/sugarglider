@@ -86,13 +86,15 @@ internal object RegionalElevationValidation {
         val manifestFile = File(directory, "manifest.json")
         verifyIdentity(manifestFile, elevation.manifest, cancelled)
         val manifest = JSONObject(manifestFile.readText(Charsets.UTF_8))
+        val ign = manifest.opt("provenance_status") == "documented" && manifest.opt("vertical_datum") == "IGN69"
         check(manifest.keys().asSequence().toSet() == setOf("schema_version", "component_id", "bounds", "format",
-            "publication_allowed", "provenance_status", "vertical_datum", "tiles"))
+            "publication_allowed", "provenance_status", "vertical_datum", "tiles") + (if (ign) setOf("derivation") else emptySet()))
+        if (ign) check(manifest.opt("publication_allowed") == false && validIgnDerivation(manifest.optJSONObject("derivation")))
         check(manifest.opt("schema_version") == 1 && manifest.opt("component_id") == elevation.componentId)
         check(manifest.opt("format") == "skadi-hgt-gzip-v1" && manifest.opt("publication_allowed") is Boolean)
         val documented = manifest.opt("provenance_status") == "documented" && manifest.opt("vertical_datum") == "EGM96"
         val research = manifest.opt("provenance_status") == "unresolved" && manifest.opt("vertical_datum") == "unresolved"
-        check(documented || research)
+        check(documented || research || ign)
         check(manifest.opt("publication_allowed") != true || documented)
         val bounds = manifest.getJSONArray("bounds")
         check(bounds.length() == 4 && (0..3).map { (bounds.opt(it) as? Number)?.toDouble()?.canonicalCoordinate() } ==

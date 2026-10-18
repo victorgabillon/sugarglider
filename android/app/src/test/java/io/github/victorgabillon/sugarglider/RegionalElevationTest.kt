@@ -139,6 +139,31 @@ class RegionalElevationTest {
         }
     }
 
+
+    @Test fun privateIgn69BindsCompleteSourceMetadataAndNeverBecomesEgm96() {
+        val metadata = JSONObject(String(fixture.manifest, Charsets.UTF_8))
+            .put("provenance_status", "documented").put("vertical_datum", "IGN69")
+            .put("derivation", syntheticIgnDerivation()).toString().toByteArray()
+        val changed = reference.copy(elevation = fixture.reference.copy(manifest = fixtureIdentity(metadata)))
+        val pack = store.stage(changed, graph, { ByteArrayInputStream(archive) }, metadata,
+            { ByteArrayInputStream(SyntheticHgt.bytes) })
+        val manifest = File(requireNotNull(pack.elevationDirectory).parentFile, "manifest.json")
+        assertEquals(ELEVATION_IGN69_REFERENCE, verifiedRegionalHeightReference(manifest))
+        assertNotEquals(ELEVATION_EGM96_REFERENCE, verifiedRegionalHeightReference(manifest))
+        val bad = File(temporary, "bad-ign.json")
+        for (mutation in listOf<(JSONObject) -> Unit>(
+            { it.put("publication_allowed", true) },
+            { it.remove("derivation") },
+            { it.getJSONObject("derivation").getJSONObject("sources").put("vertical_crs", "EPSG:5773") },
+            { it.getJSONObject("derivation").put("transformation_sha256", "wrong") },
+            { it.getJSONObject("derivation").getJSONObject("sources").getJSONArray("files").getJSONObject(0).put("url", "https://other.example/terrain") },
+        )) {
+            val value = JSONObject(String(metadata, Charsets.UTF_8)); mutation(value)
+            bad.writeText(value.toString())
+            assertThrows(IllegalStateException::class.java) { verifiedRegionalHeightReference(bad) }
+        }
+    }
+
     private fun install(): RoutingPack = store.stage(reference, graph, { ByteArrayInputStream(archive) },
         fixture.manifest, { ByteArrayInputStream(SyntheticHgt.bytes) })
 }

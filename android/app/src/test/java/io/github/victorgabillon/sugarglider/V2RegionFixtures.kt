@@ -72,3 +72,19 @@ internal fun syntheticValhallaArchive(size: Int = 256 * 1_024 + 512): ByteArray 
     "3.9.1".toByteArray().copyInto(result, 1552)
     return result
 }
+
+
+/** Entirely synthetic source pin shared by IGN contract tests. */
+internal fun syntheticIgnDerivation(): JSONObject {
+    val filename = "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D078_2020-07-30.7z"
+    val file = JSONObject().put("filename", filename)
+        .put("url", "https://data.geopf.fr/telechargement/download/RGEALTI/${filename.removeSuffix(".7z")}/$filename")
+        .put("byte_size", 7).put("sha256", "c".repeat(64)).put("acquired_at", "2026-01-01T00:00:00Z")
+        .put("last_modified", JSONObject.NULL).put("etag", JSONObject.NULL).put("version_id", JSONObject.NULL)
+    val sources = JSONObject().put("schema_version", 1).put("product", "IGN-RGE-ALTI-5M")
+        .put("horizontal_crs", "EPSG:2154").put("vertical_crs", "EPSG:5720").put("surface", "DTM")
+        .put("license_url", "https://www.etalab.gouv.fr/licence-ouverte-open-licence/")
+        .put("files", org.json.JSONArray().put(file))
+    return JSONObject().put("algorithm", "ign-rge-alti-5m-ign69-skadi-v1").put("sources", sources)
+        .put("prepared_sha256", "d".repeat(64)).put("transformation_sha256", "e".repeat(64))
+}

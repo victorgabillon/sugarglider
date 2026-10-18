@@ -11,12 +11,17 @@ from typing import Protocol
 
 from sugarglider.offline_regions.elevation_hgt_probe import probe_hgt_file, sha256_file
 from sugarglider.offline_regions.models import canonical_json
-from sugarglider.offline_regions.terrain_source import TerrainSources, verify_source
+from sugarglider.offline_regions.terrain_source import (
+    IGNSources,
+    TerrainSources,
+    verify_source,
+)
 
 TRANSFORMATION = "cop-dem-cog-egm96-v1"
 
 
 def geoid_pipeline(source: Path) -> str:
+    source = source.resolve()
     geoid08 = source / "us_nga_egm08_25.tif"
     geoid96 = source / "us_nga_egm96_15.tif"
     return (
@@ -77,8 +82,18 @@ def convert_tile(
             compressed.write(values.tobytes())
 
 
-def convert_sources(pins: TerrainSources, source: Path, output: Path) -> None:
+def convert_sources(
+    pins: TerrainSources | IGNSources,
+    source: Path,
+    output: Path,
+    bounds: tuple[float, float, float, float] | None = None,
+) -> None:
     """Full nine-tile halo is mandatory: COGs removed east/south shared samples."""
+    if isinstance(pins, IGNSources):
+        if bounds is None:
+            raise ValueError("IGN conversion requires explicit regional bounds")
+        convert_ign_sources(pins, source, output, bounds)
+        return
     import numpy as np
     import pyproj
     import rasterio  # type: ignore[import-untyped]
@@ -199,7 +214,7 @@ def convert_sources(pins: TerrainSources, source: Path, output: Path) -> None:
     for lat in (48, 49):
         for lon in (1, 2):
             name = f"N{lat}E{lon:03}"
-            path = output.absolute() / f"N{lat}/{name}.hgt.gz"
+            path = output.resolve() / f"N{lat}/{name}.hgt.gz"
             original = originals[
                 f"Copernicus_DSM_COG_10_N{lat}_00_E{lon:03}_00_DEM.tif"
             ]
@@ -220,6 +235,113 @@ def convert_sources(pins: TerrainSources, source: Path, output: Path) -> None:
         canonical_json(
             ElevationInputs(
                 publication_allowed=False, tiles=tuple(acquired)
+            ).model_dump(mode="json")
+        )
+    )
+
+
+def convert_ign_sources(
+    pins: IGNSources,
+    prepared: Path,
+    output: Path,
+    bounds: tuple[float, float, float, float],
+) -> None:
+    """Reuse the Skadi writer; IGN69 is preserved explicitly, without an offset."""
+    import numpy as np
+    import pyproj
+    import rasterio
+
+    from sugarglider.offline_regions.elevation_component import (
+        AcquiredTile,
+        ElevationInputs,
+        IGNDerivation,
+    )
+    from sugarglider.offline_regions.elevation_layout import elevation_paths
+    from sugarglider.offline_regions.terrain_ign import ign_sampler
+
+    paths = elevation_paths(bounds)
+    if output.exists() or output.is_symlink():
+        raise FileExistsError(output)
+    if shutil.disk_usage(output.parent).free < len(paths) * 26_982_978 + 65_536:
+        raise ValueError("insufficient disk for bounded IGN conversion")
+    output.mkdir()
+    pyproj.network.set_network_enabled(False)  # type: ignore[attr-defined]
+    transformer = pyproj.Transformer.from_crs(
+        4326, 2154, always_xy=True, allow_ballpark=False, only_best=True
+    )
+    results = []
+    acquired = []
+    with ign_sampler(pins, prepared) as sampler:
+
+        def read_row(latitude: float, west: int, count: int) -> list[float | None]:
+            longitude = west + np.arange(count, dtype=np.float64) / 3600
+            xs, ys = transformer.transform(
+                longitude, np.full(count, latitude), errcheck=True
+            )
+            return sampler.sample(xs, ys)
+
+        for relative in paths:
+            name = Path(relative).name
+            south, west = int(name[1:3]), int(name[4:7])
+            if name[0] != "N" or name[3] != "E":
+                raise ValueError("IGN mainland conversion requires N/E tiles")
+            target = output / relative.removeprefix("elevation/skadi/")
+            convert_tile(target, south, west, read_row, lambda _x, _y, h: h)
+            probe = probe_hgt_file(target, sha256_file(target))
+            results.append(
+                {
+                    "path": target.relative_to(output).as_posix(),
+                    "sha256": probe.source_sha256,
+                    "byte_size": target.stat().st_size,
+                    "probe": probe.report(),
+                }
+            )
+            acquired.append(
+                AcquiredTile(
+                    tile=name.removesuffix(".hgt.gz"),
+                    path=str(target.resolve()),
+                    source_url="https://www.data.gouv.fr/datasets/rge-alti-r",
+                    acquired_at=max(p.acquired_at for p in pins.files),
+                    byte_size=target.stat().st_size,
+                    sha256=probe.source_sha256,
+                    last_modified=None,
+                    origin="ign-rge-alti-5m-ign69-skadi-v1",
+                )
+            )
+    record = canonical_json(
+        {
+            "algorithm": "ign-rge-alti-5m-ign69-skadi-v1",
+            "sources": pins.model_dump(mode="json"),
+            "prepared_sha256": sha256_file(prepared / "prepared.json"),
+            "input_vertical_crs": "EPSG:5720",
+            "output_vertical_crs": "EPSG:5720",
+            "vertical_operation": "identity; IGN69 normal heights retained",
+            "horizontal_operation": transformer.definition,
+            "horizontal_accuracy_m": transformer.accuracy,
+            "interpolation": "bilinear point nodes; all positive-weight nodes required",
+            "rounding": "nearest integer ties to even; <=0.5 m",
+            "nodata": -32768,
+            "python": platform.python_version(),
+            "numpy": np.__version__,
+            "rasterio": rasterio.__version__,
+            "gdal": rasterio.__gdal_version__,
+            "pyproj": pyproj.__version__,
+            "proj": pyproj.proj_version_str,
+            "zlib": zlib.ZLIB_VERSION,
+            "tiles": results,
+        }
+    )
+    (output / "transformation.json").write_bytes(record)
+    derivation = IGNDerivation(
+        algorithm="ign-rge-alti-5m-ign69-skadi-v1",
+        sources=pins,
+        prepared_sha256=sha256_file(prepared / "prepared.json"),
+        transformation_sha256=sha256_file(output / "transformation.json"),
+    )
+    (output / "elevation-inputs.json").write_bytes(
+        canonical_json(
+            ElevationInputs(
+                publication_allowed=False, tiles=tuple(acquired), derivation=derivation
             ).model_dump(mode="json")
         )
     )

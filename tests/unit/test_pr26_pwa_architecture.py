@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v95_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v96_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v95"
+    assert generation.group(1) == "v96"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -234,7 +234,7 @@ def test_shared_shell_generation_tracks_v95_cached_assets() -> None:
             "319176cc644c0c80ba464133c969de558e65e75d084e1ed699646301e3ee7b1b"
         ),
         "elevation_view.js": (
-            "2268ac60acd3d18b658573c7a5dc28bca07f120734f0b8d6d13589812d0d1095"
+            "c1ef3370260365c0038fba98e03db3571451d13ccbccd36663be4790beb9caf6"
         ),
         "elevation_map_marker.js": (
             "3e064a2be298eda3d3d64e335e478e35a9a0c3a23ff417d905ebe73314c641ba"
@@ -246,7 +246,7 @@ def test_shared_shell_generation_tracks_v95_cached_assets() -> None:
             "a2c0a6fa37dec239e634a59816dc3ca3ea12819557cecc0341e68f1d1ab59511"
         ),
         "route_elevation.js": (
-            "2aaf61193f04e5ba2403c7d06b1c19b642e526f83ef3ea83b032b93c38debc18"
+            "949bbfc150e01a062fd0e6c2bc82732328692d4538e86f8bc8a782b0821b0c22"
         ),
         "itinerary_draft.js": (
             "d637856e680a5f29511e568daaec73043690f6ffb3e2d721c7f5399e3d42f366"

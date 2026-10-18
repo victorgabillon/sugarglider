@@ -57,6 +57,10 @@ class RouteElevationProtocolTest {
         val documented = JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){false}).getJSONObject("analysis")
         assertEquals(ELEVATION_EGM96_REFERENCE, documented.getString("height_reference"))
         assertEquals(analysis.getDouble("total_ascent_m"), documented.getDouble("total_ascent_m"), 0.0)
+        heightReference = ELEVATION_IGN69_REFERENCE
+        val ign = JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){false}).getJSONObject("analysis")
+        assertEquals(ELEVATION_IGN69_REFERENCE, ign.getString("height_reference"))
+        assertEquals(analysis.getDouble("total_ascent_m"), ign.getDouble("total_ascent_m"), 0.0)
         heights=listOf(0.0,null,0.0)
         val partial=JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){false}).getJSONObject("analysis")
         assertEquals("partial",partial.getString("coverage"));assertTrue(partial.isNull("total_ascent_m"));assertTrue(partial.getJSONArray("samples").getJSONObject(1).isNull("height_m"))
@@ -64,8 +68,8 @@ class RouteElevationProtocolTest {
         val absent=JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){false}).getJSONObject("analysis")
         assertEquals("unavailable",absent.getString("coverage"));assertTrue(absent.isNull("minimum_height_m"))
         cancelled=true
-        assertEquals("elevation_cancelled",JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){cancelled}).getString("code"));assertEquals(4,calls)
+        assertEquals("elevation_cancelled",JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){cancelled}).getString("code"));assertEquals(5,calls)
         var checks=0
-        assertEquals("elevation_cancelled",JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){++checks>=2}).getString("code"));assertEquals(5,calls)
+        assertEquals("elevation_cancelled",JSONObject(RouteElevationProtocol.execute(id,parsed.elevation,engine){++checks>=2}).getString("code"));assertEquals(6,calls)
     }
 }

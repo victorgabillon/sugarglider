@@ -11,6 +11,7 @@ internal const val MAX_ELEVATION_REQUEST_CHARS = 262_144
 internal const val MAX_ELEVATION_REPLY_CHARS = 1_048_576
 internal const val ELEVATION_HEIGHT_REFERENCE = "unresolved vertical datum; verified V2 elevation component manifest"
 internal const val ELEVATION_EGM96_REFERENCE = "EGM96 orthometric metres; verified V2 elevation component manifest"
+internal const val ELEVATION_IGN69_REFERENCE = "IGN69 normal metres; IGN RGE ALTI 5 m; Licence Ouverte 2.0; verified V2 elevation component manifest"
 internal data class RouteElevationRequest(val operationId: String, val candidateId: String, val profile: String,
     val geometry: String, val distance: Double, val reference: RegionalRoutingPackReference, val interval: Double,
     val positions: List<Pair<Double, LocalRouteCoordinate>>)

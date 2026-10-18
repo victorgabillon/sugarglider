@@ -1,6 +1,9 @@
 """Pinned public-source acquisition. Download permission is not publication approval."""
 
 import hashlib
+import re
+import shutil
+from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated, Literal, Self
 
@@ -33,6 +36,54 @@ class SourceFile(StrictModel):
     last_modified: str | None
     etag: str | None
     version_id: str | None
+
+
+IGN_LICENSE = "https://www.etalab.gouv.fr/licence-ouverte-open-licence/"
+IGN_ATTRIBUTION = "IGN — RGE ALTI® 5 m; Licence Ouverte / Open Licence 2.0"
+
+
+class IGNArchive(SourceFile):
+    # Departmental deliveries exceed the old individual COG download limit.
+    byte_size: Annotated[int, Field(gt=0, le=1_000_000_000)]
+
+    @model_validator(mode="after")
+    def official_archive(self) -> Self:
+        if not re.fullmatch(
+            r"RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D[0-9]{3}_"
+            r"[0-9]{4}-[0-9]{2}-[0-9]{2}\.7z",
+            self.filename,
+        ):
+            raise ValueError("expected mainland RGE ALTI 5 m delivery identity")
+        delivery = self.filename.removesuffix(".7z")
+        date.fromisoformat(delivery[-10:])
+        if (
+            not 20 <= len(self.acquired_at) <= 40
+            or datetime.fromisoformat(self.acquired_at).tzinfo is None
+        ):
+            raise ValueError("IGN acquisition timestamp requires a timezone")
+        if self.url != (
+            "https://data.geopf.fr/telechargement/download/RGEALTI/"
+            f"{delivery}/{self.filename}"
+        ):
+            raise ValueError("IGN source URL/delivery mismatch")
+        return self
+
+
+class IGNSources(StrictModel):
+    schema_version: Literal[1] = 1
+    product: Literal["IGN-RGE-ALTI-5M"]
+    horizontal_crs: Literal["EPSG:2154"]
+    vertical_crs: Literal["EPSG:5720"]  # IGN69 normal heights, not EGM96.
+    surface: Literal["DTM"]
+    license_url: Literal["https://www.etalab.gouv.fr/licence-ouverte-open-licence/"]
+    files: Annotated[tuple[IGNArchive, ...], Field(min_length=1, max_length=24)]
+
+    @model_validator(mode="after")
+    def unique_departments(self) -> Self:
+        departments = [p.filename.split("_")[5] for p in self.files]
+        if len(set(departments)) != len(departments):
+            raise ValueError("duplicate IGN department or ambiguous source vintages")
+        return self
 
 
 class TerrainSources(StrictModel):
@@ -78,12 +129,17 @@ def verify_source(directory: Path, pin: SourceFile) -> Path:
     return path
 
 
-def acquire_sources(pins: TerrainSources, output: Path) -> None:
+def acquire_sources(pins: TerrainSources | IGNSources, output: Path) -> None:
     """Explicit bounded HTTPS GETs, fresh directory, no auth, redirects or cookies."""
     if len({pin.filename for pin in pins.files}) != len(pins.files):
         raise ValueError("duplicate source files")
     if output.is_symlink() or any(p.is_symlink() for p in output.absolute().parents):
         raise ValueError("symlink acquisition output")
+    if (
+        shutil.disk_usage(output.parent).free
+        < sum(pin.byte_size for pin in pins.files) + 65_536
+    ):
+        raise ValueError("insufficient disk for pinned source acquisition")
     output.mkdir()  # An incomplete acquisition is never reused implicitly.
     with httpx.Client(follow_redirects=False, trust_env=False, timeout=90.0) as client:
         for pin in pins.files:
