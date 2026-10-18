@@ -330,6 +330,10 @@ and offline-config delayed-startup paths (16 real-app browser cases). On-device
 delayed catalog delivery confirms early imports without injecting routing or
 elevation results; normal native readiness and short/2,048-sample routes pass
 after release of the same real request.
+The shared web shell advances to cache generation **v95**, with its strict asset
+fingerprint pins updated for the fixed app module. Android excludes the service
+worker and retains the exact final audited APK bytes. This is a cache generation,
+not another pull request or an application version change.
 
 The sustained memory figures above were measured with staging APK `74b3bcd7…`,
 before this startup-only fix. They are not relabelled as a fresh sustained run of
