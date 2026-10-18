@@ -7,12 +7,13 @@ included in this change. The durable private evidence directory is
 `data/offline-regions/pr95-ign/evidence` in the original checkout; source and
 derived data are in its sibling `private` directory, outside this worktree.
 
-**Acceptance boundary:** the Marly pilot is physically validated; full Yvelines
-conversion, fresh graph and private catalogue pass host verification. The final
-full-Yvelines phone installation/forest/long-route/native Save run remains
-**pending: the connected Fairphone is locked**. An availability request is
-pending. No lock bypass or physical pass is claimed. The final audited staging
-APK is installed, retaining all existing regions.
+**Acceptance boundary:** Marly and the new full Yvelines bundle are physically
+validated on the isolated final staging APK. Conversion, graph/component
+verification, six-profile routing, native heights, chart/map interaction,
+Android GPX saving, restart and region switching pass. The full-app zero-network
+assertion **fails** with unattributed UI-associated traffic; the native-only
+phases record zero traffic. Public release remains **NO-GO**. No data was
+published and no PR was merged.
 
 ## Implementation and boundaries
 
@@ -356,9 +357,9 @@ Its new routing archive SHA-256 is
 The four-tile elevation component is 18,274,069 bytes. Rebuild: **495.65 s**,
 host maximum RSS **2,666,508 KiB**, container peak **902,815,744 bytes**.
 The native graph stage took 94 s and applied elevation once. Full independent
-component/catalogue verification passed. Final full-region device acceptance
-remains pending while the phone is locked; the earlier pilot is separately
-identified above.
+component/catalogue verification and the final physical functional checks
+passed. The failed full-app network assertion remains explicitly separate
+from those passes.
 
 
 ### Storage and final host artifacts
@@ -384,14 +385,19 @@ with replacement, without uninstalling or clearing data. Its test APK is
 byte-identical to the pilot instrumentation APK. The first final-artifact audit
 correctly detected a stale shared asset during the licence-link correction;
 all variants were rebuilt and the complete final audit then passed.
-The final audited APK has not yet completed physical UI acceptance; pilot
-measurements are not silently reassigned to it.
+The final audited APK completed the separate physical run below. Earlier pilot
+measurements remain identified with their actual APK.
 
 The post-update preservation audit independently confirms unchanged production
 APK/certificate identities, all 220 older Debug private files, all 271 V2 research
-private files and 41 previously installed staging regional/OPFS payload files.
-All eight installed Marly component files independently match their expected
-hashes. Production private files are inaccessible to `run-as`; their contents
+private files and **40 prior immutable staging payload files** (531 immutable
+baseline files total). The initial numeric-OPFS-file comparison flagged one
+replacement. Its original hash exactly equals the 98-byte JSON
+`{"schema_version":1,"build_id":"8df4…"}` active-version pointer; the matching
+new pointer is present. This is the expected `region_versions.js` activation,
+not a discarded immutable payload. All other baseline payload paths/bytes
+remain intact, including the previous Copernicus build. All **19 installed
+IGN component files** independently match their expected hashes. Production private files are inaccessible to `run-as`; their contents
 were not claimed to be byte-audited. No operation targeted production data.
 
 | Derived HGT | Compressed bytes | SHA-256 |
@@ -400,6 +406,118 @@ were not claimed to be byte-audited. No operation targeted production data.
 | N48/N48E002.hgt.gz | 4,248,630 | `d47f7dc9e0947cacd975be249fb73c8c7212f98b9cdb384d9044da87f81ca5e0` |
 | N49/N49E001.hgt.gz | 5,527,281 | `d79a01593f51fa01589242892505b90e3a13479405c864373462d2b094bd7611` |
 | N49/N49E002.hgt.gz | 4,891,056 | `7955eec7df9675fdf2d897d6f581379c87940365353a2505c420ee6565415cb3` |
+
+## Final Fairphone run: full IGN Yvelines and Marly
+
+Final APK: `a4ecb351754dccb6a0053dfc35adc15e57739e28011b03bc4a48a1e2f61dcf9e`.
+The normal **Update region** operation completed in **23.857 s**. All five
+components became Ready; the former Copernicus version remains an unused
+installed build. An initial driver attempt reached a still-disabled Update
+control during readiness. Waiting for the actual control fixed the driver;
+no application state or response was substituted.
+
+All six profiles × open/loop passed through normal Generate. Native sampling was **8–23 ms**, analysis **3–9 ms**,
+and elevation-request time **27–45 ms** in that 12-route set.
+The first import/Generate/ready driver flow took 15.029 s, including readiness
+and cold storage/worker work; it is not a pure native-routing CPU measurement.
+
+| Additional actual UI route | Distance | Samples | Native D+ / D− | Native height / analysis / total |
+| --- | ---: | ---: | ---: | ---: |
+| Forest loop | 7.942 km | 160 | 135.2625 / 135.2625 m | 12 / 8 / 32 ms |
+| Regenerated long gravel loop | 151.697 km | 2,048 | 990.42146 / 990.42146 m | 148 / 69 / 239 ms |
+
+The regenerated long geometry differs from the retained **151.917 km** control.
+Its 990.42 m total must not replace the 991.40 m HGT comparison on that retained
+geometry. The host and phone forest controls have 192 vertices and the same
+reported distance but slight coordinate differences; they are separately
+captured. Cross-source comparison rows above always use identical coordinates
+within each experiment. No preferred total was used to select smoothing or data.
+
+* Touch, keyboard inspection, map position and GPX invariance passed on both
+  forest and long profiles. No new height requests were triggered by inspection.
+  The actual final forest screenshot was inspected privately; map attribution,
+  summary and graph are visible. The source caption reports IGN69 and links to
+  the current official licence text.
+* Visible Cancel/Retry remained nonfatal and retry made no routing call. Normal
+  UI Yvelines→Marly→Yvelines→Marly produced correct distinct build/source
+  identities with no stale elevation cache. A native Yvelines→Marly→Marly→Yvelines
+  run separately verified actor cold/warm transitions and zero mappings after close.
+* Android's actual Export GPX button opened its real Save picker. A fresh uniquely
+  named Downloads file was saved successfully. **8,692 bytes**, SHA-256
+  `d67c6359131f522abe7cbeba10f274fac5ec9ee683b64c46b410bbd389ee56df`:
+  canonical worker bytes = native binary payload = file read back from Android.
+  One track/segment; no route, elevation or extensions. Existing files were not
+  opened or overwritten. The new acceptance GPX remains on the phone.
+* Native/Python comparison covers **18 final captures**, including the real long
+  profile: availability matches and HGT error ≤0.010001 m; complete analysis
+  values and fingerprint match within 1×10⁻⁷. A separate native run used all
+  **2,048 actual retained-route coordinates**, matching the independent HGT
+  sampler within **0.010000000000006 m**, plus four-tile/seam/outside fixtures.
+  The private check initially reversed the fixture coordinate order; that check
+  failed, was corrected to its actual longitude/latitude contract, and passed.
+* Native 2,048-point cold sampling: **492 ms**; total including initialization
+  **2,742 ms**; warm **180 ms**; 20 identical repeats **75–161 ms**. The additional
+  repeated-point API-budget fixture took 79 ms. Over-budget, invalid-coordinate
+  and wrong-identity calls were rejected. Actor close/reopen, synthetic missing
+  and void heights and all mathematical runtime fixtures passed. These native
+  phases each measured zero UID transmit/receive bytes and zero mappings after close.
+* A normal, non-instrumented restart followed by explicit region selection and
+  Generate reproduced the forest analysis **exactly**, including fingerprint.
+  Actual Android Clear confirmation removed the generated candidate, SVG,
+  controls and inspection marker. Saved GPX and all regional data remained.
+
+### Final network finding
+
+After actual warmup and a 20 s idle period, the labelled settled UI window still
+recorded **4,354 transmitted / 7,684 received UID bytes**. Startup deltas were
+zero. The strict instrumentation assertion failed and is retained as such.
+CDP recorded **50 requests, all to the local intercepted app-assets origin**;
+this does not account for network activity outside CDP's resource-request view.
+A read-only, UID-filtered socket observation after normal restart found an
+external IPv6 TCP/443 connection under the app UID. Its service, initiator and
+relationship to the measured byte deltas were not established; private device
+addresses are not included here. Socket inspection also reported a netlink
+permission limitation. No packet interception, TLS bypass, connectivity change,
+security-feature disabling or counter adjustment was used. This narrows the
+investigation but does **not** clear the full-app no-network gate. Native routing
+and heights functioned with zero native traffic, independently of that UI result.
+
+### Final aggregate memory
+
+The final run lasted **1,155.58 s**, with 597 observations, of which 539 contained
+a valid live main process. Process-restart gaps are retained as invalid samples,
+not treated as zero-memory evidence. Main+associated PSS at each observed peak:
+
+| Window | Median aggregate | Observed peak | Main + associated at peak |
+| --- | ---: | ---: | ---: |
+| Visible before full install | 341,800,960 B | 353,024,000 B | 176,290,816 + 176,733,184 B |
+| Full-region update/readiness | 704,532,480 B | 1,782,868,992 B | 194,349,056 + 1,588,519,936 B |
+| Six-profile Generate set | 727,193,088 B | 782,538,752 B | 275,658,752 + 506,880,000 B |
+| Long route generation | 832,730,112 B | 872,430,592 B | 381,360,128 + 491,070,464 B |
+| Long chart/map interaction | 894,960,640 B | 894,960,640 B | 406,986,752 + 487,973,888 B |
+| Two IGN regions | 885,207,040 B | 925,095,936 B | 404,829,184 + 520,266,752 B |
+| Post-Clear idle, 392.06 s | 631,992,832 B | 657,324,032 B | 258,485,248 + 398,838,784 B |
+
+The **1,782,868,992-byte installation transient** is predominantly the WebView
+renderer. Its raw meminfo reports **1,483,481 KiB in Unknown**; that bucket does
+not identify a specific allocation owner. The later CDP main-context JavaScript
+heap peaked at only 21,731,916 bytes, but those metrics began after installation
+and do not cover every worker/native/graphics allocation. They cannot explain
+or exonerate the installation peak.
+
+The 392 s post-Clear idle window stayed in the foreground for all 202 valid
+observations and ended at **622,939,136 bytes**. It retains a loaded full region,
+so it is not comparable to a fresh empty-app baseline. The native headless
+actor test fell to **71,855,104 bytes after close / 70,941,696 after 15 s idle**,
+with no regional mappings. These measurements show a substantial transient and
+retained working set; they do not establish a leak. Profile full-region
+installation/readiness allocations on release hardware before public rollout;
+no arbitrary memory threshold or unsupported retention fix was introduced.
+
+All owned fixture processes and ADB forwards were removed afterward. The normal
+staging app, regions and saved GPX remain. No production/older-Debug/research
+package, signing key, phone connectivity setting, public catalogue or Play
+release was changed.
 
 ## Automated verification and packaging
 
@@ -420,7 +538,7 @@ were not claimed to be byte-audited. No operation targeted production data.
 * Android: **240 Debug / 235 Release unit tests**, zero failures; lint and normal
   Debug/Release assembly passed after the final native metadata validation. The
   private staging and instrumentation variants also built successfully.
-* All pilot APKs passed ZIP/ELF **16 KiB alignment** checks; native library bytes
+* All pilot and final APKs passed ZIP/ELF **16 KiB alignment** checks; native library bytes
   are unchanged (`09b6d312b19caa5410561b804213641f5f8a772d1b3db570cc17bac8a55fb878`).
   The phone's 4 KiB page size does not prove physical 16 KiB execution. Normal
   Release contains the expected shared assets/catalogue and neither private CA,
@@ -481,19 +599,21 @@ release acceptance. This private IGN69 component intentionally cannot pass the
 current Copernicus-specific public approval gate. Neither the public catalogue,
 Play, production signing nor installed production app was changed.
 
-## Current assessments
+## Final assessments
 
-1. **IGN technical suitability: GO for the private pilot and code review.**
+1. **IGN technical suitability: GO for private integration and code review.**
    Explicit ground-model/IGN69 contracts, real rebuilt graph and physical
    native/profile comparison are established.
 2. **Elevation accuracy: comparative evidence only.** Ground semantics and
    cross-source shape agreement are useful; no surveyed accuracy claim.
 3. **Full Yvelines: conversion coverage GO within the specified bounds.**
    The full graph, repeat conversion and independent five-component/catalogue
-   verification pass. Full-region phone acceptance remains pending; this is
-   not a blanket end-to-end acceptance of the new Yvelines bundle.
+   verification and physical functional checks pass. Four-degree-footprint voids
+   outside the region remain explicit; no blanket national-coverage claim.
 4. **Distribution/legal readiness: NO-GO.** No operator approval or IGN public
    publication evidence is supplied; the existing strict gate remains closed.
-5. **Public release: NO-GO.** Private data/catalogue, outstanding acceptance
-   and unattributed UI traffic remain explicit gates. No merge or release.
+5. **Public release: NO-GO.** Private data/catalogue, absent operator approval,
+   unattributed external UI traffic and the large installation-memory transient
+   remain explicit gates. No merge or release. The code can be reviewed for
+   private integration; this report is not public-distribution acceptance.
 
