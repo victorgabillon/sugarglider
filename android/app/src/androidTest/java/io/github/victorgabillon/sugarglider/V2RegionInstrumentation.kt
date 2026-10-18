@@ -84,15 +84,24 @@ class V2RegionInstrumentation : Instrumentation() {
                 // Keep the explicitly instrumented process eligible to execute
                 // its real WebView/installer while the device is locked. This
                 // does not dismiss authentication or install any files itself.
+                val uid = Process.myUid()
+                val initialTx = TrafficStats.getUidTxBytes(uid)
+                val initialRx = TrafficStats.getUidRxBytes(uid)
                 val activity = startActivitySync(Intent(targetContext, MainActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                runOnMainSync {
+                    activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
                 val finished = File(root, "installer-finished")
                 check(!finished.exists())
                 val deadline = SystemClock.elapsedRealtime() + 10 * 60 * 1_000
                 while (!finished.exists() && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(200)
                 check(finished.isFile) { "installer harness deadline" }
                 File(root, "installer-result.json").writeText(JSONObject().put("publication_allowed", false)
-                    .put("installer_harness_completed", true).toString())
+                    .put("installer_harness_completed", true)
+                    .put("initial_uid_tx_bytes", initialTx).put("initial_uid_rx_bytes", initialRx)
+                    .put("uid_tx_delta_bytes", TrafficStats.getUidTxBytes(uid) - initialTx)
+                    .put("uid_rx_delta_bytes", TrafficStats.getUidRxBytes(uid) - initialRx).toString())
                 runOnMainSync { activity.finish() }
                 summary.putString("stream", "V2 installer acceptance passed\n")
                 finish(Activity.RESULT_OK, summary)
@@ -243,12 +252,24 @@ class V2RegionInstrumentation : Instrumentation() {
                 }
                 output.put("region_switches", results)
             } else error("unknown research phase")
+            val mappedBefore = regionalMappings()
+            val expectedPrefix = "/regional-routing-packs/${reference.regionId}/${reference.buildId}/${reference.packId}/"
+            check(mappedBefore.all { expectedPrefix in it }) { "Unexpected regional mapping ownership" }
             output.put("pss_before_close_bytes", pss())
+                .put("regional_mapping_paths_before_close", JSONArray(mappedBefore))
             engine.close()
+            val mappedAfter = regionalMappings()
+            check(mappedAfter.isEmpty()) { "Regional mappings survived explicit actor closure" }
+            output.put("regional_mapping_paths_after_close", JSONArray(mappedAfter))
             output.put("pss_after_close_bytes", pss()).put("pss_initial_bytes", initialPss)
                 .put("elapsed_ms", SystemClock.elapsedRealtime() - started)
                 .put("uid_tx_delta_bytes", TrafficStats.getUidTxBytes(uid) - tx)
                 .put("uid_rx_delta_bytes", TrafficStats.getUidRxBytes(uid) - rx)
+            if (phase == "height") {
+                SystemClock.sleep(15_000)
+                check(regionalMappings().isEmpty()) { "Regional mappings returned after closed idle" }
+                output.put("closed_idle_ms", 15_000).put("pss_after_closed_idle_bytes", pss())
+            }
             if (phase != "installer") {
                 check(tx >= 0 && rx >= 0 && output.getLong("uid_tx_delta_bytes") == 0L && output.getLong("uid_rx_delta_bytes") == 0L)
             }
@@ -274,5 +295,7 @@ class V2RegionInstrumentation : Instrumentation() {
     private fun coordinates(points: List<LocalRouteCoordinate>): JSONArray = JSONArray(points.map {
         JSONArray(listOf(it.longitude, it.latitude)) })
     private fun nullable(heights: List<Double?>): JSONArray = JSONArray(heights.map { it ?: JSONObject.NULL })
+    private fun regionalMappings(): List<String> = File("/proc/self/maps").readLines()
+        .filter { "/regional-routing-packs/" in it }
     private fun pss(): Long = Debug.getPss() * 1_024L
 }

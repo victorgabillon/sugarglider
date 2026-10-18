@@ -6,27 +6,251 @@ not publication approval. See the [rights dossier](pr94-terrain-rights.md).
 
 ## Acceptance assessment
 
-- **Terrain format/native-engine suitability: GO for the tested Copernicus DSM
-  pipeline on the host.** Do not describe this surface model as surveyed or
-  bare-earth hiking terrain; the independent source differences below remain.
-- **Terrain redistribution: evidence prepared; NO-GO for actual publication.**
-  The reviewed licence and notices are documented, but affirmative exact-build
-  operator acceptance/approval is absent. Every actual regional manifest retains
-  `publication_allowed=false`.
-- **V2 distribution engineering: NO-GO for complete acceptance; host staging passes.**
-  Real TLS byte/range/CORS checks pass. The phone became disconnected after the
-  new isolated APK was installed, before installing its new region. Native HTTPS
-  installation, failure/restart tests and new-source physical UI remain gates.
-- **Public Android release: NO-GO.** Approval, coordinated public V2 catalog,
-  physical new-source acceptance and the outstanding PR93 release gates remain.
-  Normal Release still bundles the unchanged public V1 catalog; the explicit
-  assembled-APK preflight rejects that mismatch. No V1 reader is added.
+The source/host experiments dated 16 October remain historical evidence. The
+18 October recovery and Fairphone measurements below use a **new immutable
+private build**, not the lost original artifact. Neither the user's permission
+to reconstruct/test nor this report is operator publication approval.
 
-The build, source and host checks below are actual experiments. Phone results
-from PR93 used historical Mapzen data and **are not PR94 acceptance**. The new
-staging APK is installed with the verified research certificate; ADB subsequently
-reported `device '014728cc' not found`. Reconnect/unlock was requested. No new
-source installation, phone routing, chart or GPX result is claimed yet.
+| Requested acceptance decision | Decision after physical acceptance |
+| --- | --- |
+| PR94 technical integration | **NO-GO for final acceptance:** normal installed-source tests pass; physical failure/lifecycle/final-audit gates remain after USB disconnection. |
+| V2 installation engineering | **NO-GO for complete acceptance:** normal phone HTTPS install/cancel/resume/restart pass, but isolated corruption/interruption/quota tests remain unrun. |
+| Copernicus terrain quality for hiking | **NO-GO for a validated ground-terrain accuracy claim.** DSM canopy/building effects and the historical ~40% long-route IGN difference remain. The conversion/native format is suitable for private research. |
+| Terrain redistribution approval | **NO-GO:** no actual operator publication approval exists; every real manifest remains `publication_allowed=false`. |
+| Public Android release | **NO-GO:** exact-build approval, coordinated public V2 catalog and outstanding PR93 device/release gates remain. Normal Release still bundles unchanged V1 offerings and fails the explicit V2 release preflight. |
+
+## Fairphone acceptance and artifact recovery: 18 October 2026
+
+Starting PR94 head: `a6e71f00fa187e0c6850e987f0647fd1321e9cb6`.
+ADB serial `014728cc` is the actual Fairphone 6, Android 16. Before any launch or
+update, an independent read-only inventory verified installed APK certificates,
+package metadata and readable private-file hashes. Staging had **zero private
+files**, so there was no existing partial installation to overwrite. Production's
+four splits were verified; production private data is inaccessible to `run-as`,
+so it is not claimed to have been read or individually hashed.
+
+Both original `/tmp/sugarglider-pr94-source` and `/tmp/sugarglider-pr94-data` were
+missing. Searches found only historical Mapzen artifacts, which were preserved
+and rejected as substitutes. The user explicitly authorized private reconstruction
+and, after the different graph hash was explained, chose the simplest path of
+testing the fresh identity with the difference recorded for a later decision.
+No assumption of approval or byte equivalence was made.
+
+The existing branch was recovered into ignored durable
+`data/offline-regions/pr94-acceptance/source`; sibling `private` and `evidence`
+hold all real data, TLS keys, APKs, raw logs, captures and screenshots outside Git.
+All 11 originals (489,501,031 bytes) reproduced the pinned SHA-256 values:
+14.71 s, maximum process RSS 49,448 KiB. A host reboot interrupted the first
+conversion/build-check attempt; its partial output was retained separately.
+The successful converter took 474.52 s / 207,388 KiB, with **all four compressed
+HGT files byte-identical to 16 October**, including the hashes listed below.
+Another 100 original-COG/manual-geoid controls and 14,404 seam comparisons pass;
+maximum integer quantization error is 0.489426 m, not terrain accuracy.
+
+The graph rebuild used the same pinned 3.9.1 image, unchanged PBF and verified
+map/Places/Nature bytes. It took 523.32 s / maximum process RSS 2,676,276 KiB.
+Its 99,481,600-byte graph has a different SHA-256; consequently the documented
+region received a new identity. **The original graph was not reproduced.**
+
+| Artifact | Immutable identity |
+| --- | --- |
+| Lost 16 October private build | `9799c1034b2e581ee1cf9cba522c4cf873c863280f8608506c15af0b4ba46efe` |
+| Lost original graph | `7d85ebdeefbbabc1716a4ffd8a50b7e9bea0083741b26b4d4aee596474e8fd09` |
+| Actually installed/tested 18 October build | `8df4d6d9c7cb18b5da524dd5ab38291ef77bff2004471a38cbc346dc74c46f6c` |
+| Actually installed graph | `cb8bb5dc00e5981c366496515ecc5ae5354a35806bfc334283a3cb416933186c` |
+| New regional manifest | `f5500e85efa7b528e72a898cd8abd51e18e5226e0afcb78c3901a6e2f7cf41bb` |
+| New elevation manifest | `52f0720ddf5eee7e2b5c1ecec74ca45eb13f520c33757d82c48fd2b3f4caf322` |
+
+TAR member metadata/order/offsets/sizes match the retained archive layout. The
+original graph bytes are absent, so the cause of the difference is unresolved.
+The actual [Valhalla 3.9.1 build-ID implementation](https://github.com/valhalla/valhalla/blob/3.9.1/src/mjolnir/util.cc#L405)
+derives the tile-set ID from content hashes; it must not be dismissed as a random
+nonce or timestamp. No graph-header editing, identity coercion or claim of exact
+reconstruction was used. This limitation remains explicit for the user's later
+artifact/reproducibility decision.
+
+A fresh local CA/server chain and catalog were generated because the old private
+keys were gone. Only staging and its test APK were updated **in place** after
+independent ID/version/certificate/permission/asset/catalog/alignment audits.
+No package was uninstalled or cleared. The cert is unchanged:
+`e84155df3a2c7ea48723876b1fe8e0e602cb600f8374d6539b9fea9aa42cfbd7`.
+
+| Installed item | SHA-256 |
+| --- | --- |
+| `.v2staging`, code 8, `1.2.0-v2-staging`, 25,618,063 bytes | `74b3bcd740e4c26a67e5e4ac232624852a4ef202e3664b1489a744d9e0dd5a26` |
+| `.v2staging.test`, 258,008 bytes | `6ded2bcda55086473aa3c2690555c807772797f66fdadf631b338cceee292c5e` |
+
+### Actual HTTPS installation, restart and immutable-file checks
+
+The server binds only `127.0.0.1:9443`, reached by a task-owned USB reverse tunnel.
+No phone connectivity, trust store, USB authorization or system CA was changed.
+Strict TLS 1.3 with explicit private CA/hostname verification, exact origin CORS,
+identity encoding, no redirect/cookie/credentials and real 127-byte PMTiles ranges
+pass. Default system trust correctly rejects the private CA. All 11 component
+files (218,670,766 bytes) and the catalog/root manifest were fetched and matched;
+actual APK/catalog preflight passes privately and public-mode preflight rejects.
+
+The actual Regions UI discovered the bundled catalog. Cancelling the fresh map
+download at 4.6 MB left an explicit incomplete state and **no active build**.
+Normal Download resumed it and committed all five components; all five checkmarks
+were Ready by the 30.91 s observation after resume. This is an observed upper bound
+for download/verification/readiness, not a more precise installer timer.
+Installation UID traffic, including cancelled bytes/TLS/startup, was
+129,738 bytes TX / 225,518,036 bytes RX. It is intentionally separate from offline
+routing traffic. All 11 installed component files were independently SHA-verified:
+native graph/elevation via actual private files and map/Places/Nature via bounded
+OPFS reads. The committed build and five-component Ready state survive process
+restart. No raw regional files were pushed into Android storage.
+
+| Installed component payload | SHA-256 |
+| --- | --- |
+| Map archive | `a5e2af1ac3785d370c84a5fc0c46e65ba764a2331d4d86b7e2c6b25de52bce3d` |
+| Routing graph | `cb8bb5dc00e5981c366496515ecc5ae5354a35806bfc334283a3cb416933186c` |
+| Places gzip | `1ace12b6869ae74f97a673ac9fe6f706cb17a6b7f29b35a9b0dbafd095ea4649` |
+| Nature gzip | `abb0819a4f4b02d8ee844aa19de71c1760e0b63a1a9f7bd3410513d82dca7b90` |
+| Four HGT gzip files | Exact four full hashes in the HGT table below |
+
+### Actual normal Generate, native heights and interactive UI
+
+All **24** normal Generate cases pass: six public profiles × open/loop × two runs.
+Every repeat preserves the exact returned geometry, authoritative distance,
+profile, candidate identity and elevation analysis. Each result binds the new
+region/build and `0.6.4/valhalla-3.9.1`; no online routing fallback was available.
+Distances and filtered totals equal the six-profile table below. Each case used
+normal request-file import followed by the application's Generate button; neither
+candidate geometry nor elevation results were injected.
+
+A fresh long gravel loop contains **152.163 km / 2,048 samples**, with actual
+74.33464 m spacing, complete EGM96 coverage, min/max 103.16/196.64 m.
+Its raw D+/D− is **1,879.93/1,879.93 m**; unchanged `distance-box-v1` filtering
+(radius 50 m, maximum gap 100 m) gives **1,402.06847/1,402.06847 m**.
+It is a newly routed geometry, not the historical 151.917 km comparison line.
+A normal 9.279 km Hike tour gives raw 248.68/248.68 m and filtered
+182.53325/182.53325 m.
+
+Across **26 actual captured profiles / 4,741 height samples**, all Python analysis
+fields/fingerprints agree within `1e-7` numerical tolerance. Native-versus-decoded
+HGT maximum error is 0.010000 m (native decimal precision); maximum original-COG
+plus independently interpolated NGA-grid error is **0.491676 m**. The long route's
+maximum is 0.474511 m. These check the same DEM and documented transformation,
+not independent ground truth or a new hiking-quality endorsement.
+
+Actual Android WebView touch/keyboard inspection moves the map marker to the
+matching cumulative-distance coordinate. End inspection reaches the actual final
+route coordinate. No additional `route_elevation` request occurs during graph
+interaction. Before/after actual worker GPX exports are byte-identical and have
+one track/one segment, no route, elevation or extensions. Normal Cancel during a
+real native request leaves the route available with explicit cancelled status;
+normal Retry restores only the current candidate/source. Raw screenshots and
+route/GPX captures remain private.
+
+### Sustained workload and the new physical blocker
+
+**At 09:41:20 Europe/Paris the host kernel recorded `usb 3-13: USB disconnect`.**
+`adb devices -l` subsequently has no device and `lsusb` has no Fairphone. No
+USB/network/trust setting was changed to work around it. A reconnect/unlock was
+requested; dependent phone work stopped and all raw/partial state was preserved.
+This is a missing physical device, not evidence of a native crash or a product
+regression. It prevents claiming complete Fairphone acceptance.
+
+Before disconnection the checkpoint records **99 paced candidate selections,
+eight normal regenerations and two Home/foreground cycles over 439.461 s**.
+Every checked selected result kept its exact candidate/source binding, one SVG,
+one chart control, one map archive and a cleared inspection marker after Escape.
+The intended 144-selection/12-regeneration/three-cycle run did not finish. The
+finished 99-selection checkpoint is explicitly partial; no clean-idle, explicit
+actor-close or final UID-network measurement is inferred from it.
+
+PSS is `dumpsys meminfo --package` for the actual staging package and **all
+associated WebView processes from the same observation**, matching PR93's
+definition. It does not exclusively attribute shared Android system services.
+Collection is about 1.5 s plus command time; subsecond peaks can be missed.
+First-use startup already opens an empty map. Native replies and chart observation
+provide separate timings, not an invented isolated height/chart PSS peak.
+
+| Physical phase | Median aggregate PSS, bytes | Observed peak, bytes | Main + associated WebView at that same peak |
+| --- | ---: | ---: | --- |
+| First startup/empty map/idle | 327,265,792 | 349,797,376 | 189,506,560 + 160,290,816 |
+| Install/verification/readiness window | 599,928,832 | **1,096,246,272** | 199,291,904 + 896,954,368 |
+| Restarted V2 region + map | 683,239,424 | 694,212,608 | 282,174,464 + 412,038,144 |
+| Six-profile Generate/height/chart workload | 720,296,960 | 788,017,152 | 271,389,696 + 516,627,456 |
+| Long route/chart/interaction window | 791,434,240 | 856,914,944 | 395,165,696 + 461,749,248 |
+| Interrupted sustained workload | See 30 s windows below | 828,903,424 | 383,217,664 + 445,685,760 |
+
+Sustained first/last 30 s median aggregate PSS: **769,648,640 / 796,721,152 bytes**.
+Two short background-window medians: 765,076,480 / 735,950,848 bytes. There was no
+observed monotonic unbounded rise, but the incomplete run and absent cleanup/idle
+cannot establish long-term stability or exclude retention. The installer peak is
+larger than PR93's 989,039,616-byte route/region-return peak and must remain
+visible. These are different workloads/artifacts/renderer states, not evidence
+of a regression or a saving. No arbitrary memory ceiling or leak claim is made.
+Observed staging private-storage peak during installation was **224,171,008
+allocated bytes** (`du` across files/WebView/cache/no_backup, excludes APKs);
+later route captures/cache reached 224,302,080. This is a sampled allocation peak,
+not a sum of logical component sizes or proof that no short staging overlap exists.
+
+Native reply timings captured before interruption include 37 actual route calls:
+18–769 ms, median 35 ms (warm actor, different path/search lengths). Across the 26
+captured profiles, native height is 4–177 ms, analysis 3–55 ms. The 2,048-sample
+route specifically measures **149 ms native height / 55 ms analysis / 223 ms total**.
+Nineteen passive reply-to-SVG MutationObserver intervals are 2.7–12.9 ms. These
+include reply handling/validation/render scheduling and are **chart-ready upper
+bounds**, not isolated construction CPU time. Test probes forward unmodified
+messages and retain bounded metadata only; memory includes the test harness.
+
+WebView network loads were blocked for the actual post-install route/UI run
+without changing phone connectivity. Real offline routes/heights/charts passed.
+The independent install traffic is recorded above. The planner's strict final
+UID TX/RX assertion was not retrieved before disconnection, so **zero-byte offline
+UID activity is not claimed**. The server trace and a blocked WebView alone do
+not prove zero native/network activity in every process.
+
+### Unfinished gates and preservation limits
+
+The physical all-four-tile/integer-boundary/missing-coordinate probe, synthetic
+partial/void JNI fixtures, explicit native close/reopen/mapping-zero checks,
+post-clear 75 s idle, final native Save-document chooser path and isolated
+wrong-hash/wrong-build/corrupt-HGT/quota/interrupted-transfer/retry tests remain
+**unrun** in this new-source acceptance attempt. Controlled faults were prepared
+only in fresh private host directories and were never used to damage the
+successful Android installation. Existing automated fixtures cover these contracts,
+but are not labelled physical results. Normal UI download cancellation/resume and
+actual elevation cancellation/retry **did** pass, as detailed above.
+
+The fresh pre-update preservation audit matches all nine installed APK files,
+package paths/versions/install timestamps, 220 old Debug and 271 previous V2
+research private files byte-for-byte. All 11 files in each retained host Mapzen
+Yvelines/Marly region independently match their original identities. Only the
+staging app/test update and their new owned state were written. **A final
+post-workload device preservation comparison is blocked**, so the earlier audit
+is not presented as a final after-test result. Production private data was never
+read. Published V1 data/catalog, signing, Play and social were not modified.
+
+No new production defect was confirmed by the completed physical cases. Added
+instrumentation asserts regional mapping ownership/zero after explicit closure,
+records a 15 s closed idle, keeps the explicit installer test awake and separates
+installation traffic. These assertions compiled and passed host checks, but their
+new-source physical execution remains a gate. Raw personal routes, all DEM/input
+bytes, keys, APKs, screenshots and logs remain outside Git.
+
+Private evidence integrity pins (not a claim that raw artifacts are committed):
+
+| Evidence | SHA-256 |
+| --- | --- |
+| recovered-apk-audit.json | `1df3fa40032c6b37270ba51b25fe55200218f4de1481573e0772ceef301daac0` |
+| host-https-final.json | `63a5bf836067b82c2597f708a60284c22dadb27c28f675fd4ab99a155cc2adf0` |
+| installed-native-verified.json | `cacb7e085166eb76637bf507cb80471269934e77985475c193da6ce1e3f72b21` |
+| installed-opfs-verified.json | `1035736a00af3394c5a799a42f636c6cdb9e55749a9033f2e72d39e208a24dc6` |
+| profiles-summary.json | `39263743aa92c085a1504f37ddbd24c1d763ef81bf2f07d01d05d5dfc67acf67` |
+| phone-comparison.json | `a990341bb719337d9f9cf1f6e5160e24ec1d5407e310bdd31c42f7207338cbd2` |
+| long-interaction.json | `6931eb13bbf8e1bb2fc68b649fdb0a4a1aec6c5ee0cc55e59a7daa961ff09e48` |
+| cancel-retry.json | `93f38272ca9b23e4b81619859aa79b6b0642d06ac8a3a1fc6454c0e3bfc1756c` |
+| endurance-progress.json | `ff60f658c8b464b569013e31b5b13afcb5cc3f1ac03defc4a26e4b96ad9f53e5` |
+| memory-summary-partial.json | `bb71d3c3230d49960669e2de67c971358335c01a26fb5e361119f59664fdcc3d` |
+| device-before.json | `cb9cf621d5a6846065210ef9aa674915734018c33d72220437fe3a0a91306929` |
+| preservation-after.json | `3c8dec531a57bdaad698d730e9c11234d967d6472584d6dcefd6ef670d1e05e4` |
+| old-host-regions-verified.json | `1d4d4baf212d5fe44a0a09fc807996f7ba4d92832bfbb722f5a2425cea4e02bf` |
+
 
 ## Implementation and confirmed integration changes
 
@@ -102,7 +326,7 @@ void/range counters and all derived hashes outside Git.
 | Graph | 22 genuine 3.9.1 GPH tiles, embedded elevation flag independently verified |
 | Regional components | 218,670,766 bytes; 218,674,036 including regional manifest |
 
-The new private documented build is
+The **16 October** private documented build was
 `9799c1034b2e581ee1cf9cba522c4cf873c863280f8608506c15af0b4ba46efe`.
 Graph SHA-256:
 `7d85ebdeefbbabc1716a4ffd8a50b7e9bea0083741b26b4d4aee596474e8fd09`.
@@ -222,8 +446,8 @@ Host route latency: 16.97–33.63 ms warm, 208.33 ms for the first route. Five-r
 native height calls took 1.13–200.06 ms; the long 2,048-sample call took 193.89 ms.
 Host actor peak RSS was 145,152 KiB; regional file mappings went from five to zero
 after actor destruction. Host RSS cannot be compared to phone aggregate PSS or
-used to claim a phone memory improvement. Phone main/WebView measurements remain
-blocked by the missing device.
+used to claim a phone memory improvement. Actual 18 October phone main/WebView measurements are reported separately above;
+these host figures are not substituted for them.
 
 ## Private distribution and phone boundary
 
@@ -242,25 +466,36 @@ HTTPS, not public hosting acceptance or Android installation. The staging catalo
 uses outer schema 1 with an exact **V2 regional manifest**, immutable build URL,
 bounds and component byte total; its local manifest/component preflight passes.
 
-The new package is `io.github.victorgabillon.sugarglider.v2staging`, version code 8,
+The 16 October staging package is `io.github.victorgabillon.sugarglider.v2staging`, version code 8,
 name `1.2.0-v2-staging`. It was verified against the installed research certificate
 `e84155df3a2c7ea48723876b1fe8e0e602cb600f8374d6539b9fea9aa42cfbd7` before installation.
 Only this previously absent package and its test APK were installed. Exact app ID,
 permissions, certificate, bundled staging catalog/CA and absence of real regional
 files were checked. Production, old Debug and `.v2debug` were not installed over,
 cleared or uninstalled. Their APK/metadata and readable regional-file baselines
-were captured before installation. A post-test comparison awaits reconnection.
+were captured before installation. Those 16 October raw baselines are now missing
+with the temporary directory; the fresh 18 October preservation inventory is
+recorded above, without claiming a comparison against unavailable files.
 
-**Pending physical acceptance:** normal five-component HTTPS installation and full
-verification; interrupted/cancelled/corrupt/wrong-hash/wrong-build/storage-failure
-recovery; restart/selection readiness; all six profiles, open and loop routes;
-new-source native samples versus HGT/original COG; D+/D−/interactive chart; GPX
-byte invariance; main plus WebView PSS/latency; actor closure/mapping ownership.
-Existing synthetic installer/security regressions do not substitute for these.
+The 16 October phone installation was interrupted by disconnection. The actual
+18 October reconstruction, replacement identity, in-place staging update, normal
+HTTPS installation and new-source physical acceptance are reported above. Neither
+historical Mapzen phone evidence nor synthetic fixtures substitute for those tests.
 
 ## Regression status and reproduction
 
-Final `uv run --offline make check`: Ruff, strict mypy, **1,405 passed / 16
+The 18 October rerun after the instrumentation changes passes **1,405 / 16
+deselected**, Ruff and strict mypy (186.56 s). Browser reruns pass all 48 harnesses /
+918 scenarios, focused 22-case V2/release checks, controlled retention and real
+four-viewport chart/map input. Android reruns pass **239 Debug + 234 Release**
+tests, both lint/build variants and isolated staging/test/lint; all three APKs
+pass ZIP/ELF 16 KiB alignment. All 134 shared assets are pinned; only staging
+receives the explicit new CA/catalog, and its permission list is byte-identical
+to the previously installed staging APK. Final committed-head reruns and CI are
+linked from the PR94 delivery update.
+
+
+Historical 16 October `uv run --offline make check`: Ruff, strict mypy, **1,405 passed / 16
 external-service tests deselected**, 179.01 s under main's retained NumPy version.
 All **25 focused tests** pass, including deterministic synthetic HGT,
 signed/no-data/orientation checks, known terms and exact approval, source
@@ -340,9 +575,9 @@ release. Ordinary main CI performs tests/builds, not this authorized publication
    HTTPS artifacts. Keep the existing public V1 artifacts for the code-8 app.
 3. Stage a V2 offering and rebuild the normal app with that coordinated catalog;
    pass the assembled-APK preflight. The outer catalog schema may remain 1.
-4. Complete the pending new-source phone installation/failure/route/chart/GPX and
-   aggregate-memory checks. Retain the PR93 startup-network attribution and broader
-   device/16 KiB-runtime release limitations until separately verified.
+4. Retain the measured phone acceptance and explicitly decide the replacement
+   graph/reproducibility issue. Retain the PR93 startup-network attribution and
+   broader device/16 KiB-runtime release limitations until separately verified.
 5. Obtain separate deployment and Android release authorization. This PR authorizes
    neither public data publication, Google Play upload, signing/version changes,
    merge nor social activation.
