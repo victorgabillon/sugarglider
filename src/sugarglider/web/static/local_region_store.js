@@ -3,7 +3,7 @@ import {
   REGIONAL_MANIFEST_MAX_BYTES, RegionalDataError, parseRegionalManifest,
   requireData, safeRegionalId, validSha256, verifyRegionalBytes,
 } from "./regional_manifest.js";
-import { createLocalRegionData, decodeRegionalIndex } from "./local_region_data.js";
+import { createLocalRegionData, decodeRegionalIndex, validateLocalRegionDocuments } from "./local_region_data.js";
 
 const DIRECTORY = "sugarglider-region-components";
 const LOCK = "sugarglider-region-components-mutation";
@@ -111,7 +111,7 @@ export function createLocalRegionStore({
           await writeFile(component, "index.json.gz", bytes);
         }
         // Full structural validation before the completion marker and active switch.
-        createLocalRegionData(manifest, documents);
+        validateLocalRegionDocuments(manifest, documents);
         signal?.throwIfAborted();
         await writeFile(version, "manifest.json", JSON.stringify(manifest));
         signal?.throwIfAborted();

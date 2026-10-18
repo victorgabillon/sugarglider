@@ -22,22 +22,66 @@ class V2RegionInstrumentation : Instrumentation() {
     private lateinit var researchId: String
     private lateinit var phase: String
     private var blockWebNetwork = false
+    private var trafficRecorder: java.util.Timer? = null
+    private var excludeAutofill = false
+
+    override fun callActivityOnCreate(activity: Activity, state: Bundle?) {
+        if (excludeAutofill) activity.window.decorView.importantForAutofill =
+            android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+        super.callActivityOnCreate(activity, state)
+    }
+
+    override fun finish(resultCode: Int, results: Bundle?) {
+        trafficRecorder?.cancel()
+        trafficRecorder = null
+        super.finish(resultCode, results)
+    }
 
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
         researchId = arguments?.getString("research_id").orEmpty()
         phase = arguments?.getString("phase").orEmpty()
         blockWebNetwork = arguments?.getString("block_web_network") == "true"
+        excludeAutofill = arguments?.getString("exclude_autofill") == "true"
+        if (arguments?.getString("fresh_webview") == "true") {
+            check(BuildConfig.DEBUG && researchId.matches(Regex("[a-z0-9-]{1,64}")))
+            android.webkit.WebView.setDataDirectorySuffix(researchId)
+        }
         start()
     }
 
     override fun onStart() {
         val summary = Bundle()
         try {
-            check(BuildConfig.DEBUG && targetContext.packageName in setOf("io.github.victorgabillon.sugarglider.v2debug", "io.github.victorgabillon.sugarglider.v2staging"))
+            check(BuildConfig.DEBUG && (targetContext.packageName in setOf("io.github.victorgabillon.sugarglider.v2debug", "io.github.victorgabillon.sugarglider.v2staging") ||
+                targetContext.packageName.matches(Regex("io\\.github\\.victorgabillon\\.sugarglider\\.v2audit[a-z0-9]{1,16}"))))
             check(researchId.matches(Regex("[a-z0-9-]{1,64}")))
             val root = File(targetContext.cacheDir, researchId).canonicalFile
             check(root.parentFile == targetContext.cacheDir.canonicalFile && root.isDirectory)
+            val trafficFile = File(root, "uid-series.jsonl")
+            check(!trafficFile.exists())
+            trafficRecorder = java.util.Timer("uid-observer", true).apply {
+                scheduleAtFixedRate(object : java.util.TimerTask() {
+                    override fun run() {
+                        trafficFile.appendText(JSONObject().put("elapsed_ms", SystemClock.elapsedRealtime())
+                            .put("uid", Process.myUid()).put("pid", Process.myPid())
+                            .put("tx_bytes", TrafficStats.getUidTxBytes(Process.myUid()))
+                            .put("rx_bytes", TrafficStats.getUidRxBytes(Process.myUid())).toString() + "\n")
+                    }
+                }, 0, 1_000)
+            }
+            if (phase == "network_control") {
+                WebViewNetworkReview.run(this, root)
+                summary.putString("stream", "Network control observations recorded; zero-network assertion retained separately\n")
+                finish(Activity.RESULT_OK, summary)
+                return
+            }
+            if (phase == "network_preload") {
+                WebViewNetworkReview.preload(this, root)
+                summary.putString("stream", "Pre-navigation network observations recorded\n")
+                finish(Activity.RESULT_OK, summary)
+                return
+            }
             if (phase == "planner") {
                 val uid = Process.myUid()
                 val startupTx = TrafficStats.getUidTxBytes(uid)

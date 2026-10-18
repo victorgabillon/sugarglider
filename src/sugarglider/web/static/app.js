@@ -25,7 +25,7 @@ import { createIcon, decorateIcons } from "./icons.js";
 import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap, keepCoordinateVisible } from "./map.js";
 import { createLocalRoutingBridge } from "./local_routing.js";
 import { createLocalPlanner, LocalPlannerError } from "./local_planner.js";
-import { createLocalRegionClient } from "./local_region_client.js";
+import { createLocalRegionClient, createRegionInstallerClient } from "./local_region_client.js";
 import { createRegionVersionStore } from "./region_versions.js";
 import { createRegionalNativeClient } from "./regional_native.js";
 import { createRegionalPlanningContext } from "./regional_planning.js";
@@ -95,7 +95,6 @@ const localGpxExporter = createLocalGpxExporter();
 const gpxFileSaver = createGpxFileSaver();
 const localRoutingBridge = createLocalRoutingBridge();
 let sharedLocalRegionClient = null;
-let installerRegionClient = null;
 let selectedRegionId = null;
 let regionScreen = null;
 let plannerProfilePreference = null;
@@ -3169,10 +3168,7 @@ async function retryCurrentConnection() {
 
 async function initializeRegionScreen() {
   const product = createRegionProduct({ versions: regionVersions, native: nativeRegions,
-    installerClient: {
-      installVersion: (...args) => { installerRegionClient ??= createLocalRegionClient(); return installerRegionClient.installVersion(...args); },
-      cancelInstall: () => installerRegionClient?.cancelInstall(),
-    } });
+    installerClient: createRegionInstallerClient() });
   regionScreen = createRegionScreen({ versions: regionVersions, product, withRegion: withPlanningRegion,
     selectedRegionId: () => selectedRegionId,
     selectRegion: (id) => {

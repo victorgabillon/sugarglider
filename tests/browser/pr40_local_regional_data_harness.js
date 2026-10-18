@@ -1,5 +1,5 @@
 import { parseRegionalManifest, regionalBuildIdentity, sha256Bytes, verifyRegionalBytes } from "../../src/sugarglider/web/static/regional_manifest.js";
-import { createLocalRegionData, decodeRegionalIndex, eligibleLocalPoi } from "../../src/sugarglider/web/static/local_region_data.js";
+import { createLocalRegionData, decodeRegionalIndex, eligibleLocalPoi, validateLocalRegionDocuments } from "../../src/sugarglider/web/static/local_region_data.js";
 import { createLocalRegionStore, loadLocalRegionData } from "../../src/sugarglider/web/static/local_region_store.js";
 import { createLocalAutoTourEngine, validateLocalAutoTourRequest } from "../../src/sugarglider/web/static/local_auto_tour.js";
 import { createLocalRegionClient } from "../../src/sugarglider/web/static/local_region_client.js";
@@ -83,6 +83,7 @@ export async function runPr40LocalRegionalDataHarness() {
     (d) => { d.nature.features[3].geometry.coordinates[1] = [[.015, .003], [.018, .003], [.018, .017], [.015, .017], [.015, .003]]; },
   ]) {
     const changed = structuredClone(fixture); mutation(changed);
+    await rejects(() => validateLocalRegionDocuments(manifest, changed));
     await rejects(() => createLocalRegionData(manifest, changed));
   }
   scenarios.push("strict_index_metadata_counts_identity_and_approaches");

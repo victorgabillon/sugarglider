@@ -3,6 +3,22 @@
 // and the planner owns intent. A discovery query must not mutate either one.
 import { RegionalDataError, freezeData } from "./regional_manifest.js";
 
+// An installer has no queries to serve after completion. Keep cancellation alive
+// until the worker acknowledges a definite result, then release its entire heap.
+export function createRegionInstallerClient({ createClient = createLocalRegionClient } = {}) {
+  let active = null;
+  return Object.freeze({
+    async installVersion(...args) {
+      if (active) throw new RegionalDataError("regional_operation_busy");
+      const owned = createClient();
+      active = owned;
+      try { return await owned.installVersion(...args); }
+      finally { active = null; owned.close(); }
+    },
+    cancelInstall: () => active?.cancelInstall(),
+  });
+}
+
 export function createLocalRegionClient({
   worker = new Worker(new URL("./local_region_worker.js", import.meta.url), { type: "module" }),
 } = {}) {
