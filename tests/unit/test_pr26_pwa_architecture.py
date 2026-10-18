@@ -234,7 +234,7 @@ def test_shared_shell_generation_tracks_v96_cached_assets() -> None:
             "319176cc644c0c80ba464133c969de558e65e75d084e1ed699646301e3ee7b1b"
         ),
         "elevation_view.js": (
-            "c1ef3370260365c0038fba98e03db3571451d13ccbccd36663be4790beb9caf6"
+            "5d6da364ecb5002fe60d7fd2f892db51d45791f673d7d4c93536c8432084242a"
         ),
         "elevation_map_marker.js": (
             "3e064a2be298eda3d3d64e335e478e35a9a0c3a23ff417d905ebe73314c641ba"

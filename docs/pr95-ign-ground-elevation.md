@@ -73,6 +73,8 @@ The missing historical D078 archive was reacquired from IGN. Its **90,690,133
 bytes / `cdd5637135c86a0779e4eed7b0398b6de1ec25e78e000b94fddc2ee00915ca38`**
 exactly match PR94, rather than assigning the old identity to different bytes.
 Its edition is 2020-07-30; delivery metadata identifies 2021-10-00009.
+The 17 selected delivery editions span 2019-07-09 to 2023-01-03; the ledger
+retains each one rather than presenting a homogeneous 2026 terrain survey.
 
 ### LiDAR HD
 
@@ -101,9 +103,10 @@ RGE ASCII cells are point nodes at multiples of 5 m. Their corner headers are
 offset by half a pixel; treating those corners as samples would introduce a
 2.5 m registration error. Preparation decodes verified 7z deliveries through a
 bounded libarchive TAR stream; links, traversal, special files, excess entries,
-expanded bytes and insufficient disk are rejected. One 1000² granule is converted
-losslessly to float32 tiled GeoTIFF at a time, with original ASCII and archive
-hashes retained. The strict preparation index is bounded to 16 MiB/40,000 grids.
+expanded bytes and insufficient disk are rejected. One 1000² granule at a time is written to tiled GeoTIFF, preserving GDAL's
+decoded float32 nodes, with original ASCII and archive hashes retained. This
+compression is lossless for those binary nodes; decimal-to-float representation
+is not exact real arithmetic. Independent ASCII comparisons allow 2×10⁻⁵ m. The strict preparation index is bounded to 16 MiB/40,000 grids.
 
 For each 3601² geographic node grid:
 
@@ -181,6 +184,7 @@ geometry and controls remain outside Git.
 | --- | ---: | ---: | ---: | --- |
 | Copernicus EGM96 | 1,859.84 / 1,859.84 | 1,393.05 / 1,393.05 | 103.16 / 196.73 | complete |
 | IGN RGE original 5m IGN69 | 1,116.46 / 1,116.46 | 995.11 / 995.11 | 101.89 / 180.49 | complete |
+| IGN RGE Skadi IGN69 | 1,123.04 / 1,123.04 | 991.40 / 991.40 | 102.00 / 180.00 | complete |
 | Historical Mapzen unresolved datum | 1,639.64 / 1,639.64 | 1,280.48 / 1,280.48 | 104.55 / 191.27 | complete |
 
 
@@ -319,7 +323,7 @@ headless test, which is not directly comparable to a visible map/chart process.
 The early phase labelled `idle-before-ign-install` included installation and
 selection and is deliberately not presented as a clean idle baseline.
 
-## Full Yvelines conversion (final build/device checks in progress)
+## Full Yvelines conversion and build
 
 All 7,520,006 target-grid nodes (including shared tile edges) are available.
 Across all four full degree tiles, 166,357 nodes outside the target bounds
@@ -329,8 +333,23 @@ quantization is 0.5 m and projection formula disagreement 5.588×10⁻⁹ m.
 The first conversion took 576.98 s with maximum RSS 207,664 KiB.
 There are 3,518 prepared records / 3,042 distinct lattice granules; all 435
 overlapping granules have identical prepared bytes (476 duplicate records).
-The repeat conversion, fresh full graph and final phone acceptance are still
-running; this draft does not claim those checks passed.
+All duplicated departmental input granules match exactly, so the merger
+introduces no priority-dependent join there. That does not rule out acquisition
+seams already present in IGN's heterogeneous master grid.
+
+The repeat conversion passed in 553.26 s / maximum RSS 163,532 KiB: all four
+HGT files and the transformation record are byte-identical. Transformation
+SHA-256: `fcf7187c3c3916403fc5cc8e83c65fec33b5ef74d60baa75ede061deda9a71a9`.
+
+The fresh full region is **210,223,038 bytes**, build
+`a92396de46a6fed5fa1a49fc8c939c39bc6371424aa90c9b71f237878294c7fd`.
+Its new routing archive SHA-256 is
+`d47b022dc2036800bfa5eadc902a90d94de2cff8df32e6377ac9c0ff5fe9fb3d`.
+The four-tile elevation component is 18,274,069 bytes. Rebuild: **495.65 s**,
+host maximum RSS **2,666,508 KiB**, container peak **902,815,744 bytes**.
+The native graph stage took 94 s and applied elevation once. Full independent
+component/catalogue verification and final device acceptance are being completed;
+the draft does not yet claim the final phone run passed.
 
 
 ## Automated verification and packaging
@@ -393,8 +412,10 @@ all historical immutable regions remain retained privately.
 IGN's published dataset identifies Licence Ouverte 2.0. Reuse requires accurate
 source/update attribution and avoiding misleading presentation or endorsement;
 the historical licence landing URL in the source contract currently redirects
-to the general data portal, so retain the dataset and actual terms evidence
-when preparing notices. This is evidence of a source licence, not operator
+to the general data portal. The chart instead links to the verified current
+[official Licence Ouverte 2.0 text](https://www.data.gouv.fr/pages/legal/licences/etalab-2.0);
+the source ledger preserves the provider's historical metadata URL. Retain the
+dataset and actual terms evidence when preparing notices. This is evidence of a source licence, not operator
 approval of an enriched combined OSM/DEM graph. Review the applicable licence
 text, source vintages, attribution, ODbL database/source obligations, derivative
 graph treatment and downstream notices before publication. No rights conclusion
@@ -416,7 +437,8 @@ Play, production signing nor installed production app was changed.
 2. **Elevation accuracy: comparative evidence only.** Ground semantics and
    cross-source shape agreement are useful; no surveyed accuracy claim.
 3. **Full Yvelines: conversion coverage GO within the specified bounds.**
-   The full graph and final phone run are pending at this draft revision.
+   The full graph and repeat conversion pass. The final full-region phone
+   run is pending at this draft revision.
 4. **Distribution/legal readiness: NO-GO.** No operator approval or IGN public
    publication evidence is supplied; the existing strict gate remains closed.
 5. **Public release: NO-GO.** Private data/catalogue, outstanding acceptance

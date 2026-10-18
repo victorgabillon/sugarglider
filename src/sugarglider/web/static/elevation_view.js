@@ -179,7 +179,7 @@ export function createElevationView({root, onPosition = () => {}, onShowMap = ()
     if (analysis.height_reference?.startsWith("IGN69 normal metres; IGN RGE ALTI 5 m;")) {
       sourceNote.append("IGN RGE ALTI® 5 m · ground model · NGF-IGN69 normal heights. IGN, ");
       const license = document.createElement("a"); license.textContent = "Licence Ouverte 2.0";
-      license.href = "https://www.etalab.gouv.fr/licence-ouverte-open-licence/";
+      license.href = "https://www.data.gouv.fr/pages/legal/licences/etalab-2.0";
       license.target = "_blank"; license.rel = "noopener noreferrer"; sourceNote.append(license);
     } else sourceNote.textContent = analysis.height_reference?.startsWith("EGM96 orthometric")
       ? "Height reference: EGM96 orthometric metres." : "Height reference: unresolved vertical datum.";
