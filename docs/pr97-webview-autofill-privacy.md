@@ -130,8 +130,11 @@ brief connections and have a netlink-permission limitation. Further independent
 no-CDP, JavaScript-disabled and bounded Java method-sampling controls are needed.
 
 Interrupted attempts (`a4`, `b5` and `c3`) are retained as incomplete, never
-counted as zero-byte passes. The foreground guard stops when the phone is used
-in another app. No screenshots or content from that other app are collected.
+counted as zero-byte passes. The foreground guard pauses on loss of ownership. In `c3` this occurred after
+the controlled page was destroyed; a cleanup transition cannot be excluded and
+no conclusion about user activity is justified. The host guard now tolerates
+transient empty focus and does not demand page visibility after destruction.
+This does not change the full 75 s counter interval or the zero-byte assertion. No screenshots or content from that other app are collected.
 
 ## Automated and packaging validation
 
@@ -162,6 +165,10 @@ version code 8 / version 1.2.0 and its existing three permissions (Internet,
 coarse and fine location). Its manifest and DEX contain no research Activity,
 network-review instrumentation or method-sampling hooks. It contains no private
 CA, HGT, regional PMTiles or routing graph. Bundled JavaScript matches the source.
+The normal unsigned Release APK is byte-identical to the retained final PR96
+Release artifact: SHA-256
+`a9c61e76ab666d08fadc4c2f420743865c3337b84ff1a4ca1fc18edb9c6cf374`.
+This is packaging preservation, not evidence of a privacy improvement.
 Normal Debug, Release and the isolated research APK pass ZIP 16 KiB alignment;
 every native ELF load segment has 16 KiB alignment and congruent offsets.
 The Valhalla library remains SHA-256
@@ -198,9 +205,42 @@ request or ignore a small positive residual to manufacture a pass.
 
 At this checkpoint the repeated supported-policy interventions, residual-traffic
 controls, final installed-package functionality, installation memory comparison
-and after-test preservation inventory are pending an unused Fairphone window.
+and after-test preservation inventory are pending a connected, unused Fairphone window. A subsequent `adb devices` check
+listed no devices; the remaining physical tests require reconnection.
 The two completed form measurements fail strict privacy acceptance. No production
 Autofill change or privacy guarantee is claimed. Host checks alone do not grant
 physical acceptance or public release approval. The draft PR remains unready for
 final integration review until these measurements and independent decisions are
 recorded.
+
+
+## Options if supported policies fail
+
+A failed policy experiment justifies keeping the privacy gate closed; it does
+not prove every future provider or documented API will behave identically.
+Do not replace semantic, accessible numeric/text controls with misleading input
+types, or permanently remove profile, location or outing functionality to force
+an empty-page result. Deferral must also be tested when a form becomes active.
+
+| Option | Engineering cost and acceptance needed |
+| --- | --- |
+| Provider-level supported fix | Submit a minimal reproducible form case with provider/API versions and origin-only evidence; validate the eventual supported fix across cold/warm sessions and provider versions. No available fix or delivery date is established here. |
+| Native Android presentation | Reuse the existing native routing/elevation and verified regions, but port map/chart presentation, forms, storage transitions and accessibility. Substantial UI work; measure every remaining SDK's traffic before claiming silence. |
+| Separate offline UID and explicit downloader | An offline application without Internet authority would need a separate authorized HTTPS download component and narrowly scoped, verified regional handoff. This changes installation, storage, IPC and update design and requires a security review and new acceptance work. Removing the current permission alone would break regional downloads. |
+
+None of these architectural changes is implemented in PR97. Unsupported Chromium
+flags, private SafeMode switches, provider changes, system Autofill changes,
+TLS exceptions and disabled Safe Browsing are excluded. Application WebView
+resource interception and a network-blocked document are diagnostics, not a
+firewall for all browser-process services.
+
+## Current independent gates (incomplete physical acceptance)
+
+| Gate | Current decision | Evidence and remaining work |
+| --- | --- | --- |
+| Application-controlled network behavior | PENDING physical acceptance | Real browser input/startup tests have no external application requests. Actual Generate, settled and lifecycle UID windows remain to run. |
+| WebView/Chromium Autofill | NO-GO | Both completed form comparisons contact the Autofill origin. Supported-policy elimination has not been demonstrated. |
+| Residual traffic | NO-GO | The no-form HTML session has positive, unattributed bytes. Independent no-CDP/JavaScript/method controls remain to run. |
+| Offline routing/elevation | PENDING physical acceptance | Existing native algorithms and artifacts are unchanged and host regressions pass. Final six-profile/height/chart/cancel/region/GPX phone checks remain to run. |
+| Technical code integration | NO-GO for final acceptance | Research implementation builds and all CI jobs for `9d2ca462b8144c5ac453820d7a86f8d25c7fcf30` passed. Required physical comparisons, memory and final preservation inventory are incomplete. Keep the PR draft. |
+| Public release | NO-GO | Strict whole-app privacy fails; no supported production fix or complete acceptance is established. No release or catalog changes are authorized here. |
