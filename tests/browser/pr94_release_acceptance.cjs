@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const { runBundledStartupRegression } = require('./pr94_startup_acceptance.cjs');
 const root = path.resolve(__dirname, '../..');
 const server = http.createServer((request, response) => {
   let pathname;
@@ -35,6 +36,10 @@ const server = http.createServer((request, response) => {
       if (result.status !== 'passed') throw Error(`${name}: ${result.text}`);
       console.log(JSON.stringify({ name, cases: JSON.parse(result.text).length, status: 'passed' }));
       await page.close();
+    }
+    for (const offlineConfig of [false, true]) {
+      const startupCases = await runBundledStartupRegression(browser, root, { offlineConfig });
+      console.log(JSON.stringify({ name: 'bundled_startup_import', offlineConfig, cases: startupCases.length, status: 'passed' }));
     }
   } finally {
     await browser?.close();

@@ -13,8 +13,8 @@ to reconstruct/test nor this report is operator publication approval.
 
 | Requested acceptance decision | Decision after physical acceptance |
 | --- | --- |
-| PR94 technical integration | **NO-GO for final acceptance:** normal installed-source tests pass; physical failure/lifecycle/final-audit gates remain after USB disconnection. |
-| V2 installation engineering | **NO-GO for complete acceptance:** normal phone HTTPS install/cancel/resume/restart pass, but isolated corruption/interruption/quota tests remain unrun. |
+| PR94 technical integration | **GO for merging the code after review:** native routing/elevation and private installation are validated; the unattributed session/startup bytes below remain a public-release gate. This is not a merge instruction or public-release approval; replacement graph identity and broader-device limitations remain explicit. |
+| V2 installation engineering | **GO for the tested private five-component workflow:** normal HTTPS install, restart, exact bytes, cancellation, controlled failures and same-transaction recovery pass. Public hosting/catalog deployment remains gated. |
 | Copernicus terrain quality for hiking | **NO-GO for a validated ground-terrain accuracy claim.** DSM canopy/building effects and the historical ~40% long-route IGN difference remain. The conversion/native format is suitable for private research. |
 | Terrain redistribution approval | **NO-GO:** no actual operator publication approval exists; every real manifest remains `publication_allowed=false`. |
 | Public Android release | **NO-GO:** exact-build approval, coordinated public V2 catalog and outstanding PR93 device/release gates remain. Normal Release still bundles unchanged V1 offerings and fails the explicit V2 release preflight. |
@@ -75,10 +75,16 @@ independent ID/version/certificate/permission/asset/catalog/alignment audits.
 No package was uninstalled or cleared. The cert is unchanged:
 `e84155df3a2c7ea48723876b1fe8e0e602cb600f8374d6539b9fea9aa42cfbd7`.
 
-| Installed item | SHA-256 |
+| Initial installed item, before the startup fix | SHA-256 |
 | --- | --- |
 | `.v2staging`, code 8, `1.2.0-v2-staging`, 25,618,063 bytes | `74b3bcd740e4c26a67e5e4ac232624852a4ef202e3664b1489a744d9e0dd5a26` |
 | `.v2staging.test`, 258,008 bytes | `6ded2bcda55086473aa3c2690555c807772797f66fdadf631b338cceee292c5e` |
+
+Final startup-fixed staging APK: **25,665,884 bytes**, SHA-256
+`4c9507cdfdc6f0d903602bfc7086be9bfd728aa7532b58781460aa2cf2278481`. It retains code 8, version `1.2.0-v2-staging`, the
+unchanged certificate and native SO; its test APK is byte-identical to the hash
+above. Only this audited staging APK was updated in place; all region bytes and
+protected applications remain preserved.
 
 ### Actual HTTPS installation, restart and immutable-file checks
 
@@ -144,22 +150,23 @@ real native request leaves the route available with explicit cancelled status;
 normal Retry restores only the current candidate/source. Raw screenshots and
 route/GPX captures remain private.
 
-### Sustained workload and the new physical blocker
+### Sustained workload, disconnection and completed resumption
 
-**At 09:41:20 Europe/Paris the host kernel recorded `usb 3-13: USB disconnect`.**
-`adb devices -l` subsequently has no device and `lsusb` has no Fairphone. No
-USB/network/trust setting was changed to work around it. A reconnect/unlock was
-requested; dependent phone work stopped and all raw/partial state was preserved.
-This is a missing physical device, not evidence of a native crash or a product
-regression. It prevents claiming complete Fairphone acceptance.
+At **09:41:20 Europe/Paris** the host kernel recorded a physical USB disconnect.
+The interrupted checkpoint remains intact: 99 selections, eight regenerations and
+two Home/foreground cycles over 439.461 s. It is not counted as a completed run.
+The user reconnected/unlocked the phone; its APKs and protected old data were
+independently reverified before testing resumed. No USB/network/trust setting or
+APK was changed during resumption.
 
-Before disconnection the checkpoint records **99 paced candidate selections,
-eight normal regenerations and two Home/foreground cycles over 439.461 s**.
-Every checked selected result kept its exact candidate/source binding, one SVG,
-one chart control, one map archive and a cleared inspection marker after Escape.
-The intended 144-selection/12-regeneration/three-cycle run did not finish. The
-finished 99-selection checkpoint is explicitly partial; no clean-idle, explicit
-actor-close or final UID-network measurement is inferred from it.
+A **fresh continuous run** completed **144 paced selections, 12 normal
+regenerations and three Home/foreground cycles in 646.613 s**. Each checked result
+retained its exact candidate/profile/region binding, one SVG/control, one map
+archive and cleared inspection marker. Actual long-route generation and touch
+were repeated afterward. Normal Clear removed the generation, chart/control and
+map marker; test-owned GPX references were released before the 104.029 s idle window.
+No forced phone GC was used. The two interrupted/completed traces are retained
+separately; their peaks are not added or presented as one continuous run.
 
 PSS is `dumpsys meminfo --package` for the actual staging package and **all
 associated WebView processes from the same observation**, matching PR93's
@@ -177,10 +184,9 @@ provide separate timings, not an invented isolated height/chart PSS peak.
 | Long route/chart/interaction window | 791,434,240 | 856,914,944 | 395,165,696 + 461,749,248 |
 | Interrupted sustained workload | See 30 s windows below | 828,903,424 | 383,217,664 + 445,685,760 |
 
-Sustained first/last 30 s median aggregate PSS: **769,648,640 / 796,721,152 bytes**.
-Two short background-window medians: 765,076,480 / 735,950,848 bytes. There was no
-observed monotonic unbounded rise, but the incomplete run and absent cleanup/idle
-cannot establish long-term stability or exclude retention. The installer peak is
+Interrupted-run first/last 30 s median aggregate PSS: **769,648,640 / 796,721,152 bytes**.
+Two short background-window medians: 765,076,480 / 735,950,848 bytes. The interrupted trace cannot establish long-term
+stability or exclude retention. The separate completed run and idle follow below. The installer peak is
 larger than PR93's 989,039,616-byte route/region-return peak and must remain
 visible. These are different workloads/artifacts/renderer states, not evidence
 of a regression or a saving. No arbitrary memory ceiling or leak claim is made.
@@ -188,6 +194,29 @@ Observed staging private-storage peak during installation was **224,171,008
 allocated bytes** (`du` across files/WebView/cache/no_backup, excludes APKs);
 later route captures/cache reached 224,302,080. This is a sampled allocation peak,
 not a sum of logical component sizes or proof that no short staging overlap exists.
+
+Completed resumption, same simultaneous-process definition:
+
+| Physical phase | Median aggregate PSS, bytes | Observed peak, bytes | Main + associated WebView at that same peak |
+| --- | ---: | ---: | --- |
+| Resumed first Generate/height/chart | 839,688,192 | 868,841,472 | 241,566,720 + 627,274,752 |
+| Fresh continuous endurance | 768,146,432 | 868,753,408 | 298,126,336 + 570,627,072 |
+| Final long route/chart/interaction | 833,047,552 | 930,572,288 | 407,236,608 + 523,335,680 |
+| After Clear + idle, last 15 s | 776,938,496 | 776,940,544 | 404,678,656 + 372,261,888 |
+
+Fresh-workload first/last 30 s medians: **816,737,280 /
+751,558,656 bytes**. Post-clear idle was **104.029 s**.
+These bounded observations and released chart/map state do not prove absence of
+all leaks, quantify every worker/JNI/MapLibre allocation, or establish a memory
+improvement against an unmatched PR93 workload. One warm actor, graph/DEM caches,
+selected-region indexes and renderer pools remain expected after Clear. Current
+mappings were checked and belonged only to the real selected Yvelines build,
+including after controlled faults; none belonged to fault-region archives.
+The initial 1,096,246,272-byte installer peak remains part of the acceptance data.
+
+Controlled fault fixtures intentionally add retained private files for diagnosis;
+their storage is not the normal Yvelines installation footprint. The initial
+224,171,008-byte sampled installation peak above excludes those later fixtures.
 
 Native reply timings captured before interruption include 37 actual route calls:
 18–769 ms, median 35 ms (warm actor, different path/search lengths). Across the 26
@@ -198,40 +227,123 @@ include reply handling/validation/render scheduling and are **chart-ready upper
 bounds**, not isolated construction CPU time. Test probes forward unmodified
 messages and retain bounded metadata only; memory includes the test harness.
 
-WebView network loads were blocked for the actual post-install route/UI run
-without changing phone connectivity. Real offline routes/heights/charts passed.
-The independent install traffic is recorded above. The planner's strict final
-UID TX/RX assertion was not retrieved before disconnection, so **zero-byte offline
-UID activity is not claimed**. The server trace and a blocked WebView alone do
-not prove zero native/network activity in every process.
+During the fresh continuous run the bounded passive timing buffer retained
+111 native route observations (min/median/max
+**14/32/110 ms**) and
+33 reply-to-SVG upper bounds
+(**2.90/3.70/8.30 ms**). The buffer is intentionally bounded;
+it is not a count of all backend calls. Actual long-route replay timings are
+retained in the captured result. Pure chart construction CPU and GPU paint time
+are not inferred from MutationObserver intervals.
 
-### Unfinished gates and preservation limits
+WebView network loads were blocked throughout the fresh normal Generate,
+selection, long-route, GPX and cleanup workload without changing phone
+connectivity. The full endurance/export window's strict UID assertion **failed** with
+**5,401 TX / 8,211 RX bytes**. Its source is unattributed; it is not silently
+excluded or labelled startup/chooser traffic. A separate diagnostic waited 20 s
+for startup settling, then covered a complete packaged-page reload, actual tour
+and long-route generation, chart/GPX serialization and a background/foreground
+cycle: **0 TX / 0 RX**, with its strict instrumentation assertion passing.
+That diagnostic's pre-ready startup window recorded **3,612 TX / 3,430 RX**.
+The final fixed APK also passed its separate settled zero-TX/RX interval.
+These establish offline route/page operation, not an all-session no-network
+privacy claim. Attribution of the small observed transfers remains an explicit
+public-release gate alongside the earlier PR93 startup-network finding. The fixed
+APK pre-ready startup measured 15,861 TX / 20,171 RX; those bytes are also
+unattributed. Installation/fault transfer traffic is measured separately: the original install was 129,738 TX /
+225,518,036 RX; isolated fault/retry testing added 337,050 TX / 586,528,691 RX.
+These are application-UID counters, not a claim that unrelated phone apps or
+shared system services used no network.
 
-The physical all-four-tile/integer-boundary/missing-coordinate probe, synthetic
-partial/void JNI fixtures, explicit native close/reopen/mapping-zero checks,
-post-clear 75 s idle, final native Save-document chooser path and isolated
-wrong-hash/wrong-build/corrupt-HGT/quota/interrupted-transfer/retry tests remain
-**unrun** in this new-source acceptance attempt. Controlled faults were prepared
-only in fresh private host directories and were never used to damage the
-successful Android installation. Existing automated fixtures cover these contracts,
-but are not labelled physical results. Normal UI download cancellation/resume and
-actual elevation cancellation/retry **did** pass, as detailed above.
+### Native lifecycle, missing data and failure recovery
 
-The fresh pre-update preservation audit matches all nine installed APK files,
-package paths/versions/install timestamps, 220 old Debug and 271 previous V2
-research private files byte-for-byte. All 11 files in each retained host Mapzen
-Yvelines/Marly region independently match their original identities. Only the
-staging app/test update and their new owned state were written. **A final
-post-workload device preservation comparison is blocked**, so the earlier audit
-is not presented as a final after-test result. Production private data was never
-read. Published V1 data/catalog, signing, Play and social were not modified.
+The actual 2,048-point long-route sample request passed cold/warm comparison and
+20 identical repeats, the 2,048 budget and rejection of 2,049 points, invalid
+coordinates, wrong component/build and empty input. All four installed tiles and
+an integer seam returned independently checked heights. Two outer-tile positions
+returned **null**, never zero. Original-COG/manual-NGA maxima were 0.474511 m for
+the long route and 0.435757 m for tile/boundary controls; decoded-HGT maxima remain
+0.01 m. Synthetic missing-file/void JNI probes remain null, malformed JSON is
+rejected, and **17** on-device synthetic Kotlin analysis fixtures match their
+reference fingerprints, including partial/unavailable coverage, long gaps, noisy
+slopes, negative heights and irregular reversal. Synthetic coverage checks are
+not represented as actual routed DEM voids; the real route captures are complete.
 
-No new production defect was confirmed by the completed physical cases. Added
-instrumentation asserts regional mapping ownership/zero after explicit closure,
-records a 15 s closed idle, keeps the explicit installer test awake and separates
-installation traffic. These assertions compiled and passed host checks, but their
-new-source physical execution remains a gate. Raw personal routes, all DEM/input
-bytes, keys, APKs, screenshots and logs remain outside Git.
+Cold native height: **473 ms**;
+verification/actor/height wall time **2838 ms**; warm height
+**164 ms**; 20 repeats **50–130 ms**, median **88 ms**.
+Close/reopen returned a cold actor and identical heights. Explicit close changed
+**five selected-build regional mappings to zero**, still zero after 15 s idle.
+Main-process PSS was **219,048,960 bytes before close,
+76,295,168 after close and
+73,634,816 after idle**. These headless snapshots
+are separate from aggregate WebView benchmarks. Native height/analysis/void
+instrumentation each independently measured 0 UID TX/RX.
+
+Controlled physical faults use the production browser coordinator/native client
+and real TLS in fresh owned OPFS/native namespaces. They never overwrite the
+successful real region, and failed stages have no committed active version:
+
+| Controlled condition | Actual rejection |
+| --- | --- |
+| Expected immutable build differs | `regional_catalog_changed` |
+| Simulated zero remaining index-storage estimate | `regional_insufficient_storage` |
+| Archive checksum mismatch | `regional_checksum_mismatch` |
+| Valid declared checksum but corrupt/short decoded HGT | `regional_elevation_invalid` |
+| Cancellation after map bytes arrive | `regional_install_cancelled` |
+| HTTPS stream interrupted after the server's first MiB | `map_pack_install_failed` |
+
+The interrupted transaction was retried in **the same staged directory/build**
+after normal server transfer was restored and committed only after all five
+component verifications. Quota is an explicit estimate simulation on the physical
+runtime, not actual phone-disk exhaustion. Fixture copies share graph bytes for
+failure injection; they are **not a distinct-region graph-switch experiment**.
+The real Yvelines build/pointer remained unchanged throughout. Failed fixture
+state is retained privately for diagnosis.
+
+The normal Android Export GPX button delivered byte-identical clean GPX bytes to
+the native save bridge. The real Save-document chooser was cancelled; its native
+reply was definitively `cancelled`, the research app returned to foreground and
+no user document was created. Actual Android chart/map screenshots are private.
+
+### Final preservation and integration limits
+
+Final after-test checks pass against the original independent baseline:
+production's four APK splits, old Debug, previous V2 research and its test APK
+have unchanged bytes, paths, versions, install/update timestamps and certificates;
+**220 Debug and 271 V2 research private files** are byte-identical. The staging
+app/test still exactly match the audited APK hashes above. Production private data
+is inaccessible to `run-as` and was not individually hashed. The selected new
+native/OPFS component files and committed build were verified again. Previously
+installed Mapzen Yvelines/Marly, retained host regions, source inputs and actual
+private Copernicus bytes are preserved. No package or valuable region was cleared
+or uninstalled; only owned test state was added.
+
+**Confirmed startup defect fixed:** valid canonical imports could be rejected as
+unknown activities while asynchronous regional verification was pending. The
+packaged app now initializes the six immutable public profile identities before
+accepting import events and preserves that catalog through configuration loading
+and offline fallback. Availability remains false until native verification; no
+routing, ranking, filtering or GPX semantics change. Six known profiles, invalid
+aliases, draft preservation and missing-region gating are covered in both normal
+and offline-config delayed-startup paths (16 real-app browser cases). On-device
+delayed catalog delivery confirms early imports without injecting routing or
+elevation results; normal native readiness and short/2,048-sample routes pass
+after release of the same real request.
+
+The sustained memory figures above were measured with staging APK `74b3bcd7…`,
+before this startup-only fix. They are not relabelled as a fresh sustained run of
+the final APK. The native library and installed regional bytes are identical;
+the final APK received separate startup/route/elevation/touch/GPX/offline checks.
+The focused instrumentation's mapping/idle/installation-counter assertions were physically
+executed. All real DEM, personal captures, raw GPX, APKs, keys, logs and screenshots
+remain outside Git. The original graph-byte mismatch remains unresolved and was
+explicitly accepted only as a fresh private testing identity. Android reports
+**4,096-byte pages** on this Fairphone: all APK/ELF 16 KiB packaging checks pass,
+but this is not a physical 16 KiB-runtime validation or broad device guarantee.
+Public V1 catalog/data, signing, Play and social remain unchanged. Broader PR93
+release gates, ground-terrain quality and exact-build redistribution authorization
+remain separate from the GO recommendation for reviewed code/private installation.
 
 Private evidence integrity pins (not a claim that raw artifacts are committed):
 
@@ -251,6 +363,32 @@ Private evidence integrity pins (not a claim that raw artifacts are committed):
 | preservation-after.json | `3c8dec531a57bdaad698d730e9c11234d967d6472584d6dcefd6ef670d1e05e4` |
 | old-host-regions-verified.json | `1d4d4baf212d5fe44a0a09fc807996f7ba4d92832bfbb722f5a2425cea4e02bf` |
 
+
+Completed resumption evidence:
+
+| Evidence | SHA-256 |
+| --- | --- |
+| preservation-resumption.json | `4b72b9c96961cac164f120af55387e54d90ac85819693e8b5754e3059e146ed4` |
+| height-result.json | `66940092ca7c76a62757cb0ddee765920d6d90adcdc0fdd7f3adcb654db3f825` |
+| analysis-result.json | `5fd2c14ca2364bd5f594ee03f9a5d380d27e32c292ac2a6aa9305d2dbf027295` |
+| void-result.json | `792af03eb70f40c47872eaca60693141d32bb542fbd8a90eb7dada7d3daeb5f5` |
+| native-comparison.json | `2ba94a25644fa1aa58fee9c3be17a0cc42697f64baefe638ea610b9007271f06` |
+| fault-results.json | `4736d7c110870bfe21cbdd81b984eaca516884e998277490796f5f50a48e10ed` |
+| fault-verification.json | `83abccbd63fcebab52101e7dd24afa6f5f82aead1e6a2691171c2070e837e711` |
+| endurance-resumed-final.json | `600ba0a03a847d5fd9b2914c7856d85f8cb2c31741d3941d6cd18eba456e509d` |
+| memory-summary-resumed.json | `63f9958338b634d5f3fad5ddc85f05d64ad13a3f00529ac5dd7f881565697c3e` |
+| planner-network-resumed.json | `f359b6891ed25f989381013fa4725a888441ce4aaf535d5f41248f912ca476eb` |
+| final-ui-cleanup.json | `c1da7b34e3adc69ed5bd9d0f7a87324c59d432224277be5b3006b3289bad9159` |
+| preservation-final.json | `9d952252728396d0d742b692b72386171f1f07742236ea966352242a99c44a9e` |
+| offline-probe-network.json | `4e3051069c8a903f8faa81f98761469e8d0872c96afdee583b1001ef7df4647b` |
+| recovered-apk-audit-fixed.json | `bc17d87edb18cdcf37f43a08a34ac74bb27b81e4f1fa68938b29d760ab21b815` |
+| fixed-phone-startup.json | `b857399dfb18e82953d6c6a04a40c908fc9d1648d56d6477456e25cf72b935da` |
+| fixed-phone-network.json | `a90f1681510aef1e00b21513839fce7a33dbf142347b999ac578d57121fb6678` |
+| installed-native-fixed-verified.json | `4db02e63844606bf06adfd685766406b733e95ab2091115d02c14afc9eebfc71` |
+| installed-opfs-fixed-verified.json | `1035736a00af3394c5a799a42f636c6cdb9e55749a9033f2e72d39e208a24dc6` |
+| final-region-ready.json | `444a892657d173590fcfadd3de0cf96800ba76d0dd7e218b2f1bc8b3f788365e` |
+| fixed-phone-interaction.json | `953b4b67ce1d6e39d6671cea4d816100c4e64bc860c90c02a442128e030a1381` |
+| phone-comparison-resumed.json | `893a528f5f5a7bc2c22477d2e9d23f147c4c9d76f0eaa4e3dce082cca10920e3` |
 
 ## Implementation and confirmed integration changes
 
@@ -492,7 +630,10 @@ tests, both lint/build variants and isolated staging/test/lint; all three APKs
 pass ZIP/ELF 16 KiB alignment. All 134 shared assets are pinned; only staging
 receives the explicit new CA/catalog, and its permission list is byte-identical
 to the previously installed staging APK. Final committed-head reruns and CI are
-linked from the PR94 delivery update.
+linked from the PR94 delivery update. The final startup fix adds **16 actual-app
+browser regression cases** to the existing 22-case focused V2/release suite
+(**38 cases**). Its audited staging-only APK update and final physical checks are
+recorded above; native library and all installed regional bytes are unchanged.
 
 
 Historical 16 October `uv run --offline make check`: Ruff, strict mypy, **1,405 passed / 16
