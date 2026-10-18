@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v96_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v97_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v96"
+    assert generation.group(1) == "v97"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -317,7 +317,7 @@ def test_shared_shell_generation_tracks_v96_cached_assets() -> None:
         "location_search_dialog.js": (
             "60924fa83037b8de5daa90cdfbcde5ab498a2134ff9a97b2b679e11b55c55b40"
         ),
-        "app.js": ("91d91caa34bdba9669ea854b9b6ee1a82f45dfb670dc417830e6cfccd381ea09"),
+        "app.js": ("41294c2d2c12eee9534b80b5584e6e2901b46c94b7d8d6b55d651c0e75faea70"),
         "region_screen.js": (
             "b53793b83aede5967d070b7eddfb6ec949df6dd24634cbd3e54ee2998e1ef953"
         ),
@@ -368,13 +368,13 @@ def test_shared_shell_generation_tracks_v96_cached_assets() -> None:
             "253de7af724800456d99f4189331aed4f49169cbc5736327c257f22d2e0cdbde"
         ),
         "local_region_client.js": (
-            "712f2b6dc1602c9b20fcd0033cb11602efad24f922dedaa60fb1a311bd560a31"
+            "293ed3257b20699c2585392a4d52b8737dbe8959cbb240c8d539cab794e0ee14"
         ),
         "local_region_data.js": (
-            "f31280b1ee68c2f30cbba34e0312f9ec17e311421f800a140006a108248fa87f"
+            "09984cf8b07543b4ca92f92a02dbcec28a4e933fdad55b0d79ad3a78305407b1"
         ),
         "local_region_store.js": (
-            "1d031f544b27c0c38ef37efd68b2d9d107843af4bbb8e12fe7c87428bab78eb5"
+            "ca9f071e5ca170d0bb60f2bae7d81f91d5e8caa721ea4ed41a2a10860204e9d7"
         ),
         "local_region_worker.js": (
             "dafff46155eb300e4be18167e7b324f001ed4e10fb5d3819517962678b0eec75"

@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <application android:networkSecurityConfig="@xml/pr94_staging_network"
-        android:usesCleartextTraffic="false" tools:replace="android:usesCleartextTraffic" />
+        android:usesCleartextTraffic="false" tools:replace="android:usesCleartextTraffic">
+        <activity android:name=".WebViewReviewActivity" android:exported="false"
+            android:launchMode="singleTop" android:documentLaunchMode="never" />
+    </application>
 </manifest>

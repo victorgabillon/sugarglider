@@ -16,6 +16,9 @@ require(shellAssetPaths.all { path ->
     !path.startsWith('/') && '\\' !in path && path.split('/').none { it in setOf("", ".", "..") }
 })
 val bundledShellDirectory = layout.buildDirectory.dir("generated/bundled-shell")
+// Opt-in, isolated storage for acceptance. Never reuses an installed app's UID.
+val stagingSuffix = providers.gradleProperty("sugargliderV2StagingSuffix").orElse(".v2staging").get()
+require(stagingSuffix == ".v2staging" || stagingSuffix.matches(Regex("\\.v2audit[a-z0-9]{1,16}")))
 val bundleSharedWebShell by tasks.registering(Sync::class) {
     inputs.file(shellAssetList)
     from(sharedWebDirectory) { include(shellAssetPaths); into("web") }
@@ -116,7 +119,7 @@ android {
         }
         create("v2Staging") {
             initWith(getByName("debug"))
-            applicationIdSuffix = ".v2staging"
+            applicationIdSuffix = stagingSuffix
             versionNameSuffix = "-v2-staging"
             buildConfigField("boolean", "ALLOW_HTTP", "false")
             matchingFallbacks += "debug"

@@ -48,18 +48,9 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
   if (pois !== null) validatePoiDocument(pois, manifest);
   if (nature !== null) validateNatureDocument(nature, manifest);
   freezeData(nature);
-  const reference = nature?.metadata.reference_latitude ?? (manifest.bounds[1] + manifest.bounds[3]) / 2;
-  const longitudeScale = EARTH_RADIUS_M * Math.cos(reference * Math.PI / 180) * Math.PI / 180;
-  const latitudeScale = EARTH_RADIUS_M * Math.PI / 180;
-  const project = ([lon, lat]) => [(lon - manifest.bounds[0]) * longitudeScale, (lat - manifest.bounds[1]) * latitudeScale];
+  const project = regionalProjection(manifest, nature);
   const projectedBounds = [...project(manifest.bounds.slice(0, 2)), ...project(manifest.bounds.slice(2))];
-  const validationWork = { remaining: 40_000_000 };
-  const natureItems = (nature?.features ?? []).map((feature) => {
-    const polygons = feature.geometry.type === "Polygon" ? [feature.geometry.coordinates] : feature.geometry.coordinates;
-    const projected = polygons.map((polygon) => polygon.map((ring) => ring.map(project)));
-    for (const polygon of projected) validateProjectedPolygon(polygon, validationWork);
-    return { feature, polygons: projected, bounds: boundsOf(projected.flat(2)) };
-  });
+  const natureItems = Array.from(projectedNatureItems(nature, project));
   const natureTree = spatialTree(natureItems);
   const poiFeatures = freezeData(pois?.features ?? []);
   const poiTree = spatialTree(poiFeatures.map((feature) => {
@@ -350,9 +341,41 @@ function validateNatureDocument(document, manifest) {
   requireCounts(document.metadata.category_counts, counts);
 }
 
+// Installation must validate the same documents and polygon topology as a
+// planning session, but has no use for a retained, projected regional index.
+export function validateLocalRegionDocuments(manifest, { pois = null, nature = null } = {}) {
+  if (pois !== null) validatePoiDocument(pois, manifest);
+  if (nature !== null) validateNatureDocument(nature, manifest);
+  for (const item of projectedNatureItems(nature, regionalProjection(manifest, nature))) {
+    // Consume one feature at a time; the shared generator owns the work budget.
+    void item;
+  }
+}
+
+function regionalProjection(manifest, nature) {
+  const reference = nature?.metadata.reference_latitude ?? (manifest.bounds[1] + manifest.bounds[3]) / 2;
+  const longitudeScale = EARTH_RADIUS_M * Math.cos(reference * Math.PI / 180) * Math.PI / 180;
+  const latitudeScale = EARTH_RADIUS_M * Math.PI / 180;
+  return ([lon, lat]) => [(lon - manifest.bounds[0]) * longitudeScale, (lat - manifest.bounds[1]) * latitudeScale];
+}
+
+function* projectedNatureItems(nature, project) {
+  const work = { remaining: 40_000_000 };
+  for (const feature of nature?.features ?? []) {
+    const polygons = feature.geometry.type === "Polygon" ? [feature.geometry.coordinates] : feature.geometry.coordinates;
+    const projected = polygons.map((polygon) => polygon.map((ring) => ring.map(project)));
+    for (const polygon of projected) validateProjectedPolygon(polygon, work);
+    yield { feature, polygons: projected, bounds: boundsOf(projected.flat(2)) };
+  }
+}
+
 function spatialTree(items) {
   if (items.length === 0) return null;
-  const bounds = items.reduce((box, item) => [Math.min(box[0], item.bounds[0]), Math.min(box[1], item.bounds[1]), Math.max(box[2], item.bounds[2]), Math.max(box[3], item.bounds[3])], [...items[0].bounds]);
+  const bounds = [...items[0].bounds];
+  for (const item of items) {
+    bounds[0] = Math.min(bounds[0], item.bounds[0]); bounds[1] = Math.min(bounds[1], item.bounds[1]);
+    bounds[2] = Math.max(bounds[2], item.bounds[2]); bounds[3] = Math.max(bounds[3], item.bounds[3]);
+  }
   if (items.length <= 16) return { bounds, items };
   const axis = bounds[2] - bounds[0] >= bounds[3] - bounds[1] ? 0 : 1;
   const sorted = [...items].sort((a, b) => a.bounds[axis] + a.bounds[axis + 2] - b.bounds[axis] - b.bounds[axis + 2]);
@@ -506,7 +529,14 @@ function nonnegative(value, integer = false) { return Number.isFinite(value) && 
 function sortedStrings(value) { return Array.isArray(value) && value.length <= 100 && value.every((text, i) => boundedText(text, 500) && (i === 0 || value[i - 1] < text)); }
 function validPosition(p) { return Array.isArray(p) && p.length === 2 && p.every(Number.isFinite) && Math.abs(p[0]) <= 180 && Math.abs(p[1]) <= 90; }
 function validCoordinate(p) { return p !== null && typeof p === "object" && (p.name === undefined || p.name === null) && validPosition([p.lon, p.lat]); }
-function boundsOf(points) { return points.reduce((box, p) => [Math.min(box[0], p[0]), Math.min(box[1], p[1]), Math.max(box[2], p[0]), Math.max(box[3], p[1])], [Infinity, Infinity, -Infinity, -Infinity]); }
+function boundsOf(points) {
+  const box = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const p of points) {
+    box[0] = Math.min(box[0], p[0]); box[1] = Math.min(box[1], p[1]);
+    box[2] = Math.max(box[2], p[0]); box[3] = Math.max(box[3], p[1]);
+  }
+  return box;
+}
 function expandBounds(box, distance) { return [box[0] - distance, box[1] - distance, box[2] + distance, box[3] + distance]; }
 function overlaps(a, b) { return a[0] <= b[2] && a[1] <= b[3] && a[2] >= b[0] && a[3] >= b[1]; }
 function inIntervals(t, spans) { return spans.some(([low, high]) => low <= t && t <= high); }

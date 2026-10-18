@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Installation allocation and worker ownership regression</title>
+<pre id="result">Running</pre>
+<script type="module">
+  import { run } from "./pr96_installation_memory_harness.js";
+  const result = document.getElementById("result");
+  try { result.textContent = JSON.stringify(await run()); result.dataset.status = "passed"; }
+  catch (error) { result.textContent = error.stack ?? String(error); result.dataset.status = "failed"; }
+</script>
+</html>
