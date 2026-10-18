@@ -24,6 +24,16 @@ class V2RegionInstrumentation : Instrumentation() {
     private var blockWebNetwork = false
     private var trafficRecorder: java.util.Timer? = null
     private var excludeAutofill = false
+    private var methodSampling = false
+    private var methodTraceActive = false
+
+    @Synchronized
+    private fun stopMethodTrace() {
+        if (methodTraceActive) {
+            Debug.stopMethodTracing()
+            methodTraceActive = false
+        }
+    }
 
     override fun callActivityOnCreate(activity: Activity, state: Bundle?) {
         if (excludeAutofill) activity.window.decorView.importantForAutofill =
@@ -32,6 +42,7 @@ class V2RegionInstrumentation : Instrumentation() {
     }
 
     override fun finish(resultCode: Int, results: Bundle?) {
+        stopMethodTrace()
         trafficRecorder?.cancel()
         trafficRecorder = null
         super.finish(resultCode, results)
@@ -43,6 +54,7 @@ class V2RegionInstrumentation : Instrumentation() {
         phase = arguments?.getString("phase").orEmpty()
         blockWebNetwork = arguments?.getString("block_web_network") == "true"
         excludeAutofill = arguments?.getString("exclude_autofill") == "true"
+        methodSampling = arguments?.getString("java_method_trace") == "true"
         if (arguments?.getString("fresh_webview") == "true") {
             check(BuildConfig.DEBUG && researchId.matches(Regex("[a-z0-9-]{1,64}")))
             android.webkit.WebView.setDataDirectorySuffix(researchId)
@@ -69,6 +81,20 @@ class V2RegionInstrumentation : Instrumentation() {
                             .put("rx_bytes", TrafficStats.getUidRxBytes(Process.myUid())).toString() + "\n")
                     }
                 }, 0, 1_000)
+            }
+            if (phase == "autofill_control") {
+                if (methodSampling) {
+                    // Method names/timing only, no argument values or HTTP contents.
+                    Debug.startMethodTracingSampling(File(root, "methods.trace").absolutePath, 32 * 1024 * 1024, 200)
+                    methodTraceActive = true
+                    requireNotNull(trafficRecorder).schedule(object : java.util.TimerTask() {
+                        override fun run() = stopMethodTrace()
+                    }, 15_000)
+                }
+                WebViewNetworkReview.formControl(this, root)
+                summary.putString("stream", "Strict form-control network acceptance passed\n")
+                finish(Activity.RESULT_OK, summary)
+                return
             }
             if (phase == "network_control") {
                 WebViewNetworkReview.run(this, root)

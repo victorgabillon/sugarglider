@@ -4,5 +4,7 @@
         android:usesCleartextTraffic="false" tools:replace="android:usesCleartextTraffic">
         <activity android:name=".WebViewReviewActivity" android:exported="false"
             android:launchMode="singleTop" android:documentLaunchMode="never" />
+        <activity android:name=".AutofillControlActivity" android:exported="false"
+            android:launchMode="singleTop" android:documentLaunchMode="never" />
     </application>
 </manifest>
