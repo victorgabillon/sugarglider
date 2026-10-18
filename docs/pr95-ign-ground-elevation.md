@@ -7,6 +7,13 @@ included in this change. The durable private evidence directory is
 `data/offline-regions/pr95-ign/evidence` in the original checkout; source and
 derived data are in its sibling `private` directory, outside this worktree.
 
+**Acceptance boundary:** the Marly pilot is physically validated; full Yvelines
+conversion, fresh graph and private catalogue pass host verification. The final
+full-Yvelines phone installation/forest/long-route/native Save run remains
+**pending: the connected Fairphone is locked**. An availability request is
+pending. No lock bypass or physical pass is claimed. The final audited staging
+APK is installed, retaining all existing regions.
+
 ## Implementation and boundaries
 
 The existing PR94 acquisition, conversion, HGT writer, component verifier and
@@ -261,7 +268,8 @@ localhost HTTPS fixture. No region bytes were pushed directly into native or
 OPFS storage. Production, older Debug, V2 research and existing downloaded
 region versions were preserved; no clear/uninstall or connectivity change.
 
-Pilot physical results:
+Pilot physical results (tested APK SHA-256
+`900ab3194c5d5a1694438306376b2fe396feee50d279716dec5025fa9dc26a6f`):
 
 * All six profiles × open/loop: **12 normal Generate operations**, complete IGN
   analyses; one additional Auto Tour, chart touch/keyboard inspection, synchronized
@@ -348,14 +356,55 @@ Its new routing archive SHA-256 is
 The four-tile elevation component is 18,274,069 bytes. Rebuild: **495.65 s**,
 host maximum RSS **2,666,508 KiB**, container peak **902,815,744 bytes**.
 The native graph stage took 94 s and applied elevation once. Full independent
-component/catalogue verification and final device acceptance are being completed;
-the draft does not yet claim the final phone run passed.
+component/catalogue verification passed. Final full-region device acceptance
+remains pending while the phone is locked; the earlier pilot is separately
+identified above.
 
+
+### Storage and final host artifacts
+
+Original archives occupy 3,026,020 KiB on disk; the 3,518 ASCII/prepared-grid
+records occupy 27,841,816 KiB (originals retained alongside random-read rasters).
+The separate two-department pilot preparation occupies 1,129,536 KiB. Nothing
+was deleted to recover space. Preparation of all departments took approximately
+50 minutes by directory/record timestamps, not an instrumented benchmark.
+Private LiDAR references occupy 140,656 + 187,540 KiB, including cells from the
+retained preliminary mixed forest/urban loop. These are host storage measurements,
+not compressed regional download sizes.
+
+| Final artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| debug APK | 25,882,631 | `db66d62dda3f4a3046f13b9d7b1436e8cc1cae02638438c7f971f38c78183146` |
+| release APK | 24,370,671 | `1384a42c93cb1ccf8edd78fb370e93afa01b42199ae0e59fa6707ef2ce7099bf` |
+| v2Staging APK | 25,884,161 | `a4ecb351754dccb6a0053dfc35adc15e57739e28011b03bc4a48a1e2f61dcf9e` |
+| v2StagingAndroidTest APK | 226,870 | `6d859a5ea4fff6d302768e61376419627ca43d4a61b24186bc4ba90b9b7faf66` |
+
+The final staging update retained the verified pilot certificate and installed
+with replacement, without uninstalling or clearing data. Its test APK is
+byte-identical to the pilot instrumentation APK. The first final-artifact audit
+correctly detected a stale shared asset during the licence-link correction;
+all variants were rebuilt and the complete final audit then passed.
+The final audited APK has not yet completed physical UI acceptance; pilot
+measurements are not silently reassigned to it.
+
+The post-update preservation audit independently confirms unchanged production
+APK/certificate identities, all 220 older Debug private files, all 271 V2 research
+private files and 41 previously installed staging regional/OPFS payload files.
+All eight installed Marly component files independently match their expected
+hashes. Production private files are inaccessible to `run-as`; their contents
+were not claimed to be byte-audited. No operation targeted production data.
+
+| Derived HGT | Compressed bytes | SHA-256 |
+| --- | ---: | --- |
+| N48/N48E001.hgt.gz | 3,597,713 | `a7d55ab92559ace1c64069bdf7669717e2ddd8acfbc9c8b041a770d0461688d3` |
+| N48/N48E002.hgt.gz | 4,248,630 | `d47f7dc9e0947cacd975be249fb73c8c7212f98b9cdb384d9044da87f81ca5e0` |
+| N49/N49E001.hgt.gz | 5,527,281 | `d79a01593f51fa01589242892505b90e3a13479405c864373462d2b094bd7611` |
+| N49/N49E002.hgt.gz | 4,891,056 | `7955eec7df9675fdf2d897d6f581379c87940365353a2505c420ee6565415cb3` |
 
 ## Automated verification and packaging
 
 * `make check`: Ruff formatting/lint, strict mypy, **1,440 passed, 16 integration
-  tests deselected**, 215.00 s. Synthetic DEM fixtures use no real map/DEM,
+  tests deselected**, 221.63 s in the final run. Synthetic DEM fixtures use no real map/DEM,
   network, service or Docker. New tests cover source identities and timestamps,
   safe archive extraction, strict preparation metadata, duplicate/hash checks,
   bounded cache behavior, grid origin, seams/voids/conflicts, vertical identity,
@@ -377,7 +426,10 @@ the draft does not yet claim the final phone run passed.
   Release contains the expected shared assets/catalogue and neither private CA,
   test tooling nor DEM data; private staging alone contains its scoped fixture
   catalogue and CA. Permissions match the retained staging APK. Final artifact
-  hashes and CI status are recorded in the final acceptance section.
+  hashes appear above. All seven GitHub checks for implementation revision
+  `82e2cc2233a3b3cc4908650b2a2ad41ea702443e` passed (Python, Android, elevation
+  browser and social workflows, including push/PR runs). Subsequent report-only
+  revisions do not change the tested APK/source bytes. PR: [draft #95](https://github.com/victorgabillon/sugarglider/pull/95).
 
 ## Reproduction and operational gates
 
@@ -437,8 +489,9 @@ Play, production signing nor installed production app was changed.
 2. **Elevation accuracy: comparative evidence only.** Ground semantics and
    cross-source shape agreement are useful; no surveyed accuracy claim.
 3. **Full Yvelines: conversion coverage GO within the specified bounds.**
-   The full graph and repeat conversion pass. The final full-region phone
-   run is pending at this draft revision.
+   The full graph, repeat conversion and independent five-component/catalogue
+   verification pass. Full-region phone acceptance remains pending; this is
+   not a blanket end-to-end acceptance of the new Yvelines bundle.
 4. **Distribution/legal readiness: NO-GO.** No operator approval or IGN public
    publication evidence is supplied; the existing strict gate remains closed.
 5. **Public release: NO-GO.** Private data/catalogue, outstanding acceptance
