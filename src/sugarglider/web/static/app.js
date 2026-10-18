@@ -3286,6 +3286,9 @@ async function start() {
       });
       return;
     }
+    // Public native identities are known before asynchronous regional checks.
+    // Their availability stays false until the selected engine is verified.
+    if (localPlanner) renderRoutingProfiles();
     bindEvents();
     const sharedSlug = currentSharedRouteSlug;
     let sharedSnapshot = null;
@@ -3295,7 +3298,7 @@ async function start() {
       try {
         [state.config, state.routingProfileCatalog] = await Promise.all([
           getConfig(),
-          localPlanner ? Promise.resolve({ profiles: [] }) : getRoutingProfiles(),
+          localPlanner ? Promise.resolve(state.routingProfileCatalog) : getRoutingProfiles(),
         ]);
         if (isBundledAndroidApp()) state.config = { ...state.config, offline_mode: true };
         clearOfflineSnapshotStatus();
@@ -3310,7 +3313,7 @@ async function start() {
           { onFailure: reportOptionalStorageFailure },
         );
         state.config = offlineMapConfig(storedConfig, null);
-        state.routingProfileCatalog = { profiles: [] };
+        if (!localPlanner) state.routingProfileCatalog = { profiles: [] };
         state.poiIndexStatus = { available: false, feature_count: null };
         setPwaNetworkStatus("offline");
       }

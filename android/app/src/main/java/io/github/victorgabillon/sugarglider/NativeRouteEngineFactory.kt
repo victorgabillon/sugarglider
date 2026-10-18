@@ -49,7 +49,7 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeOfflineEngine 
                 val started = SystemClock.elapsedRealtime()
                 val heights = localValhallaHeightValues(request, selected.actor.valhalla.height(request))
                 NativeHeightResult.Success(reference, heights, SystemClock.elapsedRealtime() - started,
-                    processPssBytes(), selected.coldStart)
+                    processPssBytes(), selected.coldStart, selected.actor.heightReference)
             }
         } catch (_: RegionalPackException) { NativeHeightResult.Failure("height_region_unavailable") }
         catch (_: Exception) { NativeHeightResult.Failure("native_height_failed") }
@@ -164,11 +164,13 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeOfflineEngine 
             configuration = owned
             val config = localValhallaConfiguration(pack.tileArchive, requireNotNull(pack.elevationDirectory))
             owned.writeText(offlineValhallaJson(config).toString())
+            val heightReference = verifiedRegionalHeightReference(File(requireNotNull(pack.elevationDirectory).parentFile, "manifest.json"))
             val created = Valhalla(owned.absolutePath)
             return ValhallaActor(
                 valhalla = created,
                 configuration = owned,
                 lease = lease,
+                heightReference = heightReference,
                 measurement = InitializationMeasurement(
                     elapsedMs = SystemClock.elapsedRealtime() - started,
                     memoryBeforeBytes = before,
@@ -188,6 +190,7 @@ private class ValhallaMobileRouteEngine(context: Context) : NativeOfflineEngine 
         val valhalla: Valhalla,
         val configuration: File,
         val lease: RegionalPackLease,
+        val heightReference: String,
         val measurement: InitializationMeasurement,
     )
 
@@ -338,4 +341,16 @@ private fun decodePolylineValue(shape: String, startIndex: Int): DecodedPolyline
     } while (chunk >= 0x20)
     val value = if ((result and 1) != 0) (result shr 1).inv() else result shr 1
     return DecodedPolylineValue(value, index)
+}
+
+
+/** Called only under the verified component's native lease, before creating JNI. */
+internal fun verifiedRegionalHeightReference(manifest: File): String {
+    check(manifest.length() in 1..65_536)
+    val value = org.json.JSONObject(manifest.readText(Charsets.UTF_8))
+    return when (Pair(value.opt("provenance_status"), value.opt("vertical_datum"))) {
+        Pair("documented", "EGM96") -> ELEVATION_EGM96_REFERENCE
+        Pair("unresolved", "unresolved") -> ELEVATION_HEIGHT_REFERENCE
+        else -> error("Unsupported terrain height reference")
+    }
 }

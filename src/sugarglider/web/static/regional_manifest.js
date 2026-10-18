@@ -34,7 +34,7 @@ export async function parseRegionalManifest(text) {
   try { value = JSON.parse(text); } catch { throw new RegionalDataError("invalid_regional_manifest"); }
   if (value?.schema_version === 1) throw new RegionalDataError("regional_v2_install_required");
   requireFields(value, ["schema_version", "publication_allowed", "region_id", "display_name", "bounds", "source", "tools", "components", "build_id"]);
-  requireData(value.schema_version === 2 && value.publication_allowed === false && safeRegionalId(value.region_id)
+  requireData(value.schema_version === 2 && typeof value.publication_allowed === "boolean" && safeRegionalId(value.region_id)
     && boundedText(value.display_name, 120) && validBounds(value.bounds)
     && validSha256(value.build_id), "invalid_regional_manifest");
   requireFields(value.source, ["basename", "byte_size", "sha256", "header_bounds", "coverage_evidence", "source_url"]);

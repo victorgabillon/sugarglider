@@ -83,7 +83,7 @@ android {
         versionCode = 8
         versionName = "1.2.0"
 
-        testInstrumentationRunner = if (providers.gradleProperty("sugargliderV2Research").isPresent)
+        testInstrumentationRunner = if (providers.gradleProperty("sugargliderV2Research").isPresent || providers.gradleProperty("sugargliderV2Staging").isPresent)
             "io.github.victorgabillon.sugarglider.V2RegionInstrumentation"
         else "io.github.victorgabillon.sugarglider.HeightResearchInstrumentation"
         buildConfigField("boolean", "ALLOW_HTTP", "false")
@@ -112,6 +112,13 @@ android {
             initWith(getByName("debug"))
             applicationIdSuffix = ".v2debug"
             versionNameSuffix = "-v2-research"
+            matchingFallbacks += "debug"
+        }
+        create("v2Staging") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".v2staging"
+            versionNameSuffix = "-v2-staging"
+            buildConfigField("boolean", "ALLOW_HTTP", "false")
             matchingFallbacks += "debug"
         }
         release {
@@ -147,7 +154,11 @@ android {
     sourceSets.getByName("main").assets.srcDir(bundledShellDirectory)
     sourceSets.getByName("v2Debug").java.srcDir("src/debug/java")
     sourceSets.getByName("v2Debug").manifest.srcFile("src/debug/AndroidManifest.xml")
-    testBuildType = if (providers.gradleProperty("sugargliderV2Research").isPresent) "v2Debug" else "debug"
+    sourceSets.getByName("v2Staging").java.srcDir("src/debug/java")
+    sourceSets.getByName("v2Staging").res.srcDir(layout.buildDirectory.dir("generated/pr94-staging/res"))
+    sourceSets.getByName("v2Staging").assets.srcDir(layout.buildDirectory.dir("generated/pr94-staging/assets"))
+    testBuildType = if (providers.gradleProperty("sugargliderV2Staging").isPresent) "v2Staging"
+        else if (providers.gradleProperty("sugargliderV2Research").isPresent) "v2Debug" else "debug"
 }
 
 tasks.named("preBuild").configure { dependsOn(bundleSharedWebShell) }
@@ -175,3 +186,32 @@ dependencies {
     testImplementation("com.squareup.moshi:moshi-kotlin:1.15.1")
     testImplementation("org.json:json:20250517")
 }
+
+
+// Explicit private test inputs. Only the isolated staging variant receives them.
+val prepareV2StagingResources by tasks.registering {
+    val certificate = providers.gradleProperty("sugargliderV2StagingCA")
+    val catalog = providers.gradleProperty("sugargliderV2StagingCatalog")
+    val destination = layout.buildDirectory.dir("generated/pr94-staging")
+    inputs.property("certificate", certificate.orElse(""))
+    inputs.property("catalog", catalog.orElse(""))
+    certificate.orNull?.let { inputs.file(it).withPropertyName("stagingCertificateBytes") }
+    catalog.orNull?.let { inputs.file(it).withPropertyName("stagingCatalogBytes") }
+    outputs.dir(destination)
+    doLast {
+        val cert = File(certificate.orNull ?: error("Private staging requires an explicit local CA"))
+        val offering = File(catalog.orNull ?: error("Private staging requires a verified V2 catalog"))
+        for (source in listOf(cert, offering)) {
+            require(source.isAbsolute && source.isFile && !Files.isSymbolicLink(source.toPath()) && source.length() in 1..65_536)
+            require(!source.canonicalFile.toPath().startsWith(rootProject.projectDir.parentFile.canonicalFile.toPath()))
+        }
+        val pem = cert.readText()
+        require(pem.startsWith("-----BEGIN CERTIFICATE-----") && !pem.contains("PRIVATE KEY"))
+        val root = destination.get().asFile
+        root.resolve("res/raw").mkdirs()
+        root.resolve("assets/web").mkdirs()
+        cert.copyTo(root.resolve("res/raw/pr94_staging_ca.pem"), overwrite = true)
+        offering.copyTo(root.resolve("assets/web/offline_region_catalog.json"), overwrite = true)
+    }
+}
+tasks.matching { it.name == "preV2StagingBuild" }.configureEach { dependsOn(prepareV2StagingResources) }

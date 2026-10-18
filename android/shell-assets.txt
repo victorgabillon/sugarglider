@@ -116,6 +116,7 @@ saved_routes.js
 service_worker_policy.js
 state.js
 styles.css
+terrain_attribution.js
 trail_profile.js
 vendor/maplibre-gl-6.4.1/LICENSE.txt
 vendor/maplibre-gl-6.4.1/maplibre-gl-shared.mjs

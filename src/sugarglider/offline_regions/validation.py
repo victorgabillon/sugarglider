@@ -211,7 +211,8 @@ def validate_components(directory: Path, manifest: RegionalManifest) -> None:
     validate_tar(directory / "routing/valhalla_tiles.tar")
     elevation = verify_elevation(directory / "elevation")
     if (
-        elevation.component_id != manifest.components.elevation.component_id
+        elevation.publication_allowed != manifest.publication_allowed
+        or elevation.component_id != manifest.components.elevation.component_id
         or elevation.bounds != manifest.bounds
     ):
         raise ValueError("elevation identity/bounds mismatch")

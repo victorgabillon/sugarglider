@@ -114,6 +114,31 @@ class RegionalElevationTest {
         assertFalse(validV2ValhallaArchive(file))
     }
 
+    @Test fun documentedAndResearchDatumPairsStayStrictAndNativeRepliesAreTruthful() {
+        for ((status, datum, publication) in listOf(
+            Triple("unresolved", "unresolved", false),
+            Triple("documented", "EGM96", false),
+            Triple("documented", "EGM96", true),
+        )) {
+            val metadata = JSONObject(String(fixture.manifest, Charsets.UTF_8))
+                .put("provenance_status", status).put("vertical_datum", datum)
+                .put("publication_allowed", publication).toString().toByteArray()
+            val changed = reference.copy(buildId = (if (publication) "c" else if (status == "documented") "b" else "a").repeat(64),
+                elevation = fixture.reference.copy(manifest = fixtureIdentity(metadata)))
+            val pack = store.stage(changed, graph, { ByteArrayInputStream(archive) }, metadata,
+                { ByteArrayInputStream(SyntheticHgt.bytes) })
+            val manifest = File(requireNotNull(pack.elevationDirectory).parentFile, "manifest.json")
+            assertEquals(if (status == "documented") ELEVATION_EGM96_REFERENCE else ELEVATION_HEIGHT_REFERENCE,
+                verifiedRegionalHeightReference(manifest))
+            store.remove(changed) // Each case owns a fresh slot; keep the two-version limit.
+        }
+        val bad = File(temporary, "bad-datum.json")
+        for ((status, datum) in listOf(Pair("documented", "unresolved"), Pair("unresolved", "EGM96"), Pair("documented", "EGM2008"))) {
+            bad.writeText(JSONObject().put("provenance_status", status).put("vertical_datum", datum).toString())
+            assertThrows(IllegalStateException::class.java) { verifiedRegionalHeightReference(bad) }
+        }
+    }
+
     private fun install(): RoutingPack = store.stage(reference, graph, { ByteArrayInputStream(archive) },
         fixture.manifest, { ByteArrayInputStream(SyntheticHgt.bytes) })
 }

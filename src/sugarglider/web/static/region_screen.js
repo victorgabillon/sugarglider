@@ -1,3 +1,4 @@
+import { appendTerrainAttribution } from "./terrain_attribution.js";
 import { loadRegionCatalog } from "./region_catalog.js";
 import { selectCommittedRegion } from "./regional_planning.js";
 
@@ -84,6 +85,7 @@ export function createRegionScreen({ elements, versions, product, withRegion,
       const item = document.createElement("li"); item.className = "offline-region-card";
       const name = document.createElement("strong"); name.textContent = offering?.display_name ?? stored?.manifest?.display_name ?? id;
       item.append(name);
+      appendTerrainAttribution(item, stored?.manifest);
       const same = stored?.manifest?.build_id === offering?.build_id;
       const verified = stored?.manifest?.build_id === readyBuild && id === selectedRegionId();
       const installed = stored?.status === "committed";
