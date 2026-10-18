@@ -28,7 +28,8 @@ const server = http.createServer((request, response) => {
       ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
     const context = await browser.newContext();
     await context.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : route.abort());
-    for (const name of ['pr90_v2_regions', 'pr91_route_elevation', 'pr94_release']) {
+    for (const name of ['pr40_local_regional_data', 'pr90_v2_regions', 'pr91_route_elevation',
+      'pr94_release', 'pr96_installation_memory']) {
       const page = await context.newPage();
       await page.goto(`${base}/tests/browser/${name}_harness.html`);
       await page.waitForFunction(() => ['passed', 'failed'].includes(document.querySelector('pre')?.dataset.status), { timeout: 30_000 });

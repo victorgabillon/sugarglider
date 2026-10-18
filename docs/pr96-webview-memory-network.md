@@ -282,6 +282,9 @@ universal device threshold or arbitrary native/cache cap is introduced.
   and runtime session construction. Focused new tests cover exact ownership,
   overlapping requests, late Cancel versus successful commit, worker closure on
   success/cancellation/checksum failure/worker failure, and fresh-worker Retry.
+  The existing browser CI entry point now runs both the structural-validation
+  corpus and all eight new installer regressions; its bundled-startup checks
+  also pass with normal and offline configuration.
 - Existing explicit host-GC regression passes: Places-only search does not retain
   Nature, retired map archives are released, and no unknown source gets a network
   fallback. Explicit collection is confined to that host regression, not physical
@@ -427,7 +430,8 @@ bridge responses feed the real UI; no successful route/height result is forged.
 Independent Python analysis reproduces the Android elevation result field by
 field within **1e-7 m** for numerical values. Direct verified HGT probes agree
 with every available native height within **0.010001 m**, accounting for native
-centimetre quantization; null availability must match exactly. All **18 captured profiles / 7,268 height samples**, including the original
+centimetre quantization; null availability must match exactly. All **18 captured
+profiles / 7,268 height samples**, including the original
 eight six-profile/forest/long captures and subsequent switching/retry captures,
 pass this comparison. These checks validate
 implementation agreement against the selected source; they do not establish
