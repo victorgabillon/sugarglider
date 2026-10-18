@@ -5,7 +5,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Annotated, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, ValidationInfo, model_validator
 
 from sugarglider.offline_regions.elevation_feasibility import (
     HGT_RAW_BYTES,
@@ -26,6 +26,31 @@ from sugarglider.offline_regions.models import (
     canonical_json,
     contained_path,
 )
+from sugarglider.offline_regions.terrain_source import IGNSources
+
+
+class IGNDerivation(StrictModel):
+    algorithm: Literal["ign-rge-alti-5m-ign69-skadi-v1"]
+    sources: IGNSources
+    prepared_sha256: Sha256
+    transformation_sha256: Sha256
+
+
+class ElevationEvidenceModel(StrictModel):
+    derivation: IGNDerivation | None = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
+
+    @model_validator(mode="after")
+    def explicit_wire_fields(self, info: ValidationInfo) -> Self:
+        # V2's original field set remains exact. Only an IGN component carries
+        # this additional mandatory evidence object; null is never a wire alias.
+        expected = set(type(self).model_fields)
+        if self.derivation is None:
+            expected.remove("derivation")
+        if info.mode == "json" and self.model_fields_set != expected:
+            raise ValueError("serialized component fields must be explicit")
+        return self
 
 
 class AcquiredTile(StrictModel):
@@ -39,7 +64,7 @@ class AcquiredTile(StrictModel):
     origin: str
 
 
-class ElevationInputs(StrictModel):
+class ElevationInputs(ElevationEvidenceModel):
     publication_allowed: Literal[False]
     tiles: Annotated[tuple[AcquiredTile, ...], Field(min_length=1, max_length=16)]
 
@@ -69,14 +94,14 @@ class ElevationTile(StrictModel):
         return self
 
 
-class ElevationManifest(StrictModel):
+class ElevationManifest(ElevationEvidenceModel):
     schema_version: Literal[1] = 1
     component_id: Identifier
     bounds: RegionBounds
     format: Literal["skadi-hgt-gzip-v1"] = "skadi-hgt-gzip-v1"
     publication_allowed: bool = False
     provenance_status: Literal["unresolved", "documented"] = "unresolved"
-    vertical_datum: Literal["unresolved", "EGM96"] = "unresolved"
+    vertical_datum: Literal["unresolved", "EGM96", "IGN69"] = "unresolved"
     tiles: Annotated[tuple[ElevationTile, ...], Field(min_length=1, max_length=16)]
 
     @model_validator(mode="after")
@@ -84,8 +109,14 @@ class ElevationManifest(StrictModel):
         if (self.provenance_status, self.vertical_datum) not in (
             ("unresolved", "unresolved"),
             ("documented", "EGM96"),
+            ("documented", "IGN69"),
         ) or (self.publication_allowed and self.provenance_status != "documented"):
             raise ValueError("publication requires documented EGM96 provenance")
+        if self.vertical_datum == "IGN69":
+            if self.derivation is None or self.publication_allowed:
+                raise ValueError("IGN69 requires source evidence and private status")
+        elif self.derivation is not None:
+            raise ValueError("IGN derivation cannot label another vertical datum")
         if tuple(f"elevation/{tile.path}" for tile in self.tiles) != elevation_paths(
             self.bounds
         ):
@@ -185,7 +216,12 @@ def build_elevation(
                 raise ValueError("elevation source changed during copy")
         tiles.append(_verified_tile(target, source))
     manifest = ElevationManifest(
-        component_id=component_id, bounds=bounds, tiles=tuple(tiles)
+        component_id=component_id,
+        bounds=bounds,
+        tiles=tuple(tiles),
+        derivation=pins.derivation,
+        provenance_status="documented" if pins.derivation else "unresolved",
+        vertical_datum="IGN69" if pins.derivation else "unresolved",
     )
     (directory / "manifest.json").write_bytes(
         canonical_json(manifest.model_dump(mode="json"))

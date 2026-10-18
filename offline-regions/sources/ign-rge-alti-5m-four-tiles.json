@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "product": "IGN-RGE-ALTI-5M",
+  "horizontal_crs": "EPSG:2154",
+  "vertical_crs": "EPSG:5720",
+  "surface": "DTM",
+  "license_url": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/",
+  "files": [
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D002_2020-09-04.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D002_2020-09-04/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D002_2020-09-04.7z",
+      "byte_size": 333567478,
+      "sha256": "7d2beca8d2d0de8b3e506900b5eb1636f80df9e929e07f683d853ce3b571ca91",
+      "acquired_at": "2026-10-18T16:06:41.764513+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D027_2022-12-21.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D027_2022-12-21/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D027_2022-12-21.7z",
+      "byte_size": 276997777,
+      "sha256": "9895dd7d033332ad43d8e22fd65cc3069149907da0e14afa864de23aac9d1a50",
+      "acquired_at": "2026-10-18T16:06:50.097760+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D028_2019-12-16.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D028_2019-12-16/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D028_2019-12-16.7z",
+      "byte_size": 171568476,
+      "sha256": "b6635e0b27b96b3ae430425d4e6b143005c6a0439cbaf075f3b4c773f371259f",
+      "acquired_at": "2026-10-18T16:06:57.242070+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D041_2019-12-16.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D041_2019-12-16/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D041_2019-12-16.7z",
+      "byte_size": 238645980,
+      "sha256": "833071baff372ca02fe9f0276135fd65057b5b6aa64eb8e0ae0bf76a6b2bd01e",
+      "acquired_at": "2026-10-18T16:07:04.894636+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D045_2023-01-03.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D045_2023-01-03/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D045_2023-01-03.7z",
+      "byte_size": 369285331,
+      "sha256": "f3128867a8d2384e0fe7cad4367958fb5c333773323fbbaf3fc781d479f7a33a",
+      "acquired_at": "2026-10-18T16:07:15.844156+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D060_2020-09-04.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D060_2020-09-04/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D060_2020-09-04.7z",
+      "byte_size": 226246156,
+      "sha256": "436881d5dd7f963900f7a3f3e689e1833df620f89a9339aed0a39b52b0adbc26",
+      "acquired_at": "2026-10-18T16:07:24.180432+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D075_2020-07-30.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D075_2020-07-30/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D075_2020-07-30.7z",
+      "byte_size": 13939995,
+      "sha256": "a159155985eae1c474fdefd49e29256063696285ffd0b4878f8d69754ee983c6",
+      "acquired_at": "2026-10-18T16:07:28.065209+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D076_2020-10-20.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D076_2020-10-20/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D076_2020-10-20.7z",
+      "byte_size": 238578862,
+      "sha256": "86f051ab983d64399c443ec426ecc4a98c79b5257774fa73d4c00bf6a1aa5f19",
+      "acquired_at": "2026-10-18T16:07:35.794147+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D077_2021-03-03.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D077_2021-03-03/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D077_2021-03-03.7z",
+      "byte_size": 226423725,
+      "sha256": "caf2c2f1fc1de554424eadc6597faf936716ee6cfb3dbe6f93b5880d87505dab",
+      "acquired_at": "2026-10-18T16:07:43.593679+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D078_2020-07-30.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D078_2020-07-30/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D078_2020-07-30.7z",
+      "byte_size": 90690133,
+      "sha256": "cdd5637135c86a0779e4eed7b0398b6de1ec25e78e000b94fddc2ee00915ca38",
+      "acquired_at": "2026-10-18T16:06:28.424214+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D080_2019-07-09.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D080_2019-07-09/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D080_2019-07-09.7z",
+      "byte_size": 227200019,
+      "sha256": "17e2d4b5b4adaafa980c1897612b0c859e7e0eae39426908c5fb8c42b8e480f7",
+      "acquired_at": "2026-10-18T16:07:51.114881+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D089_2023-01-03.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D089_2023-01-03/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D089_2023-01-03.7z",
+      "byte_size": 485461155,
+      "sha256": "7a3659eb2a18bbb290182852e6014a490ae1089ef3899bbf37fa140396a2b3c9",
+      "acquired_at": "2026-10-18T16:08:02.840279+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D091_2021-03-03.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D091_2021-03-03/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D091_2021-03-03.7z",
+      "byte_size": 65188861,
+      "sha256": "e63a8ae12fb825b76d0bedf826da1091d9d1b3b5e905e7f7d0d5f0c19b67c552",
+      "acquired_at": "2026-10-18T16:08:08.244011+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D092_2020-07-30.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D092_2020-07-30/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D092_2020-07-30.7z",
+      "byte_size": 19125413,
+      "sha256": "868d9b52d4a2b46fec167c8dbda9f43d179d0165a87c369113463fda55f8c1f8",
+      "acquired_at": "2026-10-18T16:06:32.427558+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D093_2020-07-30.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D093_2020-07-30/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D093_2020-07-30.7z",
+      "byte_size": 23291756,
+      "sha256": "0a0ea1bc80891b5952a8852ebbe5513d2e1293b375133028d06eabe798000c16",
+      "acquired_at": "2026-10-18T16:08:12.316698+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D094_2020-07-30.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D094_2020-07-30/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D094_2020-07-30.7z",
+      "byte_size": 23784381,
+      "sha256": "6e8804cc8e2ac57737c1b2505d8cac7f9615895b9bf5cab2c03e85163394dfe6",
+      "acquired_at": "2026-10-18T16:08:16.377740+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    },
+    {
+      "filename": "RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D095_2020-07-30.7z",
+      "url": "https://data.geopf.fr/telechargement/download/RGEALTI/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D095_2020-07-30/RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D095_2020-07-30.7z",
+      "byte_size": 68555083,
+      "sha256": "de662135a000ad91d8f67a3b003fe59c631ccb9099ab6f92cf67de1024fa5260",
+      "acquired_at": "2026-10-18T16:08:21.249825+00:00",
+      "last_modified": null,
+      "etag": null,
+      "version_id": null
+    }
+  ]
+}

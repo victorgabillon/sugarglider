@@ -9,6 +9,7 @@ const REQUEST_LIMIT = 262144, REPLY_LIMIT = 1048576;
 const HEIGHT_REFERENCES = Object.freeze([
   "unresolved vertical datum; verified V2 elevation component manifest",
   "EGM96 orthometric metres; verified V2 elevation component manifest",
+  "IGN69 normal metres; IGN RGE ALTI 5 m; Licence Ouverte 2.0; verified V2 elevation component manifest",
 ]);
 
 // Bounded one-worker preparation. Termination owns cancellation during sampling.

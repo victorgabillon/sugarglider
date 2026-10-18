@@ -51,7 +51,15 @@ export async function runElevationUiHarness(){
     current={status,candidate_id:id,result:status==='ready'?{analysis:a,sample_coordinates:coords(a)}:null};
     view.render(current,currentCandidate);return current;
   }
+  const ign = structuredClone(summit);
+  ign.height_reference = "IGN69 normal metres; IGN RGE ALTI 5 m; Licence Ouverte 2.0; verified V2 elevation component manifest";
+  display(ign);
+  assert(root.querySelector('[data-elevation-source]').textContent.includes('NGF-IGN69'),'IGN datum visible');
+  assert(root.querySelector('[data-elevation-source] a').href==='https://www.data.gouv.fr/pages/legal/licences/etalab-2.0','IGN attribution and official license');
+  assert(root.querySelector('[data-elevation-ascent]').textContent==='15 m','datum label never changes totals');
+  scenarios.push('ign69_ground_model_credit_and_datum_without_recalculation');
   display(summit);
+  assert(!root.querySelector('[data-elevation-source]').textContent.includes('IGN RGE'),'old source credit cleared on route change');
   assert(!root.hidden&&root.querySelector('[data-elevation-ascent]').textContent==='15 m','uses returned filtered D+');
   assert(root.querySelector('[data-elevation-altitude]').textContent==='0–30 m','raw observed range, no invented filtered range');
   assert(root.querySelectorAll('.elevation-profile-line').length===1,'one supported line');

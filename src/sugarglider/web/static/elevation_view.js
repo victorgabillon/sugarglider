@@ -14,6 +14,8 @@ export function createElevationView({root, onPosition = () => {}, onShowMap = ()
   const summary = find("[data-elevation-summary]"), note = find("[data-elevation-note]");
   const observed = find("[data-elevation-observed]"), badge = find("[data-elevation-coverage]");
   const readout = find("#elevation-position-readout");
+  const sourceNote = document.createElement("p"); sourceNote.className = "elevation-help";
+  sourceNote.dataset.elevationSource = ""; note.append(sourceNote);
   const listeners = new window.AbortController();
   let value = null, candidate = null, projection = null, control = null, svg = null;
   let cursor = null, cursorPoint = null, position = null, width = 0, pointer = null;
@@ -173,6 +175,14 @@ export function createElevationView({root, onPosition = () => {}, onShowMap = ()
       return;
     }
     const analysis = value.result.analysis;
+    sourceNote.replaceChildren();
+    if (analysis.height_reference?.startsWith("IGN69 normal metres; IGN RGE ALTI 5 m;")) {
+      sourceNote.append("IGN RGE ALTI® 5 m · ground model · NGF-IGN69 normal heights. IGN, ");
+      const license = document.createElement("a"); license.textContent = "Licence Ouverte 2.0";
+      license.href = "https://www.data.gouv.fr/pages/legal/licences/etalab-2.0";
+      license.target = "_blank"; license.rel = "noopener noreferrer"; sourceNote.append(license);
+    } else sourceNote.textContent = analysis.height_reference?.startsWith("EGM96 orthometric")
+      ? "Height reference: EGM96 orthometric metres." : "Height reference: unresolved vertical datum.";
     badge.textContent = analysis.coverage === "complete" ? "Complete" : analysis.coverage === "partial" ? "Partial coverage" : "Unavailable";
     if (analysis.coverage === "complete") {
       find("[data-elevation-ascent]").textContent = metres(analysis.total_ascent_m);
@@ -203,7 +213,7 @@ export function createElevationView({root, onPosition = () => {}, onShowMap = ()
   observer.observe(host);
   const destroy = () => {
     if (destroyed) return;
-    destroyed = true; listeners.abort(); observer.disconnect(); removeChart(); root.hidden = true;
+    destroyed = true; listeners.abort(); observer.disconnect(); removeChart(); sourceNote.remove(); root.hidden = true;
   };
   window.addEventListener("pagehide", destroy, {once:true, signal:listeners.signal});
   return Object.freeze({render, destroy, diagnostics:() => ({chart_renders:chartRenders, chart_render_ms:renderMs,

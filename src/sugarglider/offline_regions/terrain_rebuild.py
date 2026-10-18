@@ -30,6 +30,11 @@ def rebuild_terrain_region(
         raise ValueError("OSM source/spec differ from immutable prior region")
     if output.exists() or output.is_symlink():
         raise FileExistsError(output)
+    if any(path.is_symlink() for path in output.absolute().parents):
+        raise ValueError("symlink terrain rebuild output")
+    # CLI paths commonly contain ../private. Native identity verification must
+    # receive canonical paths, just as it does for an absolute build command.
+    output = output.resolve()
     output.mkdir()
     for name in ("map", "pois", "nature"):
         shutil.copytree(previous / name, output / name)

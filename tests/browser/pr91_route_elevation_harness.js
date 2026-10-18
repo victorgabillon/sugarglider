@@ -26,6 +26,9 @@ export async function runElevationHarness(){
  const fields={elevation_version:1,operation_id:'e'.repeat(32),candidate_id:'geometry:'+'a'.repeat(64),profile:'hike',distance_m:100,regional_reference:reference,...await sampleElevationGeometry(geometry,100)};
  const documented=reply(fields);documented.analysis.height_reference="EGM96 orthometric metres; verified V2 elevation component manifest";
  assert(parseRouteElevationReply(JSON.stringify(documented))?.analysis.height_reference===documented.analysis.height_reference,'verified EGM96 reference accepted');
+ documented.analysis.height_reference="IGN69 normal metres; IGN RGE ALTI 5 m; Licence Ouverte 2.0; verified V2 elevation component manifest";
+ assert(parseRouteElevationReply(JSON.stringify(documented))?.analysis.height_reference===documented.analysis.height_reference,'verified IGN69 reference accepted without EGM96 relabel');
+ cases.push('ign69_ground_model_reference_preserved');
  documented.analysis.height_reference="guessed datum";assert(parseRouteElevationReply(JSON.stringify(documented))===null,'unknown datum rejected');
  cases.push('documented_egm96_and_research_height_references_remain_explicit');
  assert(parseRouteElevationReply(JSON.stringify(reply(fields)))!==null,'valid reply');
