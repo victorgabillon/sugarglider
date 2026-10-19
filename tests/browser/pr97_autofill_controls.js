@@ -17,6 +17,7 @@ export function buildAutofillControls(source) {
   const bodies = {
     none: "<p>Local control</p>", input: one, "form-one": `<form>${one}</form>`,
     "form-two": `<form>${two}</form>`, "form-three": `<form>${three}</form>`, "inputs-three": three,
+    "numbers-two": `<form>${three.slice(one.length)}</form>`,
     "form-three-off": `<form autocomplete="off">${three.replaceAll("<input", '<input autocomplete="off"')}</form>`,
     "form-three-hidden": `<form hidden>${three}</form>`,
     "form-three-detached": `<template><form>${three}</form></template>`,

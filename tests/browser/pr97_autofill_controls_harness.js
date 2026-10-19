@@ -22,6 +22,8 @@ try {
   assert([...off.querySelectorAll("form,input,select,textarea")].every((field) => field.getAttribute("autocomplete") === "off"), "explicit policy attribute on each form/control");
   assert(parse(controls["form-two"]).querySelectorAll("input").length === 2, "two-field comparison");
   assert(parse(controls["form-three"]).querySelectorAll("input").length === 3, "restored third field is present");
+  const numeric = [...parse(controls["numbers-two"]).querySelectorAll("input")];
+  assert(numeric.length === 2 && numeric.every((field) => field.type === "number"), "numeric-only control excludes the text field");
   assert(parse(controls["inputs-three"]).forms.length === 0 && parse(controls["inputs-three"]).querySelectorAll("input").length === 3, "unowned fields remain a separate condition");
   assert(parse(controls["real-all-detached"]).querySelectorAll("input").length === 0, "template fields are detached, unlike hidden fields");
   assert(parse(controls["real-all-hidden"]).querySelectorAll("input").length === plain.querySelectorAll("input").length, "hidden fields remain attached");
