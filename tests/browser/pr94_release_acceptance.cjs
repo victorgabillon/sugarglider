@@ -4,6 +4,7 @@ const path = require('node:path');
 const http = require('node:http');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { runBundledStartupRegression } = require('./pr94_startup_acceptance.cjs');
+const { runFormAcceptance } = require('./pr97_form_acceptance.cjs');
 const root = path.resolve(__dirname, '../..');
 const server = http.createServer((request, response) => {
   let pathname;
@@ -24,12 +25,12 @@ const server = http.createServer((request, response) => {
   try {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const base = `http://127.0.0.1:${server.address().port}`;
-    browser = await chromium.launch({ headless: true,
+    browser = await chromium.launch({ headless: true, args: ['--enable-unsafe-swiftshader'],
       ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
     const context = await browser.newContext();
     await context.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : route.abort());
     for (const name of ['pr40_local_regional_data', 'pr90_v2_regions', 'pr91_route_elevation',
-      'pr94_release', 'pr96_installation_memory']) {
+      'pr94_release', 'pr96_installation_memory', 'pr97_autofill_controls']) {
       const page = await context.newPage();
       await page.goto(`${base}/tests/browser/${name}_harness.html`);
       await page.waitForFunction(() => ['passed', 'failed'].includes(document.querySelector('pre')?.dataset.status), { timeout: 30_000 });
@@ -41,6 +42,9 @@ const server = http.createServer((request, response) => {
     for (const offlineConfig of [false, true]) {
       const startupCases = await runBundledStartupRegression(browser, root, { offlineConfig });
       console.log(JSON.stringify({ name: 'bundled_startup_import', offlineConfig, cases: startupCases.length, status: 'passed' }));
+    }
+    for (const width of [360, 390, 420, 1280]) {
+      console.log(JSON.stringify({ name: 'real_form_input', status: 'passed', ...await runFormAcceptance(browser, root, width) }));
     }
   } finally {
     await browser?.close();
