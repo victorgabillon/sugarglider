@@ -159,7 +159,8 @@
 - Activity-specific analysis and scoring must respect path-detail coverage. Missing
   surface, access, network, smoothness, or technicality data remains visibly unknown.
 - Routing profiles are preferences over mapped OSM data, never safety, legality,
-  opening, current-condition, or rideability guarantees. Elevation remains disabled.
+  opening, current-condition, or rideability guarantees. Elevation is not used for
+  route generation or ranking; selected-route terrain analysis is optional.
 - Start, end, and explicitly exact waypoints remain hard constraints. Approach and
   best-effort constraints must use the shared profile-aware resolver and may not cause
   an unexplained total-plan rejection.
@@ -302,3 +303,17 @@
   authenticated not-found cleanup must clear only its matching encrypted session even
   after Stop or generation invalidation, while stale callbacks cannot mutate a newer
   WebView or participant state.
+
+- Android promises offline-capable planning within an installed, verified supported
+  region: local maps, routing, Places/Nature, terrain elevation analysis and GPX.
+  Required missing data and uncovered routes fail explicitly; no hidden network
+  routing fallback, silent region stitching or automatic route/location upload.
+- Offline functionality, first-party network controls and platform UID diagnostics
+  are independent assessments. Preserve all nonzero UID findings and the original
+  strict zero-byte diagnostic. Offline success does not establish network silence;
+  platform disclosure and public-release approval remain separate review gates.
+- Keep the local-only Android release policy: no enabled social or live publication.
+  Online address search is explicit and optional; static-region downloads require
+  an explicit installer action. External export destinations may sync their copies.
+- V2 policy/Data Safety drafts are proposals. Do not deploy them, alter Play, change
+  production catalogs or bypass the IGN publication gate without authorization.

@@ -12,6 +12,33 @@ The Android app plans **on the device with Valhalla** after an offline region is
 installed. The Python application is the **reference/backend planner using an external
 GraphHopper process**. Ordinary Android planning does not need that server.
 
+## Offline-capable Android product
+
+After downloading a supported region, Sugarglider calculates routes, displays
+regional maps, analyzes elevation and exports GPX on the device without requiring
+an internet connection.
+
+This contract applies within an installed, verified region. It includes local
+Places/Nature data, all six supported profiles, waypoint routes, Auto Tour and the
+interactive elevation profile. There is no worldwide coverage, uncovered-area
+routing fallback, turn-by-turn navigation guarantee or guarantee of trail access
+and current conditions. D+/D− are terrain estimates, not surveyed measurements.
+Downloading, updating and checking regional files requires internet access.
+Optional online address search sends submitted text to IGN Géoplateforme; local
+planning does not require it. A selected GPX storage provider may sync exports.
+
+Offline capability is independent of Android/WebView network silence. PR97 observed
+Google Autofill requests and unattributed traffic when connected; their encrypted
+contents remain unknown. Strict UID diagnostics are retained, and disclosure still
+requires review. The local-only packaged policy keeps social and live publication
+disabled. See the [product contract and release gates](docs/pr98-offline-capable-product.md),
+[V2 privacy-policy draft](docs/pr98-privacy-policy-draft.md) and
+[Data Safety evidence review](docs/pr98-data-safety-review.md).
+
+The published V1 regions and privacy page are separate from this unreleased V2
+code. The bundled public catalog is still V1 and cannot install a ready V2 region.
+No public IGN V2 publication or coordinated Android release is authorized here.
+
 ## What you can do
 
 - Plan Auto Tour loops or Waypoint Routes through explicit stops. Automatic route
