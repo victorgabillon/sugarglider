@@ -48,6 +48,11 @@ class ElevationEvidenceModel(StrictModel):
         expected = set(type(self).model_fields)
         if self.derivation is None:
             expected.remove("derivation")
+        if (
+            "publication_basis_sha256" in expected
+            and getattr(self, "publication_basis_sha256", None) is None
+        ):
+            expected.remove("publication_basis_sha256")
         if info.mode == "json" and self.model_fields_set != expected:
             raise ValueError("serialized component fields must be explicit")
         return self
@@ -95,6 +100,9 @@ class ElevationTile(StrictModel):
 
 
 class ElevationManifest(ElevationEvidenceModel):
+    publication_basis_sha256: Sha256 | None = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
     schema_version: Literal[1] = 1
     component_id: Identifier
     bounds: RegionBounds
@@ -111,12 +119,18 @@ class ElevationManifest(ElevationEvidenceModel):
             ("documented", "EGM96"),
             ("documented", "IGN69"),
         ) or (self.publication_allowed and self.provenance_status != "documented"):
-            raise ValueError("publication requires documented EGM96 provenance")
+            raise ValueError("publication requires documented source provenance")
         if self.vertical_datum == "IGN69":
-            if self.derivation is None or self.publication_allowed:
-                raise ValueError("IGN69 requires source evidence and private status")
+            if self.derivation is None or self.publication_allowed != (
+                self.publication_basis_sha256 is not None
+            ):
+                raise ValueError(
+                    "IGN69 requires derivation and exact publication basis"
+                )
         elif self.derivation is not None:
             raise ValueError("IGN derivation cannot label another vertical datum")
+        elif self.publication_basis_sha256 is not None:
+            raise ValueError("IGN publication basis cannot label another source")
         if tuple(f"elevation/{tile.path}" for tile in self.tiles) != elevation_paths(
             self.bounds
         ):

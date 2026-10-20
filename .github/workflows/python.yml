@@ -20,4 +20,6 @@ jobs:
       - run: uv run ruff check .
       - run: uv run mypy src tests
       - run: uv run pytest -m "not integration"
+      - name: Synthetic IGN release over private loopback HTTPS
+        run: uv run python tests/unit/pr101_private_https_acceptance.py --output "$RUNNER_TEMP/pr101-private-https"
 

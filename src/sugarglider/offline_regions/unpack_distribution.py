@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import NoReturn, cast
 from urllib.parse import urlsplit
 
+from sugarglider.offline_regions.elevation_component import ElevationManifest
+
 MAX_BYTES = 950_000_000  # Below the published 1 GB GitHub Pages site limit.
 MAX_FILES = 128  # Bound archive metadata; not a special-case retained-version limit.
 REGIONAL_FILES = {
@@ -246,8 +248,8 @@ def unpack_distribution(
                 )
             from sugarglider.offline_regions.models import RegionalManifest
             from sugarglider.offline_regions.publication import (
-                PublicationEvidence,
                 authorize_release_manifest,
+                parse_publication_evidence,
             )
 
             if (
@@ -255,15 +257,31 @@ def unpack_distribution(
                 or approval_path.stat().st_size > 4096
             ):
                 raise ValueError("oversized publication evidence/approval")
-            evidence = PublicationEvidence.model_validate_json(
-                evidence_path.read_bytes()
+            evidence = parse_publication_evidence(evidence_path.read_bytes())
+            from sugarglider.offline_regions.ign_publication import (
+                IGNPublicationEvidence,
+                require_ign_v2_namespace,
             )
+
+            if isinstance(evidence, IGNPublicationEvidence):
+                catalog = _read_object(bundle, "catalog.json")
+                rows = catalog["regions"]
+                assert isinstance(rows, list) and isinstance(rows[0], dict)
+                require_ign_v2_namespace(
+                    str(rows[0]["manifest_url"]).split("/regions/", 1)[0] + "/"
+                )
             relative = next(iter(regions))
             manifest = RegionalManifest.model_validate_json(
                 bundle.read(f"{relative}/manifest.json")
             )
             authorize_release_manifest(
-                manifest, evidence, approval_path.read_bytes(), trusted_approval_sha256
+                manifest,
+                evidence,
+                approval_path.read_bytes(),
+                trusted_approval_sha256,
+                elevation=ElevationManifest.model_validate_json(
+                    bundle.read(f"{relative}/elevation/manifest.json")
+                ),
             )
         output.mkdir()  # Exclusive output ownership; extraction never replaces data.
         try:

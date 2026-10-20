@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "status": "evidence-for-human-review-not-authorization",
+  "retrieved_at": "2026-10-20T09:44:18.182152+00:00",
+  "documents": [
+    {
+      "role": "ign-product",
+      "url": "https://www.data.gouv.fr/api/1/datasets/rge-alti-r/",
+      "path": "ign-product.json",
+      "byte_size": 47492,
+      "sha256": "b8bc50c6fb4a930dcd2144cd0e22805fdb42f23c34e6eefce40a8318f0741982"
+    },
+    {
+      "role": "open-licence",
+      "url": "https://www.etalab.gouv.fr/wp-content/uploads/2017/04/ETALAB-Licence-Ouverte-v2.0.pdf",
+      "path": "open-licence.pdf",
+      "byte_size": 237693,
+      "sha256": "df600a2fd08b887716612ac57fffbbe10c9e678961064c72214cebb89c90cbb6"
+    },
+    {
+      "role": "osm-attribution",
+      "url": "https://osmfoundation.org/wiki/Licence/Attribution_Guidelines",
+      "path": "osm-attribution.html",
+      "byte_size": 58627,
+      "sha256": "6633a53abc2b521a30f411221dc562b5d29a186bfab93606c7e25f0d2354ad44"
+    },
+    {
+      "role": "osm-collective",
+      "url": "https://osmfoundation.org/wiki/Licence/Community_Guidelines/Collective_Database_Guideline_Guideline",
+      "path": "osm-collective.html",
+      "byte_size": 44644,
+      "sha256": "9a12ae60596941e76d36454c655834306cfdac39c0bd7c9752d9c13ef1502bf9"
+    },
+    {
+      "role": "odbl",
+      "url": "https://opendatacommons.org/licenses/odbl/odbl-10.txt",
+      "path": "odbl.txt",
+      "byte_size": 25278,
+      "sha256": "607680718977f6f6c9607972afd98f208573f19251315ed1362a8589b51beaf5"
+    }
+  ]
+}

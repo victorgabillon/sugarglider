@@ -351,7 +351,7 @@ internal fun verifiedRegionalHeightReference(manifest: File): String {
     return when (Pair(value.opt("provenance_status"), value.opt("vertical_datum"))) {
         Pair("documented", "EGM96") -> ELEVATION_EGM96_REFERENCE
         Pair("documented", "IGN69") -> {
-            check(value.opt("publication_allowed") == false && validIgnDerivation(value.optJSONObject("derivation")))
+            check(validIgnPublicationMetadata(value))
             ELEVATION_IGN69_REFERENCE
         }
         Pair("unresolved", "unresolved") -> ELEVATION_HEIGHT_REFERENCE

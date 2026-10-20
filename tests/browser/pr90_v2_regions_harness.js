@@ -29,6 +29,17 @@ export async function runV2RegionsHarness(){
  assert(approved.build_id!==fixture.build_id,'approval flag is part of immutable identity');
  assert((await parseRegionalManifest(JSON.stringify(approved))).publication_allowed===true,'approved V2 reader compatibility; publication authorization is a separate export gate');
  cases.push('private_and_approved_v2_wire_identity_without_v1_compatibility');
+ const ign=await(await fetch('../fixtures/pr101_ign_publication.json')).json();
+ assert(ign.synthetic_only===true,'fixture carries no real approval');
+ const ignManifest=await parseRegionalManifest(JSON.stringify(ign.manifest));
+ assert(ignManifest.publication_allowed===true && Object.keys(ignManifest.components).length===5,'synthetic IGN public reader contract');
+ assert(ignManifest.components.elevation.files.length===5,'four HGT identities plus metadata');
+ assert(ign.elevation.vertical_datum==='IGN69' && /^[0-9a-f]{64}$/.test(ign.elevation.publication_basis_sha256),'IGN basis and normal heights preserved');
+ const changedIgn=structuredClone(ign.manifest);changedIgn.components.elevation.files[0].sha256='0'.repeat(64);
+ await rejects(()=>parseRegionalManifest(JSON.stringify(changedIgn)));
+ const wrongBuild=structuredClone(ign.manifest);wrongBuild.build_id='0'.repeat(64);
+ await rejects(()=>parseRegionalManifest(JSON.stringify(wrongBuild)));
+ cases.push('synthetic_ign_exact_public_identity_four_hgt_metadata_tampering_and_wrong_build');
  const vectors=await(await fetch('../fixtures/v2_manifest_identity_vectors.json')).json();
  for(const vector of vectors) assert((await parseRegionalManifest(JSON.stringify(vector.manifest))).build_id===vector.manifest.build_id,vector.name);
  cases.push('python_js_float_unicode_and_southern_tile_identity_vectors');

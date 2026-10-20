@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from sugarglider.offline_regions.elevation_component import ElevationManifest
 from sugarglider.offline_regions.models import RegionalManifest, canonical_json
 from sugarglider.offline_regions.unpack_distribution import MAX_BYTES, MAX_FILES
 from sugarglider.offline_regions.validation import verify_region
@@ -61,7 +62,8 @@ def _sha256(path: Path) -> str:
 
 def _notice(manifest: RegionalManifest, relative: str) -> str:
     terrain_status = (
-        "The fifth component is documented EGM96 terrain. Publication requires the\n"
+        "The fifth component is documented terrain. Its exact vertical datum and\n"
+        "source-specific rights appear in the evidence below. Publication requires\n"
         "separate exact-build operator authorization retained below.\n"
         if manifest.publication_allowed
         else "The fifth component is PRIVATE elevation research data.\n"
@@ -141,8 +143,8 @@ def prepare_distribution(
     publication_notice = ""
     if manifest.publication_allowed:
         from sugarglider.offline_regions.publication import (
-            PublicationEvidence,
             authorize_release_manifest,
+            parse_publication_evidence,
         )
 
         if (
@@ -155,9 +157,15 @@ def prepare_distribution(
             )
         if evidence_path.stat().st_size > 32_768 or approval_path.stat().st_size > 4096:
             raise ValueError("oversized publication evidence/approval")
-        evidence = PublicationEvidence.model_validate_json(evidence_path.read_bytes())
+        evidence = parse_publication_evidence(evidence_path.read_bytes())
         authorize_release_manifest(
-            manifest, evidence, approval_path.read_bytes(), trusted_approval_sha256
+            manifest,
+            evidence,
+            approval_path.read_bytes(),
+            trusted_approval_sha256,
+            elevation=ElevationManifest.model_validate_json(
+                (source / "elevation/manifest.json").read_bytes()
+            ),
         )
         publication_notice = (
             "\nTerrain license, provenance, transformation and "
@@ -166,12 +174,21 @@ def prepare_distribution(
             + "\nOperator authorization:\n"
             + approval_path.read_text(encoding="utf-8")
         )
+        from sugarglider.offline_regions.ign_publication import (
+            IGNPublicationEvidence,
+            ign_notice,
+            require_ign_v2_namespace,
+        )
+
+        if isinstance(evidence, IGNPublicationEvidence):
+            require_ign_v2_namespace(base)
+            publication_notice += "\n" + ign_notice(evidence) + "\n"
     if not manifest.publication_allowed and evidence_path is not None:
-        from sugarglider.offline_regions.publication import PublicationEvidence
+        from sugarglider.offline_regions.publication import parse_publication_evidence
 
         if evidence_path.stat().st_size > 32_768:
             raise ValueError("oversized private evidence")
-        evidence = PublicationEvidence.model_validate_json(evidence_path.read_bytes())
+        evidence = parse_publication_evidence(evidence_path.read_bytes())
         if (
             evidence.private_build_id != manifest.build_id
             or evidence.graph_sha256 != manifest.components.routing.files[1].sha256

@@ -166,4 +166,24 @@ class RegionalElevationTest {
 
     private fun install(): RoutingPack = store.stage(reference, graph, { ByteArrayInputStream(archive) },
         fixture.manifest, { ByteArrayInputStream(SyntheticHgt.bytes) })
+
+    @Test fun syntheticPublicIgnReaderPreservesDatumAndVerifiesBytesAfterRestart() {
+        // Synthetic compatibility only; no real publisher approval or data.
+        val metadata = JSONObject(String(fixture.manifest, Charsets.UTF_8))
+            .put("provenance_status", "documented").put("vertical_datum", "IGN69")
+            .put("derivation", syntheticIgnDerivation()).put("publication_allowed", true)
+            .put("publication_basis_sha256", "d".repeat(64)).toString().toByteArray()
+        val changed = reference.copy(elevation = fixture.reference.copy(manifest = fixtureIdentity(metadata)))
+        val pack = store.stage(changed, graph, { ByteArrayInputStream(archive) }, metadata,
+            { ByteArrayInputStream(SyntheticHgt.bytes) })
+        val manifest = File(requireNotNull(pack.elevationDirectory).parentFile, "manifest.json")
+        assertEquals(ELEVATION_IGN69_REFERENCE, verifiedRegionalHeightReference(manifest))
+        // A fresh actor verifies the installed component rather than trusting a marker.
+        assertEquals(pack, RegionalRoutingPackStore(root) { Long.MAX_VALUE }.open(changed))
+        for (basis in listOf<Any>("wrong", JSONObject.NULL, 12)) {
+            val bad = JSONObject(String(metadata)).put("publication_basis_sha256", basis)
+            manifest.writeText(bad.toString())
+            assertThrows(IllegalStateException::class.java) { verifiedRegionalHeightReference(manifest) }
+        }
+    }
 }

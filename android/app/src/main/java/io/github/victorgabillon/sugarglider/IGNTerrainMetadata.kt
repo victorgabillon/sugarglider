@@ -2,6 +2,14 @@ package io.github.victorgabillon.sugarglider
 
 import org.json.JSONObject
 
+/** Structural reader contract. Detached human authority is checked by exporters. */
+internal fun validIgnPublicationMetadata(value: JSONObject): Boolean =
+    validIgnDerivation(value.optJSONObject("derivation")) && when (value.opt("publication_allowed")) {
+        false -> !value.has("publication_basis_sha256")
+        true -> (value.opt("publication_basis_sha256") as? String)?.matches(Regex("[0-9a-f]{64}")) == true
+        else -> false
+    }
+
 /** Private IGN69 components bind full original archives and the offline derivation.
  * Publication remains governed by the separate source-specific operator gate.
  */
