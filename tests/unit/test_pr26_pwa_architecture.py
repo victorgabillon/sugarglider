@@ -157,17 +157,18 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v97_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v98_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v97"
+    assert generation.group(1) == "v98"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
+            "brand/profile-badges/olivier.png",
             "index.html",
             "app.js",
             "app_shell.js",
@@ -230,6 +231,9 @@ def test_shared_shell_generation_tracks_v97_cached_assets() -> None:
             "public_profile_metadata.js",
         )
     } == {
+        "brand/profile-badges/olivier.png": (
+            "bc967b92f946ff80794202f982dc2089ee41111554f2f7a51e5874fda775a5dc"
+        ),
         "elevation_profile.js": (
             "319176cc644c0c80ba464133c969de558e65e75d084e1ed699646301e3ee7b1b"
         ),

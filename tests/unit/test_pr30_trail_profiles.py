@@ -14,7 +14,7 @@ BADGE_HASHES = {
     "orange.png": "7341ee2b77171515e5308d924a82a1a78769d32134d8ea757457daffa7755df9",
     "tomato.png": "483bfee9e59dc914f0e634714c6990b972cea35eab66675ba43df72d4e29b129",
     "mask.png": "0cf50dc763279290f655daeeda6e4044fcbd319b799a6457109ac547204c7a24",
-    "olivier.png": "144f9b9883163ff9ce5f6449add50cbec6bba2c7f76fe1f168ffa4c8065d16f2",
+    "olivier.png": "bc967b92f946ff80794202f982dc2089ee41111554f2f7a51e5874fda775a5dc",
 }
 AVATAR_LABELS = {
     "blue": "Lake",
@@ -151,7 +151,7 @@ def test_pr30_shell_cache_and_framework_free_harness_cover_new_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     harness = (ROOT / "tests/browser/pr30_trail_profiles_harness.js").read_text()
     html = (ROOT / "tests/browser/pr30_trail_profiles_harness.html").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v97`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v98`" in worker
     for name in BADGE_HASHES:
         assert f'"/static/brand/profile-badges/{name}"' in worker
     assert '"/static/avatar.js"' in worker
