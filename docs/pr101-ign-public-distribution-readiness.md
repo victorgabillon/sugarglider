@@ -198,10 +198,10 @@ fresh synthetic authorization and physical installation are distinct evidence.
 
 | Conclusion | Release gate |
 | --- | --- |
-| A. IGN technical readiness | Verify recovered exact private bytes and record any missing original derivation inputs separately. |
+| A. IGN technical readiness | Exact private payload, four HGT and seventeen original archives independently verified. Original derivation receipts/PBF remain missing; historical lineage is not newly re-proven. |
 | B. Redistribution rights evidence | Official documents pinned; combined-graph interpretation and final notices require human review. |
-| C. Exact-build authorization readiness | Synthetic complete path tested; actual unsigned request requires every retained source and build record. |
-| D. Private V2 distribution engineering | Loopback HTTPS and installation contracts tested; real-data transport results reported separately. |
+| C. Exact-build authorization readiness | Synthetic complete path passes 45 tests. The real unsigned request remains blocked by missing preparation/conversion/graph receipts, prepared rasters and PBF. |
+| D. Private V2 distribution engineering | Synthetic failure/restart contracts and the exact real private 210,223,038-byte HTTPS delivery pass. No fresh physical installation performed. |
 | E. Public distribution authorization | **Absent.** No real human approval, approved real artifact or deployment. |
 | F. Google Play readiness | **Not granted.** Technical APK checks do not settle policy, Data Safety, signing, distribution authority or the retained nonzero UID findings. |
 
@@ -269,3 +269,93 @@ request, proposed public build ID or approval. Recover those exact original
 inputs/receipts, or explicitly prepare and verify a new private build with a
 new identity, before running the real IGN request path. The strict gate
 demonstrates this missing-evidence condition instead of bypassing it.
+
+## Final automated and transport results
+
+Implementation commit `c11738ed8253c7d659de36bfdd1d30e52995db72` passed all
+four GitHub workflows:
+
+- [Python](https://github.com/victorgabillon/sugarglider/actions/runs/39405282421):
+  Ruff format/lint, strict mypy over 299 files, **1,544 tests passed**, 16
+  integration tests deliberately deselected, nine existing NumPy deprecation
+  warnings. All 45 new IGN cases pass. The separate synthetic HTTPS acceptance
+  also passes in CI.
+- [Browser](https://github.com/victorgabillon/sugarglider/actions/runs/39405282294):
+  retention/GC, elevation interactions, release/source/datum contracts and
+  offline-product failures pass. Local Chromium also passes at 360, 390, 420
+  and 1280 px, including the new exact synthetic IGN public identity vector.
+- [Android](https://github.com/victorgabillon/sugarglider/actions/runs/39405282356):
+  Debug/Release unit tests, lint, APK assembly, debug test-APK assembly and
+  **Debug/Release APK + ELF 16 KiB checks pass**. The redundant local Android
+  build was stopped after this complete CI result, and is not claimed as a
+  completed local run. No physical APK installation was performed.
+- [Existing social checks](https://github.com/victorgabillon/sugarglider/actions/runs/39405282337)
+  pass; no deployment was requested.
+
+The actual CI debug APK was downloaded from artifact `12257030512`, bound to
+that exact commit, and independently inspected locally. Archive SHA-256:
+`a19d5ac39b4c9a1b52383e18c86238d301a495c4daaa8a9f14362ef6b1aedf41`.
+APK: 25,923,517 bytes, SHA-256
+`3981e0abe9d72e81ecdddcbf8e8c4ecbbf384987225eeb63b767c412dab70864`.
+Android SDK 36 `zipalign -c -P 16 4` passes; all three native ELF LOAD segments
+have alignment `0x4000`. The APK's bundled catalog is byte-identical to the
+preserved V1 catalog. No private regional/DEM bytes were added to the app.
+
+Fresh private TLS results:
+
+| Run | Result |
+| --- | --- |
+| Synthetic authorization format | 5 components / 4 HGT / 11 files / 122,693 bytes, exact streamed hashes and explicit CA passed. |
+| Synthetic failures and restart | CORS OPTIONS, actual 206 ranges, interrupted response/retry, corruption and missing HGT rejection, wrong catalog ID rejection, restored bytes and fresh server actor all passed. |
+| Recovered real private IGN | **11 files / 210,223,038 bytes**, all streamed hashes, explicit-CA TLS and actual PMTiles range passed. Public release preflight rejected missing authorization. |
+| Existing published V1 | Original immutable manifest returned 200, schema 1, build `902f951bedd1de527629baa572358aec4c388359ce5435d472639dac61f9bc71`; all six component HEAD requests returned 200 with matching sizes using identity encoding. No V1 payload download/hash re-audit or modification is claimed. |
+| Fairphone preservation | All 12 recovered regional files (including the regional manifest) were rehashed directly on the phone after recovery and still match the host copy. No install/update/clear, foreground launch, phone-wide certificate or connectivity change. |
+
+Host evidence is retained durably in `/home/juno/sugarglider-pr101-evidence/`,
+including raw licence snapshots, source retrievals, recovered private region,
+post-recovery phone hashes, TLS receipts, V1 availability receipt and APK audit.
+The local test CA/private key stays in that private directory; it is not a
+production or phone-wide trust anchor. Both HTTPS servers and the temporary
+DevTools forward have been stopped/removed.
+
+The remaining technical prerequisite for a real authorization request is recovery
+of the exact original preparation/conversion/graph-build records, prepared
+input rasters and PBF, or a separately identified and independently verified
+replacement private build if those records are lost. No source archive download
+or green CI result supplies those historical records or the publisher's legal
+interpretation and exact-build approval.
+
+## Original IGN archive reacquisition
+
+Following the owner's clarification that earlier work used another computer,
+all **17 original official IGN archives** were reacquired into a fresh private
+host directory. Every compressed byte size and SHA-256 independently matches
+the preserved source ledger: **3,098,550,581 bytes** in total. Interrupted/slow
+transfers were retried against the same official URLs and accepted only after
+full SHA-256 verification; incomplete transfer bytes were never accepted as
+sources. This does not rebuild, replace or authorize the recovered DEM/graph.
+The original acquisition timestamps in the immutable ledger remain historical;
+the separate new retrieval receipt records today's acquisition.
+
+| Original archive | Verified bytes | Verified SHA-256 |
+| --- | ---: | --- |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D002_2020-09-04.7z` | 333,567,478 | `7d2beca8d2d0de8b3e506900b5eb1636f80df9e929e07f683d853ce3b571ca91` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D027_2022-12-21.7z` | 276,997,777 | `9895dd7d033332ad43d8e22fd65cc3069149907da0e14afa864de23aac9d1a50` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D028_2019-12-16.7z` | 171,568,476 | `b6635e0b27b96b3ae430425d4e6b143005c6a0439cbaf075f3b4c773f371259f` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D041_2019-12-16.7z` | 238,645,980 | `833071baff372ca02fe9f0276135fd65057b5b6aa64eb8e0ae0bf76a6b2bd01e` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D045_2023-01-03.7z` | 369,285,331 | `f3128867a8d2384e0fe7cad4367958fb5c333773323fbbaf3fc781d479f7a33a` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D060_2020-09-04.7z` | 226,246,156 | `436881d5dd7f963900f7a3f3e689e1833df620f89a9339aed0a39b52b0adbc26` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D075_2020-07-30.7z` | 13,939,995 | `a159155985eae1c474fdefd49e29256063696285ffd0b4878f8d69754ee983c6` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D076_2020-10-20.7z` | 238,578,862 | `86f051ab983d64399c443ec426ecc4a98c79b5257774fa73d4c00bf6a1aa5f19` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D077_2021-03-03.7z` | 226,423,725 | `caf2c2f1fc1de554424eadc6597faf936716ee6cfb3dbe6f93b5880d87505dab` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D078_2020-07-30.7z` | 90,690,133 | `cdd5637135c86a0779e4eed7b0398b6de1ec25e78e000b94fddc2ee00915ca38` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D080_2019-07-09.7z` | 227,200,019 | `17e2d4b5b4adaafa980c1897612b0c859e7e0eae39426908c5fb8c42b8e480f7` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D089_2023-01-03.7z` | 485,461,155 | `7a3659eb2a18bbb290182852e6014a490ae1089ef3899bbf37fa140396a2b3c9` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D091_2021-03-03.7z` | 65,188,861 | `e63a8ae12fb825b76d0bedf826da1091d9d1b3b5e905e7f7d0d5f0c19b67c552` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D092_2020-07-30.7z` | 19,125,413 | `868d9b52d4a2b46fec167c8dbda9f43d179d0165a87c369113463fda55f8c1f8` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D093_2020-07-30.7z` | 23,291,756 | `0a0ea1bc80891b5952a8852ebbe5513d2e1293b375133028d06eabe798000c16` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D094_2020-07-30.7z` | 23,784,381 | `6e8804cc8e2ac57737c1b2505d8cac7f9615895b9bf5cab2c03e85163394dfe6` |
+| `RGEALTI_2-0_5M_ASC_LAMB93-IGN69_D095_2020-07-30.7z` | 68,555,083 | `de662135a000ad91d8f67a3b003fe59c631ccb9099ab6f92cf67de1024fa5260` |
+
+Reacquisition establishes these source identities. It supplies neither the lost
+preparation/conversion/build receipts nor legal or operator approval.
