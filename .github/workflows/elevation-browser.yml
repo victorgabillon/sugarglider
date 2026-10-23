@@ -29,5 +29,7 @@ jobs:
         run: node tests/browser/pr94_release_acceptance.cjs
       - name: Check installed IGN sources, offline disclosure and keyboard layout
         run: node tests/browser/ign_attribution_acceptance.cjs
+      - name: Check complete offline data notices and export-workflow access
+        run: node tests/browser/data_notices_acceptance.cjs
       - name: Check offline product and first-party failure boundaries
         run: node tests/browser/pr98_offline_acceptance.cjs

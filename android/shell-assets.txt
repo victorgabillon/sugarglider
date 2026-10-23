@@ -21,6 +21,8 @@ brand/sugarglider-ice-cream-pin.png
 brand/sugarglider-map-pin.png
 brand/sugarglider-water-pin.png
 canonical_numbers.js
+data_notice_registry.js
+data_notices.js
 elevation_map_marker.js
 elevation_profile.js
 elevation_sampling.js

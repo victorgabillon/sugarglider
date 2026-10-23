@@ -1,4 +1,5 @@
 import { createSelectedRouteElevation } from "./route_elevation.js";
+import { initializeSourceInformation } from "./data_notices.js";
 import { createElevationView } from "./elevation_view.js";
 import { clearElevationMapPosition, showElevationMapPosition } from "./map.js";
 import { placeCompatibilityMessage } from "./place_capabilities.js";
@@ -3208,6 +3209,7 @@ async function initializeRegionScreen() {
 }
 
 async function start() {
+  initializeSourceInformation(document);
   appShell = initializeAppShell({ resizeMap: ({ layoutChanged, view }) => {
     resizeMap();
     if (!layoutChanged || view !== "plan" || isImmutableSnapshotDisplay()

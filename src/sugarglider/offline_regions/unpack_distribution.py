@@ -14,6 +14,11 @@ from urllib.parse import urlsplit
 
 from sugarglider.offline_regions.elevation_component import ElevationManifest
 
+# Keep the legacy --private verifier independently copyable. Public v3 verification
+# below imports the installed, pinned application and its code-owned notice registry.
+NOTICE_FILE = "SOURCE_NOTICES.txt"
+NOTICE_LIMIT = 131_072
+
 MAX_BYTES = 950_000_000  # Below the published 1 GB GitHub Pages site limit.
 MAX_FILES = 128  # Bound archive metadata; not a special-case retained-version limit.
 REGIONAL_FILES = {
@@ -215,7 +220,9 @@ def unpack_distribution(
             ):
                 raise ValueError("invalid publication archive entry")
             names.add(name)
-            if name not in ROOT_FILES:
+            if name == NOTICE_FILE and member.file_size > NOTICE_LIMIT:
+                raise ValueError("oversized supplementary notice file")
+            if name not in ROOT_FILES | {NOTICE_FILE}:
                 match = re.fullmatch(
                     r"(regions/[a-z0-9][a-z0-9_-]{0,63}/[a-f0-9]{64})/(.+)", name
                 )
@@ -282,6 +289,51 @@ def unpack_distribution(
                 elevation=ElevationManifest.model_validate_json(
                     bundle.read(f"{relative}/elevation/manifest.json")
                 ),
+            )
+            from sugarglider.offline_regions.distribution import (
+                _notice,
+                distribution_index,
+                publication_notice,
+                supplementary_notice,
+            )
+
+            supplement = supplementary_notice(evidence)
+            if supplement is not None:
+                if NOTICE_FILE not in names or bundle.read(NOTICE_FILE) != supplement:
+                    raise ValueError("missing or changed bound supplementary notices")
+            if (
+                bundle.getinfo("README.txt").file_size > 4 * NOTICE_LIMIT
+                or bundle.getinfo("index.html").file_size > 4 * NOTICE_LIMIT
+            ):
+                raise ValueError("oversized hosted notice documents")
+            expected_readme = (
+                _notice(manifest, relative)
+                + publication_notice(evidence, approval_path.read_bytes())
+            ).encode("utf-8")
+            catalog = _read_object(bundle, "catalog.json")
+            rows = catalog["regions"]
+            assert isinstance(rows, list) and isinstance(rows[0], dict)
+            total = sum(
+                bundle.getinfo(f"{relative}/{name}").file_size
+                for name in regions[relative]
+            )
+            expected_index = distribution_index(
+                manifest, str(rows[0]["description"]), total, relative, supplement
+            ).encode("utf-8")
+            if (
+                bundle.read("README.txt") != expected_readme
+                or bundle.read("index.html") != expected_index
+            ):
+                raise ValueError(
+                    "hosted notices differ from exact approved notice rendering"
+                )
+            if supplement is None and NOTICE_FILE in names:
+                raise ValueError(
+                    "legacy evidence cannot authorize supplementary notices"
+                )
+        elif NOTICE_FILE in names:
+            raise ValueError(
+                "supplementary notices require independently approved v3 evidence"
             )
         output.mkdir()  # Exclusive output ownership; extraction never replaces data.
         try:

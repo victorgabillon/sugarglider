@@ -480,6 +480,7 @@
             <details id="offline-maps" class="offline-maps" aria-labelledby="offline-maps-title">
               <summary><strong id="offline-maps-title">Offline maps</strong></summary>
               <div class="offline-maps-body">
+                <button type="button" class="text-button" data-source-information>Map data sources and licences</button>
                 <p id="offline-map-storage-support">Checking browser storage support…</p>
                 <p id="offline-map-pack-status" role="status" aria-live="polite">Checking installed map packs…</p>
                 <p id="offline-map-active">No local map pack is active.</p>
@@ -615,6 +616,7 @@
           </form>
           <div id="outing-participant-actions" class="button-row hidden">
             <button id="download-my-outing-gpx" class="button secondary" type="button">Download my GPX</button>
+            <button type="button" class="text-button" data-source-information>GPX sources, licences and database offer</button>
             <button id="leave-outing" class="text-button" type="button">Leave outing</button>
           </div>
           <div id="outing-remember-actions" class="remember-actions hidden">
@@ -645,6 +647,7 @@
           <div class="export-primary">
             <button id="download-gpx" class="button primary wide" type="button" data-icon="download" disabled>Export GPX</button>
             <p id="export-status" class="context-note" role="status"></p>
+            <p class="context-note">Route data © OpenStreetMap contributors. <button type="button" class="text-button" data-source-information>Sources, licences and complete database offer</button></p>
           </div>
           <section id="route-elevation" class="route-elevation" aria-labelledby="route-elevation-title" hidden>
             <div class="elevation-heading"><h3 id="route-elevation-title">Elevation</h3><span class="elevation-coverage" data-elevation-coverage></span></div>
@@ -683,6 +686,6 @@
       </div>
     </main>
 
-    <footer>Routes use OpenStreetMap data. Map attribution remains visible on the map.</footer>
+    <footer>Routes use OpenStreetMap data. Map attribution remains visible on the map. <button type="button" class="text-button" data-source-information>Data sources and licences</button></footer>
   </body>
 </html>

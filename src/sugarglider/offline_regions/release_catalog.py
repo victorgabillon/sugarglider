@@ -98,6 +98,45 @@ def preflight_catalog(
                     )
                 ),
             )
+            from sugarglider.offline_regions.distribution import (
+                _notice,
+                distribution_index,
+                publication_notice,
+                supplementary_notice,
+            )
+            from sugarglider.offline_regions.source_notices import (
+                NOTICE_FILE,
+                NOTICE_LIMIT,
+            )
+
+            supplement = supplementary_notice(evidence)
+            expected = {
+                "README.txt": (
+                    _notice(manifest, relative)
+                    + publication_notice(evidence, bounded_record(approval_path, 4096))
+                ).encode("utf-8"),
+                "index.html": distribution_index(
+                    manifest,
+                    row.description,
+                    total + (site / relative / "manifest.json").stat().st_size,
+                    relative,
+                    supplement,
+                ).encode("utf-8"),
+            }
+            if supplement is not None:
+                expected[NOTICE_FILE] = supplement
+            for name, value in expected.items():
+                if (
+                    bounded_record(contained_path(site, name), 4 * NOTICE_LIMIT)
+                    != value
+                ):
+                    raise ValueError(
+                        "release catalog has missing or changed bound notices"
+                    )
+            if supplement is None and (site / NOTICE_FILE).exists():
+                raise ValueError(
+                    "legacy evidence cannot authorize supplementary notices"
+                )
         if urlsplit(row.manifest_url).scheme != "https":
             raise ValueError("release requires HTTPS")
     return parsed

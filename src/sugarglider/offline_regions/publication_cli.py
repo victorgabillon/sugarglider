@@ -16,6 +16,7 @@ from sugarglider.offline_regions.publication import (
     prepare_publication_request,
 )
 from sugarglider.offline_regions.publication_records import bounded_record
+from sugarglider.offline_regions.source_notices import SupplementaryNotices
 from sugarglider.offline_regions.terrain_source import TerrainSources
 
 
@@ -36,6 +37,7 @@ def main() -> None:
     parser.add_argument("--legal-evidence", type=Path)
     parser.add_argument("--notices", type=Path)
     parser.add_argument("--osm-pbf", type=Path)
+    parser.add_argument("--supplementary-notices", type=Path)
     args = parser.parse_args()
     evidence: ReleaseEvidence
     if args.command == "ign-request":
@@ -70,6 +72,11 @@ def main() -> None:
             IGNLegalEvidence.model_validate_json(bounded_record(args.legal_evidence)),
             IGNNotices.model_validate_json(bounded_record(args.notices)),
             args.osm_pbf,
+            supplementary_notices=SupplementaryNotices.model_validate_json(
+                bounded_record(args.supplementary_notices)
+            )
+            if args.supplementary_notices is not None
+            else None,
         )
         with args.evidence.open("xb") as stream:
             stream.write(canonical_json(evidence.model_dump(mode="json")))

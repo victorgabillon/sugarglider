@@ -1,3 +1,5 @@
+import { appendMapSources } from "./data_notices.js";
+
 // Notices are code-pinned to reviewed payload identities, never manifest source text.
 const HASHES = Object.freeze(["fac3ef52cbea26ca5736a597923562f79e36c0ef041e4ddde0f5e3d4f655de95", "eea1345034e3110af7d2a0b9a706358be987182b3fb4b9e180a97e21e0f7ca7e", "1b2b3dfd1a59691f81cf3f7a33043be9dc8c4f147d7f1a13ce9ec37141a18111", "3c18a4d200ea418549ca097893338d52d47efd8eddb4b00edb2cf1cb7f457454"]);
 const CREDIT = "produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved";
@@ -139,6 +141,7 @@ export function appendRegionSources(parent, manifest) {
   else paragraph(details, "Terrain source information is unavailable or unsupported for this installed data. No terrain source or licence is inferred.");
   const map = parent.ownerDocument.createElement("h4"); map.textContent = "Map data sources"; details.append(map);
   paragraph(details, "See the separate credits on the map for its data sources and licences. Terrain licensing does not cover other map data.");
+  appendMapSources(details, manifest);
   return details;
 }
 

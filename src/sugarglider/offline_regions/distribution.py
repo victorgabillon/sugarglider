@@ -13,12 +13,86 @@ from urllib.parse import urlsplit
 
 from sugarglider.offline_regions.elevation_component import ElevationManifest
 from sugarglider.offline_regions.models import RegionalManifest, canonical_json
+from sugarglider.offline_regions.publication import ReleaseEvidence
+from sugarglider.offline_regions.source_notices import (
+    NOTICE_FILE,
+    NOTICE_LIMIT,
+    notice_text,
+)
 from sugarglider.offline_regions.unpack_distribution import MAX_BYTES, MAX_FILES
 from sugarglider.offline_regions.validation import verify_region
 
 ODBL_URL = "https://opendatacommons.org/licenses/odbl/1-0/"
 OSM_URL = "https://www.openstreetmap.org/copyright"
 SOURCE_URL = "https://github.com/victorgabillon/sugarglider"
+
+
+def supplementary_notice(evidence: ReleaseEvidence) -> bytes | None:
+    from sugarglider.offline_regions.ign_publication import (
+        IGNCompletePublicationBasis,
+        IGNPublicationEvidence,
+    )
+
+    if isinstance(evidence, IGNPublicationEvidence) and isinstance(
+        evidence.basis, IGNCompletePublicationBasis
+    ):
+        return notice_text()
+    return None
+
+
+def publication_notice(evidence: ReleaseEvidence, approval_bytes: bytes) -> str:
+    from sugarglider.offline_regions.ign_publication import (
+        IGNPublicationEvidence,
+        ign_notice,
+    )
+
+    text = (
+        "\nTerrain license, provenance, transformation and authorization evidence:\n"
+        + canonical_json(evidence.model_dump(mode="json")).decode("utf-8")
+        + "\nOperator authorization:\n"
+        + approval_bytes.decode("utf-8")
+    )
+    if isinstance(evidence, IGNPublicationEvidence):
+        text += "\n" + ign_notice(evidence) + "\n"
+    extra = supplementary_notice(evidence)
+    if extra is not None:
+        text += "\n" + extra.decode("utf-8")
+    return text
+
+
+def distribution_index(
+    manifest: RegionalManifest,
+    description: str,
+    total: int,
+    relative: str,
+    supplement: bytes | None,
+) -> str:
+    extra = ""
+    if supplement is not None:
+        links = "".join(
+            f'<li><a href="{relative}/{f.path}">{html.escape(f.path)}</a></li>'
+            for c in manifest.components.ordered
+            for f in c.files
+        )
+        extra = (
+            f'<p><a href="{NOTICE_FILE}">Complete source notices and reading guide</a>'
+            "</p><h2>Complete machine-readable regional databases</h2>"
+            f"<ul>{links}</ul><pre>{html.escape(supplement.decode('utf-8'))}</pre>"
+        )
+    return (
+        '<!doctype html><html lang="en"><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        "<title>Sugarglider offline regions</title>"
+        "<h1>Sugarglider offline regions</h1>"
+        f"<h2>{html.escape(manifest.display_name)}</h2>"
+        f"<p>{html.escape(description)}</p><p>About {total / 1_000_000:.1f} MB.</p>"
+        f'<p>Map data © <a href="{OSM_URL}">OpenStreetMap contributors</a>. '
+        f'OSM-derived databases retain the <a href="{ODBL_URL}">'
+        "Open Database License (ODbL) 1.0</a>; separate content rights remain.</p>"
+        '<p><a href="README.txt">Data attribution and build information</a></p>'
+        f'<p><a href="{relative}/manifest.json">Immutable regional manifest</a></p>'
+        '<p><a href="catalog.json">Regional catalog</a></p>' + extra + "</html>\n"
+    )
 
 
 def _regional_files(manifest: RegionalManifest) -> tuple[str, ...]:
@@ -140,7 +214,8 @@ def prepare_distribution(
     if not output.parent.is_dir() or output.resolve().is_relative_to(source.resolve()):
         raise ValueError("output requires an existing parent outside the source region")
     manifest = verify_region(source)
-    publication_notice = ""
+    notice = ""
+    supplement: bytes | None = None
     if manifest.publication_allowed:
         from sugarglider.offline_regions.publication import (
             authorize_release_manifest,
@@ -167,22 +242,15 @@ def prepare_distribution(
                 (source / "elevation/manifest.json").read_bytes()
             ),
         )
-        publication_notice = (
-            "\nTerrain license, provenance, transformation and "
-            "authorization evidence:\n"
-            + canonical_json(evidence.model_dump(mode="json")).decode("utf-8")
-            + "\nOperator authorization:\n"
-            + approval_path.read_text(encoding="utf-8")
-        )
         from sugarglider.offline_regions.ign_publication import (
             IGNPublicationEvidence,
-            ign_notice,
             require_ign_v2_namespace,
         )
 
         if isinstance(evidence, IGNPublicationEvidence):
             require_ign_v2_namespace(base)
-            publication_notice += "\n" + ign_notice(evidence) + "\n"
+        notice = publication_notice(evidence, approval_path.read_bytes())
+        supplement = supplementary_notice(evidence)
     if not manifest.publication_allowed and evidence_path is not None:
         from sugarglider.offline_regions.publication import parse_publication_evidence
 
@@ -195,7 +263,7 @@ def prepare_distribution(
             or evidence.derived_tiles != manifest.components.elevation.files[1:]
         ):
             raise ValueError("private attribution/evidence identity mismatch")
-        publication_notice = (
+        notice = (
             "\nDocumented terrain evidence; operator approval ABSENT:\n"
             + canonical_json(evidence.model_dump(mode="json")).decode("utf-8")
         )
@@ -226,11 +294,17 @@ def prepare_distribution(
         for directory, captured in sources
         for name in _regional_files(captured)
     )
-    if publication_total + 65_536 > MAX_BYTES:
+    document_budget = 65_536 + (3 * NOTICE_LIMIT if supplement is not None else 0)
+    if publication_total + document_budget > MAX_BYTES:
         raise ValueError("publication exceeds the static host size budget")
-    if 4 + sum(len(_regional_files(captured)) for _, captured in sources) > MAX_FILES:
+    if (
+        4
+        + (1 if supplement is not None else 0)
+        + sum(len(_regional_files(captured)) for _, captured in sources)
+        > MAX_FILES
+    ):
         raise ValueError("publication exceeds the archive verifier file-count budget")
-    if shutil.disk_usage(output.parent).free < publication_total * 2 + 65_536:
+    if shutil.disk_usage(output.parent).free < publication_total * 2 + document_budget:
         raise ValueError("insufficient free space for the site and publication archive")
     output.mkdir()  # Exclusive ownership; never replace or reuse an existing output.
     try:
@@ -266,30 +340,21 @@ def prepare_distribution(
             canonical_json({"schema_version": 1, "regions": [offering]})
         )
         (site / "README.txt").write_text(
-            _notice(manifest, relative) + publication_notice, encoding="utf-8"
+            _notice(manifest, relative) + notice, encoding="utf-8"
         )
         if len(sources) > 1:
-            with (site / "README.txt").open("a", encoding="utf-8") as notice:
-                notice.write(
+            with (site / "README.txt").open("a", encoding="utf-8") as retained_notice:
+                retained_notice.write(
                     "\nPrevious private versions retained for local validation;\n"
                     "each version keeps its own terrain provenance and rights status:\n"
                     + "\n".join(f"- {item.build_id}" for _, item in sources[1:])
                     + "\n"
                 )
         (site / ".nojekyll").write_bytes(b"")
+        if supplement is not None:
+            (site / NOTICE_FILE).write_bytes(supplement)
         (site / "index.html").write_text(
-            '<!doctype html><html lang="en"><meta charset="utf-8">'
-            '<meta name="viewport" content="width=device-width,initial-scale=1">'
-            "<title>Sugarglider offline regions</title>"
-            "<h1>Sugarglider offline regions</h1>"
-            f"<h2>{html.escape(manifest.display_name)}</h2>"
-            f"<p>{html.escape(description)}</p><p>About {total / 1_000_000:.1f} MB.</p>"
-            f'<p>Map data © <a href="{OSM_URL}">OpenStreetMap contributors</a>. '
-            f'Regional databases are available under the <a href="{ODBL_URL}">'
-            "Open Database License (ODbL) 1.0</a>.</p>"
-            '<p><a href="README.txt">Data attribution and build information</a></p>'
-            f'<p><a href="{relative}/manifest.json">Immutable regional manifest</a></p>'
-            '<p><a href="catalog.json">Regional catalog</a></p></html>\n',
+            distribution_index(manifest, description, total, relative, supplement),
             encoding="utf-8",
         )
         archive = output / "sugarglider-regions-static.zip"

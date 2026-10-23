@@ -27,6 +27,10 @@ from sugarglider.offline_regions.models import (
     contained_path,
 )
 from sugarglider.offline_regions.publication_records import bounded_record, digest
+from sugarglider.offline_regions.source_notices import (
+    SupplementaryNotices,
+    verify_notice_components,
+)
 from sugarglider.offline_regions.terrain_ign import PreparedIGN
 from sugarglider.offline_regions.terrain_source import IGN_ATTRIBUTION, verify_source
 
@@ -100,8 +104,7 @@ class IGNNotices(StrictModel):
     no_endorsement: Literal["No IGN or OpenStreetMap endorsement; no warranty"]
 
 
-class IGNPublicationBasis(StrictModel):
-    schema_version: Literal[1] = 1
+class IGNCoreBasis(StrictModel):
     upstream_product: Literal["IGN-RGE-ALTI-5M"] = "IGN-RGE-ALTI-5M"
     private_manifest: RegionalManifest
     derivation: IGNDerivation
@@ -124,14 +127,28 @@ class IGNPublicationBasis(StrictModel):
         return self
 
 
-class IGNPublicationEvidence(StrictModel):
+class IGNPublicationBasis(IGNCoreBasis):
+    schema_version: Literal[1] = 1
+
+
+class IGNCompletePublicationBasis(IGNCoreBasis):
     schema_version: Literal[2] = 2
+    supplementary_notices: SupplementaryNotices
+
+    @model_validator(mode="after")
+    def exact_notice_components(self) -> Self:
+        verify_notice_components(self.supplementary_notices, self.private_manifest)
+        return self
+
+
+class IGNPublicationEvidence(StrictModel):
+    schema_version: Literal[2, 3] = 2
     upstream_product: Literal["IGN-RGE-ALTI-5M"] = "IGN-RGE-ALTI-5M"
     private_build_id: Sha256
     release_build_id: Sha256
     graph_sha256: Sha256
     derived_tiles: tuple[FileDescriptor, ...]
-    basis: IGNPublicationBasis
+    basis: IGNPublicationBasis | IGNCompletePublicationBasis
 
     @property
     def basis_sha256(self) -> str:
@@ -141,7 +158,9 @@ class IGNPublicationEvidence(StrictModel):
     def exact_basis(self) -> Self:
         private = self.basis.private_manifest
         if (
-            self.private_build_id != private.build_id
+            (self.schema_version == 3)
+            != isinstance(self.basis, IGNCompletePublicationBasis)
+            or self.private_build_id != private.build_id
             or self.graph_sha256 != private.components.routing.files[1].sha256
             or self.derived_tiles != private.components.elevation.files[1:]
         ):
@@ -265,6 +284,8 @@ def prepare_ign_request(
     legal_evidence: IGNLegalEvidence,
     notices: IGNNotices,
     osm_pbf: Path,
+    *,
+    supplementary_notices: SupplementaryNotices | None = None,
 ) -> IGNPublicationEvidence:
     """Return unsigned facts; leave every private byte and publication flag intact."""
     from sugarglider.offline_regions.publication import release_manifests
@@ -276,19 +297,26 @@ def prepare_ign_request(
     )
     if elevation.vertical_datum != "IGN69" or elevation.derivation is None:
         raise ValueError("expected documented IGN69 derivation")
-    basis = IGNPublicationBasis(
+    core = IGNPublicationBasis(
         private_manifest=private,
         derivation=elevation.derivation,
         graph_build_record_sha256=digest(bounded_record(graph_record)),
         legal_evidence=legal_evidence,
         notices=notices,
     )
+    basis: IGNPublicationBasis | IGNCompletePublicationBasis = core
+    if supplementary_notices is not None:
+        basis = IGNCompletePublicationBasis(
+            **core.model_dump(exclude={"schema_version"}),
+            supplementary_notices=supplementary_notices,
+        )
     proposed, _ = release_manifests(
         directory,
         private,
         ign_basis_sha256=digest(canonical_json(basis.model_dump(mode="json"))),
     )
     evidence = IGNPublicationEvidence(
+        schema_version=3 if supplementary_notices is not None else 2,
         private_build_id=private.build_id,
         release_build_id=proposed.build_id,
         graph_sha256=private.components.routing.files[1].sha256,
