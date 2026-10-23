@@ -1,0 +1,141 @@
+{
+  "_description": "Presentation-only V2 fixture: exact reviewed IGN elevation/routing descriptors; synthetic other components and source. No regional payload, approval, or private manifest. Build identities recomputed by browser tests. Proposed-public descriptor is the unsigned in-memory preview, not an authorized release.",
+  "manifest": {
+    "schema_version": 2,
+    "region_id": "ign-attribution-fixture",
+    "display_name": "IGN source presentation fixture",
+    "bounds": [
+      1.445097,
+      48.38,
+      2.25,
+      49.1
+    ],
+    "source": {
+      "basename": "synthetic.osm.pbf",
+      "byte_size": 1,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "header_bounds": [
+        1.445097,
+        48.11918,
+        3.560409,
+        49.24271
+      ],
+      "coverage_evidence": "osm-header-bounds",
+      "source_url": null
+    },
+    "tools": {
+      "pipeline_version": 2,
+      "protomaps_revision": "3ea8293a28131c3dc63f1bb20827bdb8a76df06f",
+      "protomaps_archive_sha256": "7b8e71f18627754af756923f6613a9008b5f1ff82377fff4e617157d053fc807",
+      "map_build_image": "maven:3.9.13-eclipse-temurin-21-alpine@sha256:194053d8f204a39710e564b49ba4d22188159fd29f073b8da1715aac61503132",
+      "valhalla_image": "ghcr.io/valhalla/valhalla:3.9.1@sha256:18cb42988e03c70dc4bc4ca095a259ec4db5e5df928be65956fc1c64c280b47a",
+      "poi_index_schema": 2,
+      "poi_classifier": "1",
+      "nature_index_schema": 1,
+      "python_version": "3.13.5",
+      "osmium_version": "4.3.1",
+      "shapely_version": "2.1.2"
+    },
+    "components": {
+      "map": {
+        "component_id": "fixture-map",
+        "files": [
+          {
+            "path": "map/manifest.json",
+            "format": "map-manifest-v1",
+            "byte_size": 23,
+            "sha256": "716ede4186bbaf2ae111dcc11616b8aea3ca16d97d45d1d5aea562e3121df5ae"
+          },
+          {
+            "path": "map/basemap.pmtiles",
+            "format": "pmtiles-v3-mvt",
+            "byte_size": 23,
+            "sha256": "716ede4186bbaf2ae111dcc11616b8aea3ca16d97d45d1d5aea562e3121df5ae"
+          }
+        ]
+      },
+      "routing": {
+        "component_id": "yvelines-ouest-parisien-routing-v2",
+        "files": [
+          {
+            "byte_size": 278,
+            "format": "routing-manifest-v2",
+            "path": "routing/manifest.json",
+            "sha256": "3d87397c8f997cdb1a4622cd3e3ad52eb3481ff777723da7031ca14e2f71927a"
+          },
+          {
+            "byte_size": 99481600,
+            "format": "valhalla-3.9.1-elevation-tar",
+            "path": "routing/valhalla_tiles.tar",
+            "sha256": "d47b022dc2036800bfa5eadc902a90d94de2cff8df32e6377ac9c0ff5fe9fb3d"
+          }
+        ]
+      },
+      "pois": {
+        "component_id": "fixture-pois",
+        "files": [
+          {
+            "path": "pois/index.json.gz",
+            "format": "poi-index-v2-gzip-json",
+            "byte_size": 814,
+            "sha256": "33337ff9fdbf9ba034f37d61512212b47ed33591c0e9892648d41256ba9d3daf"
+          }
+        ]
+      },
+      "nature": {
+        "component_id": "fixture-nature",
+        "files": [
+          {
+            "path": "nature/index.json.gz",
+            "format": "nature-index-v1-gzip-json",
+            "byte_size": 500,
+            "sha256": "502ec1cfc5bd8e19dff57ce7a1d10e587d17156cf97fb15f955821522e221cba"
+          }
+        ]
+      },
+      "elevation": {
+        "component_id": "yvelines-ouest-parisien-elevation-v2",
+        "files": [
+          {
+            "byte_size": 9389,
+            "format": "elevation-manifest-v1",
+            "path": "elevation/manifest.json",
+            "sha256": "67fff11e1f8ae2b09792962e28d93ae96aeef2883d3a52635a89fed64f36d969"
+          },
+          {
+            "byte_size": 3597713,
+            "format": "skadi-hgt-gzip-v1",
+            "path": "elevation/skadi/N48/N48E001.hgt.gz",
+            "sha256": "a7d55ab92559ace1c64069bdf7669717e2ddd8acfbc9c8b041a770d0461688d3"
+          },
+          {
+            "byte_size": 4248630,
+            "format": "skadi-hgt-gzip-v1",
+            "path": "elevation/skadi/N48/N48E002.hgt.gz",
+            "sha256": "d47f7dc9e0947cacd975be249fb73c8c7212f98b9cdb384d9044da87f81ca5e0"
+          },
+          {
+            "byte_size": 5527281,
+            "format": "skadi-hgt-gzip-v1",
+            "path": "elevation/skadi/N49/N49E001.hgt.gz",
+            "sha256": "d79a01593f51fa01589242892505b90e3a13479405c864373462d2b094bd7611"
+          },
+          {
+            "byte_size": 4891056,
+            "format": "skadi-hgt-gzip-v1",
+            "path": "elevation/skadi/N49/N49E002.hgt.gz",
+            "sha256": "7955eec7df9675fdf2d897d6f581379c87940365353a2505c420ee6565415cb3"
+          }
+        ]
+      }
+    },
+    "build_id": "d6d607899b6b034929eef261a37fa60bdebf778292b23e01c1533f16d2227ce5",
+    "publication_allowed": false
+  },
+  "proposed_public_elevation_descriptor": {
+    "byte_size": 9482,
+    "format": "elevation-manifest-v1",
+    "path": "elevation/manifest.json",
+    "sha256": "8560979840108e4a6f654c2b33ec295b422ce604f55905773f40674ca5c16f71"
+  }
+}

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Installed terrain source attribution</title>
+<link rel="stylesheet" href="../../src/sugarglider/web/static/styles.css">
+<body class="ui-shell">
+<main style="max-width: 640px; margin: auto; padding: 12px;">
+  <h1>Installed region sources</h1>
+  <div id="fixture"></div>
+  <pre id="result" style="white-space: pre-wrap; overflow-wrap: anywhere;">Running</pre>
+</main>
+<script type="module">
+const result = document.getElementById('result');
+try {
+  const {run} = await import('./ign_attribution_harness.js');
+  result.textContent = JSON.stringify(await run()); result.dataset.status = 'passed';
+} catch (error) { result.textContent = error.stack ?? String(error); result.dataset.status = 'failed'; }
+</script>
+</html>

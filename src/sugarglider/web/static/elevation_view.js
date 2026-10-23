@@ -1,4 +1,5 @@
 import { elevationDistanceLabel, elevationPositionAtDistance, elevationSampleIndex, projectElevationProfile } from "./elevation_profile.js";
+import { appendElevationSource } from "./terrain_attribution.js";
 
 const SVG = "http://www.w3.org/2000/svg";
 const metres = value => value === null ? "Unavailable" : `${Math.round(value)} m`;
@@ -41,6 +42,7 @@ export function createElevationView({root, onPosition = () => {}, onShowMap = ()
     host.replaceChildren(); host.hidden = true;
     projection = null; control = null; svg = null; cursor = null; cursorPoint = null;
     note.hidden = true;
+    sourceNote.replaceChildren();
   }
   function inspect(distance) {
     if (!owns() || value.status !== "ready" || !projection) { clearInspection(); return; }
@@ -175,14 +177,6 @@ export function createElevationView({root, onPosition = () => {}, onShowMap = ()
       return;
     }
     const analysis = value.result.analysis;
-    sourceNote.replaceChildren();
-    if (analysis.height_reference?.startsWith("IGN69 normal metres; IGN RGE ALTI 5 m;")) {
-      sourceNote.append("IGN RGE ALTI® 5 m · ground model · NGF-IGN69 normal heights. IGN, ");
-      const license = document.createElement("a"); license.textContent = "Licence Ouverte 2.0";
-      license.href = "https://www.data.gouv.fr/pages/legal/licences/etalab-2.0";
-      license.target = "_blank"; license.rel = "noopener noreferrer"; sourceNote.append(license);
-    } else sourceNote.textContent = analysis.height_reference?.startsWith("EGM96 orthometric")
-      ? "Height reference: EGM96 orthometric metres." : "Height reference: unresolved vertical datum.";
     badge.textContent = analysis.coverage === "complete" ? "Complete" : analysis.coverage === "partial" ? "Partial coverage" : "Unavailable";
     if (analysis.coverage === "complete") {
       find("[data-elevation-ascent]").textContent = metres(analysis.total_ascent_m);
@@ -200,6 +194,7 @@ export function createElevationView({root, onPosition = () => {}, onShowMap = ()
     }
     find("[data-elevation-altitude]").textContent = analysis.minimum_height_m === analysis.maximum_height_m
       ? metres(analysis.minimum_height_m) : `${Math.round(analysis.minimum_height_m)}–${Math.round(analysis.maximum_height_m)} m`;
+    appendElevationSource(sourceNote, analysis.height_reference);
     host.hidden = false; note.hidden = false; draw();
   }
   cancel.addEventListener("click", () => { if (owns()) onCancel(); }, {signal:listeners.signal});
