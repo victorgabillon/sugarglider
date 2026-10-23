@@ -58,6 +58,21 @@ export async function runElevationUiHarness(){
   assert(root.querySelector('[data-elevation-source] a').href==='https://www.data.gouv.fr/pages/legal/licences/etalab-2.0','IGN attribution and official license');
   assert(root.querySelector('[data-elevation-ascent]').textContent==='15 m','datum label never changes totals');
   scenarios.push('ign69_ground_model_credit_and_datum_without_recalculation');
+  const partialIgn = structuredClone(missing); partialIgn.height_reference = ign.height_reference;
+  display(partialIgn);
+  assert(root.querySelector('[data-elevation-source]').textContent.includes('EPSG:5720') && root.querySelector('[data-elevation-coverage]').textContent === 'Partial coverage', 'partial coverage keeps actual IGN reference');
+  for (const state of ['loading', 'unavailable', 'idle']) {
+    display(ign);
+    display(ign, state);
+    assert(!root.querySelector('[data-elevation-source]').textContent && !root.querySelector('svg'), 'non-ready state clears old source text');
+  }
+  display(ign);
+  current = {...current, status:'unavailable', diagnostic:'elevation_cancelled'}; view.render(current,currentCandidate);
+  assert(!root.querySelector('[data-elevation-source]').textContent, 'cancelled analysis clears old IGN text');
+  const noIgnHeights = analysis('all_missing',true); noIgnHeights.height_reference = ign.height_reference;
+  display(noIgnHeights);
+  assert(!root.querySelector('[data-elevation-source]').textContent, 'no coverage leaves no stale chart credit');
+  scenarios.push('ign_partial_coverage_loading_cancellation_unavailable_idle_and_absent_coverage_sources');
   display(summit);
   assert(!root.querySelector('[data-elevation-source]').textContent.includes('IGN RGE'),'old source credit cleared on route change');
   assert(!root.hidden&&root.querySelector('[data-elevation-ascent]').textContent==='15 m','uses returned filtered D+');
