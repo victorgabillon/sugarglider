@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offline data source notices</title>
+<link rel="stylesheet" href="../../src/sugarglider/web/static/styles.css">
+<body class="ui-shell">
+<main style="max-width: 640px; margin: auto; padding: 12px;">
+  <h1>Offline data source information</h1>
+  <button type="button" data-source-information>Map data sources and licences</button>
+  <button type="button" data-source-information>GPX sources and complete database offer</button>
+  <button type="button" data-source-information>Data sources and licences</button>
+  <div id="fixture"></div>
+  <pre id="result" style="white-space: pre-wrap; overflow-wrap: anywhere">Running</pre>
+</main>
+<script type="module">
+const result = document.getElementById('result');
+try {
+  const {run} = await import('./data_notices_harness.js');
+  result.textContent = JSON.stringify(await run()); result.dataset.status = 'passed';
+} catch (error) { result.textContent = error.stack ?? String(error); result.dataset.status = 'failed'; }
+</script>
+</html>
