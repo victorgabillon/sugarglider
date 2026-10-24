@@ -146,7 +146,9 @@ export function createRegionScreen({ elements, versions, product, withRegion,
       if (stored || offering) {
         const remove = button(stored ? "Remove region" : "Clear regional data", async () => {
           if (isPlanning() || !confirmRemoval(`Remove ${name.textContent} and all of its offline data from this device? Saved route snapshots are kept.`)) return;
-          await act(async () => { await product.remove(id); message("Region removed from this device.", "regional_removed"); });
+          await act(async () => { await product.remove(id);
+            if (selectedRegionId() === id) selectRegion(null);
+            message("Region removed from this device.", "regional_removed"); });
         }, `${id}:remove`);
         remove.classList.add("danger");
         remove.dataset.mutation = "remove"; (stored ? item : technical).append(remove);
@@ -177,7 +179,8 @@ export function createRegionScreen({ elements, versions, product, withRegion,
       message(regionFailureMessage(error.code), error.code);
       renderRows(); await onMapChange(); return;
     }
-    if (selectedRegionId() === null) selectRegion(row.region_id);
+    // The sole-region default is implicit; it must not undo an explicit clear.
+    if (selectedRegionId() === null) selectRegion(row.region_id, { remember: false });
     onReady(null, "regional_checking", null);
     message(regionFailureMessage("regional_checking"), "regional_checking");
     try {
@@ -208,6 +211,8 @@ export function createRegionScreen({ elements, versions, product, withRegion,
       renderRows(); await onMapChange(); return;
     }
     if (closed) return;
+    const selected = rows.find(row => row.region_id === selectedRegionId());
+    if (selectedRegionId() !== null && (!selected || selected.status === "not_installed")) selectRegion(null);
     renderRows();
     await inspectSelection();
     if (catalogUnavailable) message(regionFailureMessage("regional_catalog_unavailable"), "regional_catalog_unavailable");
@@ -237,7 +242,8 @@ export function createRegionScreen({ elements, versions, product, withRegion,
 
   selector.addEventListener("change", () => {
     if (pending || isPlanning()) return;
-    selectRegion(selector.value || null);
+    const id = selector.value || null;
+    selectRegion(id);
     void act(async () => { message("Checking the selected region…", "regional_checking"); });
   });
   refreshButton.addEventListener("click", () => { if (!isPlanning()) void act(async () => refresh({ catalogToo: true }), { refreshAfter: false }); });

@@ -33,3 +33,5 @@ jobs:
         run: node tests/browser/data_notices_acceptance.cjs
       - name: Check offline product and first-party failure boundaries
         run: node tests/browser/pr98_offline_acceptance.cjs
+      - name: Check remembered regional selection and bundled startup order
+        run: node tests/browser/region_preference_acceptance.cjs

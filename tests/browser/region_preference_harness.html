@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <title>Region preference harness</title>
+  <script src="../../src/sugarglider/web/static/vendor/pmtiles-4.5.0/pmtiles.js"></script>
+  <pre id="result">running</pre>
+  <script type="module">
+    const result = document.getElementById("result");
+    const fail = (error) => { result.dataset.status = "failed"; result.textContent = error?.stack ?? String(error); };
+    window.addEventListener("error", (event) => fail(event.error ?? event.message));
+    window.addEventListener("unhandledrejection", (event) => fail(event.reason));
+    try {
+      const { runRegionPreferenceHarness } = await import("./region_preference_harness.js");
+      const scenarios = await runRegionPreferenceHarness();
+      if (result.dataset.status !== "failed") { result.dataset.status = "passed"; result.textContent = JSON.stringify(scenarios); }
+    } catch (error) { fail(error); }
+  </script>
+</html>

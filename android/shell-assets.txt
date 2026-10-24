@@ -98,6 +98,7 @@ pwa_store.js
 pwa_view.js
 region_catalog.js
 region_components.js
+region_preference.js
 region_product.js
 region_screen.js
 region_versions.js
