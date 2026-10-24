@@ -8,12 +8,42 @@ const origin = 'https://appassets.androidplatform.net';
 const root = path.resolve(__dirname, '../..');
 const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bike', 'road_bike'];
 
+async function chooseAndRemember(page, regionId) {
+  // A ready message precedes completion of the map refresh. Wait for controls,
+  // then exercise the normal enabled selector instead of forcing a change.
+  await page.waitForFunction(() => !document.querySelector('#planning-region').disabled
+    && !document.querySelector('#regional-refresh').disabled);
+  for (const selector of ['.header-tools', '#offline-regions']) {
+    const details = page.locator(selector);
+    if (!await details.evaluate(element => element.open)) await details.locator(':scope > summary').click();
+  }
+  await page.selectOption('#planning-region', regionId ?? '');
+  await page.waitForFunction(id => document.querySelector('#planning-region').value === (id ?? '')
+    && !document.querySelector('#planning-region').disabled
+    && !document.querySelector('#regional-refresh').disabled, regionId);
+  // In pinned Playwright 1.58, waitForFunction does not poll an async predicate:
+  // its Promise is truthy even when it resolves false. Await each storage read
+  // from Node and check the resolved value before allowing a reload.
+  const deadline = Date.now() + 30_000;
+  let stored;
+  do {
+    stored = await page.evaluate(async () => {
+      const { store } = await (await import('/static/pwa_runtime.js')).pwaRuntime();
+      return await store.get('public_runtime', 'planner-region-id') ?? null;
+    });
+    if (stored === regionId) return;
+    await page.waitForTimeout(25);
+  } while (Date.now() < deadline);
+  assert.equal(stored, regionId, 'The selected region preference did not commit before reload');
+}
+
 async function startup(browser, scenario) {
   const context = await browser.newContext();
   const requests = [], errors = [];
   let releaseCatalog, catalogRequested;
   const gate = new Promise(resolve => { releaseCatalog = resolve; });
   const requested = new Promise(resolve => { catalogRequested = resolve; });
+  let page, phase = 'setup';
   try {
     await context.addInitScript(({ profiles, scenario }) => {
       globalThis.preferenceEvents = [];
@@ -22,7 +52,7 @@ async function startup(browser, scenario) {
       IDBObjectStore.prototype.get = function(key) {
         if (key === 'planner-region-id' && scenario.storageUnavailable) throw Error('Optional preference read unavailable');
         const request = get.call(this, key);
-        if (key === 'planner-region-id') request.addEventListener('success', () => preferenceEvents.push({ type: 'preference_read' }));
+        if (key === 'planner-region-id') request.addEventListener('success', () => preferenceEvents.push({ type: 'preference_read', region_id: request.result?.value }));
         return request;
       };
       const directory = FileSystemDirectoryHandle.prototype.getDirectoryHandle;
@@ -66,12 +96,12 @@ async function startup(browser, scenario) {
       try { return route.fulfill({ body: await fs.readFile(file), contentType: mime[path.extname(file)] ?? 'application/octet-stream' }); }
       catch { return route.fulfill({ status: 404, body: '' }); }
     });
-    const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
+    page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     await page.goto(origin + '/seed.html');
     if (scenario.runHarness) {
       const cases = await page.evaluate(async () => (await import('/tests/browser/region_preference_harness.js')).runRegionPreferenceHarness());
       assert.deepEqual(errors, []);
-      return { name: scenario.name, status: 'passed', cases: cases.length };
+      return { name: scenario.name, ...(scenario.repeat === undefined ? {} : { repeat: scenario.repeat }), status: 'passed', cases: cases.length };
     }
     const installed = await page.evaluate(async scenario => {
       const { seedRegion } = await import('/tests/browser/region_preference_harness.js');
@@ -90,11 +120,13 @@ async function startup(browser, scenario) {
         const writer = await file.createWritable(); await writer.write('corrupted'); await writer.close();
       }
       const store = await openPwaStore();
+      await store.put(PWA_STORES.trailProfile, 'current', { schema_version: 1, display_name: 'Synthetic reviewer', avatar_key: 'blue' });
       if (Object.hasOwn(scenario, 'preference')) await store.put(PWA_STORES.publicRuntime, 'planner-region-id', scenario.preference);
       return manifests;
     }, scenario);
     requests.length = 0;
     if (scenario.offline) await context.setOffline(true);
+    phase = 'initial startup';
     await page.goto(origin + '/', { waitUntil: 'domcontentloaded' });
     await requested;
     // Before catalog discovery/region-screen initialization, observe the *first*
@@ -129,22 +161,16 @@ async function startup(browser, scenario) {
       .every(request => request.regional_reference.build_id === installed[scenario.expected].build_id));
     assert.equal(requests.some(url => /\.(pmtiles|gz|tar)$/u.test(url) || /\/v[12]\/.*(plan|route)/u.test(url)), false, 'Startup downloaded a region or generated a route');
     if (scenario.switchAndClear) {
-      await page.selectOption('#planning-region', 'beta', { force: true });
-      await page.waitForFunction(async () => {
-        const { store } = await (await import('/static/pwa_runtime.js')).pwaRuntime();
-        return !document.querySelector('#regional-refresh').disabled
-          && await store.get('public_runtime', 'planner-region-id') === 'beta';
-      });
+      phase = 'select beta and commit';
+      await chooseAndRemember(page, 'beta');
+      phase = 'reload remembered beta';
       await page.reload();
       await page.waitForFunction(() => document.querySelector('#regional-status').dataset.state === 'regional_ready');
       assert.equal(await page.locator('#planning-region').inputValue(), 'beta');
       assert.equal(await page.evaluate(() => preferenceEvents.find(event => event.type === 'map_open').build), installed.beta.build_id);
-      await page.selectOption('#planning-region', '', { force: true });
-      await page.waitForFunction(async () => {
-        const { store } = await (await import('/static/pwa_runtime.js')).pwaRuntime();
-        return !document.querySelector('#regional-refresh').disabled
-          && await store.get('public_runtime', 'planner-region-id') === undefined;
-      });
+      phase = 'clear selection and commit';
+      await chooseAndRemember(page, null);
+      phase = 'reload cleared selection';
       await page.reload();
       await page.waitForFunction(() => document.querySelector('#regional-status').dataset.state === 'regional_selection_required');
       assert.equal(await page.locator('#planning-region').inputValue(), '');
@@ -154,11 +180,30 @@ async function startup(browser, scenario) {
     assert.equal(result.candidate, null, 'Startup restored a route candidate');
     assert.equal(result.generation, null, 'Startup generated a route');
     assert.deepEqual(errors, []);
-    return { name: scenario.name, status: 'passed', first_map_build_matches: Boolean(scenario.expected), offline: Boolean(scenario.offline) };
+    return { name: scenario.name, ...(scenario.repeat === undefined ? {} : { repeat: scenario.repeat }), status: 'passed', first_map_build_matches: Boolean(scenario.expected), offline: Boolean(scenario.offline) };
+  } catch (error) {
+    const diagnostic = await page?.evaluate(async () => {
+      const { store } = await (await import('/static/pwa_runtime.js')).pwaRuntime();
+      const { createRegionVersionStore } = await import('/static/region_versions.js');
+      return { selected: document.querySelector('#planning-region')?.value,
+        selector_disabled: document.querySelector('#planning-region')?.disabled,
+        refresh_disabled: document.querySelector('#regional-refresh')?.disabled,
+        status: document.querySelector('#regional-status')?.dataset.state,
+        stored_region: await store.get('public_runtime', 'planner-region-id') ?? null,
+        durable: store.durable,
+        regions: (await createRegionVersionStore().list()).map(row => ({ id: row.region_id, status: row.status, code: row.code })),
+        events: preferenceEvents.slice(-30),
+        native_calls: preferenceNative.map(request => request.type),
+        error: document.querySelector('#error-details')?.textContent };
+    }).catch(cause => ({ diagnostic_error: cause.message }));
+    console.error(JSON.stringify({ scenario: scenario.name, repeat: scenario.repeat, phase, diagnostic, errors }));
+    throw error;
   } finally { releaseCatalog(); await context.close(); }
 }
 
-(async () => {
+async function main() {
+  const repeats = Number(process.env.REGION_PREFERENCE_RELOAD_REPEATS ?? 10);
+  assert.ok(Number.isSafeInteger(repeats) && repeats >= 1 && repeats <= 50);
   const browser = await chromium.launch({ headless: true, args: ['--enable-unsafe-swiftshader'],
     ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
   try {
@@ -179,6 +224,12 @@ async function startup(browser, scenario) {
       { name: 'offline_restart_restores_map_without_download_or_route', regions: ['alpha', 'beta'], preference: 'beta', expected: 'beta', offline: true },
       { name: 'restored_hint_does_not_bypass_native_readiness', regions: ['alpha', 'beta'], preference: 'beta', expected: 'beta', nativeUnavailable: true, failure: 'regional_routing_unavailable' },
       { name: 'restored_hint_does_not_bypass_map_integrity', regions: ['alpha', 'beta'], preference: 'beta', expected: 'beta', corruptMap: true, failure: 'map_pack_invalid' },
-    ]) console.log(JSON.stringify(await startup(browser, scenario)));
+    ]) {
+      for (let repeat = 0; repeat < (scenario.switchAndClear ? repeats : 1); repeat++) {
+        console.log(JSON.stringify(await startup(browser, { ...scenario, ...(scenario.switchAndClear ? { repeat } : {}) })));
+      }
+    }
   } finally { await browser.close(); }
-})().catch(error => { console.error(error); process.exitCode = 1; });
+}
+module.exports = { startup };
+if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1; });
