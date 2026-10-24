@@ -35,3 +35,5 @@ jobs:
         run: node tests/browser/pr98_offline_acceptance.cjs
       - name: Check bounded offline nature analysis and worker lifecycle
         run: node tests/browser/nature_performance_acceptance.cjs
+      - name: Check remembered regional selection and bundled startup order
+        run: node tests/browser/region_preference_acceptance.cjs

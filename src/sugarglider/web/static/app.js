@@ -32,6 +32,7 @@ import { createRegionalNativeClient } from "./regional_native.js";
 import { createRegionalPlanningContext } from "./regional_planning.js";
 import { createRegionalMapStore } from "./regional_map_store.js";
 import { createRegionProduct } from "./region_product.js";
+import { createRegionPreference } from "./region_preference.js";
 import { createRegionScreen, regionFailureMessage } from "./region_screen.js";
 import { requireData } from "./regional_manifest.js";
 import { createPlannerProfilePreference, initialLocalPlannerProfile } from "./planner_profile.js";
@@ -97,6 +98,7 @@ const gpxFileSaver = createGpxFileSaver();
 const localRoutingBridge = createLocalRoutingBridge();
 let sharedLocalRegionClient = null;
 let selectedRegionId = null;
+let regionPreference = null;
 let regionScreen = null;
 let plannerProfilePreference = null;
 let localAvailabilityStatusText = null;
@@ -3172,7 +3174,8 @@ async function initializeRegionScreen() {
     installerClient: createRegionInstallerClient() });
   regionScreen = createRegionScreen({ versions: regionVersions, product, withRegion: withPlanningRegion,
     selectedRegionId: () => selectedRegionId,
-    selectRegion: (id) => {
+    selectRegion: (id, { remember = true } = {}) => {
+      if (remember) void regionPreference?.remember(id);
       if (selectedRegionId === id) return;
       selectedRegionId = id;
       state.poiAbortController?.abort();
@@ -3237,9 +3240,15 @@ async function start() {
     });
     const currentOutingSlug = outingSlug();
     const currentSharedRouteSlug = sharedRouteSlug();
-    if (localPlanner && !currentOutingSlug && !currentSharedRouteSlug) {
-      plannerProfilePreference = createPlannerProfilePreference((await pwaRuntime()).store);
-      state.routingProfile = await plannerProfilePreference.restore();
+    if (localPlanner) {
+      const { store } = await pwaRuntime();
+      regionPreference = createRegionPreference(store);
+      // Restore before initializeOfflineMaps performs its first regional scan.
+      selectedRegionId = await regionPreference.restore(regionVersions);
+      if (!currentOutingSlug && !currentSharedRouteSlug) {
+        plannerProfilePreference = createPlannerProfilePreference(store);
+        state.routingProfile = await plannerProfilePreference.restore();
+      }
     }
     await initializeTrailProfile({
       requireSetup: !currentOutingSlug && !currentSharedRouteSlug,
