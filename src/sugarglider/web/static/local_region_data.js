@@ -8,6 +8,10 @@ const EARTH_RADIUS_M = 6_371_008.8;
 const MAX_FEATURES = 250_000;
 const MAX_POSITIONS = 2_000_000;
 const MAX_ANALYSIS_OPERATIONS = 4_000_000;
+const BOUNDARY_BLOCK_SIZE = 64;
+// Conservatively include the existing point-on-boundary tolerance (1e-7 in
+// cross/dot products). Bounds only prune work; exact predicates stay unchanged.
+const BOUNDARY_BOUNDS_PADDING_M = 0.001;
 export const LOCAL_NATURE_WEIGHTS = Object.freeze({ woodland: 1, open_natural: 0.85, agriculture: 0.3,
   park_or_protected: 0.2, near_water: 0.15, urban: -1, unknown: -0.1 });
 const PRIMARY_CLASSES = Object.freeze(["urban", "water", "woodland", "open_natural", "agriculture"]);
@@ -50,7 +54,10 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
   freezeData(nature);
   const project = regionalProjection(manifest, nature);
   const projectedBounds = [...project(manifest.bounds.slice(0, 2)), ...project(manifest.bounds.slice(2))];
-  const natureItems = Array.from(projectedNatureItems(nature, project));
+  const natureItems = [];
+  for (const item of projectedNatureItems(nature, project)) {
+    natureItems.push({ ...item, polygons: item.polygons.map(prepareNaturePolygon) });
+  }
   const natureTree = spatialTree(natureItems);
   const poiFeatures = freezeData(pois?.features ?? []);
   const poiTree = spatialTree(poiFeatures.map((feature) => {
@@ -144,17 +151,28 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
         const coverage = rectangleIntervals(a, b, projectedBounds);
         if (intervalLength(coverage) < 1 - 1e-10) outside = true;
         for (const item of nearby) {
-          if (overlaps(item.bounds, edgeBounds)) {
-            const spans = polygonIntervals(a, b, item.polygons, work);
+          const water = item.feature.primary_class === "water";
+          // Water interiors serve both the primary class and proximity overlay.
+          // The latter also needs interiors when only the expanded query matched.
+          const intersects = overlaps(item.bounds, edgeBounds);
+          const spans = intersects || water ? polygonIntervals(a, b, item.polygons, work) : [];
+          if (intersects) {
             if (item.feature.primary_class !== null) intervals[item.feature.primary_class].push(...spans);
             if (item.feature.park_or_protected) intervals.park_or_protected.push(...spans);
           }
-          if (item.feature.primary_class === "water") {
-            intervals.near_water.push(...polygonIntervals(a, b, item.polygons, work));
-            for (const ring of item.polygons.flat()) {
-              for (let vertex = 1; vertex < ring.length; vertex += 1) {
-                spend(work);
-                intervals.near_water.push(...capsuleIntervals(a, b, ring[vertex - 1], ring[vertex], 100));
+          if (water) {
+            intervals.near_water.push(...spans);
+            const waterBounds = expandBounds(edgeBounds, 100 + BOUNDARY_BOUNDS_PADDING_M);
+            for (const polygon of item.polygons) {
+              spend(work);
+              if (!overlaps(polygon.bounds, waterBounds)) continue;
+              for (const ring of polygon.rings) {
+                for (const { first, end } of ringRanges(ring.points, ring.blocks, waterBounds, work)) {
+                  for (let vertex = first; vertex < end; vertex += 1) {
+                    spend(work);
+                    intervals.near_water.push(...capsuleIntervals(a, b, ring.points[vertex - 1], ring.points[vertex], 100));
+                  }
+                }
               }
             }
           }
@@ -435,17 +453,59 @@ function validateProjectedPolygon(polygon, work) {
   }
 }
 
+// Retain only coarse bounds, never duplicate coordinates or cache route queries.
+// Index only rings with >64 segments: at most 2 * MAX_POSITIONS / 64 blocks
+// (<62,500). Polygon and block bounds visit at most 3 * MAX_POSITIONS
+// positions in total, including shared block endpoints. No sort,
+// recursive index build or cross-region owner exists. Installation validation
+// consumes projectedNatureItems without constructing this planning-only index.
+function prepareNaturePolygon(polygon) {
+  return { bounds: boundsOf(polygon.flat()), rings: polygon.map((points) => {
+    let blocks = null;
+    if (points.length - 1 > BOUNDARY_BLOCK_SIZE) {
+      blocks = [];
+      for (let first = 1; first < points.length; first += BOUNDARY_BLOCK_SIZE) {
+        const end = Math.min(points.length, first + BOUNDARY_BLOCK_SIZE);
+        blocks.push({ first, end, bounds: boundsOf(points.slice(first - 1, end)) });
+      }
+    }
+    return { points, blocks };
+  }) };
+}
+
+function ringRanges(points, blocks, bounds, work) {
+  if (blocks === null) return [{ first: 1, end: points.length }];
+  const matches = [];
+  for (const block of blocks) {
+    spend(work);
+    if (overlaps(block.bounds, bounds)) matches.push(block);
+  }
+  return matches;
+}
+
 function polygonIntervals(a, b, polygons, work) {
   const spans = [];
+  // segmentCuts admits nearly collinear boundaries within 1e-7 / edge length.
+  // Include that strip even for extremely short nonzero routed edges.
+  const bounds = expandBounds(boundsOf([a, b]), BOUNDARY_BOUNDS_PADDING_M + (1e-7 + 1e-10) / metricDistance(a, b));
   for (const polygon of polygons) {
+    spend(work);
+    if (!overlaps(polygon.bounds, bounds)) continue;
     const cuts = [0, 1];
-    for (const ring of polygon) {
-      for (let i = 1; i < ring.length; i += 1) { spend(work); cuts.push(...segmentCuts(a, b, ring[i - 1], ring[i])); }
+    for (const ring of polygon.rings) {
+      for (const { first, end } of ringRanges(ring.points, ring.blocks, bounds, work)) {
+        for (let i = first; i < end; i += 1) {
+          spend(work);
+          cuts.push(...segmentCuts(a, b, ring.points[i - 1], ring.points[i]));
+        }
+      }
     }
     const sorted = [...new Set(cuts)].sort((x, y) => x - y);
     for (let i = 1; i < sorted.length; i += 1) {
       const p = interpolate(a, b, (sorted[i - 1] + sorted[i]) / 2);
-      if (inRing(p, polygon[0], work) >= 0 && polygon.slice(1).every((ring) => inRing(p, ring, work) <= 0)) spans.push([sorted[i - 1], sorted[i]]);
+      const [outer, ...holes] = polygon.rings;
+      if (inRing(p, outer.points, work, outer.blocks) >= 0
+        && holes.every((ring) => inRing(p, ring.points, work, ring.blocks) <= 0)) spans.push([sorted[i - 1], sorted[i]]);
     }
   }
   return unionIntervals(spans);
@@ -464,14 +524,20 @@ function segmentCuts(a, b, c, d) {
   return t > 0 && t < 1 && s >= 0 && s <= 1 ? [t] : [];
 }
 
-function inRing(p, ring, work) {
+function inRing(p, ring, work, blocks = null) {
   let inside = false;
-  for (let i = 1; i < ring.length; i += 1) {
-    spend(work);
-    const a = ring[i - 1]; const b = ring[i];
-    const delta = subtract(b, a); const relative = subtract(p, a);
-    if (Math.abs(cross(delta, relative)) <= 1e-7 && dot(relative, subtract(p, b)) <= 1e-7) return 0;
-    if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside;
+  // A rightward ray needs only segments at this height and to its right.
+  // Padding also retains every segment eligible for the boundary predicate.
+  const bounds = blocks === null ? null : [p[0] - BOUNDARY_BOUNDS_PADDING_M, p[1] - BOUNDARY_BOUNDS_PADDING_M,
+    Infinity, p[1] + BOUNDARY_BOUNDS_PADDING_M];
+  for (const { first, end } of ringRanges(ring, blocks, bounds, work)) {
+    for (let i = first; i < end; i += 1) {
+      spend(work);
+      const a = ring[i - 1]; const b = ring[i];
+      const delta = subtract(b, a); const relative = subtract(p, a);
+      if (Math.abs(cross(delta, relative)) <= 1e-7 && dot(relative, subtract(p, b)) <= 1e-7) return 0;
+      if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside;
+    }
   }
   return inside ? 1 : -1;
 }

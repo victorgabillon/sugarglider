@@ -58,7 +58,9 @@ export async function runPr40LocalRegionalDataHarness() {
   complexNature.metadata.category_counts = { woodland: 1 };
   const boundedData = createLocalRegionData(manifest, { nature: complexNature });
   const bounded = boundedData.analyzeNature({ ...fixture.route,
-    geometry: Array.from({ length: 5000 }, (_, index) => [.01 + (index % 2 ? .001 : -.001), .01]) });
+    // Crossing the entire ring remains expensive after block pruning; a
+    // small oscillation wholly inside it now correctly completes cheaply.
+    geometry: Array.from({ length: 20_000 }, (_, index) => [.01 + (index % 2 ? .0095 : -.0095), .01]) });
   assert(!bounded.available && bounded.warnings[0] === "nature_analysis_budget_exhausted", "complex analysis fails explicitly at budget");
   equal(bounded.operation_count, bounded.operation_budget, "strict geometry operation budget");
   equal(bounded.unknown_landcover.distance_m, fixture.route.distance_m, "no partial score after budget rejection");

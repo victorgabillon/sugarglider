@@ -33,3 +33,5 @@ jobs:
         run: node tests/browser/data_notices_acceptance.cjs
       - name: Check offline product and first-party failure boundaries
         run: node tests/browser/pr98_offline_acceptance.cjs
+      - name: Check bounded offline nature analysis and worker lifecycle
+        run: node tests/browser/nature_performance_acceptance.cjs
