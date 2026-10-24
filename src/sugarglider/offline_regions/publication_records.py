@@ -4,6 +4,15 @@ import hashlib
 from pathlib import Path
 
 
+def unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate publication JSON field")
+        result[key] = value
+    return result
+
+
 def digest(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 

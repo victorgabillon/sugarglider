@@ -1110,3 +1110,9 @@ body.outing-mode .route-dock { display: none; }
 .elevation-actions:empty { display: none; }
 .elevation-actions .button, .elevation-actions .text-button { min-height: 44px; font-size: .85rem; }
 .elevation-map-marker { width: 19px; height: 19px; border: 3px solid #fffef9; border-radius: 50%; background: #245d90; box-shadow: 0 0 0 2px #173d31, 0 2px 7px #0005; pointer-events: none; }
+
+/* Offline source notices use ordinary text and deliberate official links. */
+.data-licences-dialog { width: min(48rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; box-sizing: border-box; }
+.data-licences-dialog, .region-sources { overflow-wrap: anywhere; }
+.data-licences-dialog pre, .region-sources pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; }
+.data-licences-dialog::backdrop { background: rgb(0 0 0 / 45%); }

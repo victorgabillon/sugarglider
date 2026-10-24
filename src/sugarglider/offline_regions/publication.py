@@ -15,6 +15,7 @@ from pydantic import Field, StrictBool, TypeAdapter, model_validator
 
 from sugarglider.offline_regions.elevation_component import ElevationManifest
 from sugarglider.offline_regions.ign_publication import (
+    IGNCompletePublicationBasis,
     IGNPublicationEvidence,
     authorize_ign_manifest,
     verify_ign_records,
@@ -72,6 +73,11 @@ type ReleaseEvidence = PublicationEvidence | IGNPublicationEvidence
 
 
 def parse_publication_evidence(value: bytes) -> ReleaseEvidence:
+    from sugarglider.offline_regions.publication_records import unique_object
+
+    if not 0 < len(value) <= 32_768:
+        raise ValueError("publication evidence exceeds limit")
+    json.loads(value, object_pairs_hook=unique_object)
     return TypeAdapter(ReleaseEvidence).validate_json(value)
 
 
@@ -201,6 +207,12 @@ def verify_approval(
 ) -> OperatorApproval:
     if digest(approval_bytes) != trusted_approval_sha256:
         raise ValueError("operator approval is not independently authorized")
+    if isinstance(evidence, IGNPublicationEvidence) and isinstance(
+        evidence.basis, IGNCompletePublicationBasis
+    ):
+        from sugarglider.offline_regions.source_notices import require_notice_review
+
+        require_notice_review(evidence.basis.supplementary_notices)
     approval = OperatorApproval.model_validate_json(approval_bytes)
     if (
         approval.evidence_sha256
