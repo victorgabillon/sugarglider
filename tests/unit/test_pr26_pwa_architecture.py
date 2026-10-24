@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v98_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v99_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v98"
+    assert generation.group(1) == "v99"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -185,6 +185,7 @@ def test_shared_shell_generation_tracks_v98_cached_assets() -> None:
             "trail_profile.js",
             "pwa_view.js",
             "region_screen.js",
+            "terrain_attribution.js",
             "state.js",
             "itinerary_draft.js",
             "itinerary_dialog.js",
@@ -238,7 +239,7 @@ def test_shared_shell_generation_tracks_v98_cached_assets() -> None:
             "319176cc644c0c80ba464133c969de558e65e75d084e1ed699646301e3ee7b1b"
         ),
         "elevation_view.js": (
-            "5d6da364ecb5002fe60d7fd2f892db51d45791f673d7d4c93536c8432084242a"
+            "3a3802c0ac4fd5ae49f957b5a2095e545f4c27f1c9c3daf69536f6f1b9ce9021"
         ),
         "elevation_map_marker.js": (
             "3e064a2be298eda3d3d64e335e478e35a9a0c3a23ff417d905ebe73314c641ba"
@@ -323,7 +324,10 @@ def test_shared_shell_generation_tracks_v98_cached_assets() -> None:
         ),
         "app.js": ("41294c2d2c12eee9534b80b5584e6e2901b46c94b7d8d6b55d651c0e75faea70"),
         "region_screen.js": (
-            "b53793b83aede5967d070b7eddfb6ec949df6dd24634cbd3e54ee2998e1ef953"
+            "b0760d1f7f42beac81cd59bcb20c35666e999e715aefd29bfb3d729a2a436c6d"
+        ),
+        "terrain_attribution.js": (
+            "6635fd0259ae80adefb76e84f658d4c4a5a8a15695e34aa47f4457fc1d1a487b"
         ),
         "pwa_view.js": (
             "b5f8919ea0c0b40b27559f3b506b2839731baea871554cfe3db7f5dc8c20b479"
@@ -348,7 +352,7 @@ def test_shared_shell_generation_tracks_v98_cached_assets() -> None:
         ),
         "map.js": ("e537d6bda14ebb1942e404b54250ab13eaf224f6dfa159b12e7738714b08f0c6"),
         "styles.css": (
-            "a3aac84487dcd00c7f9c5010a6e9ec8d054f398e11b7ae6b91c6abe8c084bef8"
+            "dfced06b2640332c815b1bb67cf62b693fc208926a107a132e99ab8373b50812"
         ),
         "planner_profile.js": (
             "4183a1318f3aa49df52ca0a46329caaa4f6eee1bec1b49612c446562b1b0030a"

@@ -1,4 +1,4 @@
-import { appendTerrainAttribution } from "./terrain_attribution.js";
+import { appendRegionSources } from "./terrain_attribution.js";
 import { loadRegionCatalog } from "./region_catalog.js";
 import { selectCommittedRegion } from "./regional_planning.js";
 
@@ -77,7 +77,8 @@ export function createRegionScreen({ elements, versions, product, withRegion,
       selector.append(option(row.region_id, row.manifest.display_name));
     }
     selector.value = selectedRegionId() ?? "";
-    const openDetails = new Set([...list.querySelectorAll("details[open]")].map((detail) => detail.dataset.regionId));
+    const openDetails = new Set([...list.querySelectorAll("details[open]")].map((detail) => detail.dataset.regionDisclosure));
+    const disclosureFocus = list.contains(document.activeElement) ? document.activeElement.dataset.regionFocus : null;
     list.replaceChildren();
     const ids = [...new Set([...catalog.map((row) => row.region_id), ...rows.map((row) => row.region_id)])];
     for (const id of ids) {
@@ -85,15 +86,24 @@ export function createRegionScreen({ elements, versions, product, withRegion,
       const item = document.createElement("li"); item.className = "offline-region-card";
       const name = document.createElement("strong"); name.textContent = offering?.display_name ?? stored?.manifest?.display_name ?? id;
       item.append(name);
-      appendTerrainAttribution(item, stored?.manifest);
+      if (stored) {
+        const sources = appendRegionSources(item, stored.status === "committed" ? stored.manifest : null);
+        for (const detail of [sources, ...sources.querySelectorAll("details")]) {
+          const key = `${id}:${detail.dataset.sourceDisclosure}`;
+          detail.dataset.regionDisclosure = key; detail.open = openDetails.has(key);
+          detail.querySelector("summary").dataset.regionFocus = key;
+        }
+        [...sources.querySelectorAll("a")].forEach((link, index) => { link.dataset.regionFocus = `${id}:source-link:${index}`; });
+      }
       const same = stored?.manifest?.build_id === offering?.build_id;
       const verified = stored?.manifest?.build_id === readyBuild && id === selectedRegionId();
       const installed = stored?.status === "committed";
       const stateLabel = installed && offering && !same ? "Update available" : verified ? "Ready" : installed ? "Installed" : stored ? "Needs attention" : offering?.manifest_url ? "Available" : "Download unavailable";
       item.dataset.regionState = stateLabel;
       const badge = document.createElement("p"); badge.className = "region-state"; badge.textContent = stateLabel; item.append(badge);
-      const technical = document.createElement("details"); technical.className = "region-technical"; technical.dataset.regionId = id; technical.open = openDetails.has(id);
-      const summary = document.createElement("summary"); summary.textContent = "Technical details"; technical.append(summary);
+      const technical = document.createElement("details"); technical.className = "region-technical"; technical.dataset.regionId = id;
+      technical.dataset.regionDisclosure = `${id}:technical`; technical.open = openDetails.has(`${id}:technical`);
+      const summary = document.createElement("summary"); summary.textContent = "Technical details"; summary.dataset.regionFocus = `${id}:technical`; technical.append(summary);
       appendText(technical, `Region ID: ${id}`);
       if (stored?.manifest) appendText(technical, `Installed build: ${stored.manifest.build_id}`);
       if (offering) appendText(technical, `Available build: ${offering.build_id}`);
@@ -155,6 +165,8 @@ export function createRegionScreen({ elements, versions, product, withRegion,
       list.append(item);
     }
     render();
+    if (disclosureFocus) [...list.querySelectorAll("[data-region-focus]")]
+      .find(element => element.dataset.regionFocus === disclosureFocus)?.focus({preventScroll:true});
   }
 
   async function inspectSelection() {
