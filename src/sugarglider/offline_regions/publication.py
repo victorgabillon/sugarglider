@@ -5,16 +5,20 @@ An approval found beside an artifact is not trusted automatically. Read-only fac
 an unsigned request and an approved release copy are three separate operations.
 """
 
-import hashlib
 import json
 import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal, Self
 
-from pydantic import Field, StrictBool, model_validator
+from pydantic import Field, StrictBool, TypeAdapter, model_validator
 
 from sugarglider.offline_regions.elevation_component import ElevationManifest
+from sugarglider.offline_regions.ign_publication import (
+    IGNPublicationEvidence,
+    authorize_ign_manifest,
+    verify_ign_records,
+)
 from sugarglider.offline_regions.models import (
     FileDescriptor,
     RegionalManifest,
@@ -23,6 +27,12 @@ from sugarglider.offline_regions.models import (
     build_identity,
     canonical_json,
 )
+from sugarglider.offline_regions.publication_records import (
+    bounded_record as bounded_record,
+)
+from sugarglider.offline_regions.publication_records import (
+    digest as digest,
+)
 from sugarglider.offline_regions.terrain_source import (
     COPERNICUS_ATTRIBUTION,
     COPERNICUS_DISCLAIMER,
@@ -30,24 +40,6 @@ from sugarglider.offline_regions.terrain_source import (
     verify_source,
 )
 from sugarglider.offline_regions.validation import verify_region
-
-
-def digest(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
-
-
-def bounded_record(path: Path, maximum: int = 32_768) -> bytes:
-    if (
-        path.is_symlink()
-        or not path.is_file()
-        or not 0 < path.stat().st_size <= maximum
-    ):
-        raise ValueError("invalid or oversized terrain evidence record")
-    with path.open("rb") as stream:
-        value = stream.read(maximum + 1)
-    if len(value) > maximum:
-        raise ValueError("terrain evidence record grew beyond limit")
-    return value
 
 
 class PublicationEvidence(StrictModel):
@@ -76,6 +68,13 @@ class PublicationEvidence(StrictModel):
     ]
 
 
+type ReleaseEvidence = PublicationEvidence | IGNPublicationEvidence
+
+
+def parse_publication_evidence(value: bytes) -> ReleaseEvidence:
+    return TypeAdapter(ReleaseEvidence).validate_json(value)
+
+
 class OperatorApproval(StrictModel):
     schema_version: Literal[1] = 1
     decision: Literal["approve-publication"]
@@ -99,7 +98,7 @@ class OperatorApproval(StrictModel):
 
 
 def release_manifests(
-    directory: Path, private: RegionalManifest
+    directory: Path, private: RegionalManifest, *, ign_basis_sha256: str | None = None
 ) -> tuple[RegionalManifest, bytes]:
     """Read-only preview; the operator reviews this exact proposed build ID."""
     if private.publication_allowed:
@@ -107,15 +106,22 @@ def release_manifests(
     elevation = ElevationManifest.model_validate_json(
         (directory / "elevation/manifest.json").read_bytes()
     )
-    if (elevation.provenance_status, elevation.vertical_datum) != (
+    ign = elevation.vertical_datum == "IGN69" and ign_basis_sha256 is not None
+    if not ign and (elevation.provenance_status, elevation.vertical_datum) != (
         "documented",
         "EGM96",
     ):
         raise ValueError("source provenance/vertical datum remain unresolved")
+    if not ign and ign_basis_sha256 is not None:
+        raise ValueError("IGN authorization cannot label another source")
+    elevation_payload = elevation.model_dump(mode="json")
+    elevation_payload["publication_allowed"] = True
+    if ign:
+        elevation_payload["publication_basis_sha256"] = ign_basis_sha256
     elevation_bytes = canonical_json(
-        elevation.model_copy(update={"publication_allowed": True}).model_dump(
-            mode="json"
-        )
+        ElevationManifest.model_validate_json(
+            canonical_json(elevation_payload)
+        ).model_dump(mode="json")
     )
     payload = private.model_dump(mode="json", exclude={"build_id"})
     payload["publication_allowed"] = True
@@ -191,7 +197,7 @@ def verify_evidence(
 
 
 def verify_approval(
-    evidence: PublicationEvidence, approval_bytes: bytes, trusted_approval_sha256: str
+    evidence: ReleaseEvidence, approval_bytes: bytes, trusted_approval_sha256: str
 ) -> OperatorApproval:
     if digest(approval_bytes) != trusted_approval_sha256:
         raise ValueError("operator approval is not independently authorized")
@@ -208,44 +214,96 @@ def verify_approval(
 def prepare_approved_region(
     private_directory: Path,
     output: Path,
-    evidence: PublicationEvidence,
+    evidence: ReleaseEvidence,
     originals: Path,
     transformation_record: Path,
     graph_build_record: Path,
     *,
     approval_bytes: bytes,
     trusted_approval_sha256: str,
+    prepared: Path | None = None,
+    legal_directory: Path | None = None,
+    osm_pbf: Path | None = None,
 ) -> RegionalManifest:
     private = verify_region(private_directory)
-    proposed, elevation_bytes = release_manifests(private_directory, private)
-    verify_evidence(
-        evidence,
+    proposed, elevation_bytes = release_manifests(
+        private_directory,
         private,
-        proposed,
-        originals,
-        transformation_record,
-        graph_build_record,
+        ign_basis_sha256=evidence.basis_sha256
+        if isinstance(evidence, IGNPublicationEvidence)
+        else None,
     )
+    if isinstance(evidence, IGNPublicationEvidence):
+        if prepared is None or legal_directory is None or osm_pbf is None:
+            raise ValueError(
+                "IGN approval requires preparation, legal evidence and OSM bytes"
+            )
+        verify_ign_records(
+            evidence,
+            private_directory,
+            originals,
+            prepared,
+            transformation_record,
+            graph_build_record,
+            legal_directory,
+            osm_pbf,
+        )
+        authorize_ign_manifest(proposed, evidence)
+    else:
+        verify_evidence(
+            evidence,
+            private,
+            proposed,
+            originals,
+            transformation_record,
+            graph_build_record,
+        )
     verify_approval(evidence, approval_bytes, trusted_approval_sha256)
     if output.exists() or output.is_symlink():
         raise FileExistsError(output)
-    shutil.copytree(private_directory, output)
-    (output / "elevation/manifest.json").write_bytes(elevation_bytes)
-    (output / "manifest.json").write_bytes(
-        canonical_json(proposed.model_dump(mode="json"))
-    )
-    if verify_region(output) != proposed:
-        raise ValueError("approved copy failed verification")
+    if output.resolve() != output.absolute() or output.absolute().is_relative_to(
+        private_directory.absolute()
+    ):
+        raise ValueError("approved copy must be outside the immutable private region")
+    output.mkdir()
+    try:
+        shutil.copytree(private_directory, output, dirs_exist_ok=True)
+        (output / "elevation/manifest.json").write_bytes(elevation_bytes)
+        (output / "manifest.json").write_bytes(
+            canonical_json(proposed.model_dump(mode="json"))
+        )
+        if verify_region(output) != proposed:
+            raise ValueError("approved copy failed verification")
+    except BaseException:
+        shutil.rmtree(output)
+        raise
     return proposed
 
 
 def authorize_release_manifest(
     manifest: RegionalManifest,
-    evidence: PublicationEvidence,
+    evidence: ReleaseEvidence,
     approval_bytes: bytes,
     trusted_approval_sha256: str,
+    *,
+    elevation: ElevationManifest | None = None,
 ) -> None:
     verify_approval(evidence, approval_bytes, trusted_approval_sha256)
+    if isinstance(evidence, IGNPublicationEvidence):
+        if (
+            elevation is None
+            or elevation.vertical_datum != "IGN69"
+            or elevation.derivation != evidence.basis.derivation
+            or elevation.publication_basis_sha256 != evidence.basis_sha256
+            or not elevation.publication_allowed
+        ):
+            raise ValueError(
+                "IGN release metadata does not match source-specific basis"
+            )
+        authorize_ign_manifest(manifest, evidence)
+        return
+    if elevation is not None and elevation.vertical_datum != "EGM96":
+        raise ValueError("Copernicus approval cannot authorize another terrain source")
     if (
         not manifest.publication_allowed
         or manifest.build_id != evidence.release_build_id
@@ -276,6 +334,8 @@ def prepare_publication_request(
     elevation = ElevationManifest.model_validate_json(
         (private_directory / "elevation/manifest.json").read_bytes()
     )
+    if elevation.derivation is not None or elevation.vertical_datum == "IGN69":
+        raise ValueError("IGN69 requires the source-specific IGN request path")
     documented = ElevationManifest.model_validate_json(
         canonical_json(
             elevation.model_copy(

@@ -9,6 +9,11 @@ from urllib.parse import urlsplit
 from pydantic import Field
 
 from sugarglider.offline_regions.distribution import distribution_base_url
+from sugarglider.offline_regions.elevation_component import ElevationManifest
+from sugarglider.offline_regions.ign_publication import (
+    IGNPublicationEvidence,
+    require_ign_v2_namespace,
+)
 from sugarglider.offline_regions.models import (
     Identifier,
     RegionBounds,
@@ -17,9 +22,10 @@ from sugarglider.offline_regions.models import (
     contained_path,
 )
 from sugarglider.offline_regions.publication import (
-    PublicationEvidence,
     authorize_release_manifest,
+    parse_publication_evidence,
 )
+from sugarglider.offline_regions.publication_records import bounded_record
 from sugarglider.offline_regions.validation import verify_region
 
 
@@ -77,11 +83,20 @@ def preflight_catalog(
                 or trusted_approval_sha256 is None
             ):
                 raise ValueError("app release requires explicit publication approval")
-            evidence = PublicationEvidence.model_validate_json(
-                evidence_path.read_bytes()
-            )
+            evidence = parse_publication_evidence(bounded_record(evidence_path))
+            if isinstance(evidence, IGNPublicationEvidence):
+                require_ign_v2_namespace(base)
             authorize_release_manifest(
-                manifest, evidence, approval_path.read_bytes(), trusted_approval_sha256
+                manifest,
+                evidence,
+                bounded_record(approval_path, 4096),
+                trusted_approval_sha256,
+                elevation=ElevationManifest.model_validate_json(
+                    bounded_record(
+                        contained_path(site, relative + "/elevation/manifest.json"),
+                        65_536,
+                    )
+                ),
             )
         if urlsplit(row.manifest_url).scheme != "https":
             raise ValueError("release requires HTTPS")
