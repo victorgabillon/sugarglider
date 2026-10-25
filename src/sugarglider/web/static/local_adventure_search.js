@@ -89,7 +89,7 @@ export async function searchWaypointAdventure({ request, targets = [], context, 
     } catch (error) {
       alive();
       if (error.name === "AbortError") throw error;
-      const code = /^[a-z_]{1,80}$/.test(error.code) ? error.code : "invalid_native_reply";
+      const code = typeof error.code === "string" && /^[a-z_]{1,80}$/.test(error.code) ? error.code : "invalid_native_reply";
       rejected.push({ code, proposal_id: proposal.proposal_id, details: {} });
       if (addedId) reasons.set(addedId, code === "maximum_distance_exceeded" || code === "strict_distance_tolerance_missed"
         ? "omitted_for_distance" : "route_infeasible");

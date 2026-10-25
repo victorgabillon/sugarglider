@@ -89,9 +89,21 @@ submitted-candidate validation. This exposed and corrected a narrow mismatch in
 the Python reconstruction of existing Near endpoint traversal anchors; 27 focused
 Python tests and the existing endpoint browser suite pass.
 
-These are synthetic routing tests, not real geographical acceptance. Real Marly
-quality/latency, deterministic wish assessment, the model revision controller and
-final adventure UI remain outstanding. No AI APK has been installed or offered as complete.
+These are synthetic routing tests, not real geographical acceptance. The deterministic assessment and two-call model controller are now implemented.
+Thirteen new controller scenarios exercise the normal regional queries, shared
+search/publisher and GPX path, including a measured additional checked stop after
+revision, failed-revision retention, unknown surfaces/partial elevation, mandatory
+confirmation, strict landmark arrival, changed region/intent and cancellation.
+The controller sends a byte-bounded strategy/measurement summary without raw route
+geometry, indexed regional records or full story prose. Model calls, measured
+usage and native calls remain separately accounted. OSM categories support place
+counts; a linked AI anecdote never becomes independently verified history. The
+application retains both round snapshots and only chooses a revised portfolio
+when supported measurements improve. Canonical control ordering remains intact.
+
+Real Marly quality/latency, the elevation measurement adapter and final adventure
+UI/microphone remain outstanding. No complete application experience or live
+account access is claimed. No AI APK has been installed or offered as complete.
 
 ## Official protocol references (checked 25 October 2026)
 

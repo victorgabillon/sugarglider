@@ -4,6 +4,7 @@ import { haversineDistance } from "./local_plan_geometry.js";
 import { deepFreeze } from "./local_candidate_evaluator.js";
 import { safeAdventureLink } from "./adventure_proposal.js";
 const position = point => [point.lon, point.lat];
+const center = point => ({ lat: point.lat, lon: point.lon });
 const distance = (a, b) => haversineDistance(position(a), position(b));
 const covered = (point, bounds) => point?.lat !== null && Number.isFinite(point?.lat) && Number.isFinite(point?.lon)
   && point.lon >= bounds[0] && point.lat >= bounds[1] && point.lon <= bounds[2] && point.lat <= bounds[3];
@@ -24,13 +25,13 @@ export async function groundAdventurePlaces(proposal, { session, reference, star
     current();
     const proposed = place.location.lat === null ? null : place.location;
     const base = { ...place, proposed_coordinate: proposed, semantic_coordinate: null, routing_coordinate: null,
-      local_id: null, match_method: null, approach: null, access_status: "unknown", status: "unresolved_location",
+      local_id: null, local_category: null, match_method: null, approach: null, access_status: "unknown", status: "unresolved_location",
       story_status: place.sources.some(source => citationLinks.has(source.url)) ? "source_linked_ai_text" : "unverified_ai_text",
       sources: place.sources.map(source => ({ ...source, retrieved: citationLinks.has(source.url) })) };
     if (proposed && !covered(proposed, bounds)) { results.push({ ...base, status: "outside_coverage" }); continue; }
     let feature = null, method = null, ambiguous = false;
     if (place.osm_id) {
-      const reply = await session.queryPois({ center: proposed ?? start, radius_m: 25, limit: 1, requested_ids: [place.osm_id] }); current(reply);
+      const reply = await session.queryPois({ center: center(proposed ?? start), radius_m: 25, limit: 1, requested_ids: [place.osm_id] }); current(reply);
       feature = reply.requested.find(row => row.id === place.osm_id)?.feature ?? null;
       if (feature) method = "osm_identity";
     }
@@ -39,7 +40,7 @@ export async function groundAdventurePlaces(proposal, { session, reference, star
       const exact = named.results.filter(row => normalizeLocationText(row.name) === normalizeLocationText(place.location.name));
       if (exact.length > 1) ambiguous = true;
       if (exact.length === 1) {
-        const reply = await session.queryPois({ center: exact[0], radius_m: 25, limit: 64, requested_ids: [] }); current(reply);
+        const reply = await session.queryPois({ center: center(exact[0]), radius_m: 25, limit: 64, requested_ids: [] }); current(reply);
         const matches = reply.features.filter(item => normalizeLocationText(item.display_name) === normalizeLocationText(place.location.name)
           && distance(item.coordinate, exact[0]) < 1);
         if (matches.length === 1) { [feature] = matches; method = "exact_local_name"; }
@@ -47,7 +48,7 @@ export async function groundAdventurePlaces(proposal, { session, reference, star
       }
     }
     if (!feature && !ambiguous && proposed) {
-      const reply = await session.queryPois({ center: proposed, radius_m: 25, limit: 64, requested_ids: [] }); current(reply);
+      const reply = await session.queryPois({ center: center(proposed), radius_m: 25, limit: 64, requested_ids: [] }); current(reply);
       const terms = normalizeLocationText(place.location.name).split(/\s+/u).filter(term => term.length > 2);
       const matches = reply.features.filter(item => terms.length && terms.every(term => normalizeLocationText(item.display_name).includes(term)) && distance(item.coordinate, proposed) <= 25);
       if (matches.length === 1) { [feature] = matches; method = "name_and_proximity"; }
@@ -66,7 +67,7 @@ export async function groundAdventurePlaces(proposal, { session, reference, star
       && covered(approach.coordinate, bounds) && distance(approach.coordinate, feature.coordinate) <= 1000)
       .sort((a, b) => a.semantic_distance_m - b.semantic_distance_m || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     const approach = approaches[0] ?? null;
-    results.push({ ...base, local_id: feature.id, semantic_coordinate: feature.coordinate,
+    results.push({ ...base, local_id: feature.id, local_category: feature.category, semantic_coordinate: feature.coordinate,
       routing_coordinate: approach?.coordinate ?? null, match_method: method, approach,
       access_status: feature.access_status, status: approach ? "grounded" : "no_mapped_approach" });
   }

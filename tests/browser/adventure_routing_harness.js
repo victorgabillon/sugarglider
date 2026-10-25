@@ -49,7 +49,7 @@ function nativeReply(input, targets, change = () => {}) {
   return reply;
 }
 
-async function rig({ loop = false, profile = "trail_run", change, handler, dataAvailable = true } = {}) {
+export async function rig({ loop = false, profile = "trail_run", change, handler, dataAvailable = true } = {}) {
   const fixtureData = await (await fetch("/tests/fixtures/pr40_regional_data.json")).json();
   const f = fixture(loop, profile), source = createLocalRegionData(fixtureData.manifest, { nature: fixtureData.nature });
   const reference = { ...structuredClone(syntheticRegionalReference), region_id: fixtureData.manifest.region_id,

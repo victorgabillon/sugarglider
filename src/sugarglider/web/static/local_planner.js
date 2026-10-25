@@ -65,7 +65,7 @@ export function createLocalPlanner({ bridge, getRegionData = async () => null, w
       modeRequest = request.kind === "waypoint_route" ? validateLocalWaypointRouteRequest(request)
         : validateLocalAutoTourPlanRequest(request);
     } catch (error) { return Promise.reject(error instanceof LocalPlannerError ? error
-      : new LocalPlannerError(/^[a-z_]{1,80}$/.test(error.code) ? error.code : "invalid_local_plan_request")); }
+      : new LocalPlannerError(typeof error.code === "string" && /^[a-z_]{1,80}$/.test(error.code) ? error.code : "invalid_local_plan_request")); }
     const identity = JSON.stringify(request);
     if (active) return active.identity === identity && active.generation === generation
       ? active.promise : Promise.reject(new LocalPlannerError("local_generation_busy"));
