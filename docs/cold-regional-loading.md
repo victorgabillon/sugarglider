@@ -23,7 +23,9 @@ Nature remains eager. The index validates the source document and polygon topolo
 projects every coordinate, and builds the same spatial tree and 64-segment boundary
 blocks. It keeps only the two classification values needed from each source feature.
 The original document, tags and geographic coordinates can therefore be released
-while the projected analyzer remains active. Recursively freezing the discarded
+while the projected analyzer remains active. Switching, clearing or removing the
+selection also closes its analysis worker, including when no replacement is loaded.
+Recursively freezing the discarded
 source graph is unnecessary. No geometry predicate, traversal order, operation
 budget, score or ranking changes.
 

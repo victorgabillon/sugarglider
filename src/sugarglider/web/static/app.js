@@ -3179,6 +3179,10 @@ async function initializeRegionScreen() {
     selectRegion: (id, { remember = true } = {}) => {
       if (remember) void regionPreference?.remember(id);
       if (selectedRegionId === id) return;
+      // Clearing/removing a region must release its worker heap too, even when
+      // no replacement region will be loaded. Old sessions reject after close.
+      sharedLocalRegionClient?.close();
+      sharedLocalRegionClient = null;
       selectedRegionId = id;
       state.poiAbortController?.abort();
       state.poiRequest = { status: "idle", id: state.poiRequest.id + 1 };

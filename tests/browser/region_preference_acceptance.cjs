@@ -48,6 +48,16 @@ async function startup(browser, scenario) {
     await context.addInitScript(({ profiles, scenario }) => {
       globalThis.preferenceEvents = [];
       globalThis.preferenceNative = [];
+      globalThis.preferenceWorkerCloses = 0;
+      const regionalWorkers = new WeakSet(), post = Worker.prototype.postMessage, terminate = Worker.prototype.terminate;
+      Worker.prototype.postMessage = function(message, ...rest) {
+        if (message?.type === 'load_version') regionalWorkers.add(this);
+        return post.call(this, message, ...rest);
+      };
+      Worker.prototype.terminate = function(...args) {
+        if (regionalWorkers.has(this)) preferenceWorkerCloses += 1;
+        return terminate.apply(this, args);
+      };
       const get = IDBObjectStore.prototype.get;
       IDBObjectStore.prototype.get = function(key) {
         if (key === 'planner-region-id' && scenario.storageUnavailable) throw Error('Optional preference read unavailable');
@@ -185,7 +195,9 @@ async function startup(browser, scenario) {
     assert.equal(requests.some(url => /\.(pmtiles|gz|tar)$/u.test(url) || /\/v[12]\/.*(plan|route)/u.test(url)), false, 'Startup downloaded a region or generated a route');
     if (scenario.switchAndClear) {
       phase = 'select beta and commit';
+      const beforeSwitch = await page.evaluate(() => preferenceWorkerCloses);
       await chooseAndRemember(page, 'beta');
+      assert.equal(await page.evaluate(() => preferenceWorkerCloses), beforeSwitch + 1, 'Switching region releases its old analysis worker');
       phase = 'reload remembered beta';
       await page.reload();
       await page.waitForFunction(() => document.querySelector('#regional-status').dataset.state === 'regional_ready');
@@ -193,6 +205,7 @@ async function startup(browser, scenario) {
       assert.equal(await page.evaluate(() => preferenceEvents.find(event => event.type === 'map_open').build), installed.beta.build_id);
       phase = 'clear selection and commit';
       await chooseAndRemember(page, null);
+      assert.equal(await page.evaluate(() => preferenceWorkerCloses), 1, 'Explicit clear releases the active worker without a replacement load');
       phase = 'reload cleared selection';
       await page.reload();
       await page.waitForFunction(() => document.querySelector('#regional-status').dataset.state === 'regional_selection_required');
@@ -206,6 +219,7 @@ async function startup(browser, scenario) {
     return { name: scenario.name, ...(scenario.repeat === undefined ? {} : { repeat: scenario.repeat }), status: 'passed', first_map_build_matches: Boolean(scenario.expected), offline: Boolean(scenario.offline) };
   } catch (error) {
     const diagnostic = await page?.evaluate(async () => {
+      globalThis.releasePreferenceNative?.();
       const { store } = await (await import('/static/pwa_runtime.js')).pwaRuntime();
       const { createRegionVersionStore } = await import('/static/region_versions.js');
       return { selected: document.querySelector('#planning-region')?.value,
