@@ -108,4 +108,23 @@ class ChatGptConnectionTest {
         assertEquals(ChatGptFailureKind.CANCELLED,assertThrows(ChatGptException::class.java) { connection.acceptCode(code()) }.kind)
         assertTrue(memory.saved.isEmpty())
     }
+    @Test fun inferencePayloadBoundsOutputAndResearchWithoutAssumingModelCapabilities() {
+        val schema = JSONObject().put("type","object").put("properties",JSONObject())
+        val payload = adventureChatGptPayload("account-visible-model","instructions","synthetic description",true,schema)
+        assertEquals("account-visible-model",payload.getString("model"))
+        assertFalse(payload.getBoolean("store"));assertTrue(payload.getBoolean("stream"))
+        assertEquals(16_384,payload.getInt("max_output_tokens"));assertEquals(4,payload.getInt("max_tool_calls"))
+        assertEquals(1,payload.getJSONArray("tools").length())
+        assertEquals("web_search",payload.getJSONArray("tools").getJSONObject(0).getString("type"))
+        val format = payload.getJSONObject("text").getJSONObject("format")
+        assertEquals("json_schema",format.getString("type"));assertTrue(format.getBoolean("strict"))
+        assertEquals(schema.toString(),format.getJSONObject("schema").toString())
+        for (key in listOf("authorization","access_token","refresh_token","api_key","previous_response_id","conversation","background")) assertFalse(payload.has(key))
+    }
+    @Test fun inferenceCanOmitUnsupportedOptionalResearchAndSchema() {
+        val payload = adventureChatGptPayload("another-visible-model","instructions","synthetic description",false,null)
+        assertFalse(payload.has("tools"));assertFalse(payload.has("max_tool_calls"));assertFalse(payload.has("text"))
+        assertEquals(16_384,payload.getInt("max_output_tokens"))
+    }
+
 }

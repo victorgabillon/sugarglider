@@ -97,10 +97,7 @@ internal class ChatGptConnection(
         require(instructions.length in 1..24_576 && input.length in 1..32_768)
         val account = authorized(call,owned)
         synchronized(lock) { require(catalog.any { it.slug == model }) { "Select an available ChatGPT model." } }
-        val payload = JSONObject().put("model",model).put("store",false).put("stream",true)
-            .put("instructions",instructions).put("input",input)
-        if (research) payload.put("tools",JSONArray().put(JSONObject().put("type","web_search")))
-        if (schema != null) payload.put("text",JSONObject().put("format",JSONObject().put("type","json_schema").put("name","sugarglider_adventure").put("strict",true).put("schema",schema)))
+        val payload = adventureChatGptPayload(model,instructions,input,research,schema)
         val started = System.nanoTime()
         val answer = http.infer(call,account.tokens!!.access!!,payload)
         synchronized(lock) { requireCurrent(owned) }
@@ -168,3 +165,20 @@ internal class ChatGptConnection(
     }
 }
 internal data class ChatGptModel(val slug: String, val label: String)
+
+// One bounded foreground response, using the documented Responses API fields.
+// These limits also include reasoning and hosted research work, not just text.
+internal fun adventureChatGptPayload(
+    model: String,
+    instructions: String,
+    input: String,
+    research: Boolean,
+    schema: JSONObject?,
+): JSONObject {
+    val payload = JSONObject().put("model",model).put("store",false).put("stream",true)
+        .put("instructions",instructions).put("input",input).put("max_output_tokens",16_384)
+    if (research) payload.put("max_tool_calls",4).put("tools",JSONArray().put(JSONObject().put("type","web_search")))
+    if (schema != null) payload.put("text",JSONObject().put("format",JSONObject().put("type","json_schema")
+        .put("name","sugarglider_adventure").put("strict",true).put("schema",schema)))
+    return payload
+}
