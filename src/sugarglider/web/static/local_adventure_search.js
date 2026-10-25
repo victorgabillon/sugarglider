@@ -1,6 +1,6 @@
 // Bounded proposals for the existing Waypoint producer. Only its injected
 // attempt boundary may route; coordinates here are never displayed as a line.
-import { analyzeLocalLoopGeometry, generateAdventureControlSkeletons } from "./local_auto_tour.js";
+import { analyzeLocalLoopGeometry, generateAdventureControlSkeletons, geometryDiversityDistanceM } from "./local_auto_tour.js";
 import { deepFreeze } from "./local_candidate_evaluator.js";
 import { haversineDistance } from "./local_plan_geometry.js";
 import { unavailableNature } from "./local_region_data.js";
@@ -50,19 +50,34 @@ export async function searchWaypointAdventure({ request, targets = [], context, 
     }
     if (JSON.stringify(nearest) !== JSON.stringify(hardOrders[0])) hardOrders.push(nearest);
   }
-  const seeds = hardOrders.map(order => sequence(order));
+  const seeds = hardOrders.map(order => ({ state: sequence(order), skeletonIndex: null }));
+  function skeletonState(skeleton) {
+    const state = sequence(hardOrders[0]);
+    for (const point of skeleton.points.slice(1, -1)) insertCheapest(state, { coordinate: point, index: null });
+    return state;
+  }
   // No-hard-point loops need useful proposals, rather than Start->Start. Open
   // routes and hard-point loops also get bounded distance-building controls.
   if (request.topology === "loop") {
     const skeletons = generateAdventureControlSkeletons(request);
-    for (const skeleton of skeletons) {
-      if (seeds.length >= 8) break;
-      const state = sequence(hardOrders[0]);
-      for (const point of skeleton.points.slice(1, -1)) insertCheapest(state, { coordinate: point, index: null });
-      if (state.length <= 16 && state.every(item => covered(item.coordinate, reference.bounds))) seeds.push(state);
+    // Rank only proposal corridors, using checked local places and bounded
+    // insertion estimates. This cannot establish an arrival or route distance.
+    // Native routing still supplies every candidate and every displayed metre.
+    const corridors = [];
+    for (const [index, skeleton] of skeletons.entries()) {
+      const state = skeletonState(skeleton);
+      if (state.length > 16 || state.some(item => !covered(item.coordinate, reference.bounds))) continue;
+      const detour = soft.reduce((sum, { point, index }) => {
+        if (!covered(targetPoint(index), reference.bounds)) return sum;
+        const copy = state.map(item => ({ ...item }));
+        return sum + priority(targetMap.get(point.id)) * insertCheapest(copy, { coordinate: targetPoint(index), index });
+      }, 0);
+      corridors.push({ state, skeletonIndex: index, detour });
     }
+    corridors.sort((a, b) => a.detour - b.detour || a.skeletonIndex - b.skeletonIndex);
+    seeds.push(...corridors.slice(0, 8 - seeds.length));
   }
-  const usefulSeeds = seeds.filter(state => state.length > 2 || request.topology !== "loop");
+  const usefulSeeds = seeds.filter(({ state }) => state.length > 2 || request.topology !== "loop");
   async function evaluate(state, controlId = null, addedId = null) {
     alive();
     if (!available() || attempts.size >= 32) return null;
@@ -102,8 +117,21 @@ export async function searchWaypointAdventure({ request, targets = [], context, 
   const controlAllowance = Math.min(3, Math.max(1, Math.floor(maxCalls / 3)));
   for (const seed of usefulSeeds) {
     if (context.totalUsed - startUsed >= controlAllowance || terminal || !available()) break;
-    const entry = await evaluate(seed);
+    const entry = await evaluate(seed.state);
     if (entry) controls.push(entry);
+    // Reuse Auto Tour's bounded measured-distance correction. Move only generated
+    // proposal controls; exact points, the actual target and routed lines stay fixed.
+    if (entry && !entry.draft.within_tolerance && seed.skeletonIndex !== null
+      && context.totalUsed - startUsed < controlAllowance && available()) {
+      const factor = Math.max(0.7, Math.min(1.3, request.distance_objective.target_m / entry.draft.distance_m));
+      if (Math.abs(factor - 1) >= 0.03) {
+        const corrected = skeletonState(generateAdventureControlSkeletons(request, factor)[seed.skeletonIndex]);
+        if (corrected.every(item => covered(item.coordinate, reference.bounds))) {
+          const measured = await evaluate(corrected);
+          if (measured) controls.push(measured);
+        }
+      }
+    }
   }
   controls.sort(compareEntries);
   const control = controls[0] ?? null;
@@ -131,6 +159,7 @@ export async function searchWaypointAdventure({ request, targets = [], context, 
   }
   alive();
   const retained = [], seen = new Set();
+  let similarOmitted = false;
   // Retain the comparison line independently of the requested alternative count.
   // Final publication puts target eligibility first, then preserves the control
   // gate because unknown repetition cannot justify a POI-based promotion.
@@ -138,6 +167,18 @@ export async function searchWaypointAdventure({ request, targets = [], context, 
     const forward = JSON.stringify(entry.draft.geometry), reverse = JSON.stringify([...entry.draft.geometry].reverse());
     const key = request.topology === "loop" && reverse < forward ? reverse : forward;
     if (seen.has(key)) continue;
+    if (request.topology === "loop" && entry !== control) {
+      // Keep the explicit comparison independently. Two claimed adventure
+      // alternatives must have distinct sampled native lines, rather than one
+      // extra small landmark detour on the same loop. Reuse Auto Tour's proxy;
+      // it is not a claim about unavailable edge-ID overlap.
+      const threshold = Math.max(150, Math.min(600, request.distance_objective.target_m * 0.025));
+      const comparison = entry.selected.length ? retained.filter(other => other.selected.length) : retained;
+      if (!entry.selected.length && control?.draft.within_tolerance && !entry.draft.within_tolerance) continue;
+      if (comparison.some(other => geometryDiversityDistanceM(other.draft.geometry, entry.draft.geometry) < threshold)) {
+        similarOmitted = true; continue;
+      }
+    }
     seen.add(key); retained.push(entry);
     if (retained.length === Math.max(2, request.candidate_count)) break;
   }
@@ -161,7 +202,8 @@ export async function searchWaypointAdventure({ request, targets = [], context, 
     route_call_count: context.totalUsed, route_call_budget: context.snapshot().budget.total_limit,
     rejected_attempt_counts: counts, rejected_attempts: rejected, search_diagnostics: context.snapshot(),
     warnings: ["exact_edge_repetition_unavailable", "path_attributes_and_access_unavailable",
-      "geometry_distinctness_is_not_corridor_diversity", "optional_detours_not_promoted_without_repetition_evidence"] });
+      "geometry_distinctness_is_not_corridor_diversity",
+      ...(similarOmitted ? ["similar_loop_alternatives_omitted"] : []), "optional_detours_not_promoted_without_repetition_evidence"] });
 }
 
 function insertCheapest(state, item) {

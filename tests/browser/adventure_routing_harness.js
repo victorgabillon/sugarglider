@@ -120,6 +120,39 @@ export async function runAdventureRoutingHarness() {
       cases.push(`${loop ? "loop" : "open"}/${profile}/subset_nature_canonical_gpx`);
     } finally { r.planner.invalidate(); }
   }
+  {
+    const r = await rig({ loop: true, change: reply => { reply.distance_m *= 1.4; } });
+    try {
+      r.request.distance_objective = { target_m: 2200, tolerance_m: 100, maximum_m: null, priority: "balanced" };
+      const before = JSON.stringify(r.request);
+      const { result } = await r.planner.planAdventure("trail_run", session => session.generate(r.request, r.targets));
+      const control = result.candidates.find(candidate => candidate.id === result.search_diagnostics.details.local_planning.no_poi_control_candidate_id);
+      assert(control?.diagnostics.within_tolerance, "actual routed distance corrects an overlong geometric proposal");
+      assert(r.calls.length <= 8 && r.calls.length > 1, "distance correction stays in the unchanged round budget");
+      assert(r.calls.every(call => samePoint(call.points[0], r.request.start) && samePoint(call.points.at(-1), r.request.start)),
+        "proposal correction cannot move either requested endpoint");
+      equal(JSON.stringify(r.request), before, "measured correction preserves the canonical target and intent");
+      cases.push("bounded_measured_distance_correction_keeps_exact_intent");
+    } finally { r.planner.invalidate(); }
+  }
+  {
+    const r = await rig({ loop: true });
+    try {
+      r.request.candidate_count = 5;
+      r.targets.splice(2); r.request.waypoints.splice(2);
+      for (const [index, coordinate] of [point(.0052, .0052), point(.00525, .0053)].entries()) {
+        r.targets[index].semantic_coordinate = coordinate; r.targets[index].approach.coordinate = coordinate;
+        r.request.waypoints[index].coordinate = coordinate; r.request.waypoints[index].approach_override = coordinate;
+      }
+      const { result } = await r.planner.planAdventure("trail_run", session => session.generate(r.request, r.targets));
+      assert(result.candidates.filter(candidate => candidate.reached_stops.length).length === 1,
+        "two tiny landmark detours on the same loop are one adventure alternative");
+      assert(result.search_diagnostics.warnings.includes("similar_loop_alternatives_omitted")
+        && result.search_diagnostics.warnings.includes("fewer_candidates_than_requested"), "fewer distinct loops explained honestly");
+      assert(result.candidates.some(candidate => !candidate.reached_stops.length), "explicit comparison still retained");
+      cases.push("small_extra_detour_cannot_manufacture_loop_diversity");
+    } finally { r.planner.invalidate(); }
+  }
   for (const count of [1, 5]) {
     const r = await rig();
     try {

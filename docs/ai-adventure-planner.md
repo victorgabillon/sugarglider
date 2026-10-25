@@ -82,7 +82,7 @@ loops and open routes, reusing its native validation and canonical publisher. A
 single adventure session retains the region lease and shared 16-call gateway
 across two 8-call rounds; exact anchors cannot change during revision. Checked
 mapped approaches, explicit omissions, retained no-optional control and one-time
-Nature enrichment are covered by 21 new routing scenarios across all six profiles.
+Nature enrichment are covered by 27 new routing scenarios across all six profiles.
 The retained manual Waypoint and normal-planner harnesses pass. Twelve synthetic
 request/result pairs (36 candidates) also pass Python canonical and neutral
 submitted-candidate validation. This exposed and corrected a narrow mismatch in
@@ -137,7 +137,21 @@ retained/evolved elevation scenarios pass. The shell/Android allowlists include 
 new modules under cache generation v107, with refreshed identities and CI steps.
 All account, routing and terrain replies in these tests are explicitly synthetic.
 
-Restart persistence, real Marly quality/latency, final comprehensive validation,
+A private read-only host benchmark now exercises the existing Marly/Yvelines graph,
+Places, Nature and IGN height files through this pipeline. It uses a curated
+geographic model fixture, not a live account. It exposed overlong random proposal
+corridors. AI search now orders proposal corridors by bounded insertion estimates
+for locally checked places and reuses Auto Tour’s bounded measured-distance
+correction. Exact anchors and the real target remain fixed; the unchanged 8-call
+round and 16-call operation limits still apply. These estimates never establish
+route distance, geometry or landmark arrival. Repeated actual routes, canonical
+validation, clean selected GPX and file integrity are checked privately. Routes
+share corridors. AI loop retention now reuses Auto Tour’s sampled native-line
+diversity proxy to omit near-identical optional loops, while always exposing the
+comparison. The UI explains fewer suitable options when the bounded search cannot
+provide the requested count. This is not an exact graph-overlap measurement. Surface, access and exact repetition remain unknown.
+
+Restart persistence, further Marly quality/diversity work, final comprehensive validation,
 APK audit, review PR and separately authorized live/physical acceptance remain
 outstanding. No AI APK has been installed or offered as complete.
 

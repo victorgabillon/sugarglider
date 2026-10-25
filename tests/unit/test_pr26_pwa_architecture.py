@@ -371,10 +371,10 @@ def test_shared_shell_generation_tracks_v107_cached_assets() -> None:
             "c8a04c972aa15441628d0f50425ce328e14b1882f1668ceee1d899d4c59441e6"
         ),
         "adventure_results.js": (
-            "efeb0397b6ec8a5b534c14d8fdf601654ad8be8284bd5af5fc31d56face8d2d4"
+            "a4f8e41951ed5c8aecbc3fb202c3608a206212e77156c9efc01ffc3792399c99"
         ),
         "local_adventure_search.js": (
-            "6365080c0ae5f82e5be0854632406038b8df3bd395c525b62f69bb37d791da1b"
+            "6208925d7c8843fedddd04f9e6dc9bd58f47b89193d30ff5d2c49c0e990ce7b2"
         ),
         "app.js": ("7ecd492cba75a7f3c7c304b412d2c41262a33a25278df118ed5f022b96987848"),
         "region_screen.js": (
@@ -427,7 +427,7 @@ def test_shared_shell_generation_tracks_v107_cached_assets() -> None:
             "aa6a94b9eee2821d68881b29d84346e8cbb7039a0200db2b0abcb0fd8373c2cd"
         ),
         "local_auto_tour.js": (
-            "9c1453d599e4f5c57c1259a50c402a1e7d2f660ea1af449a3eb6bffb4247ef17"
+            "3f427eacfb2ce4b6a2017aabd50151c12caa06f092e397fc52c951a052dbdbfe"
         ),
         "local_waypoint_route.js": (
             "8b730bfcafe7eaab2f66220d2a4a6abea64e0b1f21013b444d5a0b82e72799e6"

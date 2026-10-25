@@ -27,7 +27,8 @@ export function createAdventureResults({ root, candidatesRoot, onManual, onShowM
     const round = output.chosen;
     element("result-title").textContent = round.proposal.name;
     element("result-summary").textContent = `${round.result.candidates.length} checked route option${round.result.candidates.length === 1 ? "" : "s"}. ${output.refinement_improved ? "The extra suggestion round improved measured preferences." : output.refinement_error ? "The extra model request could not finish; the first valid routes were kept." : "The best available measured results were retained."}`;
-    element("result-limitations").textContent = "Stories are AI text with source labels. Mapped locations and route arrival do not establish current access or historical accuracy. Asphalt, exact retracing and technical difficulty remain unknown.";
+    element("result-limitations").textContent = (round.result.candidates.length < round.request.candidate_count
+      ? "The bounded search found fewer suitable options than requested. Additional suggestions did not yield distinct, feasible routes within the search limit. " : "") + "Stories are AI text with source labels. Mapped locations and route arrival do not establish current access or historical accuracy. Asphalt, exact retracing and technical difficulty remain unknown.";
     for (const button of candidatesRoot.querySelectorAll("[data-candidate-id]")) {
       button.querySelectorAll(".adventure-card-summary").forEach(node => node.remove());
       const assessment = round.assessment.assessments.find(value => value.candidate_id === button.dataset.candidateId);
