@@ -32,6 +32,7 @@ internal class ChatGptConnection(
             return JSONObject().put("accounts",rows).put("selected_account",selectedId ?: JSONObject.NULL)
                 .put("models",JSONArray(catalog.map { JSONObject().put("id",it.slug).put("label",it.label) }))
                 .put("last_failure",lastFailure?.diagnostic() ?: JSONObject.NULL)
+                .put("model_catalog_bytes",http.modelCatalogBytes ?: JSONObject.NULL)
         }
     }
 
@@ -100,14 +101,19 @@ internal class ChatGptConnection(
 
     fun models(expectedEpoch: Long? = null): JSONObject = operation(expectedEpoch) { call, owned ->
         val account = authorized(call,owned)
-        val rows = http.models(call,account.tokens!!.access!!).getJSONArray("models")
-        require(rows.length() <= 100)
-        val models = (0 until rows.length()).map { rows.getJSONObject(it) }.filter { it.optString("visibility") == "list" }.map {
-            ChatGptModel(ChatGptAccountJson.text(it,"slug",128),ChatGptAccountJson.text(it,"display_name",256)).also { model ->
-                require(model.slug.matches(Regex("[A-Za-z0-9._-]+")))
-            }
+        val response = http.models(call,account.tokens!!.access!!)
+        val models = try {
+            val rows = response.getJSONArray("models")
+            require(rows.length() <= 100)
+            (0 until rows.length()).map { rows.getJSONObject(it) }.filter { it.optString("visibility") == "list" }.map {
+                ChatGptModel(ChatGptAccountJson.text(it,"slug",128),ChatGptAccountJson.text(it,"display_name",256)).also { model ->
+                    require(model.slug.matches(Regex("[A-Za-z0-9._-]+")))
+                }
+            }.also { require(it.map { model -> model.slug }.distinct().size == it.size) }
+        } catch (_: Exception) {
+            throw ChatGptException(ChatGptFailureKind.INVALID_RESPONSE,ChatGptHttpStage.MODEL_CATALOG,
+                responseIssue=ChatGptResponseIssue.CATALOG_SCHEMA)
         }
-        require(models.map { it.slug }.distinct().size == models.size)
         synchronized(lock) { requireCurrent(owned); catalog = models }
         status()
     }

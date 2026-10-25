@@ -262,3 +262,14 @@ remaining bounded browser phase; cancellation and destruction release the wait,
 and the callback socket closes immediately after receipt. No network settings,
 TLS trust, endpoints, permissions or secret fallback are changed. A live retest
 is still required to establish that this resolves the observed connection failure.
+
+On the foreground-handoff build, real native sign-in completed: signed identity
+validation passed, the account was retained in protected native storage and plan
+usage was granted. Model discovery then failed at the HTTP decoding boundary;
+no inference had started. The catalog now has a separate 1 MiB input bound for
+provider metadata, with identity/token documents retaining their 256 KiB cap.
+Native diagnostics distinguish media type, size, JSON and catalog-schema failures
+without recording provider bodies, and report the catalog's observed byte count.
+The app still exposes only the ordered visible slug/label list, with at most 100
+entries and no hardcoded model or alternate-format fallback. Physical retest must
+establish whether the previous size bound caused this observed catalog failure.

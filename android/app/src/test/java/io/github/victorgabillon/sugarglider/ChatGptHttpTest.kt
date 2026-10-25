@@ -80,9 +80,26 @@ class ChatGptHttpTest {
             val failure = assertThrows(ChatGptException::class.java) { http.discovery(ChatGptCall()) }
             assertEquals(ChatGptHttpStage.DISCOVERY,failure.stage)
             assertEquals(expected,failure.networkCause)
-            assertEquals(setOf("kind","stage","network_cause"),failure.diagnostic().keys().asSequence().toSet())
+            assertEquals(setOf("kind","stage","network_cause","response_issue"),failure.diagnostic().keys().asSequence().toSet())
             assertFalse(failure.diagnostic().toString().contains("secret"))
             assertNull(failure.cause)
+        }
+    }
+    @Test fun boundsRichCatalogMetadataSeparatelyAndClassifiesDecodeFailures() {
+        val catalog = JSONObject().put("models",org.json.JSONArray()).put("metadata","x".repeat(300_000)).toString()
+        val http = ChatGptHttp(ConnectionFactory { url -> Response(url,body=catalog) })
+        assertEquals(0,http.models(ChatGptCall(),"synthetic-token").getJSONArray("models").length())
+        assertEquals(catalog.toByteArray(Charsets.UTF_8).size,http.modelCatalogBytes)
+        val identityLimit = assertThrows(ChatGptException::class.java) { http.discovery(ChatGptCall()) }
+        assertEquals(ChatGptResponseIssue.BODY_TOO_LARGE,identityLimit.responseIssue)
+        for ((reply,issue) in listOf(
+            Response(URL(ChatGptHttp.MODELS),body="x".repeat(1_048_577)) to ChatGptResponseIssue.BODY_TOO_LARGE,
+            Response(URL(ChatGptHttp.MODELS),body="not-json") to ChatGptResponseIssue.JSON_SYNTAX,
+            Response(URL(ChatGptHttp.MODELS),mime="text/html") to ChatGptResponseIssue.CONTENT_TYPE,
+        )) {
+            val failure = assertThrows(ChatGptException::class.java) { ChatGptHttp(ConnectionFactory { reply }).models(ChatGptCall(),"synthetic-token") }
+            assertEquals(issue,failure.responseIssue)
+            assertEquals(ChatGptHttpStage.MODEL_CATALOG,failure.stage)
         }
     }
 }

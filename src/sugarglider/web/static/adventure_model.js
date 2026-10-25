@@ -29,7 +29,11 @@ export function createAdventureModel({ transport = nativeBridgeTransport, origin
         } });
       if (signal?.aborted) throw new AdventureModelError("cancelled");
       if (!payload) throw new AdventureModelError("network");
-      if (payload.error) throw new AdventureModelError(payload.error);
+      if (payload.error) {
+        const error = new AdventureModelError(payload.error);
+        if (action === "models" && payload.error === "invalid_response") error.message = "Your ChatGPT account is connected, but its model list could not be read. Try Refresh available models.";
+        throw error;
+      }
       if (!payload.result) throw new AdventureModelError("invalid_response");
       return payload.result;
     } finally { signal?.removeEventListener("abort", abort); }

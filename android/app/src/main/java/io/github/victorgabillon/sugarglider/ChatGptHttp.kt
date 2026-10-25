@@ -10,13 +10,15 @@ import org.json.JSONObject
 internal enum class ChatGptFailureKind { CANCELLED, NETWORK, AUTH_EXPIRED, AUTH_TIMEOUT, USAGE_LIMIT, UNSUPPORTED, INVALID_RESPONSE, STORAGE, BROWSER_UNAVAILABLE }
 internal enum class ChatGptHttpStage { DISCOVERY, IDENTITY_KEYS, TOKEN_EXCHANGE, REVOCATION, MODEL_CATALOG, INFERENCE }
 internal enum class ChatGptNetworkCause { DNS, TLS, TIMEOUT, CONNECT, IO, HTTP_STATUS }
+internal enum class ChatGptResponseIssue { CONTENT_TYPE, BODY_TOO_LARGE, JSON_SYNTAX, CATALOG_SCHEMA }
 // Only fixed enums cross the diagnostic boundary, never provider bodies,
 // exception messages, URLs, headers or token forms.
 internal class ChatGptException(val kind: ChatGptFailureKind, val stage: ChatGptHttpStage? = null,
-    val networkCause: ChatGptNetworkCause? = null) : IllegalStateException(kind.name) {
+    val networkCause: ChatGptNetworkCause? = null, val responseIssue: ChatGptResponseIssue? = null) : IllegalStateException(kind.name) {
     fun diagnostic(): JSONObject = JSONObject().put("kind",kind.name.lowercase())
         .put("stage",stage?.name?.lowercase() ?: JSONObject.NULL)
         .put("network_cause",networkCause?.name?.lowercase() ?: JSONObject.NULL)
+        .put("response_issue",responseIssue?.name?.lowercase() ?: JSONObject.NULL)
 }
 
 /** Owns one foreground operation's connections; closing aborts blocked network reads. */
@@ -39,13 +41,18 @@ internal class ChatGptCall(private val nowNanos: () -> Long = System::nanoTime) 
 
 /** Fixed official endpoints only; no redirects, cookies, retries or custom TLS trust. */
 internal class ChatGptHttp(private val connections: ConnectionFactory = ConnectionFactory { it.openConnection() as HttpURLConnection }) {
+    var modelCatalogBytes: Int? = null
+        private set
     fun discovery(call: ChatGptCall): JSONObject = json(call, DISCOVERY)
     fun jwks(call: ChatGptCall): JSONObject = json(call, JWKS)
     fun exchange(call: ChatGptCall, form: String): JSONObject = json(call, TOKEN, form.toByteArray(Charsets.UTF_8), "application/x-www-form-urlencoded")
     fun revoke(call: ChatGptCall, form: String) {
         request(call, REVOKE, form.toByteArray(Charsets.UTF_8), "application/x-www-form-urlencoded", null) { input -> readBounded(input, 4096); Unit }
     }
-    fun models(call: ChatGptCall, token: String): JSONObject = json(call, MODELS, bearer = token)
+    fun models(call: ChatGptCall, token: String): JSONObject {
+        modelCatalogBytes = null
+        return json(call, MODELS, bearer = token)
+    }
     fun infer(call: ChatGptCall, token: String, payload: JSONObject): ChatGptCompletion {
         require(payload.optBoolean("stream") && payload.has("store") && !payload.getBoolean("store"))
         val body = payload.toString().toByteArray(Charsets.UTF_8)
@@ -56,9 +63,15 @@ internal class ChatGptHttp(private val connections: ConnectionFactory = Connecti
     }
     private fun json(call: ChatGptCall, endpoint: String, body: ByteArray? = null, contentType: String = "application/json", bearer: String? = null): JSONObject =
         request(call, endpoint, body, contentType, bearer) { input ->
-            try { JSONObject(readBounded(input, 262_144).toString(Charsets.UTF_8)) }
+            try {
+                // Catalog entries may carry substantial unused provider metadata.
+                // Identity/token documents retain their smaller independent cap.
+                val bytes = readBounded(input, if (endpoint == MODELS) 1_048_576 else 262_144)
+                if (endpoint == MODELS) modelCatalogBytes = bytes.size
+                JSONObject(bytes.toString(Charsets.UTF_8))
+            }
             catch (error: ChatGptException) { throw error }
-            catch (_: Exception) { throw ChatGptException(ChatGptFailureKind.INVALID_RESPONSE) }
+            catch (_: Exception) { throw ChatGptException(ChatGptFailureKind.INVALID_RESPONSE,responseIssue=ChatGptResponseIssue.JSON_SYNTAX) }
         }
     private fun <T> request(call: ChatGptCall, endpoint: String, body: ByteArray?, contentType: String, bearer: String?, read: (InputStream) -> T): T {
         require(endpoint in setOf(DISCOVERY, JWKS, TOKEN, REVOKE, MODELS, RESPONSES))
@@ -101,7 +114,9 @@ internal class ChatGptHttp(private val connections: ConnectionFactory = Connecti
                 else -> throw ChatGptException(ChatGptFailureKind.NETWORK,stage,ChatGptNetworkCause.HTTP_STATUS)
             }
             val type = connection.contentType?.substringBefore(';')?.trim()?.lowercase()
-            require(endpoint == REVOKE || type == if (endpoint == RESPONSES) "text/event-stream" else "application/json") { "Invalid OpenAI response type." }
+            if (endpoint != REVOKE && type != if (endpoint == RESPONSES) "text/event-stream" else "application/json") {
+                throw ChatGptException(ChatGptFailureKind.INVALID_RESPONSE,stage,responseIssue=ChatGptResponseIssue.CONTENT_TYPE)
+            }
             return connection.inputStream.use { raw ->
                 val bounded = object : FilterInputStream(raw) {
                     override fun read(): Int { checkCurrent(); return super.read() }
@@ -110,7 +125,7 @@ internal class ChatGptHttp(private val connections: ConnectionFactory = Connecti
                 }
                 read(bounded)
             }
-        } catch (error: ChatGptException) { throw ChatGptException(error.kind,error.stage ?: stage,error.networkCause) }
+        } catch (error: ChatGptException) { throw ChatGptException(error.kind,error.stage ?: stage,error.networkCause,error.responseIssue) }
         catch (error: java.io.IOException) { throw networkFailure(call,stage,error) }
         catch (_: Exception) { throw ChatGptException(if (call.cancelled()) ChatGptFailureKind.CANCELLED else ChatGptFailureKind.INVALID_RESPONSE,stage) }
         finally { call.detach(connection) }
@@ -132,7 +147,7 @@ internal class ChatGptHttp(private val connections: ConnectionFactory = Connecti
             val count = input.read(buffer, 0, minOf(buffer.size, maximum + 1 - output.size()))
             if (count < 0) break
             output.write(buffer, 0, count)
-            require(output.size() <= maximum) { "OpenAI response too large." }
+            if (output.size() > maximum) throw ChatGptException(ChatGptFailureKind.INVALID_RESPONSE,responseIssue=ChatGptResponseIssue.BODY_TOO_LARGE)
         }
         return output.toByteArray()
     }
