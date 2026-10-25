@@ -147,12 +147,68 @@ export async function runAdventureControllerHarness() {
   {
     const r = await setup();
     try {
-      await rejected(r.controller.run({ ...r.input, context: { ...r.input.context, start: null } }), "adventure_start_required");
-      equal(r.calls.length, 0, "missing Start never discloses a guessed position");
+      await rejected(r.controller.run({ ...r.input, context: { ...r.input.context, reference: null } }), "adventure_context_required");
+      equal(r.calls.length, 0, "missing region never starts a model request");
       r.proposal.wishes[1].importance = "hard";
       await rejected(r.controller.run(r.input), "adventure_unsupported_hard_preference");
       equal(r.nativeCalls.length, 0, "unsupported hard wish requires review before routing");
-      cases.push("missing_start_and_unsupported_hard_wish_require_review");
+      cases.push("missing_region_and_unsupported_hard_wish_require_review");
+    } finally { r.controller.cancel(); r.planner.invalidate(); }
+  }
+  for (const kinds of [["start"], ["end"], ["start", "end"]]) {
+    let reviewed = false;
+    const r = await setup({ confirmProposal: async review => {
+      assert(r.nativeCalls.length === 0, 'inferred endpoints cannot route before review');
+      for (const kind of kinds) {
+        assert(review[`${kind}Resolution`].evidence === 'model_coordinate_unverified', 'model coordinate is not relabelled as locally verified');
+        assert(['lat','lon','name'].every(key => review.context[kind][key] === r.proposal.intent[kind][key]), 'review displays the actual proposed coordinate');
+      }
+      reviewed = true; return { confirmedMandatoryIds: [] };
+    } });
+    try {
+      const context = { ...r.input.context };
+      for (const kind of kinds) context[kind] = null;
+      const output = await r.controller.run({ ...r.input, context, refine: false });
+      assert(reviewed && output.chosen.result.candidates.length > 0, 'reviewed inferred endpoints produce actual routed candidates');
+      const sent = JSON.parse(r.calls[0].input).planning_context;
+      for (const kind of kinds) {
+        assert(sent[kind] === null && sent[`${kind}_is_fixed`] === false, 'missing endpoints are sent honestly without GPS or centre fallback');
+        assert(['lat','lon','name'].every(key => output.chosen.request[kind][key] === r.proposal.intent[kind][key]), 'canonical request preserves the reviewed endpoint');
+      }
+      assert(output.routing_diagnostics.budget.total_used <= 8 && r.calls.length === 1, 'endpoint resolution adds no model or routing calls');
+      cases.push(`inferred_${kinds.join('_and_')}_requires_review_before_routing`);
+    } finally { r.controller.cancel(); r.planner.invalidate(); }
+  }
+  {
+    const r = await setup({ confirmProposal: async () => { throw Error('Unresolved endpoint must not reach review'); } });
+    try {
+      r.proposal.intent.start = null;
+      await rejected(r.controller.run({ ...r.input, context: { ...r.input.context, start: null }, refine: false }), 'adventure_start_required');
+      assert(r.calls.length === 1 && r.nativeCalls.length === 0, 'missing area asks for clarification before any route call');
+      cases.push('missing_start_description_does_not_invent_a_location');
+    } finally { r.controller.cancel(); r.planner.invalidate(); }
+  }
+  {
+    let checked = false;
+    const r = await setup({ confirmProposal: async ({ startResolution }) => {
+      checked = true; assert(startResolution.evidence === 'unique_exact_local_name', 'named Start is resolved in the installed index');
+      assert(r.nativeCalls.length === 0, 'named Start reviewed before routing');return { confirmedMandatoryIds: [] };
+    } });
+    try {
+      r.proposal.intent.start = { name: 'Fixture 2', lat: null, lon: null };
+      const output = await r.controller.run({ ...r.input, context: { ...r.input.context, start: null }, refine: false });
+      assert(checked && output.chosen.request.start.name === 'Fixture 2', 'resolved Start is canonical');
+      outputs.push(output);cases.push('named_start_resolved_with_original_proposal_retained');
+    } finally { r.controller.cancel(); r.planner.invalidate(); }
+  }
+  {
+    const r = await setup({ confirmProposal: async () => ({ confirmedMandatoryIds: [] }) });
+    try {
+      r.proposal.intent.topology = 'loop';r.proposal.intent.end = null;
+      const output = await r.controller.run({ ...r.input, context: { ...r.input.context, start: null, end: null }, refine: false });
+      assert(output.chosen.request.topology === 'loop' && output.chosen.request.end === null && output.chosen.endpoint_resolution.end === null,
+        'inferred loop Start never invents a separate End');
+      cases.push('inferred_loop_returns_to_reviewed_start');
     } finally { r.controller.cancel(); r.planner.invalidate(); }
   }
   {

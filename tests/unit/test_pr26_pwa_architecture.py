@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v108_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v109_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v108"
+    assert generation.group(1) == "v109"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -332,7 +332,7 @@ def test_shared_shell_generation_tracks_v108_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "0a0c7ca64612a6377e2095f6711d587201cf38cb6388df6eaa76df5d239433ff"
+            "1e8dbc91f97635119c122015feeff4383a0c36d5d38c5d04314bf1257a876127"
         ),
         "location_search.js": (
             "635f5aaf5603cadbc3b77f035055251e54358b16a831d927e51fe6c44c031c36"
@@ -350,16 +350,16 @@ def test_shared_shell_generation_tracks_v108_cached_assets() -> None:
             "03c369c11d72f1069e13138552f4ca37642489a44d085b80b778cdd1c653c03a"
         ),
         "adventure_proposal.js": (
-            "d4429584a94cde2f31e12639fae7392e1b0aca68b16669fcffa0b93400fa1cdc"
+            "acf1263ec813760b8b72be7b959db16a14ba99b631255ad90db840ee4edc88e5"
         ),
         "adventure_grounding.js": (
-            "8b879c0c2348b6fe64d5e85de780ae941e6be0bf1099b6550240e731f3a0520f"
+            "4a9e173c59c7fbc3054237aff141bbc758eb0b01fccf9c8b56563d9cfac95d6a"
         ),
         "adventure_assessment.js": (
             "b43fee68ac2ce4c550b5a2aea7a0e72dbbae6cd92d4aeb91537f932a30d919a0"
         ),
         "adventure_controller.js": (
-            "af6bcff6a5db8cb87ad462a459dd90892d5e64391bbd1861c53f2563d55b2a27"
+            "a22cc3a260ec652e92ee3dd038a5aa91a582f433a87aec764bf100f67c62f00c"
         ),
         "adventure_intent.js": (
             "0376d810ec62f80a7eca947bc34362af4d5b68fd78d9bc8086ad2143e4dcf067"
@@ -371,7 +371,7 @@ def test_shared_shell_generation_tracks_v108_cached_assets() -> None:
             "a5ea6a98c7ed602b9ada993fb689e9f57e77027b6422dcd830616a83915c0d11"
         ),
         "adventure_dialog.js": (
-            "c8a04c972aa15441628d0f50425ce328e14b1882f1668ceee1d899d4c59441e6"
+            "93661b30f750695286afb3b8a7aec1ee9099287564e1981b85637d90e80b72ad"
         ),
         "adventure_results.js": (
             "f1ceb73408b7fee7cb47fd56da6b72e5a4cd8e2294efc27bec4d209ba8a332c9"
@@ -380,7 +380,7 @@ def test_shared_shell_generation_tracks_v108_cached_assets() -> None:
             "fd1610e5d2b3655fe7187561921bb2f69a153c3522749257efb788a40898597c"
         ),
         "adventure_snapshot_validation.js": (
-            "c8034b81b2abe00481e74e01ce7417213ea7a9fad576d5f2429afd0483ee38f2"
+            "b78d2a142055d15293ec4a64a1ec0839ceb7025533d9c394ce69136d119db1b7"
         ),
         "adventure_snapshot_worker.js": (
             "212e4c0a9cd53aec3b19384119d2921a27293eb054cb9e0ce399c10edd933d3b"
@@ -388,7 +388,7 @@ def test_shared_shell_generation_tracks_v108_cached_assets() -> None:
         "local_adventure_search.js": (
             "a8bf92047b989491774fefe8857e38d097c7ad9487a6090667eddeea2a829a40"
         ),
-        "app.js": ("33a0cb98e1f0de0ef9004f831ac4bb6f17a1544b33590507f718862f3b4588fc"),
+        "app.js": ("5458a3b7ff4ba3368a332a0fddef136c7395eef58fdf474b6e5c864a077c5bf8"),
         "region_screen.js": (
             "bc2253c1950d5c1ead08feb3d08bbd830e05c401b405fef65bb2b8a9100425a1"
         ),
@@ -420,11 +420,11 @@ def test_shared_shell_generation_tracks_v108_cached_assets() -> None:
             "aa3c203a3042fb812c1088adc60fa3f07585ef014aec9a8584895e660862a7eb"
         ),
         "state.js": (
-            "83b9cb8f300cb2dbc2270178247c92496c4a6821cfa27538e41a37331a55299c"
+            "ae7c5e7acc9d5e91957c275b227957a95855aee7853f15178858a0c52c0cc1c3"
         ),
         "map.js": ("d5e48c46f88466ebfea387a096c603641b7835f9b33caf10e718fe24e39220ea"),
         "styles.css": (
-            "606588d1eae3d488433c1aea602974ac078d8bdd837e45c925dcd7eadd882593"
+            "9b0e01237dbd46e8fa80c6bf1fc24c817381456175a2be976f52b1425bb08d02"
         ),
         "planner_profile.js": (
             "4183a1318f3aa49df52ca0a46329caaa4f6eee1bec1b49612c446562b1b0030a"

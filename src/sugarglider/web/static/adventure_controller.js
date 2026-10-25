@@ -1,5 +1,5 @@
 import { ADVENTURE_INSTRUCTIONS, ADVENTURE_SCHEMA, parseAdventureProposal, adventureWishCapabilities } from "./adventure_proposal.js";
-import { groundAdventurePlaces, resolveAdventureEnd } from "./adventure_grounding.js";
+import { groundAdventurePlaces, resolveAdventureEndpoint } from "./adventure_grounding.js";
 import { AdventureIntentError, buildAdventureIntent } from "./adventure_intent.js";
 import { assessAdventure, compactAdventureAssessment, compareAdventureAssessments, adventureMeasuredImprovement } from "./adventure_assessment.js";
 import { deepFreeze } from "./local_candidate_evaluator.js";
@@ -16,8 +16,8 @@ export function createAdventureController({ model, planner, confirmProposal = nu
   function run({ prompt, modelId, context, research = false, structured = true, refine = true }, signal) {
     if (active) return Promise.reject(new AdventureIntentError("adventure_busy", "The previous adventure is still finishing."));
     if (typeof prompt !== "string" || prompt.trim().length < 3 || prompt.length > 8000
-      || typeof modelId !== "string" || !modelId || !context?.start || !context.reference) {
-      return Promise.reject(new AdventureIntentError("adventure_start_required", "Choose a Start and an installed region, then describe your adventure."));
+      || typeof modelId !== "string" || !modelId || !context?.reference) {
+      return Promise.reject(new AdventureIntentError("adventure_context_required", "Choose an installed region and describe your adventure."));
     }
     if (signal?.aborted) return Promise.reject(cancelled());
     const input = deepFreeze(structuredClone(context)), abort = new AbortController(), owned = ++generation;
@@ -50,7 +50,8 @@ export function createAdventureController({ model, planner, confirmProposal = nu
     const promise = (async () => {
       progress("understanding");
       const first = await infer({ user_request: prompt.trim(), planning_context: {
-        start: input.start, end: input.end ?? null, activity: input.profile ?? input.suggested_profile ?? null, activity_is_fixed: Boolean(input.profile),
+        start: input.start ?? null, end: input.end ?? null, start_is_fixed: Boolean(input.start), end_is_fixed: Boolean(input.end),
+        activity: input.profile ?? input.suggested_profile ?? null, activity_is_fixed: Boolean(input.profile),
         exact_points: (input.hardWaypoints ?? []).map(({ id, name, coordinate }) => ({ id, name, coordinate })),
         region: { region_id: input.reference.region_id, bounds: input.reference.bounds },
         available: { offline_routing: true, mapped_nature: true, exact_repetition: false, native_surface: false, current_access: false } } }, "initial");
@@ -63,16 +64,23 @@ export function createAdventureController({ model, planner, confirmProposal = nu
           || session.reference.pack_id !== input.reference.pack_id) throw cancelled();
         if (!session.data) throw new AdventureIntentError("adventure_places_unavailable", "The selected region's Places data is unavailable.");
         progress("checking_places");
-        let endResolution = null;
+        let startResolution = null, endResolution = null;
+        if (!input.start) {
+          startResolution = await resolveAdventureEndpoint(original.intent.start, { session: session.data, reference: session.reference, signal: abort.signal });
+          current();
+          if (!startResolution) throw new AdventureIntentError("adventure_start_required", "Where would you like to start? Describe a more precise place or choose Start on the map.");
+          original = deepFreeze({ ...original, intent: { ...original.intent, start: startResolution.coordinate } });
+        }
         if (!input.end && original.intent.topology === "point_to_point") {
-          endResolution = await resolveAdventureEnd(original.intent.end, { session: session.data, reference: session.reference, signal: abort.signal });
+          endResolution = await resolveAdventureEndpoint(original.intent.end, { session: session.data, reference: session.reference, signal: abort.signal });
           current();
           if (!endResolution) throw new AdventureIntentError("adventure_end_required", "The destination could not be resolved unambiguously in this region. Choose End on the map, then try again.");
-          if (!confirmProposal) throw new AdventureIntentError("adventure_endpoint_review_required", "Review the locally found End before routing.");
           original = deepFreeze({ ...original, intent: { ...original.intent, end: endResolution.coordinate } });
         }
+        if ((startResolution || endResolution) && !confirmProposal) throw new AdventureIntentError("adventure_endpoint_review_required", "Review the proposed Start and End before routing.");
+        const start = input.start ?? startResolution.coordinate, end = input.end ?? endResolution?.coordinate ?? null;
         const grounded = await groundAdventurePlaces(original, { session: session.data, reference: session.reference,
-          start: input.start, citations: first.response.citations, researched: first.response.researched, signal: abort.signal });
+          start, citations: first.response.citations, researched: first.response.researched, signal: abort.signal });
         current();
         let confirmation = { confirmedMandatoryIds: [] };
         const unsupportedHard = adventureWishCapabilities(original, { nature: true, places: true })
@@ -80,14 +88,14 @@ export function createAdventureController({ model, planner, confirmProposal = nu
         if (confirmProposal) {
           progress("reviewing");
           confirmation = await confirmProposal(deepFreeze({ proposal: original, grounding: grounded,
-            context: endResolution ? { ...input, end: endResolution.coordinate } : input, unsupportedHard, endResolution }), abort.signal);
+            context: { ...input, start, end }, unsupportedHard, startResolution, endResolution }), abort.signal);
           current();
           if (!confirmation) throw cancelled();
         }
         if (unsupportedHard.length && !confirmation.acceptUnknownHardPreferences) {
           throw new AdventureIntentError("adventure_unsupported_hard_preference", "Some required preferences cannot be verified. Review these limitations before routing.");
         }
-        const options = { start: input.start, end: input.end ?? endResolution?.coordinate ?? null, hardWaypoints: input.hardWaypoints ?? [],
+        const options = { start, end, hardWaypoints: input.hardWaypoints ?? [],
           endpointSnapPolicy: input.endpointSnapPolicy, seed: input.seed ?? 0, confirmedMandatoryIds: confirmation.confirmedMandatoryIds ?? [] };
         const initialIntent = buildAdventureIntent(original, grounded, options);
         async function searchRound(proposal, grounding, intent) {
@@ -108,7 +116,8 @@ export function createAdventureController({ model, planner, confirmProposal = nu
           // Never promote an optional detour when its canonical control is lost.
           const controlId = result.search_diagnostics.details.local_planning.no_poi_control_candidate_id;
           if (!result.candidates.some(candidate => candidate.id === controlId)) result.candidates = [];
-          const round = deepFreeze({ proposal, grounding, ...intent, result, assessment, elevations, endpoint_resolution: endResolution });
+          const round = deepFreeze({ proposal, grounding, ...intent, result, assessment, elevations,
+            endpoint_resolution: { start: startResolution, end: endResolution } });
           rounds.push(round);
           return round;
         }
@@ -127,7 +136,7 @@ export function createAdventureController({ model, planner, confirmProposal = nu
             if (proposal.places.length > 20) throw new Error("The revised place set exceeds its limit.");
             progress("checking_places");
             const grounding = await groundAdventurePlaces(proposal, { session: session.data, reference: session.reference,
-              start: input.start, citations: [...(first.response.citations ?? []), ...(revision.response.citations ?? [])],
+              start, citations: [...(first.response.citations ?? []), ...(revision.response.citations ?? [])],
               researched: first.response.researched || revision.response.researched, signal: abort.signal });
             current();
             const intent = buildAdventureIntent(proposal, grounding, { ...options,

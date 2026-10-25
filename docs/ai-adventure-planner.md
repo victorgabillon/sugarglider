@@ -323,3 +323,32 @@ Actual usage and research citations come from the completed response/items.
 See the [Responses streaming event definitions](https://developers.openai.com/api/reference/resources/responses/streaming-events).
 A full live app acceptance still requires the corrected APK; the diagnostic
 comparison is not a claim that the previous app accepted a complete adventure.
+
+
+## Optional Start and End
+
+The AI entry point accepts an installed region with neither endpoint chosen. The
+user can supply either endpoint in typed or transcribed speech, keep a manually
+chosen endpoint, explicitly release it for inference, or choose it on the map
+before or during planning. A map edit cancels and drains the current operation,
+then reopens the same description without automatically requesting inference.
+Cancelling placement clears that return action. The manual draft stays separate
+from inferred endpoints. No map centre, GPS fix or default coordinate is supplied
+in place of a missing Start.
+
+Both endpoints use one bounded local-name resolver. A unique exact local name can
+resolve a proposed name; duplicate names remain ambiguous even if the model gives
+a coordinate. A conflicting coordinate or location outside coverage fails. An
+in-region AI coordinate without a local-name match remains explicitly unverified.
+Every inferred endpoint requires review before any route call, preserving both
+its original proposal and resolved coordinate in the immutable recovery snapshot.
+Unresolved endpoints ask for a more precise place or a map choice. Loops return to
+Start; the strict response schema and local parser both reject a separate End.
+
+The separately authorized completed-stream staging build subsequently accepted a
+real authenticated short response in 2.699 seconds wall time (32 input and 10
+output tokens). A normal researched Marly adventure then reached local validation
+but was rejected because the returned loop included a separate End. No candidate
+or GPX was accepted from that response. The original 23.172 km manual selection
+and byte-identical GPX were restored. This establishes completed native inference,
+while full live AI-to-route/GPX and physical speech acceptance remain outstanding.

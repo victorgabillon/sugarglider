@@ -114,9 +114,41 @@ export async function runAdventureUiHarness() {
       await until(() => !f.byId("review").hidden, "End review");
       assert(f.byId("required").textContent.includes("End found on this device: Fixture 2") && r.nativeCalls.length === 0, "local destination needs explicit review before routing");
       f.byId("confirm").click(); await until(() => Boolean(output), "confirmed local End");
-      assert(output.chosen.request.end.name === "Fixture 2" && output.chosen.endpoint_resolution.evidence === "unique_exact_local_name", "End comes from the local index, not guessed coordinates");
+      assert(output.chosen.request.end.name === "Fixture 2" && output.chosen.endpoint_resolution.end.evidence === "unique_exact_local_name", "End comes from the local index, not guessed coordinates");
       cases.push("named_end_resolved_locally_and_reviewed_before_routing");
     } finally { dialog.clear(); r.planner.invalidate(); f.element.remove(); }
+  }
+  {
+    const r = await setup(), f = await frame(); let output = null;
+    r.input.context.start = null;r.input.context.end = null;
+    const dialog = initializeAdventureDialog({ root:f.root, launcher:f.doc.getElementById('plan-with-ai'), planner:r.planner,
+      model:accounts(r.model),speech:{cancel(){}},elevation:{measure:async()=>({}),clear(){}},
+      getContext:async()=>r.input.context,onChooseStart(){},onChooseEnd(){},onResult:value=>{output=value;} });
+    try {
+      await dialog.open();f.byId('text').value='Run from the described Start to the described End';f.byId('text').dispatchEvent(new Event('input'));f.byId('refine').checked=false;
+      await until(()=>!f.byId('generate').disabled,'optional endpoints allow Generate');
+      assert(f.byId('start').textContent.includes('from your description')&&r.calls.length===0,'opening without endpoints requests no location or model');
+      f.byId('generate').click();await until(()=>!f.byId('review').hidden,'both endpoint proposals reviewed');
+      assert(f.byId('required').textContent.includes('Proposed Start')&&f.byId('required').textContent.includes('Proposed End')&&r.nativeCalls.length===0,'unverified coordinates are labelled and do not route yet');
+      assert(!f.byId('choose-start').disabled&&!f.byId('choose-end').disabled,'map selection remains available during endpoint review');
+      f.byId('confirm').click();await until(()=>Boolean(output),'reviewed endpoints routed');
+      cases.push('no_manual_endpoints_text_or_speech_can_propose_both_for_review');
+    }finally{dialog.clear();r.planner.invalidate();f.element.remove();}
+  }
+  {
+    const r=await setup(),f=await frame();let output=null;
+    const dialog=initializeAdventureDialog({root:f.root,launcher:f.doc.getElementById('plan-with-ai'),planner:r.planner,
+      model:accounts(r.model),speech:{cancel(){}},elevation:{measure:async()=>({}),clear(){}},getContext:async()=>r.input.context,
+      onChooseStart(){},onChooseEnd(){},onResult:value=>{output=value;}});
+    try{
+      await dialog.open();f.byId('text').value='Use places from my description';f.byId('text').dispatchEvent(new Event('input'));f.byId('refine').checked=false;
+      await until(()=>!f.byId('generate').disabled,'chosen endpoint controls ready');
+      f.byId('keep-start').click();f.byId('keep-end').click();f.byId('generate').click();
+      await until(()=>!f.byId('review').hidden,'explicitly released manual endpoints reviewed');f.byId('confirm').click();await until(()=>Boolean(output),'new reviewed endpoints accepted');
+      const sent=JSON.parse(r.calls[0].input).planning_context;
+      assert(sent.start===null&&sent.end===null&&r.input.context.start!==null&&r.input.context.end!==null,'choosing inference leaves the manual planner untouched');
+      cases.push('explicit_prompt_endpoint_choice_preserves_manual_draft');
+    }finally{dialog.clear();r.planner.invalidate();f.element.remove();}
   }
   {
     const r = await setup(), f = await frame(); let contextCalls = 0, finish;
@@ -133,6 +165,23 @@ export async function runAdventureUiHarness() {
       assert(r.calls.length === 0 && r.nativeCalls.length === 0, "cancel before context cannot start model work");
       cases.push("cancel_before_region_context_never_starts_model");
     } finally { dialog.clear(); r.planner.invalidate(); f.element.remove(); }
+  }
+  {
+    const r=await setup(),f=await frame();let contextCalls=0,finish,mapChoices=0;const busy=[];
+    const dialog=initializeAdventureDialog({root:f.root,launcher:f.doc.getElementById('plan-with-ai'),planner:r.planner,
+      model:accounts(r.model),speech:{cancel(){}},elevation:{clear(){}},onBusy:value=>busy.push(value),
+      getContext:()=>++contextCalls===2?new Promise(resolve=>{finish=resolve;}):Promise.resolve(r.input.context),
+      onChooseStart(){assert(busy.at(-1)===false,'map selection waits for the cancelled operation to drain');mapChoices++;r.input.context.start={name:'New map Start',lat:.006,lon:.005};},
+      onChooseEnd(){},onResult(){throw Error('Cancelled endpoint change must not commit');}});
+    try{
+      await dialog.open();f.byId('text').value='Keep this description while I choose the Start';f.byId('text').dispatchEvent(new Event('input'));
+      await until(()=>!f.byId('generate').disabled,'ready to start');f.byId('generate').click();await until(()=>Boolean(finish),'context pending');
+      f.byId('choose-start').click();assert(!f.root.open&&mapChoices===0,'map choice cancels before taking over planner controls');
+      finish(r.input.context);await until(()=>mapChoices===1,'cancel drained before map choice');
+      await dialog.open();await until(()=>!f.byId('generate').disabled,'resumed after map selection');
+      assert(f.byId('text').value==='Keep this description while I choose the Start'&&f.byId('start').textContent.includes('New map Start')&&r.calls.length===0&&r.nativeCalls.length===0,'description and updated manual endpoint return without hidden generation');
+      cases.push('choose_endpoint_during_planning_drains_and_preserves_description');
+    }finally{dialog.clear();r.planner.invalidate();f.element.remove();}
   }
   return cases;
 }

@@ -3,7 +3,7 @@ import { createLocalRegionData } from "../../src/sugarglider/web/static/local_re
 import { setup } from "./adventure_controller_harness.js";
 import { createAdventureSnapshotRepository } from "../../src/sugarglider/web/static/adventure_snapshot.js";
 import { openPwaStore, createMemoryPwaStore, PWA_STORES } from "../../src/sugarglider/web/static/pwa_store.js";
-import { encodeAdventureSnapshot } from "../../src/sugarglider/web/static/adventure_snapshot_validation.js";
+import { encodeAdventureSnapshot, decodeAdventureSnapshot } from "../../src/sugarglider/web/static/adventure_snapshot_validation.js";
 import { exportCanonicalCandidate } from "../../src/sugarglider/web/static/local_gpx_export.js";
 const assert = (value, message) => { if (!value) throw Error(message); };
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -11,6 +11,17 @@ export async function runAdventureSnapshotHarness() {
   const r = await setup(), cases = [];
   let store;
   try {
+    const inferred = await setup({ confirmProposal: async () => ({ confirmedMandatoryIds: [] }) });
+    try {
+      const value = await inferred.controller.run({ ...inferred.input, context: { ...inferred.input.context, start:null, end:null }, refine:false });
+      const encoded = await encodeAdventureSnapshot(value), selected = value.chosen.result.candidates[0].id;
+      const before = inferred.nativeCalls.length;
+      const restored = await decodeAdventureSnapshot({ ...encoded, selected_id:selected });
+      assert(same(restored.output,value) && inferred.nativeCalls.length===before,'reviewed endpoint evidence and exact canonical endpoints survive recovery without routing');
+      const wrong = structuredClone(value);wrong.rounds[0].endpoint_resolution.start.coordinate.lat += .001;wrong.chosen=wrong.rounds[0];
+      let rejected=false;try{await encodeAdventureSnapshot(wrong)}catch{rejected=true}assert(rejected,'inferred endpoint evidence cannot move away from the stored request');
+      cases.push('inferred_endpoint_evidence_restores_exactly_and_rejects_moved_coordinates');
+    } finally { inferred.controller.cancel();inferred.planner.invalidate(); }
     const output = await r.controller.run(r.input);
     const selected = output.chosen.result.candidates.at(-1), id = selected.id;
     const encoded = await encodeAdventureSnapshot(output);

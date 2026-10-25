@@ -92,7 +92,7 @@ import {
   renderPwaStatus,
 } from "./pwa_view.js";
 import { createSavedRoute, deleteSavedRoute, getSavedRoute, savedRouteShareUrl, shareSavedRoute, sharedRouteSlug } from "./saved_routes.js";
-import { assignRouteEndpoint, currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, generationAvailability, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, readPlannerOptionsFromControls, renderEndpointTopologyControls, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, setRouteTopology, state, switchPlanningMode } from "./state.js";
+import { assignRouteEndpoint, currentAdventureContext, currentDisplayContext, currentDisplayedCandidates, currentPlanRequest, currentSearchDiagnostics, generationAvailability, invalidateCandidates, isImmutableSnapshotDisplay, isSavedRouteSnapshotDisplay, pointDisplayName, readPlannerOptionsFromControls, renderEndpointTopologyControls, requestedPlaceIdentifier, saveActivePoints, selectedCandidate, setRouteTopology, state, switchPlanningMode } from "./state.js";
 import {
   initializeTrailProfile,
   subscribeTrailProfile,
@@ -145,6 +145,7 @@ const withPlanningRegion = createRegionalPlanningContext({ versions: regionVersi
 const localPlanner = isBundledAndroidApp()
   ? createLocalPlanner({ withRegion: withPlanningRegion }) : null;
 let adventureDialog = null, adventurePlanning = false, manualAdventureSnapshot = null, pendingAdventureSnapshot = null;
+let adventureMapEndpoint = null;
 let adventureSnapshots = null, forgottenAdventureOutput = null, adventureRestoreEpoch = 0;
 const adventureElevationViews = new Map();
 const adventureResults = createAdventureResults({ root: byId("adventure-result"), candidatesRoot: byId("candidate-list"),
@@ -192,15 +193,14 @@ function returnToManualPlan({ refresh = true } = {}) {
 }
 async function adventureContext() {
   if (!localPlanner || regionPlanningError) throw new Error(regionFailureMessage(regionPlanningError ?? "regional_required"));
-  const request = state.adventureDisplay ? state.generationSourceRequest : currentPlanRequest();
-  if (!request?.start) throw new Error("Choose a Start on the map before generating your adventure.");
-  const hardWaypoints = request.kind === "auto_tour" ? request.hard_waypoints
-    : request.waypoints.filter(point => point.constraint_strength === "exact");
-  if (hardWaypoints.length > 14) throw new Error("This adventure can preserve up to 14 exact intermediate points. Review your required points first.");
+  const request = state.adventureDisplay ? state.generationSourceRequest : null;
+  const context = request ? { start: request.start, end: request.end,
+    hardWaypoints: request.waypoints.filter(point => point.constraint_strength === "exact"),
+    suggested_profile: request.routing_profile, seed: request.seed, endpointSnapPolicy: request.endpoint_snap_policy }
+    : currentAdventureContext();
+  if (context.hardWaypoints.length > 14) throw new Error("This adventure can preserve up to 14 exact intermediate points. Review your required points first.");
   const reference = await regionVersions.withCommittedRegions(async rows => regionalRoutingReference(selectCommittedRegion(rows, selectedRegionId).manifest));
-  return { start: request.start, end: request.end, reference, hardWaypoints,
-    suggested_profile: request.routing_profile, seed: request.seed,
-    endpointSnapPolicy: request.endpoint_snap_policy ?? { start: "near", end: "near" } };
+  return { ...context, reference };
 }
 async function displayExactAdventure(output, selectedId, requestId) {
   state.adventureDisplay = true; state.adventureResult = output;
@@ -270,7 +270,7 @@ async function checkAdventureRecovery() {
 function initializeAdventure() {
   byId("adventure-launch").hidden = !localPlanner;
   if (!localPlanner) return;
-  byId("plan-with-ai").addEventListener("click", () => { adventureRestoreEpoch++; }, { capture: true });
+  byId("plan-with-ai").addEventListener("click", () => { adventureRestoreEpoch++; adventureMapEndpoint = null; }, { capture: true });
   byId("route-form").addEventListener("input", () => { adventureRestoreEpoch++; });
   byId("restore-adventure").addEventListener("click", () => void reopenSavedAdventure());
   byId("forget-adventure").addEventListener("click", () => void forgetSavedAdventure());
@@ -300,8 +300,8 @@ function initializeAdventure() {
       await displayExactAdventure(output, output.chosen.result.candidates[0].id, requestId);
       byId("request-status").textContent = "Your AI adventure is ready. Route calculations used the selected offline region.";
     },
-    onChooseStart: () => { returnToManualPlan(); byId("set-hard-start").click(); appShell?.show("map"); },
-    onChooseEnd: () => { returnToManualPlan(); changeMapTopology("point_to_point", "near"); updateControlsFromOptions(); byId("set-hard-end").click(); appShell?.show("map"); },
+    onChooseStart: () => { returnToManualPlan(); clearPointPlacement(); byId("set-hard-start").click(); adventureMapEndpoint = "start"; appShell?.show("map"); },
+    onChooseEnd: () => { returnToManualPlan(); clearPointPlacement(); changeMapTopology("point_to_point", "near"); updateControlsFromOptions(); byId("set-hard-end").click(); adventureMapEndpoint = "end"; appShell?.show("map"); },
   });
   window.addEventListener("pagehide", () => adventureDialog?.clear(), { once: true });
 }
@@ -1151,6 +1151,7 @@ function selectPoint(index, { scrollSelected = false, requestPopup = false } = {
 }
 
 function clearPointPlacement() {
+  adventureMapEndpoint = null;
   state.addPointMode = false;
   state.endpointSetMode = null;
   state.movingPointIndex = null;
@@ -3674,6 +3675,9 @@ async function start() {
           setEditableRequestStatus(
             `${kind === "start" ? "Start" : "End"} point set from map.`,
           );
+          const reopenAdventure = adventureMapEndpoint === kind;
+          adventureMapEndpoint = null;
+          if (reopenAdventure) void adventureDialog?.open();
 
           return;
         }

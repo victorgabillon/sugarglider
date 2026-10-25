@@ -14,19 +14,28 @@ const categoryMatches = (suggestion, actual) => suggestion === "historical"
   : suggestion === "viewpoint" ? ["viewpoint", "observation_tower"].includes(actual)
     : suggestion === "water" ? ["drinking_water", "fountain", "water_tap"].includes(actual) : true;
 
-// An unchosen End may be proposed from one exact local name, then reviewed by
-// the user. A model coordinate cannot disambiguate two identically named places.
-export async function resolveAdventureEnd(location, { session, reference, signal }) {
-  if (!location || location.name.trim().length < 3) return null;
-  const response = await session.searchPlaceNames(location.name);
+// Both endpoints use this same review boundary. A model coordinate never
+// disambiguates duplicate local names or becomes a verified place by itself.
+export async function resolveAdventureEndpoint(location, { session, reference, signal }) {
+  if (!location) return null;
   if (signal?.aborted) throw new DOMException("Adventure cancelled.", "AbortError");
-  if (response.identity.region_id !== reference.region_id || response.identity.build_id !== reference.build_id) throw new Error("The selected region changed while checking End.");
-  const matches = response.results.filter(row => normalizeLocationText(row.name) === normalizeLocationText(location.name));
-  if (matches.length !== 1 || !covered(matches[0], reference.bounds)) return null;
-  const found = matches[0];
-  if (location.lat !== null && distance(found, location) > 1000) return null;
-  return deepFreeze({ coordinate: { lat: found.lat, lon: found.lon, name: found.name },
-    proposed_coordinate: location, evidence: "unique_exact_local_name" });
+  if (session.identity.region_id !== reference.region_id || session.identity.build_id !== reference.build_id) throw new Error("The selected region changed while checking endpoints.");
+  let matches = [];
+  if (location.name.trim().length >= 3) {
+    const response = await session.searchPlaceNames(location.name);
+    if (signal?.aborted) throw new DOMException("Adventure cancelled.", "AbortError");
+    if (response.identity.region_id !== reference.region_id || response.identity.build_id !== reference.build_id) throw new Error("The selected region changed while checking endpoints.");
+    matches = response.results.filter(row => normalizeLocationText(row.name) === normalizeLocationText(location.name));
+  }
+  if (matches.length > 1) return null;
+  if (matches.length === 1) {
+    const found = matches[0];
+    if (!covered(found, reference.bounds) || location.lat !== null && distance(found, location) > 1000) return null;
+    return deepFreeze({ coordinate: { lat: found.lat, lon: found.lon, name: found.name },
+      proposed_coordinate: location, evidence: "unique_exact_local_name" });
+  }
+  return covered(location, reference.bounds) ? deepFreeze({ coordinate: { ...location },
+    proposed_coordinate: location, evidence: "model_coordinate_unverified" }) : null;
 }
 
 export async function groundAdventurePlaces(proposal, { session, reference, start, citations = [], researched = false, signal } = {}) {

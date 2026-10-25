@@ -1,6 +1,6 @@
 // Synthetic proposal/location records only. No model account, native geometry or regional data.
 import { parseAdventureProposal, adventureWishCapabilities, ADVENTURE_SCHEMA, ADVENTURE_INSTRUCTIONS } from '../../src/sugarglider/web/static/adventure_proposal.js';
-import { groundAdventurePlaces } from '../../src/sugarglider/web/static/adventure_grounding.js';
+import { groundAdventurePlaces, resolveAdventureEndpoint } from '../../src/sugarglider/web/static/adventure_grounding.js';
 import { createAdventureModel } from '../../src/sugarglider/web/static/adventure_model.js';
 import { state } from '../../src/sugarglider/web/static/state.js';
 const assert = (ok, message) => { if (!ok) throw Error(message); };
@@ -14,7 +14,7 @@ export async function runAdventureProposalHarness(){
  const before=JSON.stringify(state),cases=[];
  const parse=x=>parseAdventureProposal(JSON.stringify(x));
  const valid=parse(syntheticAdventure);assert(Object.isFrozen(valid.places[0]),'immutable proposals');cases.push('bounded-immutable-contract');
- const mutations={unknown:v=>v.geometry=[],string_coordinate:v=>v.places[0].location.lat='0.02',range:v=>v.places[0].location.lon=181,
+ const mutations={unknown:v=>v.geometry=[],loop_destination:v=>v.intent.end={...v.intent.start},string_coordinate:v=>v.places[0].location.lat='0.02',range:v=>v.places[0].location.lon=181,
   paired_null:v=>v.places[0].location.lat=null,missing:v=>delete v.intent,identity_array:v=>v.places[0].osm_id=['node/1'],
   malicious_link:v=>v.places[0].sources[0].url='javascript:alert(1)',html_story:v=>v.places[0].anecdote='<script>native()</script>',
   duplicate_places:v=>v.places.push(structuredClone(v.places[0])),duplicate_objective:v=>v.wishes.push(structuredClone(v.wishes[0])),
@@ -32,6 +32,21 @@ export async function runAdventureProposalHarness(){
  const identity={region_id:'synthetic',build_id:'synthetic-build',bounds:[0,0,.1,.1]};let queries=0;
  const session={identity,queryPois:async q=>{queries++;return{identity,requested:q.requested_ids.map(id=>({id,feature:id===feature.id?feature:null})),features:[feature]}},searchPlaceNames:async()=>({identity,results:[]})};
  const options={session,reference:identity,start:valid.intent.start,citations:[{url:'https://example.invalid/source'}],researched:true};
+ const endpoints={session,reference:identity};
+ const proposed={name:'Synthetic endpoint',lat:.02,lon:.02};
+ const exactSession={...session,searchPlaceNames:async()=>({identity,results:[{name:'Synthetic endpoint',lat:.0201,lon:.02}]})};
+ const resolved=await resolveAdventureEndpoint(proposed,{...endpoints,session:exactSession});
+ assert(resolved.evidence==='unique_exact_local_name'&&resolved.coordinate.lat===.0201&&resolved.proposed_coordinate.lat===.02,'resolved and proposed endpoint coordinates remain distinct');
+ const ambiguousSession={...session,searchPlaceNames:async()=>({identity,results:[{name:proposed.name,lat:.02,lon:.02},{name:proposed.name,lat:.03,lon:.03}]})};
+ assert(await resolveAdventureEndpoint(proposed,{...endpoints,session:ambiguousSession})===null,'model coordinates cannot resolve ambiguous local names');
+ assert(await resolveAdventureEndpoint({...proposed,lat:1},endpoints)===null,'out-of-region endpoint rejected');
+ assert(await resolveAdventureEndpoint({...proposed,lat:.09}, {...endpoints,session:exactSession})===null,'conflicting local identity rejected');
+ assert(await resolveAdventureEndpoint({...proposed,lat:null,lon:null},endpoints)===null,'unlocated name never becomes a guessed coordinate');
+ const zero=await resolveAdventureEndpoint({name:'Origin',lat:0,lon:0},endpoints);
+ assert(zero.coordinate.lat===0&&zero.coordinate.lon===0&&zero.evidence==='model_coordinate_unverified','zero coordinates remain valid but visibly unverified');
+ const endpointAbort=new AbortController();endpointAbort.abort();let endpointCancelled=false;
+ try{await resolveAdventureEndpoint(proposed,{...endpoints,signal:endpointAbort.signal})}catch(e){endpointCancelled=e.name==='AbortError'}assert(endpointCancelled,'cancelled endpoint resolution cannot proceed');
+ cases.push('shared_endpoint_resolution_requires_review_and_preserves_ambiguity_coverage_and_evidence');
  const grounded=await groundAdventurePlaces(valid,options);assert(grounded.places[0].status==='grounded','local id grounding');assert(grounded.places[0].access_status==='unknown','OSM is not access proof');
  const conflicting={...session,queryPois:async()=>({identity,requested:[{id:'node/1',feature:{...feature,category:'cafe'}}],features:[]})};assert((await groundAdventurePlaces(valid,{...options,session:conflicting})).places[0].status==='identity_conflict','wrong mapped category cannot become a visited historical place');cases.push('mapped_identity_category_conflict_stays_unresolved');
  const water=structuredClone(syntheticAdventure);water.places[0].category='water';

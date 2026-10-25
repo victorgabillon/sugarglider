@@ -538,6 +538,21 @@ export function waypointPlanRequestSnapshot(planner) {
   return { schema_version: 1, kind: "waypoint_route", ...common, ...modeState };
 }
 
+// AI may begin with either endpoint unset. Do not serialize an incomplete
+// canonical request or substitute a map centre/current location for it.
+export function currentAdventureContext() {
+  saveActivePoints();
+  const endpoints = state.planningMode === "auto_tour" ? state.autoTour : state.waypointEndpoints;
+  const hardWaypoints = state.planningMode === "auto_tour"
+    ? state.autoTour.hardPoints.map((point, index) => ({ id: point.id ?? `hard-waypoint-${index + 1}`,
+      name: pointDisplayName(point, index + 1), coordinate: coordinatePayload(point, pointDisplayName(point, index + 1)) }))
+    : waypointPlanState(state.points, state.options).waypoints.filter(point => point.constraint_strength === "exact");
+  return { start: endpoints.start ? coordinatePayload(endpoints.start, "Start") : null,
+    end: endpoints.routeTopology === "point_to_point" && endpoints.end ? coordinatePayload(endpoints.end, "End") : null,
+    hardWaypoints, suggested_profile: state.routingProfile, seed: state.options.seed,
+    endpointSnapPolicy: { start: endpoints.start?.snapPolicy ?? "near", end: endpoints.end?.snapPolicy ?? "near" } };
+}
+
 // This synchronizes the active draft and derived plan mirror before serializing
 // the canonical request. Snapshot viewing never calls it to recreate a search.
 export function currentPlanRequest() {

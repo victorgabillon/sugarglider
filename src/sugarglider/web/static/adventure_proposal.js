@@ -16,12 +16,14 @@ const string = (maximum, options = null) => ({ type: "string", minLength: 1, max
 const nullable = schema => ({ anyOf: [schema, { type: "null" }] });
 const coordinate = object({ name: string(120), lat: nullable({ type: "number", minimum: -90, maximum: 90 }), lon: nullable({ type: "number", minimum: -180, maximum: 180 }) });
 const source = object({ title: string(200), url: string(2048) });
+const intentProperties = { activity: string(30, profiles), topology: string(20, ["loop", "point_to_point"]),
+  start: nullable(coordinate), end: nullable(coordinate), target_distance_m: { type: "number", minimum: 1000, maximum: 200000 },
+  tolerance_m: { type: "number", minimum: 100, maximum: 10000 }, alternatives: { type: "integer", minimum: 1, maximum: 5 }, order: string(12, ["fixed", "optimize"]) };
 export const ADVENTURE_SCHEMA = deepFreeze(object({
   format: { enum: ["sugarglider_ai_adventure"], type: "string" }, version: { enum: [1], type: "integer" },
   name: string(120), interpretation: string(1200),
-  intent: object({ activity: string(30, profiles), topology: string(20, ["loop", "point_to_point"]),
-    start: nullable(coordinate), end: nullable(coordinate), target_distance_m: { type: "number", minimum: 1000, maximum: 200000 },
-    tolerance_m: { type: "number", minimum: 100, maximum: 10000 }, alternatives: { type: "integer", minimum: 1, maximum: 5 }, order: string(12, ["fixed", "optimize"]) }),
+  intent: { anyOf: [object({ ...intentProperties, topology: string(20, ["loop"]), end: { type: "null" } }),
+    object({ ...intentProperties, topology: string(20, ["point_to_point"]) })] },
   wishes: { type: "array", maxItems: 12, items: object({ metric: string(30, ADVENTURE_METRICS), goal: string(12, goals), value: nullable({ type: "number", minimum: 0, maximum: 200000 }), importance: string(10, levels) }) },
   places: { type: "array", maxItems: ADVENTURE_MAX_PLACES, items: object({ id: string(80), location: coordinate,
     osm_id: nullable(string(80)), wikidata_id: nullable(string(30)), category: string(20, categories),
@@ -51,7 +53,7 @@ export function parseAdventureProposal(raw) {
   fields(value, Object.keys(ADVENTURE_SCHEMA.properties), [], "Adventure");
   requireValue(value.format === "sugarglider_ai_adventure" && value.version === 1, "Unknown adventure proposal format.");
   const intent = value.intent;
-  fields(intent, Object.keys(ADVENTURE_SCHEMA.properties.intent.properties), [], "Intent");
+  fields(intent, Object.keys(intentProperties), [], "Intent");
   const topology = choice(intent.topology, ["loop", "point_to_point"], "Route type");
   requireValue(topology !== "loop" || intent.end === null, "A loop cannot have a separate End.");
   requireValue(Number.isInteger(intent.alternatives), "The alternative count must be an integer.");
@@ -103,8 +105,8 @@ export function adventureWishCapabilities(proposal, { nature = false, places = f
 }
 export const ADVENTURE_INSTRUCTIONS = `You are an expert outdoor adventure planner proposing places and strategies for Sugarglider's separate local routing engine.
 Understand the user's wishes and answer in their language. Return exactly the supplied adventure JSON contract, never geometry, HTML or native commands.
-Respect the supplied Start, End, activity and explicitly confirmed mandatory places. A named area such as Marly is not a precise Start or permission to access GPS. Ask at most essential clarifications; use null coordinates for unresolved places rather than guessing.
-When activity_is_fixed is false, the supplied activity is only a default: an activity explicitly described by the user takes precedence. A chosen Start or End is always fixed. An unchosen End may be suggested by name for local resolution and user review.
+Respect a supplied Start, End, activity and explicitly confirmed mandatory places. Start and End may be absent: infer them from the user's text or speech when given, or propose a verifiable, identifiable meeting point in their stated area. An area such as Marly is not a precise coordinate or permission to access GPS. Never invent a precise location. Use a resolvable place name with null coordinates when numeric coordinates are not grounded, and ask an essential clarification if even the intended area is missing or ambiguous. Sugarglider reviews inferred endpoints before routing; manually chosen endpoints remain fixed.
+When activity_is_fixed is false, the supplied activity is only a default: an activity explicitly described by the user takes precedence. A loop returns to its resolved Start and has no separate End. For a point-to-point adventure, propose any missing Start and End from the user's description for resolution and review.
 Propose up to twenty geographically sensible interesting places and feasible groupings, prioritizing verifiable OSM/Wikidata identities. Supply numeric WGS84 coordinates only when grounded; names alone may stay unresolved.
 Suggested stops default prefer or possibility. Mark mandatory only for a user-stated requirement; Sugarglider will confirm it. Never silently discard required intent. Identify conflicting requirements.
 Use web research only when the application explicitly enables it. Supply concise factual anecdotes with identifiable sources when available. Never invent a source URL, historical detail, precise coordinate, access assurance or route measurement. Distinguish uncertainty. A mapped landmark does not establish public access or current opening.

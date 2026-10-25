@@ -112,6 +112,30 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await page.waitForFunction(() => document.querySelector('#regional-status').dataset.state === 'regional_ready');
         const startupCalls = await page.evaluate(() => adventureNativeCalls.map(call => call.type));
         assert(!startupCalls.some(type => ['local_route', 'route_elevation', 'chatgpt_infer', 'adventure_speech_start'].includes(type)), 'Startup must not route, infer or listen');
+        const initialContext = await page.evaluate(() => adventureAppState.currentAdventureContext());
+        assert.equal(initialContext.start,null);assert.equal(initialContext.end,null);
+        const initialPlanView = page.locator('[data-shell-view="plan"]');if(await initialPlanView.isVisible())await initialPlanView.click();
+        await page.locator('#plan-with-ai').click();await page.locator('#adventure-connect').click();
+        await page.waitForFunction(()=>document.querySelector('#adventure-model').value==='synthetic-model');
+        await page.locator('#adventure-text').fill('Describe the endpoints, or choose them while planning');
+        await page.waitForFunction(()=>!document.querySelector('#adventure-generate').disabled);
+        assert((await page.locator('#adventure-start').textContent()).includes('from your description'),'Blank editor supports AI without serializing missing manual endpoints');
+        await page.locator('#adventure-choose-start').click();
+        await page.waitForFunction(()=>adventureAppState.state.endpointSetMode==='start');
+        await page.locator('#cancel-point-placement').click();
+        await page.evaluate(()=>document.querySelector('#set-hard-start').click());
+        await page.locator('.maplibregl-canvas').click({position:{x:150,y:150}});
+        assert(!await page.locator('#adventure-dialog').evaluate(node=>node.open),'Cancelled AI map placement cannot reopen during a later ordinary edit');
+        await page.evaluate(()=>document.querySelector('#plan-with-ai').click());
+        await page.waitForFunction(()=>document.querySelector('#adventure-dialog').open&&!document.querySelector('#adventure-choose-start').disabled);
+        await page.locator('#adventure-choose-start').click();
+        await page.waitForFunction(()=>adventureAppState.state.endpointSetMode==='start');
+        await page.locator('.maplibregl-canvas').click({position:{x:250,y:150}});
+        await page.waitForFunction(()=>document.querySelector('#adventure-dialog').open&&document.querySelector('#adventure-start').textContent.includes('Start:'));
+        assert.equal(await page.locator('#adventure-text').inputValue(),'Describe the endpoints, or choose them while planning','Map selection resumes the same description');
+        assert(await page.evaluate(()=>adventureAppState.currentAdventureContext().start!==null),'The ordinary map handler supplies the selected Start');
+        assert.equal(await page.evaluate(()=>adventureModelCount),0,'Map selection does not infer automatically');
+        await page.locator('#adventure-close').click();
         const request = { schema_version: 1, kind: 'waypoint_route', name: 'Synthetic manual route', topology: 'point_to_point',
           start: fixture.initial.intent.start, end: fixture.initial.intent.end, routing_profile: 'trail_run', candidate_count: 3, seed: 0,
           endpoint_snap_policy: { start: 'near', end: 'near' }, distance_objective: { target_m: 2200, tolerance_m: 700, maximum_m: null, priority: 'balanced' },
@@ -214,7 +238,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await page.locator('.candidate-select').first().click();
         assert.equal(await page.evaluate(async () => { const { store } = await (await import('/static/pwa_runtime.js')).pwaRuntime(); return (await store.get('public_runtime','latest-adventure')) ?? null; }), null, 'Selecting after Forget must not resurrect the saved adventure');
         assert.deepEqual(errors, []); assert.deepEqual(external, []);
-        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, status: 'passed', cases: ['no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
+        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, status: 'passed', cases: ['optional_endpoints_and_cancelled_map_roundtrip','no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
       } finally { await context.close(); }
     }
   } finally { await browser.close(); }

@@ -1130,6 +1130,7 @@ body.outing-mode .route-dock { display: none; }
 /* A focused, foreground adventure flow. The route remains visible behind it. */
 .adventure-dialog { width: min(44rem, calc(100vw - 1.5rem)); max-height: calc(100dvh - 2rem); padding: 0; border: 1px solid #b9c8bd; border-radius: 1rem; color: #19392f; background: #fcfdf9; }
 .adventure-dialog[open] { display: flex; flex-direction: column; }
+.adventure-dialog [hidden] { display: none !important; }
 .adventure-dialog::backdrop { background: #11251db3; }
 .adventure-dialog > header, .adventure-dialog > footer { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: 1rem; background: #f3f7ef; flex-shrink: 0; flex-wrap: wrap; }
 .adventure-dialog h2 { margin: .25rem 0; font-size: clamp(1.25rem, 4vw, 1.75rem); overflow-wrap: anywhere; }

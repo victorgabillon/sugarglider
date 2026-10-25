@@ -59,6 +59,19 @@ async function validateOutput(output) {
     requireValue(exact(round, ["proposal", "grounding", "request", "targets", "bindings", "exclusions", "result", "assessment", "elevations", "endpoint_resolution"]));
     const proposal = parseAdventureProposal(JSON.stringify(round.proposal));
     const request = validateLocalWaypointRouteRequest(round.request, { adventure: true });
+    requireValue(exact(round.endpoint_resolution, ["start", "end"]));
+    for (const kind of ["start", "end"]) {
+      const resolution = round.endpoint_resolution[kind];
+      if (resolution === null) continue;
+      requireValue(exact(resolution, ["coordinate", "proposed_coordinate", "evidence"])
+        && ["unique_exact_local_name", "model_coordinate_unverified"].includes(resolution.evidence)
+        && exact(resolution.coordinate, ["name", "lat", "lon"])
+        && request[kind] && ["lat", "lon", "name"].every(key => resolution.coordinate[key] === request[kind][key])
+        && (kind !== "end" || request.topology === "point_to_point"));
+      const proposed = resolution.proposed_coordinate;
+      requireValue(exact(proposed, ["name", "lat", "lon"]) && typeof proposed.name === "string" && proposed.name.length >= 1 && proposed.name.length <= 120
+        && (proposed.lat === null && proposed.lon === null || Number.isFinite(proposed.lat) && Math.abs(proposed.lat) <= 90 && Number.isFinite(proposed.lon) && Math.abs(proposed.lon) <= 180));
+    }
     requireValue(sha(round.grounding?.build_id) && round.grounding.places.length === proposal.places.length
       && round.grounding.places.every((place, index) => place.id === proposal.places[index].id
         && typeof place.location?.name === "string" && typeof place.reason === "string"
