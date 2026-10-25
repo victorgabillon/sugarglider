@@ -79,6 +79,9 @@ class MainActivity : Activity() {
     private var outingLeaveDialog: AlertDialog? = null
     private val bridgeLedger = BridgeRequestLedger()
     private val localRouteExecutor = Executors.newSingleThreadExecutor()
+    private val chatGptInferences = mutableSetOf<String>()
+    private val chatGptExecutor = Executors.newSingleThreadExecutor()
+    private val chatGpt by lazy { ChatGptConnection(AndroidChatGptAccounts(applicationContext)) }
     private val documentExecutor = Executors.newSingleThreadExecutor()
     private val gpxDocumentSaver = GpxDocumentSaver(
         showPicker = ::showGpxDocumentPicker,
@@ -161,6 +164,7 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        if (chatGptInferences.isNotEmpty()) chatGpt.cancel()
         activityVisible = false
         super.onPause()
     }
@@ -174,6 +178,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        chatGpt.cancel()
+        chatGptExecutor.shutdownNow()
         externalItineraryReceiver.close()
         externalItineraryExecutor.shutdownNow()
         pendingStart = null
@@ -686,6 +692,50 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun beginChatGpt(request: BridgeRequest.ChatGpt, payload: String, channel: BridgeChannel) {
+        val command = request.command
+        if (command.action == "cancel") {
+            chatGpt.cancel()
+            completeBridgePayload(request,payload,channel,ChatGptProtocol.reply(request.requestId,org.json.JSONObject()))
+            return
+        }
+        if (!activityVisible) {
+            completeBridgePayload(request,payload,channel,ChatGptProtocol.reply(request.requestId,error="unavailable"))
+            return
+        }
+        if (command.action in setOf("select","sign_out","sign_in")) chatGpt.cancel()
+        val expectedEpoch = chatGpt.epoch()
+        if (command.action == "infer") chatGptInferences.add(request.requestId)
+        chatGptExecutor.execute {
+            if (chatGpt.epoch() != expectedEpoch) {
+                runOnUiThread { chatGptInferences.remove(request.requestId); completeBridgePayload(request,payload,channel,ChatGptProtocol.reply(request.requestId,error="cancelled")) }
+                return@execute
+            }
+            val response = try {
+                val result = when(command.action) {
+                    "status" -> chatGpt.status()
+                    "select" -> { chatGpt.select(command.accountId!!); chatGpt.status() }
+                    "sign_in" -> chatGpt.signIn(command.accountId,expectedEpoch) { uri ->
+                        runOnUiThread {
+                            if (activeBridgeChannel === channel && bridgeNavigationEpoch == channel.navigationEpoch && !isFinishing && !isDestroyed) openExternal(Uri.parse(uri.toString()))
+                            else chatGpt.cancel()
+                        }
+                    }
+                    "models" -> chatGpt.models(expectedEpoch)
+                    "sign_out" -> chatGpt.signOut()
+                    "infer" -> chatGpt.infer(command.model!!,command.instructions!!,command.input!!,command.research,command.schema,expectedEpoch)
+                    else -> error("Unsupported ChatGPT operation.")
+                }
+                ChatGptProtocol.reply(request.requestId,result)
+            } catch (error: ChatGptException) {
+                ChatGptProtocol.reply(request.requestId,error=error.kind.name.lowercase())
+            } catch (_: Exception) {
+                ChatGptProtocol.reply(request.requestId,error="invalid_response")
+            }
+            runOnUiThread { chatGptInferences.remove(request.requestId); completeBridgePayload(request,payload,channel,response) }
+        }
+    }
+
     private fun installBridge(created: WebView, origin: String) {
         // Origin permission alone is insufficient: the callback must also belong
         // to the current WebView's main frame and current bridge page/channel.
@@ -737,6 +787,7 @@ class MainActivity : Activity() {
                 return@addWebMessageListener
             }
             when (request) {
+                is BridgeRequest.ChatGpt -> beginChatGpt(request,payload,channel)
                 is BridgeRequest.Hello -> completeBridgeRequest(
                     request,
                     payload,
@@ -1312,6 +1363,8 @@ class MainActivity : Activity() {
     }
 
     private fun invalidateBridgePage() {
+        chatGpt.cancel()
+        chatGptInferences.clear()
         pendingElevation?.cancelled?.set(true)
         activeBridgeChannel?.let { application.regionalRoutingOperations.cancelOwner(it.pageNonce) }
         gpxDocumentSaver.invalidate()

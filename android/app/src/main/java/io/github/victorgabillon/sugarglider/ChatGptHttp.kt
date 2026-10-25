@@ -33,12 +33,12 @@ internal class ChatGptHttp(private val connections: ConnectionFactory = Connecti
         request(call, REVOKE, form.toByteArray(Charsets.UTF_8), "application/x-www-form-urlencoded", null) { input -> readBounded(input, 4096); Unit }
     }
     fun models(call: ChatGptCall, token: String): JSONObject = json(call, MODELS, bearer = token)
-    fun infer(call: ChatGptCall, token: String, payload: JSONObject): String {
+    fun infer(call: ChatGptCall, token: String, payload: JSONObject): ChatGptCompletion {
         require(payload.optBoolean("stream") && payload.has("store") && !payload.getBoolean("store"))
         val body = payload.toString().toByteArray(Charsets.UTF_8)
         require(body.size <= 98_304)
         return request(call, RESPONSES, body, "application/json", token) { input ->
-            ChatGptResponseStream.read(input.reader(Charsets.UTF_8), call::cancelled)
+            ChatGptResponseStream.completed(input.reader(Charsets.UTF_8), call::cancelled)
         }
     }
     private fun json(call: ChatGptCall, endpoint: String, body: ByteArray? = null, contentType: String = "application/json", bearer: String? = null): JSONObject =

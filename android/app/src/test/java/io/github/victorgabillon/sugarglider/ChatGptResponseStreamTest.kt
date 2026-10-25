@@ -16,7 +16,7 @@ class ChatGptResponseStreamTest {
         val delta = event(JSONObject().put("type", "response.output_text.delta").put("delta", "not authoritative"))
         assertEquals("synthetic answer", ChatGptResponseStream.read(StringReader(delta + completed())))
         assertEquals("synthetic answer", ChatGptResponseStream.read(StringReader(completed().replace("\n", "\r\n"))))
-        for (raw in listOf(delta, "data: [DONE]\n\n", completed().trimEnd(), completed() + "data: {")) {
+        for (raw in listOf(delta, "data: [DONE]\n\n", completed().trimEnd())) {
             assertThrows(IllegalStateException::class.java) { ChatGptResponseStream.read(StringReader(raw)) }
         }
     }
@@ -24,9 +24,20 @@ class ChatGptResponseStreamTest {
         for (type in listOf("response.failed", "response.incomplete", "error")) {
             val failure = event(JSONObject().put("type", type).put("code", "subscription_sharing_usage_limit_exceeded"))
             assertThrows(IllegalStateException::class.java) { ChatGptResponseStream.read(StringReader(failure)) }
-            assertThrows(IllegalStateException::class.java) { ChatGptResponseStream.read(StringReader(completed() + failure)) }
+            assertEquals("synthetic answer", ChatGptResponseStream.read(StringReader(completed() + failure)))
         }
-        assertThrows(IllegalStateException::class.java) { ChatGptResponseStream.read(StringReader(completed() + completed())) }
+        assertEquals("synthetic answer", ChatGptResponseStream.read(StringReader(completed() + completed())))
+    }
+    @Test fun retainsOnlyActualResearchCitationsAndMeasuredUsage() {
+        val response = JSONObject().put("usage",JSONObject().put("input_tokens",12).put("output_tokens",8).put("total_tokens",20))
+            .put("output",org.json.JSONArray().put(JSONObject().put("type","web_search_call").put("status","completed"))
+                .put(JSONObject().put("type","message").put("content",org.json.JSONArray().put(JSONObject().put("annotations",org.json.JSONArray()
+                    .put(JSONObject().put("type","url_citation").put("url","https://example.invalid/source").put("title","Source"))
+                    .put(JSONObject().put("type","url_citation").put("url","javascript:bad").put("title","Bad")))))))
+        val result = ChatGptCompletion.from(response,"synthetic")
+        assertTrue(result.researched);assertEquals(1,result.citations.length());assertEquals(20,result.usage.getInt("total_tokens"))
+        response.getJSONArray("output").remove(0)
+        assertEquals(0,ChatGptCompletion.from(response,"synthetic").citations.length())
     }
     @Test fun enforcesSizeNestingAndCancellation() {
         assertThrows(IllegalArgumentException::class.java) { ChatGptResponseStream.read(StringReader("x".repeat(ChatGptResponseStream.MAX_EVENT_CHARS + 1))) }

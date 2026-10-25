@@ -39,7 +39,7 @@ internal class ChatGptConnection(
         synchronized(lock) { selectedId = clientId; catalog = emptyList() }
     }
 
-    fun signIn(clientId: String?, openBrowser: (URI) -> Unit): JSONObject = operation { call, owned ->
+    fun signIn(clientId: String?, expectedEpoch: Long? = null, openBrowser: (URI) -> Unit): JSONObject = operation(expectedEpoch) { call, owned ->
         val prior = clientId?.let { id -> accounts.list().single { it.clientId == id } }
         val pending = if (clientId == null) accounts.pendingRegistration() else null
         val callback = ChatGptLoopback()
@@ -79,7 +79,7 @@ internal class ChatGptConnection(
         }
     }
 
-    fun models(): JSONObject = operation { call, owned ->
+    fun models(expectedEpoch: Long? = null): JSONObject = operation(expectedEpoch) { call, owned ->
         val account = authorized(call,owned)
         val rows = http.models(call,account.tokens!!.access!!).getJSONArray("models")
         require(rows.length() <= 100)
@@ -93,7 +93,7 @@ internal class ChatGptConnection(
         status()
     }
 
-    fun infer(model: String, instructions: String, input: String, research: Boolean, schema: JSONObject?): String = operation { call, owned ->
+    fun infer(model: String, instructions: String, input: String, research: Boolean, schema: JSONObject?, expectedEpoch: Long? = null): JSONObject = operation(expectedEpoch) { call, owned ->
         require(instructions.length in 1..24_576 && input.length in 1..32_768)
         val account = authorized(call,owned)
         synchronized(lock) { require(catalog.any { it.slug == model }) { "Select an available ChatGPT model." } }
@@ -101,9 +101,11 @@ internal class ChatGptConnection(
             .put("instructions",instructions).put("input",input)
         if (research) payload.put("tools",JSONArray().put(JSONObject().put("type","web_search")))
         if (schema != null) payload.put("text",JSONObject().put("format",JSONObject().put("type","json_schema").put("name","sugarglider_adventure").put("strict",true).put("schema",schema)))
+        val started = System.nanoTime()
         val answer = http.infer(call,account.tokens!!.access!!,payload)
         synchronized(lock) { requireCurrent(owned) }
-        answer
+        JSONObject().put("text",answer.text).put("usage",answer.usage).put("citations",answer.citations)
+            .put("researched",research && answer.researched).put("elapsed_ms",(System.nanoTime()-started)/1_000_000)
     }
 
     fun signOut(): JSONObject {
@@ -156,9 +158,11 @@ internal class ChatGptConnection(
         require(metadata.optString("issuer") == "https://auth.openai.com" && metadata.optString("jwks_uri") == ChatGptHttp.JWKS && metadata.optString("token_endpoint") == ChatGptHttp.TOKEN && metadata.optString("revocation_endpoint") == ChatGptHttp.REVOKE) { "Unsupported ChatGPT authorization metadata." }
     }
     private fun requireCurrent(owned: Long) { if (generation != owned) throw ChatGptException(ChatGptFailureKind.CANCELLED) }
-    private fun <T> operation(run: (ChatGptCall,Long) -> T): T {
+    fun epoch(): Long = synchronized(lock) { generation }
+
+    private fun <T> operation(expectedEpoch: Long? = null, run: (ChatGptCall,Long) -> T): T {
         val call = ChatGptCall()
-        val owned = synchronized(lock) { check(activeCall == null) { "A ChatGPT operation is still finishing." }; activeCall = call; generation }
+        val owned = synchronized(lock) { if (expectedEpoch != null) requireCurrent(expectedEpoch); check(activeCall == null) { "A ChatGPT operation is still finishing." }; activeCall = call; generation }
         try { return run(call,owned) }
         finally { call.close(); synchronized(lock) { if (activeCall === call) activeCall = null } }
     }

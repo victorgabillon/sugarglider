@@ -12,6 +12,9 @@ internal sealed interface BridgeRequest {
     val requestId: String
     val pageNonce: String
 
+    class ChatGpt(override val requestId: String, override val pageNonce: String,
+        val command: ChatGptCommand) : BridgeRequest
+
     data class Hello(
         override val requestId: String,
         override val pageNonce: String,
@@ -126,10 +129,12 @@ internal object BridgeProtocol {
         } catch (_: JSONException) {
             return null
         }
-        if (payload.length > 8_192 && value.optString("type") != "route_elevation") return null
+        if (payload.length > 8_192 && value.optString("type") != "route_elevation"
+            && !(value.optString("type") == "chatgpt_infer" && payload.toByteArray(StandardCharsets.UTF_8).size <= 98_304)) return null
         if (value.optInt("schema_version", -1) != SCHEMA_VERSION) return null
         val requestId = value.optString("request_id", "")
         val pageNonce = pageNonce(requestId) ?: return null
+        if (value.optString("type").startsWith("chatgpt_")) return ChatGptProtocol.parse(value)?.let { BridgeRequest.ChatGpt(requestId,pageNonce,it) }
         return when (value.optString("type", "")) {
             "hello" -> if (hasExactly(value, baseFields)) {
                 BridgeRequest.Hello(requestId, pageNonce)
