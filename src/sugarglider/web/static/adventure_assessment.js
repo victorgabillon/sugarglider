@@ -108,6 +108,9 @@ function compareMeasured(a, b) {
   }, 0);
   return Number(b.hard_route_constraints_satisfied) - Number(a.hard_route_constraints_satisfied)
     || Number(b.within_distance_tolerance) - Number(a.within_distance_tolerance)
+    || (!a.within_distance_tolerance && !b.within_distance_tolerance ? a.target_error_m - b.target_error_m : 0)
+    || (finite(a.loop_geometry?.geometry_penalty) && finite(b.loop_geometry?.geometry_penalty)
+      ? a.loop_geometry.geometry_penalty - b.loop_geometry.geometry_penalty : 0)
     || commonDifference
     || a.target_error_m - b.target_error_m;
 }

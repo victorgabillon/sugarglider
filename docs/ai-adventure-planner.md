@@ -102,6 +102,11 @@ application retains both round snapshots and only chooses a revised portfolio
 when supported measurements improve. AI route ordering puts measured distance-tolerance eligibility first. The
 comparison route remains visible and leads within the same tolerance class;
 optional-stop rewards alone cannot establish lower repetition or backtracking.
+Distance eligibility and outside-distance pressure precede soft wishes. In
+strategy comparison, jointly measured loop shape precedes Nature and other soft
+wishes; missing shape never becomes a fabricated zero penalty. Optional subset
+search retains its bounded place reward behind the existing hard loop-shape
+screens, without promoting over the comparison on unknown repetition.
 When only one alternative is requested, its comparison is also retained (at most
 five published candidates). Manual Waypoint and Auto Tour ordering are unchanged.
 

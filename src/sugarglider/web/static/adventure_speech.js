@@ -5,10 +5,14 @@ const statuses = ["ready", "completed", "cancelled", "unavailable", "busy", "tim
   "permission_denied", "language_unavailable", "platform_consent_required"];
 export function createAdventureSpeech({ transport = nativeBridgeTransport, origin = globalThis.location?.origin } = {}) {
   const owner = {};
+  let active = null;
   async function invoke(action, fields = {}, signal) {
     if (origin !== "https://appassets.androidplatform.net" || !transport.nativeAvailable) return { status: "unavailable", mode: "unavailable", text: null };
     if (signal?.aborted) throw new DOMException("Speech cancelled.", "AbortError");
-    const abort = () => cancel();
+    const owned = action === "start" ? {} : null;
+    if (owned && active) return { status: "busy", mode: "unavailable", text: null };
+    if (owned) active = owned;
+    const abort = () => { if (owned && active === owned) cancel(); };
     signal?.addEventListener("abort", abort, { once: true });
     try {
       const result = await transport.request(`adventure_speech_${action}`, fields, { owner: action === "cancel" ? null : owner, timeoutMs: 65000, parseReply: raw => {
@@ -24,9 +28,14 @@ export function createAdventureSpeech({ transport = nativeBridgeTransport, origi
       } });
       if (signal?.aborted) throw new DOMException("Speech cancelled.", "AbortError");
       return result ?? { status: "unavailable", mode: "unavailable", text: null };
-    } finally { signal?.removeEventListener("abort", abort); }
+    } finally {
+      signal?.removeEventListener("abort", abort);
+      if (owned && active === owned) active = null;
+    }
   }
   function cancel() {
+    if (!active) return;
+    active = null;
     void invoke("cancel").catch(() => {});
     transport.cancelOwner(owner);
   }

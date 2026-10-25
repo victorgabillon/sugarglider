@@ -1,3 +1,4 @@
+import { createAdventureSpeech } from "../../src/sugarglider/web/static/adventure_speech.js";
 import { initializeAdventureDialog } from "../../src/sugarglider/web/static/adventure_dialog.js";
 import { createAdventureResults } from "../../src/sugarglider/web/static/adventure_results.js";
 import { renderRouteChoices } from "../../src/sugarglider/web/static/route_results.js";
@@ -33,6 +34,21 @@ function accounts(model, initiallyConnected = true) {
 
 export async function runAdventureUiHarness() {
   const cases = [];
+  {
+    const calls = []; let finish;
+    const transport = { nativeAvailable: true, cancelOwner() { finish?.(null); }, request: async type => {
+      calls.push(type);
+      if (type === "adventure_speech_start") return new Promise(resolve => { finish = resolve; });
+      return null;
+    } };
+    const speech = createAdventureSpeech({ transport, origin: "https://appassets.androidplatform.net" });
+    speech.cancel(); assert(calls.length === 0, "idle cleanup must not send a native speech command at startup");
+    const abort = new AbortController(), started = speech.start("fr-FR", false, abort.signal).catch(error => error);
+    abort.abort(); speech.cancel();
+    assert((await started).name === "AbortError" && calls.filter(type => type === "adventure_speech_cancel").length === 1,
+      "owned recording cancellation is sent once and discards late transcription");
+    cases.push("idle_speech_cleanup_is_silent_and_owned_abort_is_single_flight");
+  }
   for (const [width, height, scale] of [[360, 800, 1], [390, 844, 1], [1280, 800, 1], [360, 640, 2]]) {
     const r = await setup(), f = await frame(width, height, scale), { byId } = f;
     let output = null, selected = null, returned = false, spoken = 0;

@@ -223,6 +223,7 @@ function compareEntries(a, b) {
 }
 function compareOptional(a, b) {
   return Number(b.draft.within_tolerance) - Number(a.draft.within_tolerance)
+    || (!a.draft.within_tolerance && !b.draft.within_tolerance ? a.draft.target_error_m - b.draft.target_error_m : 0)
     || b.reward - a.reward || a.draft.target_error_m - b.draft.target_error_m
     || compareText(a.draft.candidate_id, b.draft.candidate_id);
 }

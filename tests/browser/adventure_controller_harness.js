@@ -201,6 +201,21 @@ export async function runAdventureControllerHarness() {
     assert(JSON.stringify(compact).length < 16000, "measurement summary bounded and compact");
     cases.push("partial_misbound_elevation_unknown_and_no_false_id_improvement");
   }
+  {
+    const prior = structuredClone(outputs[0].chosen.assessment.assessments[0]);
+    prior.loop_geometry = { geometry_penalty: 1 };
+    const revised = structuredClone(prior);
+    revised.loop_geometry.geometry_penalty = 2;
+    for (const wish of revised.wishes) if (wish.loss !== null) wish.loss -= 10;
+    assert(!adventureMeasuredImprovement(prior, revised), "better wishes cannot conceal worse measured loop shape");
+    revised.loop_geometry.geometry_penalty = 1;
+    assert(adventureMeasuredImprovement(prior, revised), "preferences can improve equally shaped valid routes");
+    revised.within_distance_tolerance = false; revised.loop_geometry.geometry_penalty = 0;
+    assert(!adventureMeasuredImprovement(prior, revised), "loop shape cannot outrank distance eligibility");
+    prior.within_distance_tolerance = false; prior.target_error_m = 100; revised.target_error_m = 200;
+    assert(!adventureMeasuredImprovement(prior, revised), "outside-distance error precedes measured shape and wishes");
+    cases.push("distance_then_measured_loop_shape_before_soft_wishes");
+  }
   equal(JSON.stringify(state), beforeState, "controller never corrupts selected/manual plan");
   return cases;
 }
