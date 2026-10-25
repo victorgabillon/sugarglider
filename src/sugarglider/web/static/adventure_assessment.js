@@ -99,9 +99,16 @@ export function compareAdventureAssessments(a, b) {
     || (a.candidate_id < b.candidate_id ? -1 : a.candidate_id > b.candidate_id ? 1 : 0);
 }
 function compareMeasured(a, b) {
+  // Unknown is not a zero-cost achievement. Only preferences measured on both
+  // candidates can establish a preference improvement; distance stays measured.
+  const commonDifference = a.wishes.reduce((sum, wish) => {
+    const other = b.wishes.find(item => item.metric === wish.metric && item.goal === wish.goal
+      && item.value === wish.value && item.importance === wish.importance);
+    return sum + (wish.loss !== null && other?.loss != null ? (wish.loss - other.loss) * weights[wish.importance] : 0);
+  }, 0);
   return Number(b.hard_route_constraints_satisfied) - Number(a.hard_route_constraints_satisfied)
     || Number(b.within_distance_tolerance) - Number(a.within_distance_tolerance)
-    || a.measured_preference_loss - b.measured_preference_loss
+    || commonDifference
     || a.target_error_m - b.target_error_m;
 }
 export function adventureMeasuredImprovement(previous, revised) {

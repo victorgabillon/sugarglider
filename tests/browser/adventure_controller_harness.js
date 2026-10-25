@@ -168,6 +168,9 @@ export async function runAdventureControllerHarness() {
     const complete = structuredClone(elevation); complete.analysis.coverage = "complete"; complete.analysis.total_ascent_m = 510;
     assert(analyze(complete).wishes[0].measured_value === 510 && analyze(complete).wishes[0].status === "measured_not_directly_optimized", "complete matched elevation is comparison only");
     complete.candidate_id = "wrong"; assert(analyze(complete).wishes[0].status === "unavailable", "wrong binding cannot supply elevation");
+    complete.candidate_id = candidate.id;
+    const measured = analyze(complete), unknown = analyze(elevation);
+    assert(!adventureMeasuredImprovement(measured, unknown), "missing elevation is not rewarded as zero target error");
     const first = round.assessment.assessments[0], same = { ...first, candidate_id: "another-id" };
     assert(!adventureMeasuredImprovement(first, same), "different ID alone is not an improvement");
     const compact = compactAdventureAssessment(round.assessment);
