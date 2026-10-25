@@ -2778,7 +2778,7 @@ export function renderImportedGpx(imported) {
   moveRequiredLabelsToTop();
 }
 
-export function fitCoordinates(coordinates, { maxZoom = 15 } = {}) {
+export function fitCoordinates(coordinates, { maxZoom = 15, padding = 70 } = {}) {
   if (!map) return;
   const valid = coordinates.filter((coordinate) => Array.isArray(coordinate)
     && coordinate.length >= 2
@@ -2790,7 +2790,7 @@ export function fitCoordinates(coordinates, { maxZoom = 15 } = {}) {
     new maplibregl.LngLatBounds(valid[0], valid[0]),
   );
   map.fitBounds(bounds, {
-    padding: 70,
+    padding,
     maxZoom,
     duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 500,
   });
