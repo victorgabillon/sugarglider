@@ -1,3 +1,4 @@
+import { createLocalRegionData } from "../../src/sugarglider/web/static/local_region_data.js";
 // Explicitly synthetic model/native replies; actual planner, workers and IDB.
 import { setup } from "./adventure_controller_harness.js";
 import { createAdventureSnapshotRepository } from "../../src/sugarglider/web/static/adventure_snapshot.js";
@@ -72,6 +73,16 @@ export async function runAdventureSnapshotHarness() {
     const failed = createAdventureSnapshotRepository({ durable: true, get: async () => { throw Error('synthetic failure'); }, put: async () => { throw Error('synthetic failure'); }, remove: async () => {} }, { lifecycleTarget: null });
     assert(await failed.read() === null && !await failed.save(output, id), 'Storage failure remains optional');
     cases.push('optional_storage_failure_preserves_valid_runtime_result');
+    const missingNature = await setup();
+    try {
+      const fixture = await (await fetch("/tests/fixtures/pr40_regional_data.json")).json();
+      const local = createLocalRegionData(fixture.manifest, { pois: fixture.pois });
+      missingNature.region.getRegionData = async () => local;
+      const unknown = await missingNature.controller.run({ ...missingNature.input, refine: false });
+      assert(unknown.chosen.result.candidates.every(candidate => candidate.route.analysis.nature === null), "Missing Nature remains visibly unknown");
+      assert((await encodeAdventureSnapshot(unknown)).payload.length > 0, "Unknown optional analysis remains a valid exact recoverable result");
+      cases.push("missing_optional_nature_diagnostics_are_explicit_and_recoverable");
+    } finally { missingNature.controller.cancel(); missingNature.planner.invalidate(); }
     return cases;
   } finally { store?.close(); r.controller.cancel(); r.planner.invalidate(); }
 }

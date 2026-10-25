@@ -320,7 +320,7 @@ def test_shared_shell_generation_tracks_v107_cached_assets() -> None:
             "d1793cac80f1cba86ec77679fb90a69bb42c8c59b71ebd2b981b24a06917f87e"
         ),
         "local_candidate_evaluator.js": (
-            "03e04529f6883023523d544d0dfb95c76f76875d807e1d2c329f414883a8ad6b"
+            "52128534fbf13f88178c86be1820005a7b48b6d91fa5f87ce1f5996e19dba5c2"
         ),
         "local_plan_publisher.js": (
             "190ca874afbbc2f40f1b7e673a6beb8a4645a60d978eeb41d31a23dcbf7e5450"
