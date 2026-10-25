@@ -82,6 +82,7 @@ class MainActivity : Activity() {
     private val chatGptInferences = mutableSetOf<String>()
     private val chatGptExecutor = Executors.newSingleThreadExecutor()
     private val chatGpt by lazy { ChatGptConnection(AndroidChatGptAccounts(applicationContext)) }
+    private val adventureSpeech by lazy { AdventureSpeechInput(this) { activityVisible && !isFinishing && !isDestroyed } }
     private val documentExecutor = Executors.newSingleThreadExecutor()
     private val gpxDocumentSaver = GpxDocumentSaver(
         showPicker = ::showGpxDocumentPicker,
@@ -152,6 +153,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         activityVisible = true
+        adventureSpeech.resumed()
         externalItineraryReceiver.flush()
         if (interruptedGpxSave) {
             interruptedGpxSave = false
@@ -164,6 +166,7 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        adventureSpeech.paused()
         if (chatGptInferences.isNotEmpty()) chatGpt.cancel()
         activityVisible = false
         super.onPause()
@@ -179,6 +182,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         chatGpt.cancel()
+        adventureSpeech.cancel()
         chatGptExecutor.shutdownNow()
         externalItineraryReceiver.close()
         externalItineraryExecutor.shutdownNow()
@@ -214,6 +218,7 @@ class MainActivity : Activity() {
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (AdventureSpeechInput.handlesResult(requestCode)) { adventureSpeech.activityResult(requestCode, resultCode, data); return }
         if (requestCode != REQUEST_GPX_DOCUMENT) return
         if (resultCode != RESULT_OK) { gpxDocumentSaver.selected(null); return }
         val uri = data?.data
@@ -232,6 +237,7 @@ class MainActivity : Activity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (AdventureSpeechInput.handlesPermission(requestCode)) { adventureSpeech.permissionResult(requestCode); return }
         if (requestCode == REQUEST_WEB_GEOLOCATION_PERMISSION) {
             val current = webView
             webGeolocationPermissions.complete(
@@ -684,11 +690,15 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun openExternal(uri: Uri) {
-        try {
+    private fun openExternal(uri: Uri): Boolean {
+        return try {
             startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE))
+            true
         } catch (_: ActivityNotFoundException) {
             // The untrusted target is not loaded into the authenticated WebView.
+            false
+        } catch (_: SecurityException) {
+            false
         }
     }
 
@@ -716,10 +726,15 @@ class MainActivity : Activity() {
                     "status" -> chatGpt.status()
                     "select" -> { chatGpt.select(command.accountId!!); chatGpt.status() }
                     "sign_in" -> chatGpt.signIn(command.accountId,expectedEpoch) { uri ->
+                        val opened = java.util.concurrent.CompletableFuture<Boolean>()
                         runOnUiThread {
-                            if (activeBridgeChannel === channel && bridgeNavigationEpoch == channel.navigationEpoch && !isFinishing && !isDestroyed) openExternal(Uri.parse(uri.toString()))
-                            else chatGpt.cancel()
+                            if (!opened.isDone) opened.complete(activeBridgeChannel === channel && bridgeNavigationEpoch == channel.navigationEpoch
+                                && chatGpt.epoch() == expectedEpoch && !isFinishing && !isDestroyed && openExternal(Uri.parse(uri.toString())))
                         }
+                        val didOpen = try { opened.get(3, java.util.concurrent.TimeUnit.SECONDS) }
+                        catch (_: InterruptedException) { opened.cancel(false); Thread.currentThread().interrupt(); throw ChatGptException(ChatGptFailureKind.CANCELLED) }
+                        catch (_: Exception) { opened.cancel(false); throw ChatGptException(ChatGptFailureKind.BROWSER_UNAVAILABLE) }
+                        if (!didOpen) throw ChatGptException(ChatGptFailureKind.BROWSER_UNAVAILABLE)
                     }
                     "models" -> chatGpt.models(expectedEpoch)
                     "sign_out" -> chatGpt.signOut()
@@ -787,6 +802,16 @@ class MainActivity : Activity() {
                 return@addWebMessageListener
             }
             when (request) {
+                is BridgeRequest.AdventureSpeech -> {
+                    val finish: (String, AdventureSpeechMode, String?) -> Unit = { status, mode, text ->
+                        completeBridgePayload(request, payload, channel, AdventureSpeechPolicy.reply(request.requestId, status, mode, text))
+                    }
+                    when (request.action) {
+                        "cancel" -> { adventureSpeech.cancel(); finish("cancelled", adventureSpeech.mode(), null) }
+                        "status" -> finish("ready", adventureSpeech.mode(), null)
+                        "start" -> adventureSpeech.begin(request.language!!, request.allowPlatform, finish)
+                    }
+                }
                 is BridgeRequest.ChatGpt -> beginChatGpt(request,payload,channel)
                 is BridgeRequest.Hello -> completeBridgeRequest(
                     request,
@@ -1364,6 +1389,7 @@ class MainActivity : Activity() {
 
     private fun invalidateBridgePage() {
         chatGpt.cancel()
+        adventureSpeech.cancel()
         chatGptInferences.clear()
         pendingElevation?.cancelled?.set(true)
         activeBridgeChannel?.let { application.regionalRoutingOperations.cancelOwner(it.pageNonce) }

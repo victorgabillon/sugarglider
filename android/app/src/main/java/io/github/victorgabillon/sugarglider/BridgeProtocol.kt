@@ -14,6 +14,8 @@ internal sealed interface BridgeRequest {
 
     class ChatGpt(override val requestId: String, override val pageNonce: String,
         val command: ChatGptCommand) : BridgeRequest
+    class AdventureSpeech(override val requestId: String, override val pageNonce: String,
+        val action: String, val language: String? = null, val allowPlatform: Boolean = false) : BridgeRequest
 
     data class Hello(
         override val requestId: String,
@@ -135,6 +137,17 @@ internal object BridgeProtocol {
         val requestId = value.optString("request_id", "")
         val pageNonce = pageNonce(requestId) ?: return null
         if (value.optString("type").startsWith("chatgpt_")) return ChatGptProtocol.parse(value)?.let { BridgeRequest.ChatGpt(requestId,pageNonce,it) }
+        if (value.optString("type").startsWith("adventure_speech_")) {
+            val action = value.getString("type").removePrefix("adventure_speech_")
+            val fields = value.keys().asSequence().toSet()
+            val base = setOf("schema_version", "request_id", "type")
+            if (action in setOf("status", "cancel") && fields == base) return BridgeRequest.AdventureSpeech(requestId, pageNonce, action)
+            if (action == "start" && fields == base + setOf("language", "allow_platform") && value.get("language") is String
+                && AdventureSpeechPolicy.language(value.getString("language")) && value.get("allow_platform") is Boolean) {
+                return BridgeRequest.AdventureSpeech(requestId, pageNonce, action, value.getString("language"), value.getBoolean("allow_platform"))
+            }
+            return null
+        }
         return when (value.optString("type", "")) {
             "hello" -> if (hasExactly(value, baseFields)) {
                 BridgeRequest.Hello(requestId, pageNonce)

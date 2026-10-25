@@ -7,7 +7,7 @@ import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONObject
 
-internal enum class ChatGptFailureKind { CANCELLED, NETWORK, AUTH_EXPIRED, USAGE_LIMIT, UNSUPPORTED, INVALID_RESPONSE, STORAGE }
+internal enum class ChatGptFailureKind { CANCELLED, NETWORK, AUTH_EXPIRED, USAGE_LIMIT, UNSUPPORTED, INVALID_RESPONSE, STORAGE, BROWSER_UNAVAILABLE }
 internal class ChatGptException(val kind: ChatGptFailureKind) : IllegalStateException(kind.name)
 
 /** Owns one foreground operation's connections; closing aborts blocked network reads. */
