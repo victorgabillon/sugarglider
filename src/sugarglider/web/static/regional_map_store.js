@@ -12,21 +12,35 @@ export function createRegionalMapStore({ versions, selectedRegionId,
   let cached = null;
   const scan = (packs = [], invalid = []) => freezeData({ packs, invalid_pack_ids: invalid, partial_pack_ids: [] });
 
-  async function openSelected(row) {
+  async function openSelected(row, directory = null) {
     const manifest = row.manifest;
-    const directory = await versions.committedDirectory(manifest.region_id, manifest.build_id);
+    directory ??= await versions.committedDirectory(manifest.region_id, manifest.build_id);
+    if (cached?.regionId === manifest.region_id && cached.buildId === manifest.build_id
+      && await cached.directory.isSameEntry(directory)) {
+      try { await cached.opened.checkUnchanged(); return cached.opened; }
+      catch (error) { cached = null; throw error; }
+    }
+    cached = null;
     const scoped = await components({ manifest, directory });
     const opened = await scoped.openMap();
-    cached = { regionId: manifest.region_id, buildId: manifest.build_id, opened };
+    cached = { regionId: manifest.region_id, buildId: manifest.build_id, directory, opened };
     return opened;
   }
 
+  // Planning already owns the version lease. Share the map runtime's opened
+  // component without acquiring another lease or maintaining a verification table.
+  async function verifyMap(manifest, directory) {
+    requireData(manifest.region_id === selectedRegionId(), "regional_version_changed");
+    await openSelected({ manifest }, directory);
+    return true;
+  }
+
   async function scanInstalledPacks() {
-    cached = null;
     return versions.withCommittedRegions(async (snapshot) => {
       let row;
       try { row = selectCommittedRegion(snapshot, selectedRegionId()); }
       catch (error) {
+        cached = null;
         if (["regional_required", "regional_selection_required"].includes(error.code)) return scan();
         return scan([], selectedRegionId() ? [selectedRegionId()] : []);
       }
@@ -39,12 +53,11 @@ export function createRegionalMapStore({ versions, selectedRegionId,
     return versions.withCommittedRegions(async (snapshot) => {
       const row = selectCommittedRegion(snapshot, selectedRegionId()), manifest = row.manifest;
       requireData(manifest.components.map.component_id === packId, "regional_version_changed");
-      if (cached?.regionId === manifest.region_id && cached.buildId === manifest.build_id) return cached.opened;
       return openSelected(row);
     });
   }
 
   const unavailable = () => { throw new RegionalDataError("regional_use_download_screen"); };
-  return Object.freeze({ capabilities: () => probe.capabilities(), scanInstalledPacks, openPackSource,
+  return Object.freeze({ capabilities: () => probe.capabilities(), scanInstalledPacks, openPackSource, verifyMap,
     installPack: unavailable, removePack: unavailable, cancelActiveInstalls() {}, requestPersistence: () => probe.requestPersistence() });
 }

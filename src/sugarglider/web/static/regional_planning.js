@@ -19,6 +19,7 @@ export function createRegionalPlanningContext({
   versions, bridge, regionClient, inspectNative,
   selectedRegionId = () => null,
   components = createVersionedRegionComponents,
+  verifyMap = async (manifest, directory) => (await components({ manifest, directory })).verifyMap(),
 } = {}) {
   return async function withRegion(run) {
     return versions.withCommittedRegions(async (snapshot) => {
@@ -28,8 +29,7 @@ export function createRegionalPlanningContext({
       const directory = await versions.committedDirectory(manifest.region_id, manifest.build_id);
       const native = await inspectNative(reference);
       requireData(native?.status === "ready", native?.code ?? "regional_routing_unavailable");
-      const scoped = await components({ manifest, directory });
-      await scoped.verifyMap();
+      await verifyMap(manifest, directory);
       const session = await regionClient.loadVersion(manifest, directory);
       requireData(session.identity.build_id === manifest.build_id
         && session.identity.region_id === manifest.region_id

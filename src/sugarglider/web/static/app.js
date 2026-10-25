@@ -106,6 +106,7 @@ let offlineMaps = null;
 let regionPlanningError = "regional_checking";
 const regionVersions = createRegionVersionStore();
 const nativeRegions = createRegionalNativeClient();
+const regionalMaps = createRegionalMapStore({ versions: regionVersions, selectedRegionId: () => selectedRegionId });
 function localRegionClient() {
   sharedLocalRegionClient ??= createLocalRegionClient();
   return sharedLocalRegionClient;
@@ -123,6 +124,7 @@ function openLocationSearch(target, launcher) {
 }
 
 const withPlanningRegion = createRegionalPlanningContext({ versions: regionVersions, bridge: localRoutingBridge,
+  verifyMap: (manifest, directory) => regionalMaps.verifyMap(manifest, directory),
   selectedRegionId: () => selectedRegionId,
   regionClient: { loadVersion: (...args) => localRegionClient().loadVersion(...args) },
   inspectNative: async (reference) => {
@@ -3256,7 +3258,7 @@ async function start() {
     try {
       if (localPlanner) byId("offline-maps").classList.add("hidden");
       offlineMaps = await initializeOfflineMaps({
-        ...(localPlanner ? { store: createRegionalMapStore({ versions: regionVersions, selectedRegionId: () => selectedRegionId }),
+        ...(localPlanner ? { store: regionalMaps,
           onStatus: (snapshot) => regionScreen?.mapState(snapshot) } : {}),
         elements: localPlanner ? {} : {
           container: byId("offline-maps"),
@@ -3325,13 +3327,19 @@ async function start() {
         setPwaNetworkStatus("offline");
       }
     }
+    const prepareRegion = async () => {
+      if (!localPlanner || sharedSnapshot || regionScreen) return;
+      try { await initializeRegionScreen(); }
+      catch (error) { handleError(error, "The selected region could not be prepared."); }
+    };
     if (sharedSnapshot) {
       state.poiIndexStatus = { available: false, feature_count: null };
       displaySavedRoute(sharedSnapshot);
       renderSnapshotProfileIdentity(sharedSnapshot.candidate.routing_profile);
     } else {
       if (localPlanner) {
-        await initializeRegionScreen();
+        // Planning remains unavailable until the checks started by map readiness
+        // finish. Open the verified map before taking the longer planning lease.
       }
       renderRoutingProfiles();
       try {
@@ -3381,8 +3389,9 @@ async function start() {
         mapReady = true;
         renderMapData();
         plannerLocation?.mapReady();
+        void prepareRegion();
       },
-      onError: showMapError,
+      onError: (message) => { showMapError(message); void prepareRegion(); },
       onViewportChange: schedulePoiRefresh,
       onUserMapInteraction: () => plannerLocation?.manualMapInteraction(),
       onMapClick: (coordinate) => {
@@ -3444,6 +3453,7 @@ async function start() {
     if (mapInitialized) void plannerLocation?.initialize();
     if (localPlanner) initializeNativeItineraryHandoff({ dialog: itineraryDialog });
     render();
+    if (!mapInitialized) void prepareRegion();
     if (sharedSnapshot) {
       fitCoordinates(sharedSnapshot.candidate.route.geometry);
       if (state.networkStatus !== "offline") {

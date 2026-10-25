@@ -43,7 +43,11 @@ export async function runPr42RegionProductHarness() {
     assert(bytes, "Only declared static distribution files requested");
     return new Response(bytes, { headers: { "Content-Length": String(bytes.byteLength) } });
   };
-  const components = ({ manifest, directory }) => createVersionedRegionComponents({ manifest, directory, storage, pageLocation, fetchResource });
+  let mapOpens = 0;
+  const components = async ({ manifest, directory }) => {
+    const scoped = await createVersionedRegionComponents({ manifest, directory, storage, pageLocation, fetchResource });
+    return { ...scoped, openMap: async () => { mapOpens += 1; return scoped.openMap(); } };
+  };
   // Native archive installation is a bounded synthetic acknowledgement in this
   // harness. Its downloader/checksums/leases are separately tested on the JVM.
   const native = {
@@ -66,9 +70,10 @@ export async function runPr42RegionProductHarness() {
     readManifest: (url, options) => fetchRegionalManifest(url, { ...options, fetchResource, pageLocation }) });
   const bridge = { forRegion: (reference) => ({ capabilities: async () => ({ enabled: nativeStored.has(reference.build_id),
     installed_pack_count: 1, installed_pack_ids: [reference.pack_id], supported_profile_ids: ["hike", "city_bike"] }) }) };
-  const withRegion = createRegionalPlanningContext({ versions, bridge, selectedRegionId: () => selected, components, inspectNative: native.inspect,
-    regionClient: { loadVersion: async (manifest, directory) => (await components({ manifest, directory })).openIndexes() } });
   const mapStore = createRegionalMapStore({ versions, selectedRegionId: () => selected, components });
+  const withRegion = createRegionalPlanningContext({ versions, bridge, selectedRegionId: () => selected, components, inspectNative: native.inspect,
+    verifyMap: (manifest, directory) => mapStore.verifyMap(manifest, directory),
+    regionClient: { loadVersion: async (manifest, directory) => (await components({ manifest, directory })).openIndexes() } });
   const container = document.createElement("details"); container.innerHTML = '<select></select><ul></ul><p data-status></p><p data-map></p><button data-cancel>Cancel</button><button data-refresh>Check</button>';
   document.body.append(container);
   const elements = { container, selector: container.querySelector("select"), list: container.querySelector("ul"),
@@ -115,6 +120,35 @@ export async function runPr42RegionProductHarness() {
     assert((await (await mapStore.openPackSource(map.pack_id)).source.getBytes(0, 8)).data.byteLength === 8, "selected map uses real bounded shared source");
     cases.push("one_download_action_validates_and_activates_all_components");
     cases.push("selected_region_map_uses_existing_pmtiles_source_and_exact_version");
+
+    const opened = await mapStore.openPackSource(map.pack_id), openedCount = mapOpens;
+    await screen.refresh();
+    equal(await mapStore.openPackSource(map.pack_id), opened, "warm refresh keeps the exact verified opened component");
+    equal(mapOpens, openedCount, "scan, planning readiness and map display share one complete verification");
+    const restartedMaps = createRegionalMapStore({ versions, selectedRegionId: () => selected, components });
+    await restartedMaps.scanInstalledPacks();
+    equal(mapOpens, openedCount + 1, "a fresh runtime verifies all bytes again");
+    cases.push("cold_runtime_reverifies_and_warm_map_planning_reuses_one_verified_snapshot");
+
+    const directory = await versions.committedDirectory(first.manifest.region_id, first.manifest.build_id);
+    const mapDirectory = await (await directory.getDirectoryHandle("sugarglider-map-packs")).getDirectoryHandle(map.pack_id);
+    const archiveHandle = await mapDirectory.getFileHandle("basemap.pmtiles");
+    const originalArchive = new Uint8Array(await (await archiveHandle.getFile()).arrayBuffer());
+    const corruptArchive = originalArchive.slice(); corruptArchive[corruptArchive.length - 1] ^= 1;
+    let archiveWriter = await archiveHandle.createWritable(); await archiveWriter.write(corruptArchive); await archiveWriter.close();
+    equal((await mapStore.scanInstalledPacks()).invalid_pack_ids, [map.pack_id], "same-size disk corruption invalidates reuse");
+    await rejects(() => mapStore.openPackSource(map.pack_id), "regional_checksum_mismatch");
+    await rejects(() => restartedMaps.openPackSource(map.pack_id), "regional_checksum_mismatch");
+    // An older source either fails when its snapshot is invalidated or keeps
+    // serving the original verified snapshot. It may never read replacement bytes.
+    try {
+      const last = new Uint8Array((await opened.source.getBytes(originalArchive.length - 1, 1)).data);
+      equal(last[0], originalArchive.at(-1), "opened range source never adopts corrupt replacement bytes");
+    } catch (error) { assert(error.name === "NotReadableError" || error.name === "NotFoundError", "invalidated snapshot fails explicitly"); }
+    archiveWriter = await archiveHandle.createWritable(); await archiveWriter.write(originalArchive); await archiveWriter.close();
+    await screen.refresh();
+    equal(ready, "ready", "restored synthetic archive receives fresh complete verification");
+    cases.push("corrupt_pmtiles_rejected_in_warm_and_fresh_runtime_without_unverified_range_reads");
 
     catalogUnavailable = true; await screen.refresh({ catalogToo: true });
     equal(ready, "ready", "optional catalog failure cannot disable the verified installed region");

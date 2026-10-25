@@ -155,10 +155,11 @@ export class MapPackStore {
     return selectMapPackForCoordinate(await this.listInstalledPacks(), coordinate);
   }
 
-  async openPackSource(packId) {
+  async openPackSource(packId, { archiveFile = null } = {}) {
     const record = await this.getPack(packId);
     const source = this.sourceFactory({
-      fileHandle: record.archiveHandle,
+      // V2 callers pin reads to the exact File snapshot they fully verified.
+      fileHandle: archiveFile ? { getFile: async () => archiveFile } : record.archiveHandle,
       key: `sugarglider-map-pack/${record.manifest.pack_id}/${record.manifest.build_id}`,
       expectedSize: record.manifest.byte_size,
     });

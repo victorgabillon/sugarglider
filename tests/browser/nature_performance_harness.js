@@ -69,6 +69,13 @@ export async function runNaturePerformanceHarness() {
     window.retainedNaturePlaces = createLocalPlacesSession(full);
     return full.searchPlaceNames("castle");
   };
+  window.createNatureSourceReleaseProbe = () => {
+    const fixture = naturePerformanceFixture(base, "complex_water");
+    window.activeNatureAnalysis = createLocalRegionData(fixture.manifest, { nature: fixture.nature });
+    window.activeNatureInput = new WeakRef(fixture.nature);
+    window.activeNatureRoute = fixture.route;
+    return window.activeNatureAnalysis.analyzeNature(fixture.route);
+  };
   return scenarios;
 }
 

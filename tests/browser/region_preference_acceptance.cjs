@@ -73,8 +73,10 @@ async function startup(browser, scenario) {
             pack_capabilities: [{ pack_id: id, access_modes: ['foot', 'bicycle'] }] };
         } else if (request.type === 'itinerary_dialog_state') return;
         else throw Error(`Unexpected automatic native operation: ${request.type}`);
-        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ schema_version: 1,
+        const deliver = () => queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ schema_version: 1,
           request_id: request.request_id, ...reply }) }));
+        if (scenario.holdNative && request.type === 'get_local_route_capabilities') globalThis.releasePreferenceNative = deliver;
+        else deliver();
       } };
     }, { profiles, scenario });
     await context.route('**/*', async route => {
@@ -93,13 +95,22 @@ async function startup(browser, scenario) {
       const file = path.resolve(root, relative);
       if (!file.startsWith(root + path.sep)) return route.abort();
       const mime = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.html': 'text/html', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml' };
+      if (url.pathname === '/v1/ui/config' && scenario.holdNative) {
+        const config = JSON.parse(await fs.readFile(file)); config.initial_center = [.01, .01];
+        return route.fulfill({ json: config });
+      }
       try { return route.fulfill({ body: await fs.readFile(file), contentType: mime[path.extname(file)] ?? 'application/octet-stream' }); }
       catch { return route.fulfill({ status: 404, body: '' }); }
     });
     page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     await page.goto(origin + '/seed.html');
     if (scenario.runHarness) {
-      const cases = await page.evaluate(async () => (await import('/tests/browser/region_preference_harness.js')).runRegionPreferenceHarness());
+      // The product harness uses relative fixture URLs and owns a separate OPFS
+      // directory. Run its integrity/update cases in the same CI acceptance job.
+      if (scenario.runHarness === 'product') await page.evaluate(() => history.replaceState(null, '', '/tests/browser/fixture.html'));
+      const cases = await page.evaluate(async product => product
+        ? (await import('/tests/browser/pr42_region_product_harness.js')).runPr42RegionProductHarness()
+        : (await import('/tests/browser/region_preference_harness.js')).runRegionPreferenceHarness(), scenario.runHarness === 'product');
       assert.deepEqual(errors, []);
       return { name: scenario.name, ...(scenario.repeat === undefined ? {} : { repeat: scenario.repeat }), status: 'passed', cases: cases.length };
     }
@@ -143,6 +154,18 @@ async function startup(browser, scenario) {
       }
     } else assert.equal(opens.length, 0, 'Ambiguous choice opened an arbitrary map');
     releaseCatalog();
+    if (scenario.holdNative) {
+      await page.waitForFunction(() => typeof releasePreferenceNative === 'function');
+      const pending = await page.evaluate(async () => ({
+        map: (await import('/static/offline_map.js')).offlineMapSnapshot(),
+        status: document.querySelector('#regional-status').dataset.state,
+        profiles: (await import('/static/state.js')).state.routingProfileCatalog.profiles,
+      }));
+      assert.equal(pending.map.active_pack_id, installed[scenario.expected].components.map.component_id, 'Verified map must open before native/index readiness');
+      assert.equal(pending.status, 'regional_checking');
+      assert.ok(pending.profiles.every(profile => !profile.available), 'Pending native checks cannot advertise planning readiness');
+      await page.evaluate(() => releasePreferenceNative());
+    }
     await page.waitForFunction(() => !document.querySelector('#regional-refresh').disabled
       && !['', 'regional_checking'].includes(document.querySelector('#regional-status').dataset.state));
     const result = await page.evaluate(async () => ({
@@ -210,7 +233,9 @@ async function main() {
     // The focused screen harness and the real startup cases share the same
     // intercepted local origin; all regional artifacts are synthetic.
     for (const scenario of [
+      { name: 'verified_map_reuse_integrity_and_updates', runHarness: 'product' },
       { name: 'storage_and_screen_preferences', runHarness: true },
+      { name: 'map_opens_before_slow_planning_checks', regions: ['alpha'], preference: 'alpha', expected: 'alpha', holdNative: true },
       { name: 'sole_region_restart', regions: ['alpha'], expected: 'alpha' },
       { name: 'multiple_region_restart_requires_choice', regions: ['alpha', 'beta'] },
       { name: 'previous_choice_first_map_before_catalog', regions: ['alpha', 'beta'], preference: 'beta', expected: 'beta' },

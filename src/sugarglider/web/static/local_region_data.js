@@ -51,7 +51,7 @@ export async function decodeRegionalIndex(bytes, descriptor) {
 export function createLocalRegionData(manifest, { pois = null, nature = null } = {}) {
   if (pois !== null) validatePoiDocument(pois, manifest);
   if (nature !== null) validateNatureDocument(nature, manifest);
-  freezeData(nature);
+  const natureAvailable = nature !== null;
   const project = regionalProjection(manifest, nature);
   const projectedBounds = [...project(manifest.bounds.slice(0, 2)), ...project(manifest.bounds.slice(2))];
   const natureItems = [];
@@ -131,7 +131,7 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
       && Array.isArray(candidate.geometry) && candidate.geometry.length >= 2 && candidate.geometry.length <= 20_000
       && candidate.geometry.every(validPosition), "invalid_routed_geometry");
     if (candidate.pack_id !== identity.routing_pack_id) return unavailableNature(candidate.distance_m, "nature_routing_pack_mismatch");
-    if (nature === null) return unavailableNature(candidate.distance_m, "nature_index_unavailable");
+    if (!natureAvailable) return unavailableNature(candidate.distance_m, "nature_index_unavailable");
     const points = candidate.geometry.map(project);
     // Match project_geometry_edges: haversine edge lengths normalized to the
     // authoritative routed total; the regional projection is for intersections.
@@ -383,7 +383,10 @@ function* projectedNatureItems(nature, project) {
     const polygons = feature.geometry.type === "Polygon" ? [feature.geometry.coordinates] : feature.geometry.coordinates;
     const projected = polygons.map((polygon) => polygon.map((ring) => ring.map(project)));
     for (const polygon of projected) validateProjectedPolygon(polygon, work);
-    yield { feature, polygons: projected, bounds: boundsOf(projected.flat(2)) };
+    // Analysis needs only these two classifications. Keeping the source feature
+    // would retain all geographic coordinates alongside their projected copies.
+    yield { feature: { primary_class: feature.primary_class, park_or_protected: feature.park_or_protected },
+      polygons: projected, bounds: boundsOf(projected.flat(2)) };
   }
 }
 
