@@ -185,8 +185,15 @@ async function startup(browser, scenario) {
       candidate: (await import('/static/state.js')).selectedCandidate(),
       generation: (await import('/static/state.js')).state.generationResult,
       native: preferenceNative,
+      profiles: (await import('/static/state.js')).state.routingProfileCatalog.profiles,
     }));
     assert.equal(result.selected, scenario.expected ?? '');
+    if (scenario.expected && !scenario.failure) {
+      await page.waitForFunction(() => document.querySelector('.maplibregl-canvas'));
+      await page.waitForFunction(() => [...document.querySelector('#profile').options].filter(option => !option.disabled).length === 6);
+      const available = await page.evaluate(async () => (await import('/static/state.js')).state.routingProfileCatalog.profiles.filter(profile => profile.available).length);
+      assert.equal(available, 6, 'Both completion orders must enable all six profiles');
+    }
     assert.equal(result.status, scenario.failure ?? (scenario.expected ? 'regional_ready' : 'regional_selection_required'));
     if (scenario.expected && !scenario.corruptMap) assert.equal(result.map.packs[0].pack_id, installed[scenario.expected].components.map.component_id);
     assert.ok(result.native.every(request => ['hello', 'get_local_route_capabilities', 'itinerary_dialog_state'].includes(request.type)), `Restoration generated a route/download: ${JSON.stringify(result.native)}`);

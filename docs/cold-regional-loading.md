@@ -13,7 +13,7 @@ Installation and explicit download verification still run their full checks.
 Previously, offline-map initialization, planning readiness and the following map
 refresh each opened and hashed the same archive. A private Fairphone trace found
 three full SHA-256 passes over an 81.6 MB archive, reading about 245 MB at startup.
-The map is now initialized before the longer planning lease, so it can render while
+The basemap now attaches before the longer planning lease, so tiles and icons can render while
 native capabilities and the regional worker are prepared. Planning availability
 still comes only from the completed native, map, Places and Nature checks. Map
 initialization failure starts those checks too, preserving usable route controls

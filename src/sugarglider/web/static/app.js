@@ -3246,6 +3246,12 @@ async function start() {
     });
     const currentOutingSlug = outingSlug();
     const currentSharedRouteSlug = sharedRouteSlug();
+    const prepareRegion = async () => {
+      if (!localPlanner || currentSharedRouteSlug || regionScreen) return;
+      try { await initializeRegionScreen(); }
+      catch (error) { handleError(error, "The selected region could not be prepared."); }
+    };
+
     if (localPlanner) {
       const { store } = await pwaRuntime();
       regionPreference = createRegionPreference(store);
@@ -3263,7 +3269,12 @@ async function start() {
       if (localPlanner) byId("offline-maps").classList.add("hidden");
       offlineMaps = await initializeOfflineMaps({
         ...(localPlanner ? { store: regionalMaps,
-          onStatus: (snapshot) => regionScreen?.mapState(snapshot) } : {}),
+          onStatus: (snapshot) => {
+            regionScreen?.mapState(snapshot);
+            // The opened basemap no longer needs the version lease. Start the
+            // independent planning checks while tiles and icons are rendering.
+            if (snapshot.status.state === "local_pack_active") void prepareRegion();
+          } } : {}),
         elements: localPlanner ? {} : {
           container: byId("offline-maps"),
           support: byId("offline-map-storage-support"),
@@ -3331,19 +3342,14 @@ async function start() {
         setPwaNetworkStatus("offline");
       }
     }
-    const prepareRegion = async () => {
-      if (!localPlanner || sharedSnapshot || regionScreen) return;
-      try { await initializeRegionScreen(); }
-      catch (error) { handleError(error, "The selected region could not be prepared."); }
-    };
     if (sharedSnapshot) {
       state.poiIndexStatus = { available: false, feature_count: null };
       displaySavedRoute(sharedSnapshot);
       renderSnapshotProfileIdentity(sharedSnapshot.candidate.routing_profile);
     } else {
       if (localPlanner) {
-        // Planning remains unavailable until the checks started by map readiness
-        // finish. Open the verified map before taking the longer planning lease.
+        // Basemap attachment starts checking the selected region. Planning
+        // remains unavailable until every required component has passed.
       }
       renderRoutingProfiles();
       try {
@@ -3393,6 +3399,8 @@ async function start() {
         mapReady = true;
         renderMapData();
         plannerLocation?.mapReady();
+        // Either map images or the regional worker may finish first.
+        if (localPlanner) { renderRoutingProfiles({ preserveUnavailableSelection: true }); render(); }
         void prepareRegion();
       },
       onError: (message) => { showMapError(message); void prepareRegion(); },

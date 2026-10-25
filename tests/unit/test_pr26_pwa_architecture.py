@@ -324,7 +324,7 @@ def test_shared_shell_generation_tracks_v104_cached_assets() -> None:
         "location_search_dialog.js": (
             "60924fa83037b8de5daa90cdfbcde5ab498a2134ff9a97b2b679e11b55c55b40"
         ),
-        "app.js": ("383f79826b7128bcb2a716d8551f17272fee058aaf25856bca7a781ed4b53ad3"),
+        "app.js": ("bd237f8ff07deb1b51b790738c8689516849daeb796b060b5b1dcac1de8a53f1"),
         "region_screen.js": (
             "bc2253c1950d5c1ead08feb3d08bbd830e05c401b405fef65bb2b8a9100425a1"
         ),
