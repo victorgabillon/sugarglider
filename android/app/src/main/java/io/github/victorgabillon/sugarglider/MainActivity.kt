@@ -81,6 +81,7 @@ class MainActivity : Activity() {
     private val localRouteExecutor = Executors.newSingleThreadExecutor()
     private val chatGptInferences = mutableSetOf<String>()
     private val chatGptExecutor = Executors.newSingleThreadExecutor()
+    private val chatGptForeground = ChatGptForegroundGate()
     private val chatGpt by lazy { ChatGptConnection(AndroidChatGptAccounts(applicationContext)) }
     private val adventureSpeech by lazy { AdventureSpeechInput(this) { activityVisible && !isFinishing && !isDestroyed } }
     private val documentExecutor = Executors.newSingleThreadExecutor()
@@ -153,6 +154,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         activityVisible = true
+        chatGptForeground.resumed()
         adventureSpeech.resumed()
         externalItineraryReceiver.flush()
         if (interruptedGpxSave) {
@@ -166,6 +168,7 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        chatGptForeground.paused()
         adventureSpeech.paused()
         if (chatGptInferences.isNotEmpty()) chatGpt.cancel()
         activityVisible = false
@@ -181,6 +184,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        chatGptForeground.close()
         chatGpt.cancel()
         adventureSpeech.cancel()
         chatGptExecutor.shutdownNow()
@@ -725,7 +729,7 @@ class MainActivity : Activity() {
                 val result = when(command.action) {
                     "status" -> chatGpt.status()
                     "select" -> { chatGpt.select(command.accountId!!); chatGpt.status() }
-                    "sign_in" -> chatGpt.signIn(command.accountId,expectedEpoch) { uri ->
+                    "sign_in" -> chatGpt.signIn(command.accountId,expectedEpoch,chatGptForeground::awaitForeground) { uri ->
                         val opened = java.util.concurrent.CompletableFuture<Boolean>()
                         runOnUiThread {
                             if (!opened.isDone) opened.complete(activeBridgeChannel === channel && bridgeNavigationEpoch == channel.navigationEpoch

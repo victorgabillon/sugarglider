@@ -7,7 +7,7 @@ import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONObject
 
-internal enum class ChatGptFailureKind { CANCELLED, NETWORK, AUTH_EXPIRED, USAGE_LIMIT, UNSUPPORTED, INVALID_RESPONSE, STORAGE, BROWSER_UNAVAILABLE }
+internal enum class ChatGptFailureKind { CANCELLED, NETWORK, AUTH_EXPIRED, AUTH_TIMEOUT, USAGE_LIMIT, UNSUPPORTED, INVALID_RESPONSE, STORAGE, BROWSER_UNAVAILABLE }
 internal enum class ChatGptHttpStage { DISCOVERY, IDENTITY_KEYS, TOKEN_EXCHANGE, REVOCATION, MODEL_CATALOG, INFERENCE }
 internal enum class ChatGptNetworkCause { DNS, TLS, TIMEOUT, CONNECT, IO, HTTP_STATUS }
 // Only fixed enums cross the diagnostic boundary, never provider bodies,

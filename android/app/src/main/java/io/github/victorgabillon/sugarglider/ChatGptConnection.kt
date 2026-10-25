@@ -41,15 +41,23 @@ internal class ChatGptConnection(
         synchronized(lock) { selectedId = clientId; catalog = emptyList(); lastFailure = null }
     }
 
-    fun signIn(clientId: String?, expectedEpoch: Long? = null, openBrowser: (URI) -> Unit): JSONObject = operation(expectedEpoch) { call, owned ->
+    fun signIn(clientId: String?, expectedEpoch: Long? = null,
+        awaitForeground: (Long, () -> Boolean) -> Unit, openBrowser: (URI) -> Unit): JSONObject = operation(expectedEpoch) { call, owned ->
         val prior = clientId?.let { id -> accounts.list().single { it.clientId == id } }
         val pending = if (clientId == null) accounts.pendingRegistration() else null
         val callback = ChatGptLoopback()
         synchronized(lock) { requireCurrent(owned); listener = callback }
         try {
             val transaction = ChatGptAuthorization(accounts.hostId(), callback.port, prior?.clientId ?: pending)
+            val browserDeadline = System.nanoTime() + 180_000_000_000L
             openBrowser(transaction.authorizationUri)
             val code = callback.awaitCode(transaction,call::cancelled)
+            callback.close()
+            synchronized(lock) { if (listener === callback) listener = null }
+            rememberRegistration(code,prior,owned)
+            // The system browser is usually still foreground at callback time.
+            // Use the remaining browser-phase budget, not a new indefinite wait.
+            awaitForeground(((browserDeadline-System.nanoTime())/1_000_000).coerceIn(0,180_000),call::cancelled)
             connect(code,prior,call,owned)
             status()
         } finally {
@@ -61,17 +69,21 @@ internal class ChatGptConnection(
     /** Separate from browser I/O so the full token validation boundary is unit-testable. */
     internal fun acceptCode(code: ChatGptCode, priorClientId: String? = null): JSONObject = operation { call, owned ->
         val prior = priorClientId?.let { id -> accounts.list().single { it.clientId == id } }
+        rememberRegistration(code,prior,owned)
         connect(code,prior,call,owned)
         status()
     }
 
-    private fun connect(code: ChatGptCode, prior: ChatGptAccount?, call: ChatGptCall, owned: Long) {
+    private fun rememberRegistration(code: ChatGptCode, prior: ChatGptAccount?, owned: Long) {
         // The issued public registration survives a later metadata/network
         // failure. It is not a token and never authorizes an account by itself.
         synchronized(lock) {
             requireCurrent(owned)
             if (prior == null) accounts.savePendingRegistration(code.clientId)
         }
+    }
+
+    private fun connect(code: ChatGptCode, prior: ChatGptAccount?, call: ChatGptCall, owned: Long) {
         validateDiscovery(call)
         val tokens = ChatGptTokenResponse.parse(http.exchange(call,code.tokenForm()),now=now())
         val identity = ChatGptIdentityVerifier.verify(tokens.idToken,code.clientId,code.nonce,http.jwks(call),now())

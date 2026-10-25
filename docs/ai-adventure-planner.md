@@ -249,3 +249,16 @@ exposes a memory-only diagnostic containing fixed failure-kind/stage/network-cau
 enums. It includes no exception messages, provider bodies, URLs, headers or tokens.
 These fixes and diagnostics require a new audited staging artifact and authorized
 physical retest; the cause of the first observed failure remains unproven.
+
+A subsequent authorized physical retest confirmed that the callback reached the
+app and retained its public registration, then failed at identity discovery with
+`network_cause: dns`. Public DNS probes under the staging UID succeeded in the
+foreground; one background probe returned unknown host. A later warm-cache
+background probe succeeded, so this is not evidence of a universal DNS outage.
+Post-callback networking was starting while Firefox was still foreground.
+Completion now waits on the connection executor for this Activity to resume before
+fetching metadata or exchanging tokens. Callback receipt and return share the
+remaining bounded browser phase; cancellation and destruction release the wait,
+and the callback socket closes immediately after receipt. No network settings,
+TLS trust, endpoints, permissions or secret fallback are changed. A live retest
+is still required to establish that this resolves the observed connection failure.

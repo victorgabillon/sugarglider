@@ -58,7 +58,11 @@ internal class ChatGptLoopback : Closeable {
             }
         }
         transaction.cancel()
-        throw IllegalStateException("ChatGPT sign-in cancelled or timed out.")
+        throw ChatGptException(when {
+            cancelled() -> ChatGptFailureKind.CANCELLED
+            attempts >= 32 -> ChatGptFailureKind.INVALID_RESPONSE
+            else -> ChatGptFailureKind.AUTH_TIMEOUT
+        })
     }
 
     override fun close(): Unit = socket.close()
