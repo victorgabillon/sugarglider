@@ -304,3 +304,22 @@ conflicting media types and missing identity/token media types remain rejected.
 Transport-level regressions cover declared/missing SSE media type, HTML, JSON,
 partial deltas and identity-document rejection. Completed live inference remains
 unproved until the corrected build is separately authorized and tested.
+
+The streaming-header build exposed a second reader defect. A short live request
+reached a completed assistant `response.output_item.done` message followed by a
+completed terminal response with `output: []`. Safe debugger checks established
+assistant role, completed status, output_text type and exact equality to the
+known test phrase; no raw provider body was captured or modified. The previous
+reader ignored completed item events and therefore discarded this answer.
+
+The reader now retains at most 16 completed message/research items in output-index
+order, with a shared 256 Ki-character serialized-item bound. Only an empty
+aggregate in a completed terminal response can use those items. A nonempty
+terminal aggregate remains authoritative and is never concatenated with the
+streamed copy. Message role/status/content/text and shared research/text limits
+remain validated. Deltas, item completion without response completion, incomplete
+terminal responses, duplicate/out-of-range indexes and oversize collections fail.
+Actual usage and research citations come from the completed response/items.
+See the [Responses streaming event definitions](https://developers.openai.com/api/reference/resources/responses/streaming-events).
+A full live app acceptance still requires the corrected APK; the diagnostic
+comparison is not a claim that the previous app accepted a complete adventure.

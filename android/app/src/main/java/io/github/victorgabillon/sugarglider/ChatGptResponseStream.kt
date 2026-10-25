@@ -9,6 +9,7 @@ internal object ChatGptResponseStream {
     const val MAX_EVENT_CHARS: Int = 262_144
     const val MAX_TEXT_CHARS: Int = 65_536
     const val MAX_RESEARCH_CALLS: Int = 4
+    const val MAX_COMPLETED_ITEMS: Int = 16
 
     fun read(reader: Reader, cancelled: () -> Boolean = { false }): String = completed(reader,cancelled).text
 
@@ -19,6 +20,8 @@ internal object ChatGptResponseStream {
         var sawCompleted = false
         var answer: ChatGptCompletion? = null
         val researchCalls = mutableSetOf<String>()
+        val completedItems = sortedMapOf<Int,JSONObject>()
+        var completedItemChars = 0
         fun event() {
             if (data.isEmpty()) return
             val payload = data.toString().trimEnd('\n')
@@ -28,6 +31,21 @@ internal object ChatGptResponseStream {
             boundDepth(payload)
             val json = try { JSONObject(payload) } catch (_: Exception) { throw IllegalArgumentException("Invalid model stream.") }
             when (json.optString("type")) {
+                "response.output_item.done" -> {
+                    val item = json.getJSONObject("item")
+                    if (item.optString("type") in setOf("message","web_search_call")) {
+                        val index = json.get("output_index")
+                        require(index is Int && index in 0 until MAX_COMPLETED_ITEMS) { "Invalid completed item index." }
+                        check(!completedItems.containsKey(index)) { "Duplicate completed item." }
+                        if (item.optString("type") == "message") {
+                            check(item.optString("role") == "assistant" && item.optString("status") == "completed") { "Incomplete model message." }
+                        }
+                        completedItemChars += item.toString().length
+                        require(completedItemChars <= MAX_EVENT_CHARS) { "Completed model items are too large." }
+                        completedItems[index] = item
+                        require(completedItems.values.count { it.optString("type") == "web_search_call" } <= MAX_RESEARCH_CALLS) { "Research budget exceeded." }
+                    }
+                }
                 "response.output_item.added" -> {
                     val item = json.optJSONObject("item")
                     if (item?.optString("type") == "web_search_call") {
@@ -45,7 +63,15 @@ internal object ChatGptResponseStream {
                     check(!sawCompleted) { "Duplicate model completion." }
                     val response = json.optJSONObject("response") ?: error("Model completion missing.")
                     check(response.optString("status") == "completed") { "Model response was not completed." }
-                    val output = response.optJSONArray("output") ?: error("Model output missing.")
+                    var output = response.optJSONArray("output") ?: error("Model output missing.")
+                    // Some plan-sharing completions omit the aggregate items.
+                    // Only item.done messages can supply that output, and only
+                    // after this terminal response has itself completed.
+                    if (output.length() == 0 && completedItems.isNotEmpty()) {
+                        output = org.json.JSONArray(completedItems.values.toList())
+                        response.put("output",output)
+                    }
+                    require(output.length() <= MAX_COMPLETED_ITEMS) { "Too many completed model items." }
                     require((0 until output.length()).count { output.getJSONObject(it).optString("type") == "web_search_call" } <= MAX_RESEARCH_CALLS) { "Research budget exceeded." }
                     val text = StringBuilder()
                     for (index in 0 until output.length()) {

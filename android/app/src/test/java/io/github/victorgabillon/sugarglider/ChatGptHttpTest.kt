@@ -26,10 +26,16 @@ class ChatGptHttpTest {
             .put("status","completed").put("output",org.json.JSONArray().put(JSONObject()
                 .put("type","message").put("role","assistant").put("status","completed")
                 .put("content",org.json.JSONArray().put(JSONObject().put("type","output_text").put("text","synthetic answer")))))) + "\n\n"
+        val terminal = JSONObject(body.removePrefix("data: ").trim())
+        val message = terminal.getJSONObject("response").getJSONArray("output").getJSONObject(0)
+        terminal.getJSONObject("response").put("output",org.json.JSONArray())
+        val itemStream = "data: " + JSONObject().put("type","response.output_item.done").put("output_index",0).put("item",message) + "\n\n" + "data: $terminal\n\n"
         for (mime in listOf("text/event-stream; charset=utf-8",null)) {
-            val http = ChatGptHttp(ConnectionFactory { url -> Response(url,body=body,mime=mime) })
-            val result = http.infer(ChatGptCall(),"synthetic-token",adventureChatGptPayload("visible-model","instructions","synthetic",false,null))
-            assertEquals("synthetic answer",result.text)
+            for (stream in listOf(body,itemStream)) {
+                val http = ChatGptHttp(ConnectionFactory { url -> Response(url,body=stream,mime=mime) })
+                val result = http.infer(ChatGptCall(),"synthetic-token",adventureChatGptPayload("visible-model","instructions","synthetic",false,null))
+                assertEquals("synthetic answer",result.text)
+            }
         }
         val explicitWrongType = ChatGptHttp(ConnectionFactory { url -> Response(url,body=body,mime="application/json") })
         val failure = assertThrows(ChatGptException::class.java) {
