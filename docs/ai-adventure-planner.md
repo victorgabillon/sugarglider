@@ -166,12 +166,33 @@ saved adventure action, keeping the editable planner independent. Missing region
 remain unavailable for new planning. The UI reports failed persistence and offers
 Forget; clearing saved offline data drains pending writes before removing data.
 No database migration, additional store opener or credential persistence is added.
-Eight storage scenarios and the actual bundled app at mobile/desktop sizes cover
+Nine storage scenarios and the actual bundled app at mobile/desktop sizes cover
 reload/GPX identity, missing region, stale recovery after editing and clear/forget.
 
-Further Marly quality/diversity work, final comprehensive validation,
-APK audit, review PR and separately authorized live/physical acceptance remain
-outstanding. No AI APK has been installed or offered as complete.
+Final local verification passes: Python 3.13 `make check` (1,612 tests, Ruff and
+strict mypy), all 61 browser harness pages, 18 self-contained browser acceptance
+drivers, Debug/Release JVM tests (268/263), both Android lints and APK assembly.
+The staging APK audit checks all 153 exact shell assets, unchanged native routing,
+existing staging certificate and 16 KiB alignment. Six older visual drivers that
+require a running six-profile server and retained real-map setup were not run;
+their component harnesses are included in the 61 passing pages. The private HTTPS
+regional contract suite also passes with synthetic publication authorization only.
+
+The repeated read-only Marly host benchmark retains two actual graph-derived
+options: a 36.787 km comparison and a 37.830 km historical option with four checked
+stops. The latter has 37.564% mapped woodland, 30.801% urban, 26.275% unknown and
+413 m ascent/descent. One measured revision improves loop shape while trading off
+woodland. The alternatives share approximately 76.9% of exact coordinate segments;
+this is not an edge-ID overlap measurement. Sixteen native route calls and fewer
+than 1.51 million Nature operations stay within the existing budgets. The model
+fixture is curated, not live AI; the height and routing measurements are real host
+measurements. This does not establish three independent predominantly forest loops.
+
+Draft review, GitHub CI and separately authorized live/physical acceptance remain
+outstanding. Android loopback sign-in, account eligibility, completed inference,
+research/schema capabilities, microphone behavior and phone latency remain
+unverified. No AI APK has been installed or offered as complete. Authentication
+must not be merged on synthetic evidence alone.
 
 ## Official protocol references (checked 25 October 2026)
 
