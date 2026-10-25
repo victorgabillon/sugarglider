@@ -14,7 +14,9 @@ Previously, offline-map initialization, planning readiness and the following map
 refresh each opened and hashed the same archive. A private Fairphone trace found
 three full SHA-256 passes over an 81.6 MB archive, reading about 245 MB at startup.
 The basemap now attaches before the longer planning lease, so tiles and icons can render while
-native capabilities and the regional worker are prepared. Planning availability
+native capabilities and the regional worker are prepared. Those independent checks
+run concurrently under one version lease. Both outcomes are drained before the
+lease is released, including on failure. Planning availability
 still comes only from the completed native, map, Places and Nature checks. Map
 initialization failure starts those checks too, preserving usable route controls
 when WebGL is unavailable.

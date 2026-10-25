@@ -119,7 +119,10 @@ async function startup(browser, scenario) {
       // directory. Run its integrity/update cases in the same CI acceptance job.
       if (scenario.runHarness === 'product') await page.evaluate(() => history.replaceState(null, '', '/tests/browser/fixture.html'));
       const cases = await page.evaluate(async product => product
-        ? (await import('/tests/browser/pr42_region_product_harness.js')).runPr42RegionProductHarness()
+        ? [
+          ...await (await import('/tests/browser/pr42_region_product_harness.js')).runPr42RegionProductHarness(),
+          ...await (await import('/tests/browser/pr42_regional_runtime_harness.js')).runPr42RegionalRuntimeHarness(),
+        ]
         : (await import('/tests/browser/region_preference_harness.js')).runRegionPreferenceHarness(), scenario.runHarness === 'product');
       assert.deepEqual(errors, []);
       return { name: scenario.name, ...(scenario.repeat === undefined ? {} : { repeat: scenario.repeat }), status: 'passed', cases: cases.length };
