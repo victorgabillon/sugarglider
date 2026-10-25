@@ -55,6 +55,19 @@ async function rejected(promise, code) {
 
 export async function runAdventureControllerHarness() {
   const cases = [], beforeState = JSON.stringify(state);
+  {
+    const r = await setup();
+    try {
+      await r.controller.run({ ...r.input, structured: false, refine: false });
+      assert(r.calls.length === 1 && r.calls[0].output_schema === null, 'explicit text mode omits unsupported Structured Outputs');
+      const marker = 'Local validation remains mandatory:\n';
+      const schema = JSON.parse(r.calls[0].instructions.split(marker)[1]);
+      assert(schema.properties.format.enum[0] === 'sugarglider_ai_adventure'
+        && schema.properties.places.maxItems === 20 && schema.additionalProperties === false,
+      'text mode still supplies the complete bounded proposal contract');
+      cases.push('text_mode_includes_exact_contract_without_provider_structured_output');
+    } finally { r.controller.cancel(); r.planner.invalidate(); }
+  }
   for (const id of ['__proto__', 'constructor']) {
     const r = await setup();
     try {

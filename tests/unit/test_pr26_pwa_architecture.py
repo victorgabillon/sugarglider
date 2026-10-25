@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v107_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v108_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v107"
+    assert generation.group(1) == "v108"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -359,7 +359,7 @@ def test_shared_shell_generation_tracks_v107_cached_assets() -> None:
             "b43fee68ac2ce4c550b5a2aea7a0e72dbbae6cd92d4aeb91537f932a30d919a0"
         ),
         "adventure_controller.js": (
-            "41b4cf3bfdd90ed86620bbb73fa399545adf5b84954e1fedc7bf5b1032b7b7fe"
+            "af6bcff6a5db8cb87ad462a459dd90892d5e64391bbd1861c53f2563d55b2a27"
         ),
         "adventure_intent.js": (
             "0376d810ec62f80a7eca947bc34362af4d5b68fd78d9bc8086ad2143e4dcf067"

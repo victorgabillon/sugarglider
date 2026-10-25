@@ -46,4 +46,15 @@ class ChatGptResponseStreamTest {
         assertThrows(IllegalStateException::class.java) { ChatGptResponseStream.read(StringReader(completed())) { true } }
         assertThrows(IllegalArgumentException::class.java) { ChatGptResponseStream.read(StringReader("data: invalid\n\n")) }
     }
+    @Test fun boundsResearchFromStreamEventsAndCompletedOutput() {
+        fun call(id: String): String = event(JSONObject().put("type","response.output_item.added")
+            .put("item",JSONObject().put("type","web_search_call").put("id",id)))
+        val four = (1..4).joinToString("") { call("call-$it") }
+        assertEquals("synthetic answer",ChatGptResponseStream.read(StringReader(four + call("call-1") + completed())))
+        assertThrows(IllegalArgumentException::class.java) { ChatGptResponseStream.read(StringReader(four + call("call-5") + completed())) }
+        val terminal = JSONObject(completed().removePrefix("data: ").trim())
+        val output = terminal.getJSONObject("response").getJSONArray("output")
+        repeat(5) { output.put(JSONObject().put("type","web_search_call").put("status","completed")) }
+        assertThrows(IllegalArgumentException::class.java) { ChatGptResponseStream.read(StringReader(event(terminal))) }
+    }
 }

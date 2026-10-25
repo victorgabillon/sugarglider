@@ -34,7 +34,9 @@ export function createAdventureController({ model, planner, confirmProposal = nu
       const record = { phase, status: "started", usage: null, elapsed_ms: null, error: null };
       calls.push(record);
       try {
-        const response = await model.infer({ model: modelId, instructions: ADVENTURE_INSTRUCTIONS,
+        const instructions = structured ? ADVENTURE_INSTRUCTIONS
+          : `${ADVENTURE_INSTRUCTIONS}\nReturn one JSON object satisfying this schema. Local validation remains mandatory:\n${JSON.stringify(ADVENTURE_SCHEMA)}`;
+        const response = await model.infer({ model: modelId, instructions,
           input: JSON.stringify(payload), research, output_schema: structured ? ADVENTURE_SCHEMA : null }, abort.signal);
         current();
         record.status = "completed"; record.usage = usage(response.usage);

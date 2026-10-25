@@ -80,10 +80,29 @@ class ChatGptHttpTest {
             val failure = assertThrows(ChatGptException::class.java) { http.discovery(ChatGptCall()) }
             assertEquals(ChatGptHttpStage.DISCOVERY,failure.stage)
             assertEquals(expected,failure.networkCause)
-            assertEquals(setOf("kind","stage","network_cause","response_issue"),failure.diagnostic().keys().asSequence().toSet())
+            assertEquals(setOf("kind","stage","network_cause","response_issue","rejection"),failure.diagnostic().keys().asSequence().toSet())
             assertFalse(failure.diagnostic().toString().contains("secret"))
             assertNull(failure.cause)
         }
+    }
+    @Test fun rejectionDiagnosticsRetainOnlyKnownCodesAndParameters() {
+        for ((code,parameter,expectedCode,expectedParameter) in listOf(
+            listOf("subscription_sharing_unsupported_capability","max_output_tokens","subscription_sharing_unsupported_capability","max_output_tokens"),
+            listOf("invalid_json_schema","text.format.schema","invalid_json_schema","text.format.schema"),
+            listOf("secret-token","secret-token","other","other"),
+        )) {
+            val body = JSONObject().put("error",JSONObject().put("code",code).put("param",parameter).put("message","secret-token"))
+            val http = ChatGptHttp(ConnectionFactory { url -> Response(url,400,body.toString()) })
+            val failure = assertThrows(ChatGptException::class.java) { http.models(ChatGptCall(),"synthetic-token") }
+            val rejection = failure.diagnostic().getJSONObject("rejection")
+            assertEquals(400,rejection.getInt("http_status"))
+            assertEquals(expectedCode,rejection.getString("code"))
+            assertEquals(expectedParameter,rejection.getString("parameter"))
+            assertFalse(failure.diagnostic().toString().contains("secret-token"))
+        }
+        val detail = ChatGptRejection.parse(400,JSONObject().put("detail","secret-token")).json()
+        assertEquals("other",detail.getString("code"));assertEquals("other",detail.getString("parameter"))
+        assertFalse(detail.toString().contains("secret-token"))
     }
     @Test fun boundsRichCatalogMetadataSeparatelyAndClassifiesDecodeFailures() {
         val catalog = JSONObject().put("models",org.json.JSONArray()).put("metadata","x".repeat(300_000)).toString()

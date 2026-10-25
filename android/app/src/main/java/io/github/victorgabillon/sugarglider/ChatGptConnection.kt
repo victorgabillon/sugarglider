@@ -195,8 +195,8 @@ internal class ChatGptConnection(
 }
 internal data class ChatGptModel(val slug: String, val label: String)
 
-// One bounded foreground response, using the documented Responses API fields.
-// These limits also include reasoning and hosted research work, not just text.
+// ChatGPT plan sharing rejects server-side token/tool caps. Bound the foreground
+// stream locally; do not send fields supported only by other Responses routes.
 internal fun adventureChatGptPayload(
     model: String,
     instructions: String,
@@ -205,8 +205,8 @@ internal fun adventureChatGptPayload(
     schema: JSONObject?,
 ): JSONObject {
     val payload = JSONObject().put("model",model).put("store",false).put("stream",true)
-        .put("instructions",instructions).put("input",input).put("max_output_tokens",16_384)
-    if (research) payload.put("max_tool_calls",4).put("tools",JSONArray().put(JSONObject().put("type","web_search")))
+        .put("instructions",instructions).put("input",JSONArray().put(JSONObject().put("role","user").put("content",input)))
+    if (research) payload.put("tools",JSONArray().put(JSONObject().put("type","web_search")))
     if (schema != null) payload.put("text",JSONObject().put("format",JSONObject().put("type","json_schema")
         .put("name","sugarglider_adventure").put("strict",true).put("schema",schema)))
     return payload

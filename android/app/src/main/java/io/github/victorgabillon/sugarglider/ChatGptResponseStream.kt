@@ -8,6 +8,7 @@ internal object ChatGptResponseStream {
     const val MAX_STREAM_CHARS: Int = 2_097_152
     const val MAX_EVENT_CHARS: Int = 262_144
     const val MAX_TEXT_CHARS: Int = 65_536
+    const val MAX_RESEARCH_CALLS: Int = 4
 
     fun read(reader: Reader, cancelled: () -> Boolean = { false }): String = completed(reader,cancelled).text
 
@@ -17,6 +18,7 @@ internal object ChatGptResponseStream {
         var total = 0
         var sawCompleted = false
         var answer: ChatGptCompletion? = null
+        val researchCalls = mutableSetOf<String>()
         fun event() {
             if (data.isEmpty()) return
             val payload = data.toString().trimEnd('\n')
@@ -26,6 +28,15 @@ internal object ChatGptResponseStream {
             boundDepth(payload)
             val json = try { JSONObject(payload) } catch (_: Exception) { throw IllegalArgumentException("Invalid model stream.") }
             when (json.optString("type")) {
+                "response.output_item.added" -> {
+                    val item = json.optJSONObject("item")
+                    if (item?.optString("type") == "web_search_call") {
+                        val id = item.getString("id")
+                        require(id.length in 1..256) { "Invalid research call identity." }
+                        researchCalls.add(id)
+                        require(researchCalls.size <= MAX_RESEARCH_CALLS) { "Research budget exceeded." }
+                    }
+                }
                 "response.failed", "response.incomplete", "error" -> {
                     val code = json.optJSONObject("response")?.optJSONObject("error")?.optString("code") ?: json.optString("code")
                     throw ChatGptException(if (code in setOf("subscription_sharing_usage_limit_exceeded", "subscription_sharing_usage_unavailable")) ChatGptFailureKind.USAGE_LIMIT else ChatGptFailureKind.INVALID_RESPONSE)
@@ -35,6 +46,7 @@ internal object ChatGptResponseStream {
                     val response = json.optJSONObject("response") ?: error("Model completion missing.")
                     check(response.optString("status") == "completed") { "Model response was not completed." }
                     val output = response.optJSONArray("output") ?: error("Model output missing.")
+                    require((0 until output.length()).count { output.getJSONObject(it).optString("type") == "web_search_call" } <= MAX_RESEARCH_CALLS) { "Research budget exceeded." }
                     val text = StringBuilder()
                     for (index in 0 until output.length()) {
                         val item = output.getJSONObject(index)

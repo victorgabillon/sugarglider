@@ -11,14 +11,36 @@ internal enum class ChatGptFailureKind { CANCELLED, NETWORK, AUTH_EXPIRED, AUTH_
 internal enum class ChatGptHttpStage { DISCOVERY, IDENTITY_KEYS, TOKEN_EXCHANGE, REVOCATION, MODEL_CATALOG, INFERENCE }
 internal enum class ChatGptNetworkCause { DNS, TLS, TIMEOUT, CONNECT, IO, HTTP_STATUS }
 internal enum class ChatGptResponseIssue { CONTENT_TYPE, BODY_TOO_LARGE, JSON_SYNTAX, CATALOG_SCHEMA }
-// Only fixed enums cross the diagnostic boundary, never provider bodies,
+// Only fixed diagnostic values cross the boundary, never provider bodies,
 // exception messages, URLs, headers or token forms.
 internal class ChatGptException(val kind: ChatGptFailureKind, val stage: ChatGptHttpStage? = null,
-    val networkCause: ChatGptNetworkCause? = null, val responseIssue: ChatGptResponseIssue? = null) : IllegalStateException(kind.name) {
+    val networkCause: ChatGptNetworkCause? = null, val responseIssue: ChatGptResponseIssue? = null,
+    private val rejection: ChatGptRejection? = null) : IllegalStateException(kind.name) {
     fun diagnostic(): JSONObject = JSONObject().put("kind",kind.name.lowercase())
         .put("stage",stage?.name?.lowercase() ?: JSONObject.NULL)
         .put("network_cause",networkCause?.name?.lowercase() ?: JSONObject.NULL)
         .put("response_issue",responseIssue?.name?.lowercase() ?: JSONObject.NULL)
+        .put("rejection",rejection?.json() ?: JSONObject.NULL)
+    fun atStage(value: ChatGptHttpStage): ChatGptException = ChatGptException(kind,value,networkCause,responseIssue,rejection)
+}
+
+// Provider text never crosses this boundary. Unknown codes/parameters collapse
+// to "other", including attacker-controlled values that resemble credentials.
+internal class ChatGptRejection private constructor(private val status: Int, private val code: String, private val parameter: String) {
+    fun json(): JSONObject = JSONObject().put("http_status",status).put("code",code).put("parameter",parameter)
+    companion object {
+        fun parse(status: Int, body: JSONObject?): ChatGptRejection {
+            val error = body?.optJSONObject("error")
+            val code = error?.optString("code") ?: (body?.opt("error") as? String)
+            val knownCodes = setOf("invalid_grant","invalid_request_error","unsupported_parameter","invalid_json_schema",
+                "subscription_sharing_unsupported_capability","subscription_sharing_user_not_eligible","subscription_sharing_route_not_supported",
+                "chatpass_v2_scope_not_authorized","chatpass_v2_invalid_authorization_context")
+            val parameter = error?.optString("param")
+            val knownParameters = setOf("input","model","instructions","tools","tools[0]","tools[0].type","text","text.format","text.format.schema",
+                "max_output_tokens","max_tool_calls","store","stream")
+            return ChatGptRejection(status,code?.takeIf(knownCodes::contains) ?: "other",parameter?.takeIf(knownParameters::contains) ?: "other")
+        }
+    }
 }
 
 /** Owns one foreground operation's connections; closing aborts blocked network reads. */
@@ -109,7 +131,8 @@ internal class ChatGptHttp(private val connections: ConnectionFactory = Connecti
                 400, 404, 422 -> {
                     val error = runCatching { connection.errorStream?.use { JSONObject(readBounded(it,16_384).toString(Charsets.UTF_8)) } }.getOrNull()
                     val code = (error?.opt("error") as? String) ?: error?.optJSONObject("error")?.optString("code")
-                    throw ChatGptException(if (code == "invalid_grant") ChatGptFailureKind.AUTH_EXPIRED else ChatGptFailureKind.UNSUPPORTED)
+                    throw ChatGptException(if (code == "invalid_grant") ChatGptFailureKind.AUTH_EXPIRED else ChatGptFailureKind.UNSUPPORTED,
+                        rejection=ChatGptRejection.parse(connection.responseCode,error))
                 }
                 else -> throw ChatGptException(ChatGptFailureKind.NETWORK,stage,ChatGptNetworkCause.HTTP_STATUS)
             }
@@ -125,7 +148,11 @@ internal class ChatGptHttp(private val connections: ConnectionFactory = Connecti
                 }
                 read(bounded)
             }
-        } catch (error: ChatGptException) { throw ChatGptException(error.kind,error.stage ?: stage,error.networkCause,error.responseIssue) }
+        } catch (error: ChatGptException) {
+            if (error.stage != null) throw error
+            // Preserve only the already sanitized rejection when adding stage.
+            throw error.atStage(stage)
+        }
         catch (error: java.io.IOException) { throw networkFailure(call,stage,error) }
         catch (_: Exception) { throw ChatGptException(if (call.cancelled()) ChatGptFailureKind.CANCELLED else ChatGptFailureKind.INVALID_RESPONSE,stage) }
         finally { call.detach(connection) }

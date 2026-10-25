@@ -139,7 +139,7 @@ a failed AI request, and restores the exact prior manual request/result/selectio
 Seven dialog scenarios also cover enlarged text, required-place confirmation,
 locally resolved End review and cancellation before region acquisition. Fifteen
 retained/evolved elevation scenarios pass. The shell/Android allowlists include the
-new modules under cache generation v107, with refreshed identities and CI steps.
+new modules under cache generation v108, with refreshed identities and CI steps.
 All account, routing and terrain replies in these tests are explicitly synthetic.
 
 A private read-only host benchmark now exercises the existing Marly/Yvelines graph,
@@ -214,11 +214,19 @@ Model discovery does not itself prove web-search/Structured Outputs/tool support
 ## Inference and local-search capability boundary
 
 The account-specific model catalog establishes visibility, not tool eligibility.
-The selected Responses API request caps output (including reasoning) at 16,384
-tokens and, when research is enabled, hosted tool calls at four per response.
-There remain at most two model requests for an adventure. Incomplete output is
-rejected, and unsupported optional research/schema can be disabled explicitly;
-there is no automatic retry onto another billing route.
+The current [ChatGPT plan-sharing preview contract](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
+requires an input message array and rejects `max_output_tokens` and
+`max_tool_calls`. Those fields are omitted. The client owns a 120 s network
+operation, 15 s socket-read timeout, 2 Mi-character stream, 256 Ki-character
+event and 64 Ki-character completed-text limits (the proposal additionally has a
+64 KiB UTF-8 limit). Research is aborted when a fifth distinct hosted search is
+observed, and a completion containing more than four searches is rejected.
+These are client acceptance/transport limits, not a server-side token or billing
+cap: work may already be running when cancellation is observed. There remain at
+most two model requests for an adventure. Incomplete output is rejected.
+Unsupported optional research/schema can be disabled explicitly; text mode still
+supplies the complete schema as instructions and applies the same strict local
+validation. There is no automatic retry onto another billing route.
 
 [Responses API fields](https://developers.openai.com/api/reference/python/resources/responses/methods/create)
 and [tool use](https://developers.openai.com/api/docs/guides/tools) document hosted
@@ -273,3 +281,13 @@ without recording provider bodies, and report the catalog's observed byte count.
 The app still exposes only the ordered visible slug/label list, with at most 100
 entries and no hardcoded model or alternate-format fallback. Physical retest must
 establish whether the previous size bound caused this observed catalog failure.
+
+On the catalog build, the protected account survived installation and eight real
+models loaded from a 610,824-byte catalog, confirming the old 256 KiB size limit.
+Two explicit phone operations (research on, then off) were rejected before a
+completed response. Review of the current preview limitations identified two
+unsupported request fields and the required array input. These are corrected;
+this correction still requires separately authorized physical verification.
+Diagnostics retain only allowlisted rejection codes and parameter names plus
+HTTP status, with unknown provider values replaced by `other`. No provider body,
+message, request headers or credentials cross that boundary.
