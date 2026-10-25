@@ -17,7 +17,8 @@ export function createAdventureModel({ transport = nativeBridgeTransport, origin
     const abort = () => cancel();
     signal?.addEventListener("abort", abort, { once: true });
     try {
-      const payload = await transport.request(`chatgpt_${action}`, fields, { owner, timeoutMs: action === "sign_in" ? 210_000 : 130_000,
+      // Sign-in owns a 180 s browser phase followed by up to 120 s native HTTP.
+      const payload = await transport.request(`chatgpt_${action}`, fields, { owner, timeoutMs: action === "sign_in" ? 310_000 : 130_000,
         parseReply: raw => {
           if (typeof raw !== "string" || raw.length > 524_288) return null;
           let value; try { value = JSON.parse(raw); } catch { return null; }

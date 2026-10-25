@@ -108,6 +108,20 @@ class ChatGptConnectionTest {
         assertEquals(ChatGptFailureKind.CANCELLED,assertThrows(ChatGptException::class.java) { connection.acceptCode(code()) }.kind)
         assertTrue(memory.saved.isEmpty())
     }
+    @Test fun metadataFailureRetainsIssuedRegistrationWithoutAuthorizingAnAccount() {
+        val memory = Memory()
+        val connection = ChatGptConnection(memory,ChatGptHttp(ConnectionFactory {
+            throw java.net.UnknownHostException("secret callback or credential")
+        })) { time }
+        assertThrows(ChatGptException::class.java) { connection.acceptCode(code()) }
+        assertEquals("oaiapp_test",memory.pending)
+        assertTrue(memory.saved.isEmpty())
+        val status = connection.status()
+        assertEquals(0,status.getJSONArray("accounts").length())
+        assertEquals("discovery",status.getJSONObject("last_failure").getString("stage"))
+        assertEquals("dns",status.getJSONObject("last_failure").getString("network_cause"))
+        assertFalse(status.toString().contains("secret"))
+    }
     @Test fun inferencePayloadBoundsOutputAndResearchWithoutAssumingModelCapabilities() {
         val schema = JSONObject().put("type","object").put("properties",JSONObject())
         val payload = adventureChatGptPayload("account-visible-model","instructions","synthetic description",true,schema)

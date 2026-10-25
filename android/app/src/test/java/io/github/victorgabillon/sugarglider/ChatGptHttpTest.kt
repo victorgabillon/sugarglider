@@ -36,9 +36,12 @@ class ChatGptHttpTest {
         for ((status,kind) in listOf(401 to ChatGptFailureKind.AUTH_EXPIRED,403 to ChatGptFailureKind.AUTH_EXPIRED,429 to ChatGptFailureKind.USAGE_LIMIT,400 to ChatGptFailureKind.UNSUPPORTED,500 to ChatGptFailureKind.NETWORK)) {
             val failure = assertThrows(ChatGptException::class.java) { ChatGptHttp(ConnectionFactory { url -> Response(url,status,"secret provider details") }).models(ChatGptCall(),"synthetic-token") }
             assertEquals(kind,failure.kind); assertFalse(failure.toString().contains("secret"))
+            assertEquals(ChatGptHttpStage.MODEL_CATALOG,failure.stage)
+            assertFalse(failure.diagnostic().toString().contains("secret"))
         }
         val failedRefresh = assertThrows(ChatGptException::class.java) { ChatGptHttp(ConnectionFactory { url -> Response(url,400,"""{"error":"invalid_grant"}""") }).exchange(ChatGptCall(),"synthetic-form") }
         assertEquals(ChatGptFailureKind.AUTH_EXPIRED,failedRefresh.kind)
+        assertEquals(ChatGptHttpStage.TOKEN_EXCHANGE,failedRefresh.stage)
     }
     @Test fun boundsInputAndCancelsWithoutFallback() {
         val huge = ChatGptHttp(ConnectionFactory { url -> Response(url,body="a".repeat(262_145)) })
@@ -48,5 +51,38 @@ class ChatGptHttpTest {
         val offline = ChatGptHttp(ConnectionFactory { throw java.io.IOException("offline") })
         assertEquals(ChatGptFailureKind.NETWORK,assertThrows(ChatGptException::class.java) { offline.models(ChatGptCall(),"synthetic-token") }.kind)
         assertThrows(IllegalArgumentException::class.java) { ChatGptHttp().infer(ChatGptCall(),"synthetic",JSONObject().put("stream",false).put("store",true)) }
+    }
+    @Test fun browserTimeDoesNotConsumeTheSingleBoundedHttpBudget() {
+        var elapsed = 0L
+        val call = ChatGptCall { elapsed }
+        elapsed = 179_000_000_000L
+        assertFalse(call.cancelled())
+        call.beginNetwork()
+        elapsed += 119_000_000_000L
+        assertFalse(call.cancelled())
+        call.beginNetwork() // Subsequent requests cannot reset the shared budget.
+        elapsed += 1_000_000_000L
+        assertTrue(call.cancelled())
+        assertThrows(ChatGptException::class.java) { call.beginNetwork() }
+        val cancelled = ChatGptCall { elapsed }; cancelled.close()
+        assertTrue(cancelled.cancelled())
+        assertThrows(ChatGptException::class.java) { cancelled.beginNetwork() }
+    }
+    @Test fun networkDiagnosticsContainOnlyFixedEnums() {
+        for ((cause, expected) in listOf(
+            java.net.UnknownHostException("secret callback token") to ChatGptNetworkCause.DNS,
+            javax.net.ssl.SSLHandshakeException("secret callback token") to ChatGptNetworkCause.TLS,
+            java.net.SocketTimeoutException("secret callback token") to ChatGptNetworkCause.TIMEOUT,
+            java.net.ConnectException("secret callback token") to ChatGptNetworkCause.CONNECT,
+            java.io.IOException("secret callback token") to ChatGptNetworkCause.IO,
+        )) {
+            val http = ChatGptHttp(ConnectionFactory { throw cause })
+            val failure = assertThrows(ChatGptException::class.java) { http.discovery(ChatGptCall()) }
+            assertEquals(ChatGptHttpStage.DISCOVERY,failure.stage)
+            assertEquals(expected,failure.networkCause)
+            assertEquals(setOf("kind","stage","network_cause"),failure.diagnostic().keys().asSequence().toSet())
+            assertFalse(failure.diagnostic().toString().contains("secret"))
+            assertNull(failure.cause)
+        }
     }
 }

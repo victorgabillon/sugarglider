@@ -8,14 +8,27 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONObject
 
 internal enum class ChatGptFailureKind { CANCELLED, NETWORK, AUTH_EXPIRED, USAGE_LIMIT, UNSUPPORTED, INVALID_RESPONSE, STORAGE, BROWSER_UNAVAILABLE }
-internal class ChatGptException(val kind: ChatGptFailureKind) : IllegalStateException(kind.name)
+internal enum class ChatGptHttpStage { DISCOVERY, IDENTITY_KEYS, TOKEN_EXCHANGE, REVOCATION, MODEL_CATALOG, INFERENCE }
+internal enum class ChatGptNetworkCause { DNS, TLS, TIMEOUT, CONNECT, IO, HTTP_STATUS }
+// Only fixed enums cross the diagnostic boundary, never provider bodies,
+// exception messages, URLs, headers or token forms.
+internal class ChatGptException(val kind: ChatGptFailureKind, val stage: ChatGptHttpStage? = null,
+    val networkCause: ChatGptNetworkCause? = null) : IllegalStateException(kind.name) {
+    fun diagnostic(): JSONObject = JSONObject().put("kind",kind.name.lowercase())
+        .put("stage",stage?.name?.lowercase() ?: JSONObject.NULL)
+        .put("network_cause",networkCause?.name?.lowercase() ?: JSONObject.NULL)
+}
 
 /** Owns one foreground operation's connections; closing aborts blocked network reads. */
-internal class ChatGptCall : AutoCloseable {
+internal class ChatGptCall(private val nowNanos: () -> Long = System::nanoTime) : AutoCloseable {
     private val stopped = AtomicBoolean(false)
-    private val deadline: Long = System.nanoTime() + 120_000_000_000L
+    @Volatile private var networkStarted: Long? = null
     @Volatile private var connection: HttpURLConnection? = null
-    fun cancelled(): Boolean = stopped.get() || System.nanoTime() >= deadline
+    fun cancelled(): Boolean = stopped.get() || networkStarted?.let { nowNanos() - it >= 120_000_000_000L } == true
+    @Synchronized fun beginNetwork() {
+        if (cancelled()) throw ChatGptException(ChatGptFailureKind.CANCELLED)
+        if (networkStarted == null) networkStarted = nowNanos()
+    }
     @Synchronized fun attach(value: HttpURLConnection) {
         if (cancelled()) { value.disconnect(); throw ChatGptException(ChatGptFailureKind.CANCELLED) }
         connection = value
@@ -49,8 +62,17 @@ internal class ChatGptHttp(private val connections: ConnectionFactory = Connecti
         }
     private fun <T> request(call: ChatGptCall, endpoint: String, body: ByteArray?, contentType: String, bearer: String?, read: (InputStream) -> T): T {
         require(endpoint in setOf(DISCOVERY, JWKS, TOKEN, REVOKE, MODELS, RESPONSES))
+        val stage = when (endpoint) {
+            DISCOVERY -> ChatGptHttpStage.DISCOVERY
+            JWKS -> ChatGptHttpStage.IDENTITY_KEYS
+            TOKEN -> ChatGptHttpStage.TOKEN_EXCHANGE
+            REVOKE -> ChatGptHttpStage.REVOCATION
+            MODELS -> ChatGptHttpStage.MODEL_CATALOG
+            else -> ChatGptHttpStage.INFERENCE
+        }
         if (bearer != null) require(bearer.length in 1..16_384 && bearer.none { it.isISOControl() })
-        val connection = try { connections.open(URL(endpoint)) } catch (_: Exception) { throw ChatGptException(ChatGptFailureKind.NETWORK) }
+        call.beginNetwork()
+        val connection = try { connections.open(URL(endpoint)) } catch (error: Exception) { throw networkFailure(call,stage,error) }
         call.attach(connection)
         try {
             connection.instanceFollowRedirects = false
@@ -76,7 +98,7 @@ internal class ChatGptHttp(private val connections: ConnectionFactory = Connecti
                     val code = (error?.opt("error") as? String) ?: error?.optJSONObject("error")?.optString("code")
                     throw ChatGptException(if (code == "invalid_grant") ChatGptFailureKind.AUTH_EXPIRED else ChatGptFailureKind.UNSUPPORTED)
                 }
-                else -> throw ChatGptException(ChatGptFailureKind.NETWORK)
+                else -> throw ChatGptException(ChatGptFailureKind.NETWORK,stage,ChatGptNetworkCause.HTTP_STATUS)
             }
             val type = connection.contentType?.substringBefore(';')?.trim()?.lowercase()
             require(endpoint == REVOKE || type == if (endpoint == RESPONSES) "text/event-stream" else "application/json") { "Invalid OpenAI response type." }
@@ -88,10 +110,20 @@ internal class ChatGptHttp(private val connections: ConnectionFactory = Connecti
                 }
                 read(bounded)
             }
-        } catch (error: ChatGptException) { throw error }
-        catch (_: java.io.IOException) { throw ChatGptException(if (call.cancelled()) ChatGptFailureKind.CANCELLED else ChatGptFailureKind.NETWORK) }
-        catch (_: Exception) { throw ChatGptException(if (call.cancelled()) ChatGptFailureKind.CANCELLED else ChatGptFailureKind.INVALID_RESPONSE) }
+        } catch (error: ChatGptException) { throw ChatGptException(error.kind,error.stage ?: stage,error.networkCause) }
+        catch (error: java.io.IOException) { throw networkFailure(call,stage,error) }
+        catch (_: Exception) { throw ChatGptException(if (call.cancelled()) ChatGptFailureKind.CANCELLED else ChatGptFailureKind.INVALID_RESPONSE,stage) }
         finally { call.detach(connection) }
+    }
+    private fun networkFailure(call: ChatGptCall, stage: ChatGptHttpStage, error: Exception): ChatGptException {
+        val cause = when (error) {
+            is java.net.UnknownHostException -> ChatGptNetworkCause.DNS
+            is javax.net.ssl.SSLException -> ChatGptNetworkCause.TLS
+            is java.net.SocketTimeoutException -> ChatGptNetworkCause.TIMEOUT
+            is java.net.ConnectException -> ChatGptNetworkCause.CONNECT
+            else -> ChatGptNetworkCause.IO
+        }
+        return ChatGptException(if (call.cancelled()) ChatGptFailureKind.CANCELLED else ChatGptFailureKind.NETWORK,stage,cause)
     }
     private fun readBounded(input: InputStream, maximum: Int): ByteArray {
         val output = java.io.ByteArrayOutputStream()

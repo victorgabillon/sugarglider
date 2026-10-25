@@ -347,7 +347,7 @@ def test_shared_shell_generation_tracks_v107_cached_assets() -> None:
             "c842db00ce0dc5d4b948b5879902f641b5483262a02625f80a0df00827223ebb"
         ),
         "adventure_model.js": (
-            "d420598149b5f9452a72c7fc6cb0061a23069013a8fdb8e502b3085204a703b1"
+            "b6c0c63ae2350dbe42e3a217283f2896458baa0262b9b4d275fdfca41a797144"
         ),
         "adventure_proposal.js": (
             "d4429584a94cde2f31e12639fae7392e1b0aca68b16669fcffa0b93400fa1cdc"

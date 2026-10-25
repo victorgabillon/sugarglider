@@ -18,6 +18,7 @@ internal class ChatGptConnection(
     private var listener: ChatGptLoopback? = null
     private val blockedAccounts = mutableSetOf<String>()
     private var catalog: List<ChatGptModel> = emptyList()
+    private var lastFailure: ChatGptException? = null
 
     fun status(): JSONObject {
         val saved = accounts.list()
@@ -30,13 +31,14 @@ internal class ChatGptConnection(
                 .put("plan_usage",account.tokens?.planUsage == true && account.clientId !in blockedAccounts)) }
             return JSONObject().put("accounts",rows).put("selected_account",selectedId ?: JSONObject.NULL)
                 .put("models",JSONArray(catalog.map { JSONObject().put("id",it.slug).put("label",it.label) }))
+                .put("last_failure",lastFailure?.diagnostic() ?: JSONObject.NULL)
         }
     }
 
     fun select(clientId: String) {
         require(accounts.list().any { it.clientId == clientId })
         cancel()
-        synchronized(lock) { selectedId = clientId; catalog = emptyList() }
+        synchronized(lock) { selectedId = clientId; catalog = emptyList(); lastFailure = null }
     }
 
     fun signIn(clientId: String?, expectedEpoch: Long? = null, openBrowser: (URI) -> Unit): JSONObject = operation(expectedEpoch) { call, owned ->
@@ -64,8 +66,13 @@ internal class ChatGptConnection(
     }
 
     private fun connect(code: ChatGptCode, prior: ChatGptAccount?, call: ChatGptCall, owned: Long) {
+        // The issued public registration survives a later metadata/network
+        // failure. It is not a token and never authorizes an account by itself.
+        synchronized(lock) {
+            requireCurrent(owned)
+            if (prior == null) accounts.savePendingRegistration(code.clientId)
+        }
         validateDiscovery(call)
-        if (prior == null) accounts.savePendingRegistration(code.clientId)
         val tokens = ChatGptTokenResponse.parse(http.exchange(call,code.tokenForm()),now=now())
         val identity = ChatGptIdentityVerifier.verify(tokens.idToken,code.clientId,code.nonce,http.jwks(call),now())
         require(prior == null || prior.clientId == code.clientId && prior.identity.subject == identity.subject) { "ChatGPT account changed." }
@@ -109,7 +116,7 @@ internal class ChatGptConnection(
         cancel()
         val id = synchronized(lock) { selectedId } ?: return status()
         val account = accounts.list().single { it.clientId == id }
-        synchronized(lock) { blockedAccounts.add(id); catalog = emptyList() }
+        synchronized(lock) { blockedAccounts.add(id); catalog = emptyList(); lastFailure = null }
         var confirmed = account.tokens?.refresh == null
         try {
             val refresh = account.tokens?.refresh
@@ -159,8 +166,12 @@ internal class ChatGptConnection(
 
     private fun <T> operation(expectedEpoch: Long? = null, run: (ChatGptCall,Long) -> T): T {
         val call = ChatGptCall()
-        val owned = synchronized(lock) { if (expectedEpoch != null) requireCurrent(expectedEpoch); check(activeCall == null) { "A ChatGPT operation is still finishing." }; activeCall = call; generation }
+        val owned = synchronized(lock) { if (expectedEpoch != null) requireCurrent(expectedEpoch); check(activeCall == null) { "A ChatGPT operation is still finishing." }; activeCall = call; lastFailure = null; generation }
         try { return run(call,owned) }
+        catch (error: ChatGptException) {
+            synchronized(lock) { if (generation == owned && error.kind != ChatGptFailureKind.CANCELLED) lastFailure = error }
+            throw error
+        }
         finally { call.close(); synchronized(lock) { if (activeCall === call) activeCall = null } }
     }
 }

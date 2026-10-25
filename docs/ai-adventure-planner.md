@@ -229,3 +229,23 @@ bounded local Places queries after the proposal; it does not ship a model-driven
 client-function loop or upload the index. Such a loop would consume response
 continuations and needs an observed account capability plus an explicit budget;
 it must not silently consume the single strategy-revision allowance.
+
+## First physical sign-in attempt
+
+After a separately authorized staging update, the user reported browser sign-in
+success, but the app reported a connection failure and retained no account.
+Installed regions, offline native routing and the exact original manual route
+remain valid. This is not proof of an account-eligibility failure or completed
+Android authentication.
+
+Review found two recovery defects: the 120-second HTTP deadline started before
+up to 180 seconds of browser authorization, and the issued registration ID could
+be lost when fetching identity metadata failed. HTTP timing now starts at the
+first network request and stays shared across subsequent requests. The browser
+phase remains bounded separately; its bridge timeout covers both phases. The
+issued public registration is retained before subsequent network work, while
+credentials still require full signed identity validation. Native status also
+exposes a memory-only diagnostic containing fixed failure-kind/stage/network-cause
+enums. It includes no exception messages, provider bodies, URLs, headers or tokens.
+These fixes and diagnostics require a new audited staging artifact and authorized
+physical retest; the cause of the first observed failure remains unproven.
