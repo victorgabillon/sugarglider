@@ -1,3 +1,4 @@
+import { measureEndpointAdjustments, endpointAdjustmentFailure, LOOP_CLOSURE_M, exceedsSnapLimit } from "./endpoint_snapping.js";
 import { UNKNOWN_DETAIL_ANALYSIS } from "./local_analysis_templates.js";
 import { publishLocalNature, publishLocalStops } from "./local_candidate_enrichment.js";
 import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
@@ -27,12 +28,14 @@ export async function evaluateLocalCandidateDraft(request, draft) {
     && Array.isArray(draft.snapped_points) && draft.snapped_points.length === draft.requested_points.length
     && draft.snapped_points.every((point) => validPosition([point.lon, point.lat])),
   "invalid_local_candidate_snaps");
-  const start = [request.start.lon, request.start.lat];
-  const end = request.topology === "loop" ? start : [request.end.lon, request.end.lat];
-  requireCandidate(haversineDistance(start, draft.geometry[0]) <= 25
-    && haversineDistance(end, draft.geometry.at(-1)) <= 25, "local_hard_endpoint_not_reached");
+  const adjustments = measureEndpointAdjustments(request, draft.geometry);
+  requireCandidate(!endpointAdjustmentFailure(adjustments), "local_hard_endpoint_not_reached");
+  requireCandidate(draft.snapped_points[0].lon === draft.geometry[0][0]
+    && draft.snapped_points[0].lat === draft.geometry[0][1]
+    && draft.snapped_points.at(-1).lon === draft.geometry.at(-1)[0]
+    && draft.snapped_points.at(-1).lat === draft.geometry.at(-1)[1], "local_candidate_snap_boundary_mismatch");
   if (request.topology === "loop") requireCandidate(
-    haversineDistance(draft.geometry[0], draft.geometry.at(-1)) <= 25, "local_route_not_closed");
+    !exceedsSnapLimit(haversineDistance(draft.geometry[0], draft.geometry.at(-1)), LOOP_CLOSURE_M), "local_route_not_closed");
   const exact = request.kind === "auto_tour" ? request.hard_waypoints
     : request.waypoints.filter((waypoint) => waypoint.constraint_strength === "exact");
   for (const waypoint of exact) requireCandidate(
@@ -79,6 +82,19 @@ export async function evaluateLocalCandidateDraft(request, draft) {
     profile: request.routing_profile,
     suggestion: "Adjust the target distance or edit the requested points and generate a new plan.",
   }];
+  for (const item of adjustments.filter(item => item.status === "adjusted")) compromises.push({
+    code: "endpoint_adjusted", severity: "warning", constraint_id: `endpoint/${item.role}`,
+    constraint_name: item.role === "start" ? "Start" : request.topology === "loop" ? "Return to Start" : "End",
+    semantic_coordinate: item.requested_coordinate, routed_coordinate: item.routed_coordinate,
+    distance_m: item.distance_m, normal_tolerance_m: item.normal_tolerance_m, configured_maximum_m: item.maximum_distance_m,
+    reason: "The route uses the graph-derived endpoint returned for the selected activity.",
+    profile: request.routing_profile, suggestion: "Review the adjustment, move your point, or explicitly use the routed point and generate again.",
+  });
+  const traversal = canonicalTraversal(request, route.geometry, reachedStops, approximatedStops);
+  for (const item of adjustments.filter(item => item.policy === "near")) {
+    const anchor = traversal.anchors.find(anchor => anchor.id === `endpoint/${item.role}`);
+    if (anchor) { anchor.constraint_strength = "approach"; anchor.outcome = item.status === "adjusted" ? "approximated" : "reached"; }
+  }
   const unmet = [];
   if (request.preferences.path_selection === "low_overlap") unmet.push(
     "Exact edge repetition is unavailable, so the low-overlap preference could not be evaluated.");
@@ -104,7 +120,7 @@ export async function evaluateLocalCandidateDraft(request, draft) {
     id, kind: request.kind, topology: request.topology, routing_profile: request.routing_profile,
     route, score: { total: targetError / Math.max(1, objective.target_m),
       components: { target_distance_error_ratio: targetError / Math.max(1, objective.target_m) } },
-    traversal: canonicalTraversal(request, route.geometry, reachedStops, approximatedStops),
+    traversal,
     reached_stops: reachedStops, approximated_stops: approximatedStops, dropped_stops: droppedStops,
     compromises,
     diagnostics: { safety_eligible: true, target_error_m: targetError, within_tolerance: withinTolerance,
@@ -117,6 +133,7 @@ export async function evaluateLocalCandidateDraft(request, draft) {
         local_routing: { engine: draft.engine, engine_version: draft.engine_version,
         pack_id: draft.pack_id, source_candidate_id: draft.candidate_id,
         source_control_candidate_id: draft.source_control_candidate_id ?? null,
+        endpoint_adjustments: adjustments,
         waypoint_order: draft.actual_waypoint_order ?? [], original_waypoint_indices: draft.original_waypoint_indices ?? [],
         loop_geometry: draft.geometry_metrics ?? null,
         poi_outcomes: draft.poi_outcomes ?? [],

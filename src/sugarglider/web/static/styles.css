@@ -1116,3 +1116,14 @@ body.outing-mode .route-dock { display: none; }
 .data-licences-dialog, .region-sources { overflow-wrap: anywhere; }
 .data-licences-dialog pre, .region-sources pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; }
 .data-licences-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+
+.endpoint-adjustments { color: #593a12; background: #fff7df; border-radius: 8px; padding: 6px 10px; margin: 4px 0; }
+.endpoint-adjustments summary { cursor: pointer; min-height: 32px; align-content: center; font-weight: 600; }
+.endpoint-adjustments p { margin: 4px 0; font-size: .85rem; }
+.endpoint-adjustment-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.endpoint-adjustment-actions button { min-height: 44px; padding: 5px 8px; }
+.route-dock .endpoint-adjustments { max-height: 30dvh; overflow: auto; }
+.endpoint-adjustment-marker { min-height: 44px; padding: 4px; border: 2px solid #825719; border-radius: 16px; background: #fffdf7; color: #593a12; font-size: 11px; }
+.endpoint-adjustment-marker.routed { border-radius: 3px; background: #825719; color: white; }
+.route-quick-editor label { font-size: .8rem; min-width: 0; }
+.route-quick-editor select { max-width: 145px; min-height: 44px; }

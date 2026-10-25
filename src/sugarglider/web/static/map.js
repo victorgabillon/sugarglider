@@ -140,6 +140,8 @@ const elevationMapMarker = createElevationMapMarker({createMarker:element => new
 let ready = false;
 let requiredMarkers = [];
 let endpointMarkers = [];
+let endpointAdjustmentMarkers = [];
+let endpointAdjustmentIdentity = null;
 let optionalMarkers = [];
 let waypointMarkers = [];
 let candidateClickHandler = null;
@@ -376,11 +378,13 @@ function resetMapInstance() {
   for (const marker of [
     ...requiredMarkers,
     ...endpointMarkers,
+    ...endpointAdjustmentMarkers,
     ...optionalMarkers,
     ...waypointMarkers,
   ]) marker.remove();
   requiredMarkers = [];
   endpointMarkers = [];
+  endpointAdjustmentMarkers = []; endpointAdjustmentIdentity = null;
   optionalMarkers = [];
   waypointMarkers = [];
   plannerLocationPositionCount = 0;
@@ -2312,6 +2316,7 @@ export function renderVisualization(collection, showNature = false) {
 }
 
 export function clearRoutes() {
+  renderEndpointAdjustmentMap([]);
   clearElevationMapPosition();
   if (!ready) return;
   clearByPrefix("candidate-");
@@ -2773,7 +2778,7 @@ export function renderImportedGpx(imported) {
   moveRequiredLabelsToTop();
 }
 
-export function fitCoordinates(coordinates) {
+export function fitCoordinates(coordinates, { maxZoom = 15 } = {}) {
   if (!map) return;
   const valid = coordinates.filter((coordinate) => Array.isArray(coordinate)
     && coordinate.length >= 2
@@ -2786,7 +2791,7 @@ export function fitCoordinates(coordinates) {
   );
   map.fitBounds(bounds, {
     padding: 70,
-    maxZoom: 15,
+    maxZoom,
     duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 500,
   });
 }
@@ -2815,4 +2820,33 @@ export function keepCoordinateVisible(coordinate) {
   }
   const point = map.project(coordinate);
   return { x: point.x, y: point.y };
+}
+
+// These dashed lines explain displacement. Candidate route sources stay untouched.
+export function renderEndpointAdjustmentMap(adjustments) {
+  if (!ready || !map) return;
+  const identity = JSON.stringify(adjustments);
+  if (identity === endpointAdjustmentIdentity) return;
+  endpointAdjustmentIdentity = identity;
+  clearMarkers(endpointAdjustmentMarkers);
+  clearByPrefix("endpoint-adjustment-");
+  if (!adjustments.length) return;
+  const features = adjustments.map(item => ({ type: "Feature", properties: { label: `${Math.round(item.distance_m)} m` },
+    geometry: { type: "LineString", coordinates: [item.requested_coordinate, item.routed_coordinate].map(p => [p.lon, p.lat]) } }));
+  sourceData("endpoint-adjustment-source", { type: "FeatureCollection", features });
+  map.addLayer({ id: "endpoint-adjustment-line", type: "line", source: "endpoint-adjustment-source",
+    paint: { "line-color": "#825719", "line-width": 2, "line-dasharray": [2, 3], "line-opacity": 0.8 } });
+  map.addLayer({ id: "endpoint-adjustment-label", type: "symbol", source: "endpoint-adjustment-source",
+    layout: { "symbol-placement": "line-center", "text-field": ["get", "label"], "text-font": ["Open Sans Semibold"], "text-size": 12 },
+    paint: { "text-color": "#593a12", "text-halo-color": "#fffdf7", "text-halo-width": 2 } });
+  for (const item of adjustments) for (const [kind, point] of [["requested", item.requested_coordinate], ["routed", item.routed_coordinate]]) {
+    const element = document.createElement("button"); element.type = "button";
+    element.className = `endpoint-adjustment-marker ${kind}`;
+    const label = item.role === "start" ? "Start" : item.endpoint === "start" ? "Return" : "End";
+    element.textContent = `${kind === "requested" ? "○" : "■"} ${label}`;
+    element.setAttribute("aria-label", `${kind === "requested" ? "Selected" : "Actual routed"} ${label}, ${Math.round(item.distance_m)} m displacement`);
+    element.addEventListener("click", event => { event.stopPropagation(); focusCoordinate([point.lon, point.lat]); });
+    element.addEventListener("keydown", event => event.stopPropagation());
+    endpointAdjustmentMarkers.push(new maplibregl.Marker({ element, anchor: "center" }).setLngLat([point.lon, point.lat]).addTo(map));
+  }
 }

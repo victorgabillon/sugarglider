@@ -2,6 +2,7 @@
 // One active request owns search, native drain and canonical publication under
 // a committed-region lease. Identical requests join it; failure remains local
 // and visible rather than silently changing mode or calling the server planner.
+import { endpointSnapPolicy } from "./endpoint_snapping.js";
 import { createLocalAutoTourEngine, validateLocalAutoTourRequest } from "./local_auto_tour.js";
 import { createLocalWaypointRouteEngine, validateLocalWaypointRouteRequest } from "./local_waypoint_route.js";
 import { createLocalPlanPublisher } from "./local_plan_client.js";
@@ -27,6 +28,7 @@ export class LocalPlannerError extends Error {
       no_route: "No connected route was found in the installed regional graph for these points.",
       routing_busy: "An on-device route calculation is still finishing. Try again shortly.",
       routing_failure: "The on-device routing engine could not finish this route.",
+      endpoint_review_required: "A routed endpoint is more than 150 m from your selected point. Review the proposed location before using it.",
       endpoint_not_reached: "A required endpoint could not be reached within its strict snap limit for this activity.",
       exact_waypoint_not_reached: "An exact waypoint could not be reached within its permitted snap limit for this activity.",
       unsupported_preference: "Local Waypoint Route currently supports Shortest with nature and loop-shape preferences off. Your settings are unchanged.",
@@ -114,7 +116,8 @@ export function createLocalPlanner({ bridge, getRegionData = async () => null, w
 export function validateLocalAutoTourPlanRequest(request) {
   const fields = ["schema_version", "kind", "name", "topology", "start", "end", "routing_profile", "candidate_count", "seed",
     "distance_objective", "preferences", "hard_waypoints", "requested_stops", "preferred_discovered_poi_ids", "free_poi_spur_physical_m"];
-  requireRequest(exactFields(request, fields) && request.schema_version === 1 && request.kind === "auto_tour"
+  endpointSnapPolicy(request.endpoint_snap_policy);
+  requireRequest(exactFields(request, request.endpoint_snap_policy === undefined ? fields : [...fields, "endpoint_snap_policy"]) && request.schema_version === 1 && request.kind === "auto_tour"
     && typeof request.name === "string" && request.name.trim().length > 0 && request.name.length <= 200
     && Object.hasOwn(PUBLIC_PROFILE_METADATA, request.routing_profile));
   if (request.topology !== "loop" || request.end !== null) throw new LocalPlannerError("unsupported_local_auto_tour_topology");
@@ -134,7 +137,8 @@ export function validateLocalAutoTourPlanRequest(request) {
     && ["off", "prefer"].includes(preferences.loop_geometry) && ["shortest", "low_overlap"].includes(preferences.path_selection));
   requireRequest(exactFields(request.start, ["lat", "lon", "name"])
     && (request.start.name === null || typeof request.start.name === "string" && request.start.name.length <= 200));
-  return validateLocalAutoTourRequest({ start: { lat: request.start.lat, lon: request.start.lon },
+  return validateLocalAutoTourRequest({
+    ...(request.endpoint_snap_policy ? { endpoint_snap_policy: endpointSnapPolicy(request.endpoint_snap_policy) } : {}), start: { lat: request.start.lat, lon: request.start.lon },
     profile: request.routing_profile, target_distance_m: objective.target_m, tolerance_m: objective.tolerance_m,
     candidate_count: request.candidate_count, seed: request.seed, direction_preference: preferences.direction,
     preferences: { nature: preferences.nature, scenic: preferences.scenic === "prefer", water: preferences.drinking_water === "prefer",

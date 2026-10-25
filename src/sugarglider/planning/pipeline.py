@@ -309,6 +309,12 @@ class PlanService:
         self._reverse = reverse
 
     async def generate(self, request: PlanRequest) -> PlanResult:
+        policy = request.endpoint_snap_policy
+        if policy is not None and (
+            policy.start == "near"
+            or (request.topology == "point_to_point" and policy.end == "near")
+        ):
+            raise ValueError("Near endpoint snapping requires the on-device planner")
         if isinstance(request, AutoTourPlanRequest):
             return await self._auto_tour.generate(request)
         return await self._waypoint.generate(request)

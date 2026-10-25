@@ -37,3 +37,7 @@ jobs:
         run: node tests/browser/nature_performance_acceptance.cjs
       - name: Check remembered regional selection and bundled startup order
         run: node tests/browser/region_preference_acceptance.cjs
+      - name: Check bounded endpoint snapping, canonical publication and GPX
+        run: node tests/browser/endpoint_snapping_acceptance.cjs
+      - name: Check endpoint adjustment touch and keyboard workflows
+        run: node tests/browser/endpoint_snapping_ui_acceptance.cjs

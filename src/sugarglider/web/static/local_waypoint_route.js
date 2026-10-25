@@ -1,3 +1,4 @@
+import { endpointSnapPolicy, measureEndpointAdjustments, endpointAdjustmentFailure, exceedsSnapLimit, EXACT_ENDPOINT_M, LOOP_CLOSURE_M } from "./endpoint_snapping.js";
 import { createLocalPlanningContext } from "./local_planning_context.js";
 import {
   MAX_ROUTE_POINTS,
@@ -7,8 +8,8 @@ import {
 import { readPlannerOptionsFromControls, waypointPlanRequestSnapshot } from "./state.js";
 
 // Endpoints/closure follow PR35 LOCAL semantics; interiors follow canonical Python.
-export const LOCAL_WAYPOINT_HARD_ENDPOINT_SNAP_TOLERANCE_M = 25;
-export const LOCAL_WAYPOINT_ROUTE_CLOSURE_TOLERANCE_M = 25;
+export const LOCAL_WAYPOINT_HARD_ENDPOINT_SNAP_TOLERANCE_M = EXACT_ENDPOINT_M;
+export const LOCAL_WAYPOINT_ROUTE_CLOSURE_TOLERANCE_M = LOOP_CLOSURE_M;
 export const LOCAL_WAYPOINT_EXACT_INTERIOR_FIDELITY_M = 300;
 export const LOCAL_WAYPOINT_MAX_DISTANCE_M = 200_000;
 export const LOCAL_WAYPOINT_ROUTE_CALL_BUDGET = 16;
@@ -17,7 +18,7 @@ const MAX_ORDER_PROPOSALS = 16;
 const EARTH_RADIUS_M = 6_371_008.8;
 const REQUEST_FIELDS = new Set([
   "schema_version", "kind", "name", "topology", "start", "end", "routing_profile",
-  "candidate_count", "seed", "distance_objective", "preferences", "waypoints", "waypoint_order",
+  "candidate_count", "seed", "distance_objective", "preferences", "waypoints", "waypoint_order", "endpoint_snap_policy",
 ]);
 const WAYPOINT_FIELDS = new Set([
   "id", "name", "coordinate", "constraint_strength", "access_search_radius_m",
@@ -49,6 +50,7 @@ export function validateLocalWaypointRouteRequest(value) {
   if (!fieldsAllowed(value, REQUEST_FIELDS) || value.schema_version !== 1) fail("invalid_request_fields");
   if (!textWithin(value.name, 200)) fail("invalid_request_name");
   if (!["loop", "point_to_point"].includes(value.topology)) fail("invalid_topology");
+  endpointSnapPolicy(value.endpoint_snap_policy);
   const start = coordinate(value.start);
   const end = value.end == null ? null : coordinate(value.end);
   if (value.topology === "loop" ? end !== null : end === null || sameCoordinate(start, end)) {
@@ -115,6 +117,7 @@ export function validateLocalWaypointRouteRequest(value) {
   return deepFreeze({
     schema_version: 1, kind: "waypoint_route", name: value.name,
     topology: value.topology, start, end, routing_profile: value.routing_profile,
+    ...(value.endpoint_snap_policy ? { endpoint_snap_policy: endpointSnapPolicy(value.endpoint_snap_policy) } : {}),
     candidate_count: value.candidate_count, seed: value.seed,
     distance_objective: {
       target_m: objective.target_m, tolerance_m: objective.tolerance_m,
@@ -321,13 +324,16 @@ function validateRoute(reply, request, proposal, points, expectedPack) {
     fail("degenerate_geometry");
   }
   const outcomes = [];
+  const adjustments = measureEndpointAdjustments(request, geometry);
+  const failure = endpointAdjustmentFailure(adjustments);
   let cursor = 0;
   for (let position = 0; position < points.length; position += 1) {
     const snap = reply.snapped_points[position];
     const endpoint = position === 0 || position === points.length - 1;
-    const threshold = endpoint ? LOCAL_WAYPOINT_HARD_ENDPOINT_SNAP_TOLERANCE_M : LOCAL_WAYPOINT_EXACT_INTERIOR_FIDELITY_M;
+    const adjustment = endpoint ? adjustments[position === 0 ? 0 : 1] : null;
+    const threshold = adjustment?.maximum_distance_m ?? LOCAL_WAYPOINT_EXACT_INTERIOR_FIDELITY_M;
     const measured = haversine(points[position], snap);
-    if (measured > threshold) fail(endpoint ? "endpoint_not_reached" : "exact_waypoint_not_reached", {
+    if (!endpoint && exceedsSnapLimit(measured, threshold)) fail("exact_waypoint_not_reached", {
       position, waypoint_id: endpoint ? null : request.waypoints[proposal.order[position - 1]].id,
       profile: request.routing_profile, snap_distance_m: measured, maximum_snap_distance_m: threshold,
       suggestion: "Move or remove the exact point; no weaker retry was performed.",
@@ -340,14 +346,16 @@ function validateRoute(reply, request, proposal, points, expectedPack) {
     outcomes.push({
       role: position === 0 ? "start" : endpoint ? "end" : "waypoint",
       waypoint_id: waypoint?.id ?? null, name: waypoint?.name ?? points[position].name,
-      original_index: originalIndex, route_position: position, status: "reached",
+      original_index: originalIndex, route_position: position, status: adjustment?.status ?? "reached",
       requested_coordinate: points[position], snapped_coordinate: snap,
       snap_distance_m: measured, maximum_snap_distance_m: threshold, geometry_vertex_index: cursor,
     });
   }
+  if (failure?.code === "endpoint_not_reached") fail(failure.code, { ...failure.details, profile: request.routing_profile });
   const closureGap = haversine(reply.snapped_points[0], reply.snapped_points.at(-1));
   if (request.topology === "loop" && closureGap > LOCAL_WAYPOINT_ROUTE_CLOSURE_TOLERANCE_M) fail("route_not_closed");
   if (request.topology === "point_to_point" && sameCoordinate(reply.snapped_points[0], reply.snapped_points.at(-1))) fail("open_route_was_closed");
+  if (failure) fail(failure.code, { ...failure.details, profile: request.routing_profile, pack_id: reply.pack_id });
   return { outcomes, closureGap: request.topology === "loop" ? closureGap : null };
 }
 
@@ -432,7 +440,7 @@ export function createLocalWaypointRouteExperiment({
           + `${candidate.duration_s === null ? "duration unavailable" : `${Math.round(candidate.duration_s / 60)} min`} · `
           + `target error ${(candidate.target_error_m / 1_000).toFixed(2)} km · within tolerance ${candidate.within_tolerance} · `
           + `order ${candidate.actual_waypoint_order.join(" → ") || "direct"} · ${candidate.construction.proposal_id} · `
-          + `hard endpoints within 25 m; ${candidate.actual_waypoint_order.length} exact interiors within 300 m`
+          + `endpoints within their requested snap policy; ${candidate.actual_waypoint_order.length} exact interiors within 300 m`
           + (candidate.topology === "loop" ? `; graph-derived closure within 25 m` : "")
         );
         elements.results.append(item);

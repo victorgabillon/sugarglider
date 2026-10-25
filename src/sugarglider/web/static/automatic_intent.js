@@ -5,12 +5,12 @@ export { rememberPointEdit, undoPointEdit, redoPointEdit, clearPointUndo, pointU
 
 const commonOptions = ["name", "targetDistanceKm", "toleranceKm", "maximumDistanceKm",
   "distancePriority", "candidateCount", "seed", "waypointOrder"];
-const endpointKeys = new Set(["name", "lat", "lon", "id", "originalIndex", "_mapCreated", "constraintStrength"]);
+const endpointKeys = new Set(["name", "lat", "lon", "id", "originalIndex", "_mapCreated", "constraintStrength", "snapPolicy"]);
 function exactEndpointCompatible(point) {
   return point && (point.constraintStrength ?? "exact") === "exact"
     && Object.keys(point).every(key => endpointKeys.has(key));
 }
-export function changeMapTopology(topology) {
+export function changeMapTopology(topology, defaultEndpointPolicy) {
   const endpoints = state.planningMode === "auto_tour" ? state.autoTour : state.waypointEndpoints;
   if (!["loop", "point_to_point"].includes(topology) || topology === endpoints.routeTopology) return false;
   saveActivePoints();
@@ -23,7 +23,8 @@ export function changeMapTopology(topology) {
   }
   rememberPointEdit("Finish changed");
   if (topology === "point_to_point" && last?._mapCreated && exactEndpointCompatible(last)) {
-    state.points.pop(); endpoints.end = last;
+    state.points.pop(); endpoints.end = defaultEndpointPolicy && last.snapPolicy === undefined
+      ? { ...last, snapPolicy: defaultEndpointPolicy } : last;
     state.selectedEndpointKind = "end"; state.selectedPointIndex = null;
   } else if (topology === "loop" && end) {
     state.points.push(end); endpoints.end = null;

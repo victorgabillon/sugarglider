@@ -76,7 +76,7 @@ def test_search_uses_only_pr34_routes_with_one_correction_and_strict_budget() ->
 def test_hard_validation_ranking_and_unavailable_metrics_are_truthful() -> None:
     source = AUTO_TOUR.read_text()
     for marker in (
-        "HARD_START_SNAP_TOLERANCE_M = 25",
+        "endpointAdjustmentFailure",
         "GENERATED_CONTROL_SNAP_TOLERANCE_M = 300",
         "hardMaximumDistance(request)",
         "snapped_point_count_mismatch",
