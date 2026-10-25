@@ -62,13 +62,23 @@ refresh rotation, sign-out and per-operation cancellation. All network endpoints
 are fixed official HTTPS destinations; redirects and custom TLS trust are absent.
 The ID-token algorithm/endpoints were checked against live issuer discovery metadata.
 
-Nineteen focused JVM tests pass without live accounts or network dependencies,
+Twenty-two focused JVM tests pass without live accounts or network dependencies,
 including signed synthetic identities, tampering, scope reduction, refresh rotation,
 account replacement rejection, cancellation before credential commit, sanitized HTTP
 failures, stream truncation and encrypted-record integrity. Android Debug lint passes.
 These results do not establish Android browser callback feasibility or live account
-access. MainActivity/bridge wiring, model usage/citation metadata, UI and live inference
-remain outstanding. No AI feature has been installed or offered as working yet.
+access. The exact-origin native bridge is wired, and the shared provider adapter receives
+completed text, measured usage and actual web-search citations without credentials.
+Page changes and inference backgrounding cancel owned work. Model output is never
+a native command. UI entry and live inference remain outstanding.
+
+The strict proposal parser and local grounding adapter are also implemented and
+covered by seventeen new browser scenarios plus the retained itinerary-import
+harness. They reuse existing validation primitives and bounded leased Places
+queries, preserve unresolved/ambiguous/outside/private outcomes, retain proposed
+versus mapped/approach coordinates, and mark source URLs unverified unless a
+completed research response actually cited them. No routing subset search or
+final adventure UI exists yet. No AI APK has been installed or offered as complete.
 
 ## Official protocol references (checked 25 October 2026)
 
