@@ -9,7 +9,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ChatGptHttpTest {
-    private class Response(url: URL, val status: Int = 200, val body: String = "{}", val mime: String = "application/json") : HttpURLConnection(url) {
+    private class Response(url: URL, val status: Int = 200, val body: String = "{}", val mime: String? = "application/json") : HttpURLConnection(url) {
         val written = ByteArrayOutputStream()
         var closed = false
         override fun connect() = Unit
@@ -20,6 +20,35 @@ class ChatGptHttpTest {
         override fun getInputStream() = ByteArrayInputStream(body.toByteArray())
         override fun getErrorStream() = ByteArrayInputStream(body.toByteArray())
         override fun getOutputStream() = written
+    }
+    @Test fun acceptsOnlyCompletedSseWithDeclaredOrMissingStreamType() {
+        val body = "data: " + JSONObject().put("type","response.completed").put("response",JSONObject()
+            .put("status","completed").put("output",org.json.JSONArray().put(JSONObject()
+                .put("type","message").put("role","assistant").put("status","completed")
+                .put("content",org.json.JSONArray().put(JSONObject().put("type","output_text").put("text","synthetic answer")))))) + "\n\n"
+        for (mime in listOf("text/event-stream; charset=utf-8",null)) {
+            val http = ChatGptHttp(ConnectionFactory { url -> Response(url,body=body,mime=mime) })
+            val result = http.infer(ChatGptCall(),"synthetic-token",adventureChatGptPayload("visible-model","instructions","synthetic",false,null))
+            assertEquals("synthetic answer",result.text)
+        }
+        val explicitWrongType = ChatGptHttp(ConnectionFactory { url -> Response(url,body=body,mime="application/json") })
+        val failure = assertThrows(ChatGptException::class.java) {
+            explicitWrongType.infer(ChatGptCall(),"synthetic-token",adventureChatGptPayload("visible-model","instructions","synthetic",false,null))
+        }
+        assertEquals(ChatGptResponseIssue.CONTENT_TYPE,failure.responseIssue)
+    }
+    @Test fun absentStreamTypeCannotAcceptHtmlJsonDeltasOrIdentityDocuments() {
+        for (body in listOf("<html>not an answer</html>","""{"status":"completed","output":[]}""",
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n")) {
+            val http = ChatGptHttp(ConnectionFactory { url -> Response(url,body=body,mime=null) })
+            val failure = assertThrows(ChatGptException::class.java) {
+                http.infer(ChatGptCall(),"synthetic-token",adventureChatGptPayload("visible-model","instructions","synthetic",false,null))
+            }
+            assertEquals(ChatGptFailureKind.INVALID_RESPONSE,failure.kind)
+            assertEquals(ChatGptHttpStage.INFERENCE,failure.stage)
+        }
+        val identity = ChatGptHttp(ConnectionFactory { url -> Response(url,mime=null) })
+        assertEquals(ChatGptResponseIssue.CONTENT_TYPE,assertThrows(ChatGptException::class.java) { identity.discovery(ChatGptCall()) }.responseIssue)
     }
     @Test fun usesOnlyPublicEndpointsAndNoRedirects() {
         val rows = mutableListOf<Response>()

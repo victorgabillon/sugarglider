@@ -137,7 +137,12 @@ internal class ChatGptHttp(private val connections: ConnectionFactory = Connecti
                 else -> throw ChatGptException(ChatGptFailureKind.NETWORK,stage,ChatGptNetworkCause.HTTP_STATUS)
             }
             val type = connection.contentType?.substringBefore(';')?.trim()?.lowercase()
-            if (endpoint != REVOKE && type != if (endpoint == RESPONSES) "text/event-stream" else "application/json") {
+            val expectedType = if (endpoint == RESPONSES) "text/event-stream" else "application/json"
+            // Observed plan-sharing responses can omit this header. The bounded
+            // SSE reader must still prove framing and response.completed; JSON,
+            // HTML and partial streams cannot become a model answer.
+            val missingStreamType = endpoint == RESPONSES && type == null
+            if (endpoint != REVOKE && type != expectedType && !missingStreamType) {
                 throw ChatGptException(ChatGptFailureKind.INVALID_RESPONSE,stage,responseIssue=ChatGptResponseIssue.CONTENT_TYPE)
             }
             return connection.inputStream.use { raw ->

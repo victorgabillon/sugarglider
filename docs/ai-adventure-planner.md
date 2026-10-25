@@ -291,3 +291,16 @@ this correction still requires separately authorized physical verification.
 Diagnostics retain only allowlisted rejection codes and parameter names plus
 HTTP status, with unknown provider values replaced by `other`. No provider body,
 message, request headers or credentials cross that boundary.
+
+The separately authorized request-format build passed all four CI workflows and
+retained the connected account. Two normal physical requests (research/schema on,
+then both off) passed HTTP admission but failed media-type validation. A further
+diagnostic attempt inspected only HTTP status and null checks under the debugger:
+the real response was HTTP 200 with no Content-Type header. No response body,
+credential, account label or raw HTTP traffic was captured; the debugger was
+detached and the original route restored. Responses alone may now omit that
+header, but must still pass bounded SSE framing and terminal completion. Explicit
+conflicting media types and missing identity/token media types remain rejected.
+Transport-level regressions cover declared/missing SSE media type, HTML, JSON,
+partial deltas and identity-document rejection. Completed live inference remains
+unproved until the corrected build is separately authorized and tested.
