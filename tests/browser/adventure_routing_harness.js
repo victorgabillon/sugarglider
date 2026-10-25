@@ -89,7 +89,10 @@ export async function runAdventureRoutingHarness() {
       const output = await r.planner.planAdventure(profile, session => session.generate(r.request, r.targets));
       const { candidates, search_diagnostics: diagnostics } = output.result;
       assert(candidates.length >= 2, `${loop}/${profile}: real subset alternatives from native fixture`);
-      assert(!candidates[0].reached_stops.length, "control remains first without exact repetition evidence");
+      const control = candidates.find(c => c.id === diagnostics.details.local_planning.no_poi_control_candidate_id);
+      assert(control && !control.reached_stops.length, "comparison route retained without claiming optional quality promotion");
+      assert(candidates.every(c => !c.diagnostics.within_tolerance) || candidates[0].diagnostics.within_tolerance, "target tolerance has priority");
+      if (control.diagnostics.within_tolerance) equal(candidates[0].id, control.id, "comparison leads within the same tolerance class");
       assert(candidates.some(c => c.reached_stops.length), "interesting optional places actually selected");
       assert(candidates.every(c => c.dropped_stops.length + c.reached_stops.length === r.targets.length), "every optional outcome explicit");
       assert(candidates.every(c => c.dropped_stops.some(p => p.id === "unreachable") && c.dropped_stops.some(p => p.id === "detour")
@@ -115,6 +118,31 @@ export async function runAdventureRoutingHarness() {
       accounting(diagnostics, r.calls);
       samples.push(output);
       cases.push(`${loop ? "loop" : "open"}/${profile}/subset_nature_canonical_gpx`);
+    } finally { r.planner.invalidate(); }
+  }
+  for (const count of [1, 5]) {
+    const r = await rig();
+    try {
+      r.request.candidate_count = count;
+      const { result } = await r.planner.planAdventure("trail_run", session => session.generate(r.request, r.targets));
+      const controlId = result.search_diagnostics.details.local_planning.no_poi_control_candidate_id;
+      assert(result.candidates[0].diagnostics.within_tolerance && result.candidates[0].reached_stops.length > 0,
+        "inside-tolerance historical option precedes the outside-tolerance comparison");
+      assert(result.candidates.some(candidate => candidate.id === controlId), "comparison remains exposed at alternative-count boundaries");
+      if (count === 1) assert(result.candidates.length === 2
+        && result.search_diagnostics.warnings.includes("adventure_comparison_route_retained"), "one requested alternative also exposes its comparison");
+      assert(result.candidates.length <= 5, "existing bounded canonical portfolio");
+      cases.push(`target_priority_and_retained_comparison/count_${count}`);
+    } finally { r.planner.invalidate(); }
+  }
+  for (const measuredDistance of [2200, 3000]) {
+    const r = await rig({ change: reply => { if (reply.distance_m < 3500) reply.distance_m = measuredDistance; } });
+    try {
+      const { result } = await r.planner.planAdventure("trail_run", session => session.generate(r.request, r.targets));
+      equal(result.candidates[0].id, result.search_diagnostics.details.local_planning.no_poi_control_candidate_id,
+        "optional rewards cannot promote over a comparison in the same distance class");
+      assert(result.candidates.some(candidate => candidate.reached_stops.length), "checked optional alternatives remain available");
+      cases.push(`comparison_quality_gate/distance_${measuredDistance}`);
     } finally { r.planner.invalidate(); }
   }
   {

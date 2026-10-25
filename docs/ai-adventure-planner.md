@@ -99,7 +99,11 @@ geometry, indexed regional records or full story prose. Model calls, measured
 usage and native calls remain separately accounted. OSM categories support place
 counts; a linked AI anecdote never becomes independently verified history. The
 application retains both round snapshots and only chooses a revised portfolio
-when supported measurements improve. Canonical control ordering remains intact.
+when supported measurements improve. AI route ordering puts measured distance-tolerance eligibility first. The
+comparison route remains visible and leads within the same tolerance class;
+optional-stop rewards alone cannot establish lower repetition or backtracking.
+When only one alternative is requested, its comparison is also retained (at most
+five published candidates). Manual Waypoint and Auto Tour ordering are unchanged.
 
 The Android application now has a Plan with AI dialog with account/model controls,
 text input, editable speech, explicit online-research/refinement choices, essential

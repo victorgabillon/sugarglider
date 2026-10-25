@@ -89,7 +89,8 @@ export async function runAdventureControllerHarness() {
             assessments: round.assessment.assessments.map(a => ({ id: a.candidate_id, valid: a.hard_route_constraints_satisfied,
               within: a.within_distance_tolerance, loss: a.measured_preference_loss, error: a.target_error_m })) })) })}`);
       assert(output.chosen.result.candidates.some(c => c.reached_stops.length === 2), "actual checked subset uses revised places");
-      assert(output.chosen.result.candidates[0].reached_stops.length === 0, "canonical no-optional control not promoted away");
+      assert(output.chosen.result.candidates.some(c => c.reached_stops.length === 0), "canonical comparison route retained");
+      assert(output.chosen.result.candidates[0].diagnostics.within_tolerance, "distance tolerance takes priority over the outside-tolerance comparison");
       assert(r.calls.every(call => call.research && call.output_schema && call.instructions.includes("never geometry")), "one protected proposal contract");
       const sent = JSON.parse(r.calls[1].input).measurements;
       const encoded = JSON.stringify(sent);

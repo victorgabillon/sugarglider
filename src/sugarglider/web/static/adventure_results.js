@@ -80,7 +80,7 @@ export function createAdventureResults({ root, candidatesRoot, onManual, onShowM
     paragraph(details, "Planning details", "summary");
     const elapsed = output.model_calls.reduce((total, call) => total + (call.elapsed_ms ?? 0), 0);
     paragraph(details, `ChatGPT requests: ${output.model_calls.length}. Measured response time: ${(elapsed / 1000).toFixed(1)} s. Offline route calls: ${output.routing_diagnostics.budget.total_used}/${output.routing_diagnostics.budget.total_limit}.`);
-    paragraph(details, "The distance comparison route stays first because exact path repetition and backtracking are unavailable. Other options contain checked suggested places.");
+    paragraph(details, "Routes meeting your distance tolerance come first. The distance comparison route is retained and leads options in the same tolerance class because exact path repetition and backtracking are unavailable. Other options contain checked suggested places.");
   }
   function showPlace(id) {
     const article = storyElements.get(id); if (!article) return;

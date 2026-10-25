@@ -131,13 +131,15 @@ export async function searchWaypointAdventure({ request, targets = [], context, 
   }
   alive();
   const retained = [], seen = new Set();
-  // Missing edge IDs cannot justify promoting an optional detour over control.
+  // Retain the comparison line independently of the requested alternative count.
+  // Final publication puts target eligibility first, then preserves the control
+  // gate because unknown repetition cannot justify a POI-based promotion.
   for (const entry of [control, ...drafts.filter(entry => entry.selected.length).sort(compareOptional), ...controls].filter(Boolean)) {
     const forward = JSON.stringify(entry.draft.geometry), reverse = JSON.stringify([...entry.draft.geometry].reverse());
     const key = request.topology === "loop" && reverse < forward ? reverse : forward;
     if (seen.has(key)) continue;
     seen.add(key); retained.push(entry);
-    if (retained.length === request.candidate_count) break;
+    if (retained.length === Math.max(2, request.candidate_count)) break;
   }
   const candidates = [];
   for (const entry of retained) {

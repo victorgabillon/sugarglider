@@ -35,15 +35,18 @@ export async function publishLocalPlan(request, search, regionalReference = null
       rejected.push({ source_candidate_id: draft.candidate_id, code: error.code });
     }
   }
-  const hasControl = request.kind === "auto_tour" || Object.hasOwn(search, "no_optional_control_candidate_id");
+  const adventure = Object.hasOwn(search, "no_optional_control_candidate_id");
+  const hasControl = request.kind === "auto_tour" || adventure;
   const controlId = sourceIds.get(search.no_poi_control_candidate_id ?? search.no_optional_control_candidate_id) ?? null;
   // A POI alternative has no independent promotion evidence. If its required
   // control fails final publication, never quietly recommend the detour.
   const pool = hasControl && !controlId ? [] : evaluated;
-  const candidates = buildLocalPortfolio(pool, { limit: request.candidate_count, controlId });
+  const candidates = buildLocalPortfolio(pool, { limit: adventure ? Math.max(2, request.candidate_count) : request.candidate_count,
+    controlId, adventure });
   const diagnostics = structuredClone(search.search_diagnostics);
   diagnostics.warnings = [...new Set([...(search.warnings ?? []),
     ...(candidates.length < request.candidate_count ? ["fewer_candidates_than_requested"] : []),
+    ...(adventure && candidates.length > request.candidate_count ? ["adventure_comparison_route_retained"] : []),
     ...(hasControl && !controlId && evaluated.length ? ["local_no_poi_control_unavailable"] : [])])].sort();
   const proposals = search.endpoint_proposals ?? search.rejected_attempts?.find(item => item.code === "endpoint_review_required")?.details.endpoint_proposals ?? [];
   const proposalPack = search.rejected_attempts?.find(item => item.code === "endpoint_review_required")?.details.pack_id;
@@ -71,7 +74,7 @@ export async function publishLocalPlan(request, search, regionalReference = null
     candidates, search_diagnostics: diagnostics });
 }
 
-export function buildLocalPortfolio(candidates, { limit, controlId = null }) {
+export function buildLocalPortfolio(candidates, { limit, controlId = null, adventure = false }) {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 5) throw new TypeError("Invalid portfolio limit.");
   const distinct = new Map();
   for (const candidate of candidates) {
@@ -86,7 +89,14 @@ export function buildLocalPortfolio(candidates, { limit, controlId = null }) {
     if (index < 0) throw new TypeError("Missing no-POI control.");
     ordered.unshift(...ordered.splice(index, 1));
   }
+  // AI search retains its comparison route even when a checked optional route
+  // meets a target the comparison misses. POI rewards cannot establish a quality
+  // improvement within the same tolerance class; the control still leads there.
+  if (adventure) ordered.sort((a, b) => Number(b.diagnostics.within_tolerance) - Number(a.diagnostics.within_tolerance));
   const selected = ordered.slice(0, limit);
+  if (controlId && adventure && !selected.some(candidate => candidate.id === controlId)) {
+    selected[selected.length - 1] = ordered.find(candidate => candidate.id === controlId);
+  }
   if (!selected.length) return Object.freeze([]);
   const roles = new Map(selected.map((candidate) => [candidate.id, new Set()]));
   roles.get(selected[0].id).add("harmonious");
