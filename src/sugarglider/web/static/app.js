@@ -1473,7 +1473,21 @@ function renderEndpointAdjustmentViews() {
     onShow: item => {
       if (!currentEndpointAdjustments().includes(item)) return;
       appShell?.show("map");
-      fitCoordinates([item.requested_coordinate, item.routed_coordinate].map(point => [point.lon, point.lat]), { maxZoom: 18 });
+      const disclosures = byId("endpoint-adjustments-map").querySelectorAll("details");
+      for (const disclosure of disclosures) {
+        disclosure.open = false;
+        if (disclosure.dataset.adjustmentRole === item.role) disclosure.querySelector("summary").focus({ preventScroll: true });
+      }
+      // Wait for the shell's map resize, then keep both markers above the dock.
+      requestAnimationFrame(() => {
+        if (!currentEndpointAdjustments().includes(item)) return;
+        const canvas = byId("map").getBoundingClientRect();
+        const dock = byId("route-dock").getBoundingClientRect();
+        fitCoordinates([item.requested_coordinate, item.routed_coordinate].map(point => [point.lon, point.lat]), {
+          maxZoom: 18,
+          padding: { top: 40, left: 40, right: 40, bottom: Math.max(40, canvas.bottom - dock.top + 40) },
+        });
+      });
     },
     onMove: item => { if (!disabled && currentEndpointAdjustments().includes(item)) byId(`set-hard-${item.endpoint}`).click(); },
     onUse: item => {

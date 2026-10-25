@@ -5,7 +5,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const root=path.resolve(__dirname,'../..'),origin='https://appassets.androidplatform.net';
 const profiles=['trail_run','hike','city_bike','gravel_bike','mountain_bike','road_bike'];
 async function run(browser,touch){
- const context=await browser.newContext({viewport:touch?{width:412,height:915}:{width:1360,height:940},hasTouch:touch,isMobile:touch});
+ const context=await browser.newContext({viewport:touch?{width:372,height:709}:{width:1360,height:940},hasTouch:touch,isMobile:touch});
  const errors=[],requests=[];const cases=[];
  try{
   await context.addInitScript(({profiles})=>{
@@ -94,6 +94,22 @@ async function run(browser,touch){
   await page.evaluate(()=>{snapDistance=240;});await page.click('#generate-top');
   await page.waitForFunction(()=>document.querySelector('#endpoint-adjustments-map')?.textContent.includes('review 240 m'));
   const before=await page.evaluate(async()=>{const{state}=await import('/static/state.js');return {lat:state.waypointEndpoints.start.lat,count:snapNativeCalls.filter(c=>c.type==='local_route').length};});
+  await page.locator('#endpoint-adjustments-map [data-adjustment-action="start-show"]').click();
+  await page.waitForTimeout(600); // Declared map transition must finish before testing occlusion.
+  const visibility=await page.evaluate(()=>{
+    const canvas=document.querySelector('.maplibregl-canvas').getBoundingClientRect();
+    const dock=document.querySelector('#route-dock').getBoundingClientRect();
+    return [...document.querySelectorAll('.endpoint-adjustment-marker')].map(marker=>{
+      const r=marker.getBoundingClientRect();
+      return {label:marker.getAttribute('aria-label'),visible:r.left>canvas.left&&r.right<canvas.right&&r.top>canvas.top&&r.bottom<Math.min(canvas.bottom,dock.top)};
+    });
+  });
+  assert.equal(visibility.length,2);assert(visibility.every(item=>item.visible),'Show adjustment must expose both markers above the dock: '+JSON.stringify(visibility));
+  assert.equal(await page.evaluate(()=>document.activeElement?.tagName),'SUMMARY','collapsed disclosure keeps keyboard focus');
+  const afterShow=await page.evaluate(async()=>{const{state}=await import('/static/state.js');return {lat:state.waypointEndpoints.start.lat,count:snapNativeCalls.filter(c=>c.type==='local_route').length};});
+  assert.deepEqual(afterShow,before,'Show adjustment neither edits nor routes');
+  if(process.env.ENDPOINT_EVIDENCE_DIR)await page.screenshot({path:path.join(process.env.ENDPOINT_EVIDENCE_DIR,touch?'touch-large-review.png':'keyboard-large-review.png')});
+  if(!await page.locator('#endpoint-adjustments-map details').evaluate(e=>e.open))await page.locator('#endpoint-adjustments-map summary').click();
   const use=page.locator('#endpoint-adjustments-map [data-adjustment-action="start-use"]');
   if(touch)await use.tap();else {await use.focus();await page.keyboard.press('Enter');}
   const adopted=await page.evaluate(async()=>{const{state}=await import('/static/state.js');return {lat:state.waypointEndpoints.start.lat,result:state.generationResult,calls:snapNativeCalls.filter(c=>c.type==='local_route').length};});
