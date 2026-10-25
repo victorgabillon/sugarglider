@@ -15,7 +15,7 @@ const equal = (a, b, message) => assert(JSON.stringify(a) === JSON.stringify(b),
 const point = (lat, lon, name = null) => ({ lat, lon, name });
 export const outputs = [];
 
-async function setup({ failure = null, mutateRevision = null, confirmProposal = null, change = undefined } = {}) {
+export async function setup({ failure = null, mutateRevision = null, confirmProposal = null, change = undefined } = {}) {
   const r = await rig({ change });
   const f = await (await fetch("/tests/fixtures/pr40_regional_data.json")).json();
   const data = createLocalRegionData(f.manifest, { pois: f.pois, nature: f.nature });
@@ -46,7 +46,7 @@ async function setup({ failure = null, mutateRevision = null, confirmProposal = 
   const controller = createAdventureController({ model, planner: r.planner, confirmProposal, onProgress: stage => stages.push(stage), lifecycleTarget: null });
   const input = { prompt: "Synthetic test: a 2.2 km historical adventure with interesting stops.", modelId: "synthetic-model",
     context: { start: proposal.intent.start, end: proposal.intent.end, reference: r.region.reference }, research: true };
-  return { ...r, nativeCalls: r.calls, controller, proposal, revision, calls, stages, input, finishModel: () => pendingModel?.(), modelPending: () => Boolean(pendingModel) };
+  return { ...r, model, nativeCalls: r.calls, controller, proposal, revision, calls, stages, input, finishModel: () => pendingModel?.(), modelPending: () => Boolean(pendingModel) };
 }
 async function rejected(promise, code) {
   const error = await promise.then(() => null, caught => caught);
@@ -55,6 +55,29 @@ async function rejected(promise, code) {
 
 export async function runAdventureControllerHarness() {
   const cases = [], beforeState = JSON.stringify(state);
+  for (const id of ['__proto__', 'constructor']) {
+    const r = await setup();
+    try {
+      r.proposal.places[0].id = id;
+      const output = await r.controller.run({ ...r.input, refine: false });
+      const candidate = output.chosen.result.candidates.find(c => c.reached_stops.length);
+      const assessment = output.chosen.assessment.assessments.find(a => a.candidate_id === candidate.id);
+      assert(candidate.reached_stops[0].id === `adventure/${id}` && assessment.places[0].canonical_id === `adventure/${id}`, 'model IDs remain data rather than object prototype properties');
+    } finally { r.controller.cancel(); r.planner.invalidate(); }
+  }
+  cases.push('model_ids_cannot_address_javascript_prototypes');
+  {
+    const r = await setup();
+    try {
+      r.proposal.places[0].location.name = 'AI historical nickname';
+      const output = await r.controller.run({ ...r.input, refine: false });
+      const candidate = output.chosen.result.candidates.find(c => c.reached_stops.length);
+      assert(candidate.reached_stops[0].name === 'Fixture 1' && output.chosen.grounding.places[0].location.name === 'AI historical nickname', 'new AI stops use the matched map name while preserving the suggestion');
+      const doc = new DOMParser().parseFromString(await exportCanonicalCandidate(candidate).blob.text(), 'application/xml');
+      assert([...doc.getElementsByTagName('wpt')].every(point => point.textContent.includes('Fixture 1')), 'GPX does not claim an unverified AI place name');
+      cases.push('mapped_names_authoritative_for_new_ai_waypoints_and_gpx');
+    } finally { r.controller.cancel(); r.planner.invalidate(); }
+  }
   {
     const r = await setup();
     try {

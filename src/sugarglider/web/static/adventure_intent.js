@@ -37,7 +37,9 @@ export function buildAdventureIntent(proposal, grounding, { start, end = null, h
   if (waypoints.some(point => point.approach_override != null || point.maximum_best_effort_distance_m != null)
     || new Set(waypoints.map(point => point.id)).size !== waypoints.length) throw new TypeError("Invalid existing exact points.");
   const byCoordinate = new Map(waypoints.map(point => [key(point.coordinate), point.id]));
-  const bindings = {}, targets = [], exclusions = {};
+  // Model IDs are data, including strings such as "__proto__". They never
+  // address an object's prototype or inherited JavaScript properties.
+  const bindings = Object.create(null), targets = [], exclusions = Object.create(null);
   for (const place of grounding.places.filter(place => confirmedMandatoryIds.includes(place.id))) {
     if (place.status !== "grounded" || !place.approach || ["private", "restricted"].includes(place.access_status)) {
       throw new AdventureIntentError("adventure_mandatory_unresolved", `The required place “${place.location.name}” has no checked usable approach in this region.`);
@@ -46,7 +48,7 @@ export function buildAdventureIntent(proposal, grounding, { start, end = null, h
     const id = duplicate ?? `adventure/${place.id}`;
     bindings[place.id] = id;
     if (!duplicate) {
-      waypoints.push({ id, name: place.location.name, coordinate, constraint_strength: "exact",
+      waypoints.push({ id, name: place.local_name ?? place.location.name, coordinate, constraint_strength: "exact",
         access_search_radius_m: 500, maximum_best_effort_distance_m: null, approach_override: null });
       byCoordinate.set(key(coordinate), id);
     }
@@ -62,7 +64,7 @@ export function buildAdventureIntent(proposal, grounding, { start, end = null, h
     if (waypoints.length >= 30) { exclusions[place.id] = "higher_priority_request_limit"; continue; }
     const id = `adventure/${place.id}`;
     if (waypoints.some(point => point.id === id)) throw new TypeError("Adventure and existing point identities conflict.");
-    waypoints.push({ id, name: place.location.name, coordinate: place.semantic_coordinate,
+    waypoints.push({ id, name: place.local_name ?? place.location.name, coordinate: place.semantic_coordinate,
       constraint_strength: "approach", access_search_radius_m: 500, maximum_best_effort_distance_m: null,
       approach_override: place.approach.coordinate });
     targets.push({ ...place, id, proposal_id: place.id }); bindings[place.id] = id;

@@ -1,0 +1,191 @@
+import { createAdventureController } from "./adventure_controller.js";
+import { createAdventureModel, AdventureModelError } from "./adventure_model.js";
+import { createAdventureSpeech } from "./adventure_speech.js";
+import { createAdventureElevationSampler } from "./adventure_elevation.js";
+import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
+
+const progressText = { understanding: "Understanding your wishes and researching places…", checking_places: "Checking locations on this device…",
+  reviewing: "Review the required places below.", routing: "Calculating actual offline routes…", comparing: "Comparing routes and measuring terrain…",
+  improving: "Improving suggestions using the measured results…", ready: "Your adventure is ready." };
+const speechText = { completed: "Transcription ready. Edit it before you Generate.", cancelled: "Microphone cancelled.",
+  unavailable: "Speech recognition is unavailable. You can type your adventure.", permission_denied: "Microphone permission was not granted. Typing still works.",
+  language_unavailable: "This language is unavailable for on-device recognition. Try another speech language or type your request.",
+  no_match: "No speech was recognized. Try again or type your request.", timeout: "Speech recognition timed out. You can try again.", busy: "The previous speech request is still finishing." };
+
+export function initializeAdventureDialog({ root, launcher, planner, getContext, canOpen = () => true,
+  onBusy = () => {}, onResult, onChooseStart, onChooseEnd,
+  model = createAdventureModel(), speech = createAdventureSpeech(), elevation = createAdventureElevationSampler() }) {
+  const element = id => root.querySelector(`#adventure-${id}`);
+  let epoch = 0, accountBusy = false, aiBusy = false, voiceBusy = false, accountAbort = null, speechAbort = null, planningAbort = null;
+  let accountState = { accounts: [], selected_account: null, models: [] }, review = null, successfulClose = false;
+  const controller = createAdventureController({ model, planner, measureElevations: elevation.measure,
+    onProgress: stage => { element("progress").textContent = progressText[stage] ?? "Planning…"; },
+    confirmProposal: confirm, lifecycleTarget: null });
+  const connected = () => accountState.accounts.find(account => account.id === accountState.selected_account);
+  const message = text => { element("error").textContent = text; };
+  function render() {
+    const account = connected(), eligible = Boolean(account?.connected && account.plan_usage);
+    for (const id of ["connect", "add-account", "account", "refresh-models", "model", "research", "structured", "refine", "language", "choose-start", "choose-end"]) {
+      element(id).disabled = accountBusy || aiBusy || voiceBusy;
+    }
+    element("text").disabled = aiBusy;
+    element("generate").disabled = accountBusy || aiBusy || voiceBusy || !eligible || !element("model").value || element("text").value.trim().length < 3;
+    element("microphone").disabled = aiBusy || voiceBusy || accountBusy;
+    element("microphone").setAttribute("aria-pressed", String(voiceBusy));
+    element("stop-speech").hidden = !voiceBusy;
+    element("cancel").hidden = !aiBusy;
+    element("sign-out").hidden = !account;
+    element("sign-out").disabled = accountBusy;
+    element("add-account").hidden = !accountState.accounts.length;
+    element("add-account").disabled ||= accountState.accounts.length >= 4;
+    element("connect").textContent = account ? "Reconnect this account" : "Sign in with ChatGPT";
+    element("account-status").textContent = accountBusy ? "Connecting to ChatGPT…"
+      : eligible ? "ChatGPT connected. Routing stays on this device."
+      : account?.connected ? "This account has not granted ChatGPT plan usage. Reconnect with an eligible account."
+      : "Connect your ChatGPT account to begin.";
+    root.setAttribute("aria-busy", String(aiBusy || accountBusy));
+  }
+  function setAccounts(value) {
+    if (!Array.isArray(value.accounts) || value.accounts.length > 4 || !Array.isArray(value.models) || value.models.length > 100) throw new AdventureModelError("invalid_response");
+    accountState = value;
+    const select = element("account"); select.replaceChildren();
+    for (const account of value.accounts) select.append(new Option(account.label, account.id));
+    if (!value.accounts.length) select.append(new Option("No account connected", ""));
+    select.value = value.selected_account ?? "";
+    const models = element("model"), prior = models.value; models.replaceChildren();
+    for (const item of value.models) models.append(new Option(item.label, item.id));
+    if (!value.models.length) models.append(new Option("No available model loaded", ""));
+    if (value.models.some(item => item.id === prior)) models.value = prior;
+  }
+  async function accountOperation(action, discover = true) {
+    if (accountBusy) return;
+    stopSpeech(); controller.cancel();
+    accountAbort?.abort(); const abort = new AbortController(), owned = epoch;
+    accountAbort = abort; accountBusy = true; message(""); render();
+    try {
+      let value = await action(abort.signal);
+      if (owned !== epoch || !root.open || abort.signal.aborted) return;
+      setAccounts(value);
+      if (discover && connected()?.connected && connected()?.plan_usage) {
+        value = await model.models(abort.signal);
+        if (owned !== epoch || !root.open || abort.signal.aborted) return;
+        setAccounts(value);
+      }
+      if (Object.hasOwn(value, "remote_revocation_confirmed") && !value.remote_revocation_confirmed) message("Signed out on this device. Remote revocation could not be confirmed; review this connection in your ChatGPT account settings.");
+    } catch (error) { if (owned === epoch && root.open && !abort.signal.aborted) message(error.message); }
+    finally { if (accountAbort === abort) { accountBusy = false; accountAbort = null; render(); } }
+  }
+  async function open() {
+    if (!canOpen() || aiBusy || accountBusy) return false;
+    epoch++; successfulClose = false; message(""); element("progress").textContent = "";
+    element("review").hidden = true; element("input").hidden = false;
+    root.showModal(); element("text").focus(); render();
+    const owned = epoch;
+    try {
+      const context = await getContext();
+      if (owned === epoch && root.open) element("start").textContent = `Start: ${context.start.name || "chosen map point"} · ${context.start.lat.toFixed(5)}, ${context.start.lon.toFixed(5)}${context.end ? ` · End: ${context.end.name || "chosen map point"}` : ""}`;
+    } catch { if (owned === epoch && root.open) element("start").textContent = "Choose a Start and an installed region before generating. Your current route is kept."; }
+    void accountOperation(() => model.status());
+    return true;
+  }
+  function stopSpeech() { speechAbort?.abort(); speechAbort = null; speech.cancel(); }
+  function cancel() {
+    planningAbort?.abort(); controller.cancel(); accountAbort?.abort(); stopSpeech();
+    review?.resolve(null); review = null;
+  }
+  function close() { cancel(); if (root.open) root.close(); }
+  launcher.addEventListener("click", () => { void open(); });
+  element("close").addEventListener("click", close);
+  root.addEventListener("cancel", cancel);
+  root.addEventListener("close", () => { epoch++; cancel(); if (!successfulClose) launcher.focus({ preventScroll: true }); });
+  element("cancel").addEventListener("click", cancel);
+  element("text").addEventListener("input", render);
+  element("connect").addEventListener("click", () => { void accountOperation(signal => model.signIn(connected()?.id ?? null, signal)); });
+  element("add-account").addEventListener("click", () => { void accountOperation(signal => model.signIn(null, signal)); });
+  element("sign-out").addEventListener("click", () => { cancel(); void accountOperation(() => model.signOut(), false); });
+  element("account").addEventListener("change", () => { const id = element("account").value; void accountOperation(() => model.select(id)); });
+  element("refresh-models").addEventListener("click", () => { void accountOperation(signal => model.models(signal), false); });
+  element("choose-start").addEventListener("click", () => { close(); onChooseStart(); });
+  element("choose-end").addEventListener("click", () => { close(); onChooseEnd(); });
+  element("stop-speech").addEventListener("click", stopSpeech);
+  element("microphone").addEventListener("click", async () => {
+    if (voiceBusy || aiBusy) return;
+    const abort = new AbortController(), owned = epoch; speechAbort = abort; voiceBusy = true; render();
+    try {
+      const available = await speech.status();
+      if (abort.signal.aborted || owned !== epoch || !root.open) return;
+      element("speech-status").textContent = available.mode === "on_device" ? "Listening on this device…" : "Android will ask before using your configured speech service.";
+      const result = await speech.start(element("language").value || navigator.language || "en-GB", true, abort.signal);
+      if (abort.signal.aborted || owned !== epoch || !root.open) return;
+      element("speech-status").textContent = speechText[result.status] ?? speechText.unavailable;
+      if (result.status === "completed") { element("text").value = result.text; element("text").focus(); }
+    } catch (error) { if (owned === epoch && root.open) element("speech-status").textContent = error.name === "AbortError" ? speechText.cancelled : speechText.unavailable; }
+    finally { if (speechAbort === abort) speechAbort = null; voiceBusy = false; render(); }
+  });
+  element("generate").addEventListener("click", async () => {
+    if (aiBusy || accountBusy || voiceBusy || element("generate").disabled) return;
+    const owned = epoch, abort = new AbortController(); planningAbort = abort;
+    aiBusy = true; message(""); render(); onBusy(true);
+    try {
+      const context = await getContext();
+      if (owned !== epoch || !root.open || abort.signal.aborted) return;
+      const output = await controller.run({ prompt: element("text").value, modelId: element("model").value, context,
+        research: element("research").checked, structured: element("structured").checked, refine: element("refine").checked }, abort.signal);
+      if (owned !== epoch || !root.open) return;
+      await onResult(output);
+      successfulClose = true; root.close();
+    } catch (error) {
+      if (owned === epoch && root.open) {
+        const code = error.code;
+        message(error.name === "AbortError" ? "Planning cancelled. Your previous route is kept."
+          : ["loop_requires_waypoint", "invalid_endpoints"].includes(code) ? "Choose the missing endpoint or describe some places that can be checked in this region. Your previous route is kept."
+          : typeof error.message === "string" && !/^[a-z_]+$/.test(error.message) ? error.message : "No valid adventure could be calculated. Your previous route is kept.");
+      }
+    } finally {
+      aiBusy = false; review = null; element("review").hidden = true; element("input").hidden = false;
+      if (planningAbort === abort) planningAbort = null;
+      render(); onBusy(false);
+    }
+  });
+  function confirm({ proposal, grounding, unsupportedHard, endResolution }, signal) {
+    const mandatory = proposal.places.filter(place => place.importance === "mandatory");
+    if (!mandatory.length && !unsupportedHard.length && !endResolution) return Promise.resolve({ confirmedMandatoryIds: [] });
+    element("review-title").textContent = endResolution ? "Review the destination" : "Confirm required places";
+    element("input").hidden = true; element("review").hidden = false;
+    element("interpretation").textContent = `${proposal.interpretation} · ${PUBLIC_PROFILE_METADATA[proposal.intent.activity].display_name} · ${(proposal.intent.target_distance_m / 1000).toFixed(1)} km`;
+    const required = element("required"); required.replaceChildren();
+    if (endResolution) {
+      const end = endResolution.coordinate, description = document.createElement("p");
+      description.textContent = `End found on this device: ${end.name} · ${end.lat.toFixed(5)}, ${end.lon.toFixed(5)}. Use this destination only if it is the place you intended.`;
+      required.append(description);
+    }
+    const checks = mandatory.map(place => {
+      const local = grounding.places.find(item => item.id === place.id), label = document.createElement("label"), checkbox = document.createElement("input");
+      checkbox.type = "checkbox"; checkbox.dataset.placeId = place.id; checkbox.disabled = local?.status !== "grounded";
+      label.className = "adventure-check"; label.append(checkbox, document.createTextNode(`Keep ${local?.local_name ?? place.location.name} required${checkbox.disabled ? " — no usable location found; edit your request" : ""}`));
+      if (local?.local_name && local.local_name !== place.location.name) label.append(document.createTextNode(` (AI suggestion: ${place.location.name})`));
+      required.append(label); return checkbox;
+    });
+    const limitations = element("limitations"); limitations.replaceChildren();
+    let acknowledge = null;
+    if (unsupportedHard.length) {
+      const label = document.createElement("label"); acknowledge = document.createElement("input"); acknowledge.type = "checkbox"; label.className = "adventure-check";
+      label.append(acknowledge, document.createTextNode(`Continue knowing these required preferences remain unknown: ${unsupportedHard.map(wish => wish.metric.replaceAll("_", " ")).join(", ")}.`)); limitations.append(label);
+    }
+    const refresh = () => { element("confirm").disabled = checks.some(check => !check.checked) || Boolean(acknowledge && !acknowledge.checked); };
+    [...checks, acknowledge].filter(Boolean).forEach(check => check.addEventListener("change", refresh)); refresh();
+    return new Promise(resolve => {
+      const finish = value => { signal.removeEventListener("abort", abort); review = null; resolve(value); };
+      const abort = () => finish(null);
+      review = { resolve: finish, checks, acknowledge };
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted) abort(); else element("confirm").focus();
+    });
+  }
+  element("confirm").addEventListener("click", () => {
+    if (!review || element("confirm").disabled) return;
+    review.resolve({ confirmedMandatoryIds: review.checks.map(check => check.dataset.placeId), acceptUnknownHardPreferences: review.acknowledge?.checked ?? false });
+  });
+  render();
+  return Object.freeze({ open, cancel, clear: () => { cancel(); elevation.clear(); }, busy: () => aiBusy });
+}

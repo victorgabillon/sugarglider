@@ -70,6 +70,8 @@ export const state = {
   importDiagnostics: null,
   waypointOptions: { ...WAYPOINT_PRODUCT_DEFAULTS },
   generationResult: null,
+  adventureDisplay: false,
+  adventureResult: null,
   resultsInvalidated: false, // Presentation notice only; never stores a candidate.
   generationSourceRequest: null,
   savedRouteSnapshot: null,
@@ -427,6 +429,7 @@ export function isSavedRouteSnapshotDisplay() {
 
 export function isImmutableSnapshotDisplay() {
   return isSavedRouteSnapshotDisplay()
+    || Boolean(state.adventureDisplay && state.adventureResult)
     || Boolean(state.outingDisplay && state.outingSnapshot);
 }
 

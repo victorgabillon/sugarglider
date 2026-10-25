@@ -17,8 +17,8 @@ export function assessAdventure({ proposal, grounding, request, result, bindings
     const anchors = new Map(candidate.traversal.anchors.map(anchor => [anchor.id, anchor]));
     const hard = request.waypoints.filter(point => point.constraint_strength === "exact");
     const places = grounding.places.map(place => {
-      const id = bindings[place.id] ?? place.id, stop = reached.get(id), anchor = anchors.get(`exact/${id}`);
-      let status = "dropped", reason = dropped.get(id)?.reason ?? exclusions[place.id] ?? "not_selected_for_this_candidate", arrival = null;
+      const id = Object.hasOwn(bindings, place.id) ? bindings[place.id] : place.id, stop = reached.get(id), anchor = anchors.get(`exact/${id}`);
+      let status = "dropped", reason = dropped.get(id)?.reason ?? (Object.hasOwn(exclusions, place.id) ? exclusions[place.id] : "not_selected_for_this_candidate"), arrival = null;
       if (place.status !== "grounded") { status = place.status; reason = place.status; }
       else if (stop) { status = "reached"; reason = null; arrival = stop.resolved_approach.graph_snap_distance_m; }
       else if (anchor && place.approach) {
@@ -30,7 +30,7 @@ export function assessAdventure({ proposal, grounding, request, result, bindings
         status = finite(arrival) && arrival <= tolerance ? "reached" : "exact_anchor_satisfied_place_arrival_unverified";
         reason = status === "reached" ? null : status;
       }
-      return { id: place.id, canonical_id: id, name: place.location?.name ?? place.name ?? place.id,
+      return { id: place.id, canonical_id: id, name: place.local_name ?? place.location?.name ?? place.name ?? place.id,
         status, reason, arrival_distance_m: arrival, local_category: place.local_category,
         access_status: place.access_status, story_status: place.story_status };
     });
@@ -66,7 +66,7 @@ export function assessAdventure({ proposal, grounding, request, result, bindings
         limitation: metric?.limitation ?? "Authoritative native path details for this preference are unavailable." };
     });
     const mandatoryVisits = proposal.places.filter(place => place.importance === "mandatory")
-      .filter(place => hard.some(point => point.id === (bindings[place.id] ?? place.id)));
+      .filter(place => hard.some(point => point.id === (Object.hasOwn(bindings, place.id) ? bindings[place.id] : place.id)));
     const hardSatisfied = candidate.diagnostics.safety_eligible
       && hard.every(point => anchors.has(`exact/${point.id}`))
       && mandatoryVisits.every(place => places.find(outcome => outcome.id === place.id)?.status === "reached");

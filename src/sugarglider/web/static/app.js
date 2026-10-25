@@ -1,4 +1,9 @@
 import { createSelectedRouteElevation } from "./route_elevation.js";
+import { initializeAdventureDialog } from "./adventure_dialog.js";
+import { createAdventureResults } from "./adventure_results.js";
+import { renderAdventurePlaces } from "./map.js";
+import { regionalRoutingReference } from "./regional_routing_reference.js";
+import { selectCommittedRegion } from "./regional_planning.js";
 import { initializeSourceInformation } from "./data_notices.js";
 import { createElevationView } from "./elevation_view.js";
 import { clearElevationMapPosition, showElevationMapPosition } from "./map.js";
@@ -139,15 +144,22 @@ const withPlanningRegion = createRegionalPlanningContext({ versions: regionVersi
   } });
 const localPlanner = isBundledAndroidApp()
   ? createLocalPlanner({ withRegion: withPlanningRegion }) : null;
+let adventureDialog = null, adventurePlanning = false, manualAdventureSnapshot = null, pendingAdventureSnapshot = null;
+const adventureElevationViews = new Map();
+const adventureResults = createAdventureResults({ root: byId("adventure-result"), candidatesRoot: byId("candidate-list"),
+  onManual: () => returnToManualPlan(),
+  onShowMap: coordinate => { appShell?.show("map"); focusCoordinate(coordinate); },
+  onShowStories: () => appShell?.show("routes") });
 const elevationView = createElevationView({root:byId("route-elevation"),
-  isCurrent:(value, candidate) => !isImmutableSnapshotDisplay()
+  isCurrent:(value, candidate) => isAdventureElevation(value, candidate) || !isImmutableSnapshotDisplay()
     && candidate === selectedCandidate() && selectedRouteElevation?.owns(value,candidate,state.generationResult,selectedRegionId),
   onPosition:position => position ? showElevationMapPosition(position) : clearElevationMapPosition(),
   onShowMap:position => {
     appShell?.show("map", {focus:true});
     requestAnimationFrame(() => {
       if (position === elevationView.diagnostics().position
-        && selectedRouteElevation?.owns(state.selectedElevation,selectedCandidate(),state.generationResult,selectedRegionId)) {
+        && (isAdventureElevation(adventureElevationView(), selectedCandidate())
+          || selectedRouteElevation?.owns(state.selectedElevation,selectedCandidate(),state.generationResult,selectedRegionId))) {
         focusCoordinate(position.coordinate);
       }
     });
@@ -155,6 +167,83 @@ const elevationView = createElevationView({root:byId("route-elevation"),
   onCancel:() => selectedRouteElevation?.cancel(), onRetry:() => selectedRouteElevation?.retry()});
 const selectedRouteElevation = localPlanner ? createSelectedRouteElevation({versions:regionVersions,
   onChange: value => { state.selectedElevation = value; renderElevation(value); }}) : null;
+
+function adventureElevationView() {
+  return state.adventureDisplay ? adventureElevationViews.get(selectedCandidate()?.id) ?? null : null;
+}
+function isAdventureElevation(value, candidate) {
+  const output = state.adventureDisplay && state.adventureResult;
+  return Boolean(output && candidate === selectedCandidate() && state.generationResult === output.chosen.result
+    && value === adventureElevationViews.get(candidate.id) && value?.candidate_id === candidate.id
+    && (value.status !== "ready" || value.result === output.chosen.elevations[candidate.id]));
+}
+function returnToManualPlan({ refresh = true } = {}) {
+  if (!state.adventureDisplay) return;
+  adventureDialog?.cancel(); adventureElevationViews.clear();
+  state.adventureDisplay = false; state.adventureResult = null;
+  if (manualAdventureSnapshot) {
+    const id = state.request.id + 1;
+    Object.assign(state, manualAdventureSnapshot);
+    state.request = { ...manualAdventureSnapshot.request, id, startedAt: null };
+  } else invalidateCandidates();
+  manualAdventureSnapshot = null; state.visualizationCache.clear();
+  if (refresh) { render(); appShell?.show("plan"); }
+}
+async function adventureContext() {
+  if (!localPlanner || regionPlanningError) throw new Error(regionFailureMessage(regionPlanningError ?? "regional_required"));
+  const request = state.adventureDisplay ? state.generationSourceRequest : currentPlanRequest();
+  if (!request?.start) throw new Error("Choose a Start on the map before generating your adventure.");
+  const hardWaypoints = request.kind === "auto_tour" ? request.hard_waypoints
+    : request.waypoints.filter(point => point.constraint_strength === "exact");
+  if (hardWaypoints.length > 14) throw new Error("This adventure can preserve up to 14 exact intermediate points. Review your required points first.");
+  const reference = await regionVersions.withCommittedRegions(async rows => regionalRoutingReference(selectCommittedRegion(rows, selectedRegionId).manifest));
+  return { start: request.start, end: request.end, reference, hardWaypoints,
+    suggested_profile: request.routing_profile, seed: request.seed,
+    endpointSnapPolicy: request.endpoint_snap_policy ?? { start: "near", end: "near" } };
+}
+function initializeAdventure() {
+  byId("adventure-launch").hidden = !localPlanner;
+  if (!localPlanner) return;
+  let priorRequest = null, requestId = null;
+  adventureDialog = initializeAdventureDialog({ root: byId("adventure-dialog"), launcher: byId("plan-with-ai"), planner: localPlanner,
+    canOpen: () => !state.outingDisplay && !isSavedRouteSnapshotDisplay() && !["running", "reversing"].includes(state.request.status),
+    getContext: adventureContext,
+    onBusy: busy => {
+      adventurePlanning = busy;
+      if (busy) {
+        priorRequest = state.request; requestId = state.request.id + 1;
+        if (!state.adventureDisplay) pendingAdventureSnapshot = { generationResult: state.generationResult,
+          generationSourceRequest: state.generationSourceRequest, selectedSignature: state.selectedSignature,
+          forkedSavedCandidate: state.forkedSavedCandidate, resultsInvalidated: state.resultsInvalidated, request: priorRequest };
+        state.request = { status: "running", id: requestId, startedAt: Date.now() };
+      } else {
+        if (state.request.id === requestId && state.request.status === "running") state.request = { ...priorRequest, id: requestId, startedAt: null };
+        pendingAdventureSnapshot = null;
+      }
+      render();
+    },
+    onResult: async output => {
+      if (!adventurePlanning || state.request.id !== requestId) throw new DOMException("Adventure cancelled.", "AbortError");
+      if (!manualAdventureSnapshot) manualAdventureSnapshot = pendingAdventureSnapshot;
+      state.adventureDisplay = true; state.adventureResult = output;
+      state.generationResult = output.chosen.result; state.generationSourceRequest = output.chosen.request;
+      state.selectedSignature = output.chosen.result.candidates[0].id;
+      state.resultsInvalidated = false; state.visualizationCache.clear(); adventureElevationViews.clear();
+      for (const candidate of output.chosen.result.candidates) {
+        const result = output.chosen.elevations[candidate.id] ?? null;
+        adventureElevationViews.set(candidate.id, Object.freeze({ status: result ? "ready" : "unavailable",
+          candidate_id: candidate.id, result, diagnostic: result ? null : "elevation_unavailable", cache_hit: true }));
+      }
+      state.request = { status: "success", id: requestId, startedAt: null };
+      byId("request-status").textContent = "Your AI adventure is ready. Route calculations used the selected offline region.";
+      render(); fitCoordinates(output.chosen.result.candidates[0].route.geometry);
+      await selectCandidate(state.selectedSignature); appShell?.show("routes");
+    },
+    onChooseStart: () => { returnToManualPlan(); byId("set-hard-start").click(); appShell?.show("map"); },
+    onChooseEnd: () => { returnToManualPlan(); changeMapTopology("point_to_point", "near"); updateControlsFromOptions(); byId("set-hard-end").click(); appShell?.show("map"); },
+  });
+  window.addEventListener("pagehide", () => adventureDialog?.clear(), { once: true });
+}
 localGpxExporter.prepare();
 let pendingGpxExport = null;
 let elapsedTimer = null;
@@ -1223,13 +1312,20 @@ function renderMapData() {
   }
   if (!mapReady) return;
   const candidate = selectedCandidate();
+  const adventure = state.adventureDisplay ? state.adventureResult : null;
+  const adventureRequest = adventure?.chosen.request;
+  const hardPoints = adventureRequest?.waypoints.filter(point => point.constraint_strength === "exact");
+  const points = hardPoints?.map(point => ({ ...point.coordinate, id: point.id, name: point.name })) ?? state.points;
+  const visits = candidate?.diagnostics.details.required_waypoint_order;
+  const markerVisits = adventureRequest ? visits?.map(visit => ({ ...visit,
+    original_index: hardPoints.findIndex(point => point.id === adventureRequest.waypoints[visit.original_index]?.id) })) : visits;
   const popupIndex = state.pendingPointPopupIndex;
   state.pendingPointPopupIndex = null;
   const requestedPopupId = state.pendingRequestedPlacePopupId;
   state.pendingRequestedPlacePopupId = null;
   renderRequiredMarkers(
-    state.points,
-    candidate?.diagnostics.details.required_waypoint_order,
+    points,
+    markerVisits,
     state.selectedEndpointKind === "start" && state.planningMode === "auto_tour" ? 0 : state.selectedPointIndex,
     popupIndex,
     isImmutableSnapshotDisplay()
@@ -1245,17 +1341,17 @@ function renderMapData() {
         requestPopup: false,
       }),
     },
-    state.planningMode === "auto_tour",
+    !adventure && state.planningMode === "auto_tour",
   );
-  const endpoints = activeEndpoints();
+  const endpoints = adventureRequest ? { start: adventureRequest.start, end: adventureRequest.end } : activeEndpoints();
   renderHardEndpoints(
-    state.planningMode === "auto_tour" ? null : endpoints.start,
+    !adventure && state.planningMode === "auto_tour" ? null : endpoints.start,
     endpoints.end,
     { onActivate: selectEndpoint, selectedKind: state.selectedEndpointKind,
       disabled: isImmutableSnapshotDisplay() || ["running", "reversing"].includes(state.request.status) },
   );
   renderOptionalMarkers(candidate?.optional_points ?? []);
-  renderImportedGpx(state.importedGpx);
+  renderImportedGpx(adventure ? null : state.importedGpx);
   renderCandidates(
     currentDisplayedCandidates(),
     state.selectedSignature,
@@ -1271,7 +1367,8 @@ function renderMapData() {
   const allFeatures = [...new Map([...state.poiFeatures,
     ...(state.selectedPoiFeature ? [state.selectedPoiFeature] : [])].map((feature) => [feature.id, feature])).values()];
   renderPois(allFeatures, state.selectedPoiId, selectPoi, poiRenderOptions());
-  const constraintPlaces = state.planningMode === "auto_tour"
+  renderAdventurePlaces(adventure?.chosen ?? null, candidate?.id, id => adventureResults.showPlace(id));
+  const constraintPlaces = adventure ? [] : state.planningMode === "auto_tour"
     ? state.autoTour.requestedPlaces
     : state.points.flatMap((point, index) => (point.constraintStrength ?? "exact") === "exact" ? [] : [{
       id: point.id ?? `route-waypoint-${index + 1}`,
@@ -1904,6 +2001,7 @@ function renderStatus() {
       : "On-device connections support exact points and shortest paths, with nature and loop preferences off. Unsupported choices report an error; your points are not weakened."
     : "Choose a loop back to Start, or a point-to-point route with a destination. Available activities use the routing service.";
   byId("import-itinerary").disabled = readOnly || running;
+  byId("plan-with-ai").disabled = running || readOnly && !state.adventureDisplay;
   byId("generate").disabled = readOnly || running || !availability.enabled;
   byId("generate-top").disabled = byId("generate").disabled;
   byId("cancel").classList.toggle("hidden", !running);
@@ -1918,7 +2016,11 @@ function renderStatus() {
     activeEndpoints().routeTopology,
     { controlsDisabled: running || readOnly },
   );
-  byId("route-form").closest(".panel.controls").inert = readOnly;
+  byId("route-form").closest(".panel.controls").inert = readOnly && !state.adventureDisplay;
+  byId("route-form").hidden = Boolean(state.adventureDisplay);
+  byId("planning-points").hidden = Boolean(state.adventureDisplay);
+  byId("route-dock").classList.toggle("hidden", Boolean(state.adventureDisplay));
+  if (state.adventureDisplay) byId("planning-readiness").textContent = `Viewing ${state.adventureResult.chosen.proposal.name}. Your manual plan is kept; return to it from Routes.`;
   byId("clear-results").disabled = readOnly;
   byId("request-status").classList.toggle("running", running);
   if (!running && !readOnly) {
@@ -1960,16 +2062,21 @@ function renderEmptyState() {
 }
 
 function renderElevation(value) {
-  elevationView.render(value,selectedCandidate());
+  elevationView.render(adventureElevationView() ?? value,selectedCandidate());
+  if (state.adventureDisplay) {
+    byId("cancel-route-elevation").hidden = true;
+    byId("retry-route-elevation").hidden = true;
+  }
 }
 
 function render() {
-  selectedRouteElevation?.sync(isImmutableSnapshotDisplay() ? null : selectedCandidate(),state.generationResult,selectedRegionId);
+  selectedRouteElevation?.sync(isImmutableSnapshotDisplay() || adventurePlanning ? null : selectedCandidate(),state.generationResult,selectedRegionId);
   renderElevation(state.selectedElevation);
   regionScreen?.render();
   renderModeControls();
   renderPoiEditor();
   renderCandidatesPanel();
+  adventureResults.render(state.adventureDisplay ? state.adventureResult : null, selectedCandidate());
   renderEndpointAdjustmentViews();
   renderMetrics();
   renderStatus();
@@ -2049,6 +2156,7 @@ function validateRequestControls() {
 }
 
 async function generate() {
+  if (isImmutableSnapshotDisplay()) return;
   hideError();
   let request;
   try {
@@ -2797,6 +2905,7 @@ function updateFailedExactPoint(action) {
 
 let itineraryDialog = null;
 function bindEvents() {
+  initializeAdventure();
   byId("redo-point-edit").addEventListener("click", () => {
     if (redoPointEdit()) { updateControlsFromOptions(); invalidateAndRender(); }
   });
@@ -2827,7 +2936,7 @@ function bindEvents() {
   byId("error-remove-waypoint").addEventListener("click", () => updateFailedExactPoint("remove"));
   byId("generate").addEventListener("click", generate);
   byId("generate-top").addEventListener("click", generate);
-  byId("cancel").addEventListener("click", () => state.abortController?.abort());
+  byId("cancel").addEventListener("click", () => { state.abortController?.abort(); adventureDialog?.cancel(); });
   byId("clear-results").addEventListener("click", () => invalidateAndRender());
   for (const id of ["undo-point-edit", "undo-point-edit-plan"]) {
     byId(id).addEventListener("click", () => {
@@ -3027,8 +3136,8 @@ function bindEvents() {
   byId("reverse-route").addEventListener("click", reverseSelectedRoute);
   byId("export-plan").addEventListener("click", () => {
     try {
-      updateOptionsFromControls();
-      const request = currentPlanRequest();
+      if (!state.adventureDisplay) updateOptionsFromControls();
+      const request = state.adventureDisplay ? state.generationSourceRequest : currentPlanRequest();
       const blob = new Blob([`${JSON.stringify(request, null, 2)}\n`], {
         type: "application/json",
       });
@@ -3045,9 +3154,8 @@ function bindEvents() {
   });
   byId("copy-request").addEventListener("click", async () => {
     try {
-      updateOptionsFromControls();
-      saveActivePoints();
-      const request = currentPlanRequest();
+      if (!state.adventureDisplay) { updateOptionsFromControls(); saveActivePoints(); }
+      const request = state.adventureDisplay ? state.generationSourceRequest : currentPlanRequest();
       await navigator.clipboard.writeText(JSON.stringify(request, null, 2));
       byId("request-status").textContent = state.planningMode === "auto_tour"
         ? "Suggested-route plan copied with places, distance settings and preferences."
@@ -3243,6 +3351,8 @@ async function initializeRegionScreen() {
     selectRegion: (id, { remember = true } = {}) => {
       if (remember) void regionPreference?.remember(id);
       if (selectedRegionId === id) return;
+      adventureDialog?.clear();
+      if (state.adventureDisplay) returnToManualPlan({ refresh: false });
       // Clearing/removing a region must release its worker heap too, even when
       // no replacement region will be loaded. Old sessions reject after close.
       sharedLocalRegionClient?.close();

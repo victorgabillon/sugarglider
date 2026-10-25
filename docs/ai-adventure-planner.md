@@ -70,10 +70,10 @@ These results do not establish Android browser callback feasibility or live acco
 access. The exact-origin native bridge is wired, and the shared provider adapter receives
 completed text, measured usage and actual web-search citations without credentials.
 Page changes and inference backgrounding cancel owned work. Model output is never
-a native command. UI entry and live inference remain outstanding.
+a native command. Live inference remains unverified.
 
 The strict proposal parser and local grounding adapter are also implemented and
-covered by seventeen new browser scenarios plus the retained itinerary-import
+covered by nineteen new browser scenarios plus the retained itinerary-import
 harness. They reuse existing validation primitives and bounded leased Places
 queries, preserve unresolved/ambiguous/outside/private outcomes, retain proposed
 versus mapped/approach coordinates, and mark source URLs unverified unless a
@@ -90,7 +90,7 @@ the Python reconstruction of existing Near endpoint traversal anchors; 27 focuse
 Python tests and the existing endpoint browser suite pass.
 
 These are synthetic routing tests, not real geographical acceptance. The deterministic assessment and two-call model controller are now implemented.
-Thirteen new controller scenarios exercise the normal regional queries, shared
+Fifteen new controller scenarios exercise the normal regional queries, shared
 search/publisher and GPX path, including a measured additional checked stop after
 revision, failed-revision retention, unknown surfaces/partial elevation, mandatory
 confirmation, strict landmark arrival, changed region/intent and cancellation.
@@ -101,9 +101,41 @@ counts; a linked AI anecdote never becomes independently verified history. The
 application retains both round snapshots and only chooses a revised portfolio
 when supported measurements improve. Canonical control ordering remains intact.
 
-Real Marly quality/latency, the elevation measurement adapter and final adventure
-UI/microphone remain outstanding. No complete application experience or live
-account access is claimed. No AI APK has been installed or offered as complete.
+The Android application now has a Plan with AI dialog with account/model controls,
+text input, editable speech, explicit online-research/refinement choices, essential
+required-place/destination review, progress and cancellation. An on-device speech
+recognizer is preferred when available. Its microphone permission is requested
+only for an explicit utterance. A platform speech fallback requires a native
+provider-processing disclosure; its offline preference is not a guarantee.
+Backgrounding the app stops its own recognizer. Native callbacks own their page
+and operation, and late system results cannot become a later transcription.
+Forty-eight focused JVM tests and Android Debug lint pass, including three speech
+policy/protocol tests. Physical microphone behavior remains unverified.
+
+Completed candidates use the existing native elevation client and sampling worker
+in a bounded sequential batch. Matching retained results are reused across rounds;
+cancellation drains native analysis and cancellation before releasing ownership.
+Canonical candidates and GPX remain unchanged. Stories use plain text and explicit
+safe HTTPS links; proposed points remain at their proposed or mapped coordinates,
+and only checked arrivals receive reached styling. New AI stop names use the
+matched local map name; conflicting mapped categories stay unresolved. Mapped
+water potability remains distinct from access and arrival. The existing candidate controls,
+terrain chart and native GPX saver use the selected canonical result.
+
+The actual bundled application passes synthetic browser acceptance at phone and
+desktop widths with verified OPFS components and real application workers. The test
+connects a fake account, edits a transcription, generates and refines through the
+normal native-message boundary, selects and exports exact GPX, retains a route after
+a failed AI request, and restores the exact prior manual request/result/selection.
+Seven dialog scenarios also cover enlarged text, required-place confirmation,
+locally resolved End review and cancellation before region acquisition. Fifteen
+retained/evolved elevation scenarios pass. The shell/Android allowlists include the
+new modules under cache generation v107, with refreshed identities and CI steps.
+All account, routing and terrain replies in these tests are explicitly synthetic.
+
+Restart persistence, real Marly quality/latency, final comprehensive validation,
+APK audit, review PR and separately authorized live/physical acceptance remain
+outstanding. No AI APK has been installed or offered as complete.
 
 ## Official protocol references (checked 25 October 2026)
 
@@ -116,3 +148,8 @@ an HTTP `127.0.0.1` callback. Account eligibility and Android feasibility must b
 proved rather than inferred from desktop examples. Use the public Responses API
 with `store: false`, `stream: true`; no backend-api endpoint or API-key fallback.
 Model discovery does not itself prove web-search/Structured Outputs/tool support.
+
+## Android speech references (checked 25 October 2026)
+
+- [SpeechRecognizer](https://developer.android.com/reference/android/speech/SpeechRecognizer): on-device API, main-thread lifecycle and microphone permission.
+- [RecognizerIntent](https://developer.android.com/reference/android/speech/RecognizerIntent): platform recognition and the advisory offline preference.

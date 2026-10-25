@@ -1,0 +1,121 @@
+import { initializeAdventureDialog } from "../../src/sugarglider/web/static/adventure_dialog.js";
+import { createAdventureResults } from "../../src/sugarglider/web/static/adventure_results.js";
+import { renderRouteChoices } from "../../src/sugarglider/web/static/route_results.js";
+import { exportCanonicalCandidate } from "../../src/sugarglider/web/static/local_gpx_export.js";
+import { setup } from "./adventure_controller_harness.js";
+const assert = (ok, message) => { if (!ok) throw Error(message); };
+async function until(check, label) {
+  for (let i = 0; i < 500; i++) { if (check()) return; await new Promise(resolve => setTimeout(resolve, 10)); }
+  throw Error(`Did not settle: ${label}`);
+}
+
+async function frame(width = 390, height = 844, scale = 1) {
+  const markup = new DOMParser().parseFromString(await (await fetch("/src/sugarglider/web/static/index.html")).text(), "text/html");
+  markup.querySelectorAll("script,link[rel=manifest]").forEach(node => node.remove());
+  for (const node of markup.querySelectorAll("link[href],img[src]")) {
+    const field = node.tagName === "LINK" ? "href" : "src", value = node.getAttribute(field);
+    if (value.startsWith("/static/")) node.setAttribute(field, `/src/sugarglider/web${value}`);
+  }
+  const element = document.createElement("iframe"); element.style.cssText = `width:${width}px;height:${height}px;border:0`;
+  const loaded = new Promise(resolve => element.addEventListener("load", resolve, { once: true }));
+  element.srcdoc = markup.documentElement.outerHTML; document.body.append(element); await loaded;
+  const doc = element.contentDocument; doc.documentElement.style.fontSize = `${16 * scale}px`;
+  doc.getElementById("adventure-launch").hidden = false;
+  return { element, doc, root: doc.getElementById("adventure-dialog"), byId: id => doc.getElementById(`adventure-${id}`) };
+}
+function accounts(model, initiallyConnected = true) {
+  let connected = initiallyConnected;
+  const state = () => ({ accounts: connected ? [{ id: "oaiapp_synthetic", label: "Synthetic account", connected: true, plan_usage: true }] : [],
+    selected_account: connected ? "oaiapp_synthetic" : null, models: connected ? [{ id: "synthetic-model", label: "Synthetic available model" }] : [] });
+  return { ...model, status: async () => state(), models: async () => state(),
+    signIn: async () => { connected = true; return state(); }, select: async () => state(), signOut: async () => { connected = false; return state(); } };
+}
+
+export async function runAdventureUiHarness() {
+  const cases = [];
+  for (const [width, height, scale] of [[360, 800, 1], [390, 844, 1], [1280, 800, 1], [360, 640, 2]]) {
+    const r = await setup(), f = await frame(width, height, scale), { byId } = f;
+    let output = null, selected = null, returned = false, spoken = 0;
+    const busy = [], speech = { status: async () => ({ mode: "on_device" }),
+      start: async () => { spoken++; return { status: "completed", text: "Une aventure historique de 2,2 km", mode: "on_device" }; }, cancel() {} };
+    const results = createAdventureResults({ root: f.doc.getElementById("adventure-result"), candidatesRoot: f.doc.getElementById("candidate-list"),
+      onManual: () => { returned = true; }, onShowMap: () => {} });
+    const choose = id => { selected = output.chosen.result.candidates.find(c => c.id === id);
+      renderRouteChoices(f.doc.getElementById("candidate-list"), output.chosen.result.candidates, id, choose); results.render(output, selected); };
+    const dialog = initializeAdventureDialog({ root: f.root, launcher: f.doc.getElementById("plan-with-ai"),
+      planner: r.planner, getContext: async () => r.input.context, model: accounts(r.model, false), speech,
+      elevation: { measure: async () => ({}), clear() {} }, onBusy: value => busy.push(value),
+      onChooseStart() {}, onChooseEnd() {}, onResult: value => { output = value; choose(value.chosen.result.candidates[0].id); } });
+    try {
+      await dialog.open(); await until(() => !byId("connect").disabled, "disconnected account ready");
+      assert(byId("generate").disabled && r.calls.length === 0, "opening panel does not infer or route");
+      byId("connect").click(); await until(() => byId("model").value === "synthetic-model" && !byId("microphone").disabled, "account models");
+      byId("microphone").click(); await until(() => byId("text").value.startsWith("Une aventure"), "editable transcription");
+      assert(spoken === 1 && r.calls.length === 0 && r.nativeCalls.length === 0, "microphone sends no model request or route call");
+      byId("text").value += " avec de beaux points de vue"; byId("text").dispatchEvent(new Event("input"));
+      assert(!byId("generate").disabled, "one explicit Generate action available");
+      assert(f.root.scrollWidth <= f.root.clientWidth + 1 && f.doc.documentElement.scrollWidth <= width + 1, `no horizontal overflow ${width}/${scale}`);
+      byId("generate").click(); await until(() => output !== null && !f.root.open, "normal proposal-to-GPX UI");
+      assert(r.calls.length === 2 && busy[0] && busy.at(-1) === false, "one bounded AI operation");
+      const alternate = [...f.doc.querySelectorAll(".candidate-select")].at(-1); alternate.click();
+      assert(selected.reached_stops.length > 0, "ordinary candidate selection owns the adventure route");
+      assert(f.doc.querySelectorAll(".adventure-card-summary").length === output.chosen.result.candidates.length, "comparison annotations do not duplicate");
+      byId("stories-open").click(); assert(!byId("stories").hidden && byId("stories").textContent.includes("AI story"), "story provenance visible");
+      assert([...byId("stories").querySelectorAll("a")].every(link => link.protocol === "https:" && link.rel.includes("noopener")), "links are safe explicit actions");
+      const xml = new DOMParser().parseFromString(await exportCanonicalCandidate(selected).blob.text(), "application/xml");
+      assert(xml.getElementsByTagName("trkpt").length === selected.route.geometry.length, "selected UI GPX is canonical native geometry");
+      byId("return-manual").click(); assert(returned, "explicit manual-plan return is wired");
+      cases.push(`account_voice_edit_generate_places_select_gpx_${width}_${scale}`);
+    } finally { dialog.clear(); r.planner.invalidate(); f.element.remove(); }
+  }
+  {
+    const r = await setup(), f = await frame(); r.proposal.places[0].importance = "mandatory";
+    let output = null;
+    const dialog = initializeAdventureDialog({ root: f.root, launcher: f.doc.getElementById("plan-with-ai"), planner: r.planner,
+      model: accounts(r.model), speech: { cancel() {} }, elevation: { measure: async () => ({}), clear() {} },
+      getContext: async () => r.input.context, onChooseStart() {}, onChooseEnd() {}, onResult: value => { output = value; } });
+    try {
+      await dialog.open(); f.byId("text").value = "Keep the castle required"; f.byId("text").dispatchEvent(new Event("input"));
+      await until(() => !f.byId("generate").disabled, "connected"); f.byId("generate").click();
+      await until(() => !f.byId("review").hidden, "mandatory review");
+      assert(f.byId("confirm").disabled && r.nativeCalls.length === 0, "no automatic mandatory acceptance");
+      f.byId("required").querySelector("input").click(); f.byId("confirm").click();
+      await until(() => Boolean(output), "accepted required stop");
+      assert(output.chosen.request.waypoints.some(p => p.constraint_strength === "exact" && p.id === "adventure/castle"), "explicit required point preserved");
+      cases.push("mandatory_review_requires_user_checkbox_before_routing");
+    } finally { dialog.clear(); r.planner.invalidate(); f.element.remove(); }
+  }
+  {
+    const r = await setup(), f = await frame(); let output = null;
+    r.input.context.end = null; r.proposal.intent.end = { name: "Fixture 2", lat: null, lon: null };
+    const dialog = initializeAdventureDialog({ root: f.root, launcher: f.doc.getElementById("plan-with-ai"), planner: r.planner,
+      model: accounts(r.model), speech: { cancel() {} }, elevation: { measure: async () => ({}), clear() {} },
+      getContext: async () => r.input.context, onChooseStart() {}, onChooseEnd() {}, onResult: value => { output = value; } });
+    try {
+      await dialog.open(); f.byId("text").value = "Finish at Fixture 2"; f.byId("text").dispatchEvent(new Event("input")); f.byId("refine").checked = false;
+      await until(() => !f.byId("generate").disabled, "connected"); f.byId("generate").click();
+      await until(() => !f.byId("review").hidden, "End review");
+      assert(f.byId("required").textContent.includes("End found on this device: Fixture 2") && r.nativeCalls.length === 0, "local destination needs explicit review before routing");
+      f.byId("confirm").click(); await until(() => Boolean(output), "confirmed local End");
+      assert(output.chosen.request.end.name === "Fixture 2" && output.chosen.endpoint_resolution.evidence === "unique_exact_local_name", "End comes from the local index, not guessed coordinates");
+      cases.push("named_end_resolved_locally_and_reviewed_before_routing");
+    } finally { dialog.clear(); r.planner.invalidate(); f.element.remove(); }
+  }
+  {
+    const r = await setup(), f = await frame(); let contextCalls = 0, finish;
+    const busy = [];
+    const dialog = initializeAdventureDialog({ root: f.root, launcher: f.doc.getElementById("plan-with-ai"), planner: r.planner,
+      model: accounts(r.model), speech: { cancel() {} }, elevation: { clear() {} }, onBusy: value => busy.push(value),
+      getContext: () => ++contextCalls === 1 ? Promise.resolve(r.input.context) : new Promise(resolve => { finish = resolve; }),
+      onChooseStart() {}, onChooseEnd() {}, onResult: () => { throw Error("Cancelled context must not commit"); } });
+    try {
+      await dialog.open(); f.byId("text").value = "Synthetic adventure"; f.byId("text").dispatchEvent(new Event("input"));
+      await until(() => !f.byId("generate").disabled, "ready"); f.byId("generate").click();
+      await until(() => Boolean(finish), "waiting for context"); f.byId("cancel").click(); finish(r.input.context);
+      await until(() => busy.at(-1) === false, "cancel drain");
+      assert(r.calls.length === 0 && r.nativeCalls.length === 0, "cancel before context cannot start model work");
+      cases.push("cancel_before_region_context_never_starts_model");
+    } finally { dialog.clear(); r.planner.invalidate(); f.element.remove(); }
+  }
+  return cases;
+}

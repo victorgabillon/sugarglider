@@ -1,6 +1,7 @@
 import { nativeBridgeTransport } from "./native_bridge_transport.js";
 
 const messages = { unavailable: "ChatGPT connection is available in the Android app.", cancelled: "Adventure planning cancelled.",
+  browser_unavailable: "Android could not open a system browser for ChatGPT sign-in. Enable a browser, then try again.",
   network: "ChatGPT could not be reached. Your existing route is unchanged.", auth_expired: "Reconnect your ChatGPT account to continue.",
   usage_limit: "Your ChatGPT usage limit was reached. Manage usage in your ChatGPT settings.",
   unsupported: "This account or model does not support the requested operation. Choose another available model or disable online research.",

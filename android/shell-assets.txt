@@ -138,3 +138,14 @@ vendor/pmtiles-4.5.0/pmtiles.js
 vendor/protomaps-basemaps-5.7.2/LICENSE.md
 vendor/protomaps-basemaps-5.7.2/basemaps.js
 waypoint_editor.js
+adventure_model.js
+adventure_proposal.js
+adventure_grounding.js
+adventure_assessment.js
+adventure_controller.js
+adventure_intent.js
+adventure_elevation.js
+adventure_speech.js
+adventure_dialog.js
+adventure_results.js
+local_adventure_search.js
