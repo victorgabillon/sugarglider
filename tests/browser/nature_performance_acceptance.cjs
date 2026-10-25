@@ -40,6 +40,12 @@ const server = http.createServer((request, response) => {
     const retained = await page.evaluate(() => ({ owner: Boolean(window.retainedNatureIndexOwner.deref()),
       nature: Boolean(window.retainedNatureIndexDocument.deref()), names: window.retainedNaturePlaces.searchPlaceNames('castle') }));
     if (retained.owner || retained.nature || JSON.stringify(retained.names) !== JSON.stringify(expected)) throw Error('Retired regional nature index retained');
+    const analysis = await page.evaluate(() => window.createNatureSourceReleaseProbe());
+    await cdp.send('HeapProfiler.collectGarbage');
+    const sourceRelease = await page.evaluate(() => ({ retained: Boolean(window.activeNatureInput.deref()),
+      analysis: window.activeNatureAnalysis.analyzeNature(window.activeNatureRoute) }));
+    if (sourceRelease.retained || JSON.stringify(sourceRelease.analysis) !== JSON.stringify(analysis)) throw Error('Active analysis retained source geometry or changed after release');
+    console.log(JSON.stringify({ source_geometry_released_while_analysis_active: true }));
     console.log(JSON.stringify({ nature_index_released: true, name_search_unchanged: true, name: 'offline_nature_performance', cases: JSON.parse(result.text), status: 'passed' }));
   } finally {
     await browser?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve));

@@ -48,6 +48,16 @@ async function startup(browser, scenario) {
     await context.addInitScript(({ profiles, scenario }) => {
       globalThis.preferenceEvents = [];
       globalThis.preferenceNative = [];
+      globalThis.preferenceWorkerCloses = 0;
+      const regionalWorkers = new WeakSet(), post = Worker.prototype.postMessage, terminate = Worker.prototype.terminate;
+      Worker.prototype.postMessage = function(message, ...rest) {
+        if (message?.type === 'load_version') regionalWorkers.add(this);
+        return post.call(this, message, ...rest);
+      };
+      Worker.prototype.terminate = function(...args) {
+        if (regionalWorkers.has(this)) preferenceWorkerCloses += 1;
+        return terminate.apply(this, args);
+      };
       const get = IDBObjectStore.prototype.get;
       IDBObjectStore.prototype.get = function(key) {
         if (key === 'planner-region-id' && scenario.storageUnavailable) throw Error('Optional preference read unavailable');
@@ -73,8 +83,10 @@ async function startup(browser, scenario) {
             pack_capabilities: [{ pack_id: id, access_modes: ['foot', 'bicycle'] }] };
         } else if (request.type === 'itinerary_dialog_state') return;
         else throw Error(`Unexpected automatic native operation: ${request.type}`);
-        queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ schema_version: 1,
+        const deliver = () => queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ schema_version: 1,
           request_id: request.request_id, ...reply }) }));
+        if (scenario.holdNative && request.type === 'get_local_route_capabilities') globalThis.releasePreferenceNative = deliver;
+        else deliver();
       } };
     }, { profiles, scenario });
     await context.route('**/*', async route => {
@@ -93,13 +105,25 @@ async function startup(browser, scenario) {
       const file = path.resolve(root, relative);
       if (!file.startsWith(root + path.sep)) return route.abort();
       const mime = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.html': 'text/html', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml' };
+      if (url.pathname === '/v1/ui/config' && scenario.holdNative) {
+        const config = JSON.parse(await fs.readFile(file)); config.initial_center = [.01, .01];
+        return route.fulfill({ json: config });
+      }
       try { return route.fulfill({ body: await fs.readFile(file), contentType: mime[path.extname(file)] ?? 'application/octet-stream' }); }
       catch { return route.fulfill({ status: 404, body: '' }); }
     });
     page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     await page.goto(origin + '/seed.html');
     if (scenario.runHarness) {
-      const cases = await page.evaluate(async () => (await import('/tests/browser/region_preference_harness.js')).runRegionPreferenceHarness());
+      // The product harness uses relative fixture URLs and owns a separate OPFS
+      // directory. Run its integrity/update cases in the same CI acceptance job.
+      if (scenario.runHarness === 'product') await page.evaluate(() => history.replaceState(null, '', '/tests/browser/fixture.html'));
+      const cases = await page.evaluate(async product => product
+        ? [
+          ...await (await import('/tests/browser/pr42_region_product_harness.js')).runPr42RegionProductHarness(),
+          ...await (await import('/tests/browser/pr42_regional_runtime_harness.js')).runPr42RegionalRuntimeHarness(),
+        ]
+        : (await import('/tests/browser/region_preference_harness.js')).runRegionPreferenceHarness(), scenario.runHarness === 'product');
       assert.deepEqual(errors, []);
       return { name: scenario.name, ...(scenario.repeat === undefined ? {} : { repeat: scenario.repeat }), status: 'passed', cases: cases.length };
     }
@@ -143,6 +167,18 @@ async function startup(browser, scenario) {
       }
     } else assert.equal(opens.length, 0, 'Ambiguous choice opened an arbitrary map');
     releaseCatalog();
+    if (scenario.holdNative) {
+      await page.waitForFunction(() => typeof releasePreferenceNative === 'function');
+      const pending = await page.evaluate(async () => ({
+        map: (await import('/static/offline_map.js')).offlineMapSnapshot(),
+        status: document.querySelector('#regional-status').dataset.state,
+        profiles: (await import('/static/state.js')).state.routingProfileCatalog.profiles,
+      }));
+      assert.equal(pending.map.active_pack_id, installed[scenario.expected].components.map.component_id, 'Verified map must open before native/index readiness');
+      assert.equal(pending.status, 'regional_checking');
+      assert.ok(pending.profiles.every(profile => !profile.available), 'Pending native checks cannot advertise planning readiness');
+      await page.evaluate(() => releasePreferenceNative());
+    }
     await page.waitForFunction(() => !document.querySelector('#regional-refresh').disabled
       && !['', 'regional_checking'].includes(document.querySelector('#regional-status').dataset.state));
     const result = await page.evaluate(async () => ({
@@ -152,8 +188,15 @@ async function startup(browser, scenario) {
       candidate: (await import('/static/state.js')).selectedCandidate(),
       generation: (await import('/static/state.js')).state.generationResult,
       native: preferenceNative,
+      profiles: (await import('/static/state.js')).state.routingProfileCatalog.profiles,
     }));
     assert.equal(result.selected, scenario.expected ?? '');
+    if (scenario.expected && !scenario.failure) {
+      await page.waitForFunction(() => document.querySelector('.maplibregl-canvas'));
+      await page.waitForFunction(() => [...document.querySelector('#profile').options].filter(option => !option.disabled).length === 6);
+      const available = await page.evaluate(async () => (await import('/static/state.js')).state.routingProfileCatalog.profiles.filter(profile => profile.available).length);
+      assert.equal(available, 6, 'Both completion orders must enable all six profiles');
+    }
     assert.equal(result.status, scenario.failure ?? (scenario.expected ? 'regional_ready' : 'regional_selection_required'));
     if (scenario.expected && !scenario.corruptMap) assert.equal(result.map.packs[0].pack_id, installed[scenario.expected].components.map.component_id);
     assert.ok(result.native.every(request => ['hello', 'get_local_route_capabilities', 'itinerary_dialog_state'].includes(request.type)), `Restoration generated a route/download: ${JSON.stringify(result.native)}`);
@@ -162,7 +205,9 @@ async function startup(browser, scenario) {
     assert.equal(requests.some(url => /\.(pmtiles|gz|tar)$/u.test(url) || /\/v[12]\/.*(plan|route)/u.test(url)), false, 'Startup downloaded a region or generated a route');
     if (scenario.switchAndClear) {
       phase = 'select beta and commit';
+      const beforeSwitch = await page.evaluate(() => preferenceWorkerCloses);
       await chooseAndRemember(page, 'beta');
+      assert.equal(await page.evaluate(() => preferenceWorkerCloses), beforeSwitch + 1, 'Switching region releases its old analysis worker');
       phase = 'reload remembered beta';
       await page.reload();
       await page.waitForFunction(() => document.querySelector('#regional-status').dataset.state === 'regional_ready');
@@ -170,6 +215,7 @@ async function startup(browser, scenario) {
       assert.equal(await page.evaluate(() => preferenceEvents.find(event => event.type === 'map_open').build), installed.beta.build_id);
       phase = 'clear selection and commit';
       await chooseAndRemember(page, null);
+      assert.equal(await page.evaluate(() => preferenceWorkerCloses), 1, 'Explicit clear releases the active worker without a replacement load');
       phase = 'reload cleared selection';
       await page.reload();
       await page.waitForFunction(() => document.querySelector('#regional-status').dataset.state === 'regional_selection_required');
@@ -183,6 +229,7 @@ async function startup(browser, scenario) {
     return { name: scenario.name, ...(scenario.repeat === undefined ? {} : { repeat: scenario.repeat }), status: 'passed', first_map_build_matches: Boolean(scenario.expected), offline: Boolean(scenario.offline) };
   } catch (error) {
     const diagnostic = await page?.evaluate(async () => {
+      globalThis.releasePreferenceNative?.();
       const { store } = await (await import('/static/pwa_runtime.js')).pwaRuntime();
       const { createRegionVersionStore } = await import('/static/region_versions.js');
       return { selected: document.querySelector('#planning-region')?.value,
@@ -210,7 +257,9 @@ async function main() {
     // The focused screen harness and the real startup cases share the same
     // intercepted local origin; all regional artifacts are synthetic.
     for (const scenario of [
+      { name: 'verified_map_reuse_integrity_and_updates', runHarness: 'product' },
       { name: 'storage_and_screen_preferences', runHarness: true },
+      { name: 'map_opens_before_slow_planning_checks', regions: ['alpha'], preference: 'alpha', expected: 'alpha', holdNative: true },
       { name: 'sole_region_restart', regions: ['alpha'], expected: 'alpha' },
       { name: 'multiple_region_restart_requires_choice', regions: ['alpha', 'beta'] },
       { name: 'previous_choice_first_map_before_catalog', regions: ['alpha', 'beta'], preference: 'beta', expected: 'beta' },

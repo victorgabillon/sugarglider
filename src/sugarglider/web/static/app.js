@@ -106,6 +106,7 @@ let offlineMaps = null;
 let regionPlanningError = "regional_checking";
 const regionVersions = createRegionVersionStore();
 const nativeRegions = createRegionalNativeClient();
+const regionalMaps = createRegionalMapStore({ versions: regionVersions, selectedRegionId: () => selectedRegionId });
 function localRegionClient() {
   sharedLocalRegionClient ??= createLocalRegionClient();
   return sharedLocalRegionClient;
@@ -123,6 +124,7 @@ function openLocationSearch(target, launcher) {
 }
 
 const withPlanningRegion = createRegionalPlanningContext({ versions: regionVersions, bridge: localRoutingBridge,
+  verifyMap: (manifest, directory) => regionalMaps.verifyMap(manifest, directory),
   selectedRegionId: () => selectedRegionId,
   regionClient: { loadVersion: (...args) => localRegionClient().loadVersion(...args) },
   inspectNative: async (reference) => {
@@ -3177,6 +3179,10 @@ async function initializeRegionScreen() {
     selectRegion: (id, { remember = true } = {}) => {
       if (remember) void regionPreference?.remember(id);
       if (selectedRegionId === id) return;
+      // Clearing/removing a region must release its worker heap too, even when
+      // no replacement region will be loaded. Old sessions reject after close.
+      sharedLocalRegionClient?.close();
+      sharedLocalRegionClient = null;
       selectedRegionId = id;
       state.poiAbortController?.abort();
       state.poiRequest = { status: "idle", id: state.poiRequest.id + 1 };
@@ -3240,6 +3246,12 @@ async function start() {
     });
     const currentOutingSlug = outingSlug();
     const currentSharedRouteSlug = sharedRouteSlug();
+    const prepareRegion = async () => {
+      if (!localPlanner || currentSharedRouteSlug || regionScreen) return;
+      try { await initializeRegionScreen(); }
+      catch (error) { handleError(error, "The selected region could not be prepared."); }
+    };
+
     if (localPlanner) {
       const { store } = await pwaRuntime();
       regionPreference = createRegionPreference(store);
@@ -3256,8 +3268,13 @@ async function start() {
     try {
       if (localPlanner) byId("offline-maps").classList.add("hidden");
       offlineMaps = await initializeOfflineMaps({
-        ...(localPlanner ? { store: createRegionalMapStore({ versions: regionVersions, selectedRegionId: () => selectedRegionId }),
-          onStatus: (snapshot) => regionScreen?.mapState(snapshot) } : {}),
+        ...(localPlanner ? { store: regionalMaps,
+          onStatus: (snapshot) => {
+            regionScreen?.mapState(snapshot);
+            // The opened basemap no longer needs the version lease. Start the
+            // independent planning checks while tiles and icons are rendering.
+            if (snapshot.status.state === "local_pack_active") void prepareRegion();
+          } } : {}),
         elements: localPlanner ? {} : {
           container: byId("offline-maps"),
           support: byId("offline-map-storage-support"),
@@ -3331,7 +3348,8 @@ async function start() {
       renderSnapshotProfileIdentity(sharedSnapshot.candidate.routing_profile);
     } else {
       if (localPlanner) {
-        await initializeRegionScreen();
+        // Basemap attachment starts checking the selected region. Planning
+        // remains unavailable until every required component has passed.
       }
       renderRoutingProfiles();
       try {
@@ -3381,8 +3399,11 @@ async function start() {
         mapReady = true;
         renderMapData();
         plannerLocation?.mapReady();
+        // Either map images or the regional worker may finish first.
+        if (localPlanner) { renderRoutingProfiles({ preserveUnavailableSelection: true }); render(); }
+        void prepareRegion();
       },
-      onError: showMapError,
+      onError: (message) => { showMapError(message); void prepareRegion(); },
       onViewportChange: schedulePoiRefresh,
       onUserMapInteraction: () => plannerLocation?.manualMapInteraction(),
       onMapClick: (coordinate) => {
@@ -3444,6 +3465,7 @@ async function start() {
     if (mapInitialized) void plannerLocation?.initialize();
     if (localPlanner) initializeNativeItineraryHandoff({ dialog: itineraryDialog });
     render();
+    if (!mapInitialized) void prepareRegion();
     if (sharedSnapshot) {
       fitCoordinates(sharedSnapshot.candidate.route.geometry);
       if (state.networkStatus !== "offline") {

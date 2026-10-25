@@ -29,11 +29,23 @@ export async function createVersionedRegionComponents({
   async function openMap({ signal, onProgress } = {}) {
     const pack = await maps.getPack(manifest.components.map.component_id);
     requireMapIdentity(pack.manifest, manifest);
-    await verifyRegionalFile(await pack.manifestHandle.getFile(), manifest.components.map.files[0], { signal });
-    await verifyRegionalFile(await pack.archiveHandle.getFile(), manifest.components.map.files[1], { signal, onProgress });
-    const opened = await maps.openPackSource(pack.manifest.pack_id);
+    const manifestFile = await pack.manifestHandle.getFile(), archiveFile = await pack.archiveHandle.getFile();
+    await verifyRegionalFile(manifestFile, manifest.components.map.files[0], { signal });
+    await verifyRegionalFile(archiveFile, manifest.components.map.files[1], { signal, onProgress });
+    const opened = await maps.openPackSource(pack.manifest.pack_id, { archiveFile });
+    requireData(JSON.stringify(opened.manifest) === JSON.stringify(pack.manifest), "regional_identity_mismatch");
     signal?.throwIfAborted();
-    return opened;
+    // Reuse only this opened, fully verified snapshot. Fresh metadata detects
+    // replacement; reading the original snapshot also detects invalidation by
+    // writes. Map range reads never switch to newly obtained, unverified bytes.
+    async function checkUnchanged() {
+      for (const [handle, file] of [[pack.manifestHandle, manifestFile], [pack.archiveHandle, archiveFile]]) {
+        const current = await handle.getFile();
+        requireData(current.size === file.size && current.lastModified === file.lastModified, "regional_checksum_mismatch");
+        await file.slice(0, 1).arrayBuffer();
+      }
+    }
+    return Object.freeze({ ...opened, checkUnchanged });
   }
 
   async function verifyMap(options) { await openMap(options); return true; }

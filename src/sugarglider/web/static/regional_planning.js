@@ -19,6 +19,7 @@ export function createRegionalPlanningContext({
   versions, bridge, regionClient, inspectNative,
   selectedRegionId = () => null,
   components = createVersionedRegionComponents,
+  verifyMap = async (manifest, directory) => (await components({ manifest, directory })).verifyMap(),
 } = {}) {
   return async function withRegion(run) {
     return versions.withCommittedRegions(async (snapshot) => {
@@ -26,11 +27,17 @@ export function createRegionalPlanningContext({
       const manifest = row.manifest;
       const reference = await regionalRoutingReference(manifest);
       const directory = await versions.committedDirectory(manifest.region_id, manifest.build_id);
-      const native = await inspectNative(reference);
+      // Independent native/index verification can overlap. Drain both outcomes
+      // before releasing the version lease, including when either check fails.
+      const [nativeCheck, indexCheck] = await Promise.allSettled([
+        inspectNative(reference),
+        (async () => { await verifyMap(manifest, directory); return regionClient.loadVersion(manifest, directory); })(),
+      ]);
+      if (nativeCheck.status === "rejected") throw nativeCheck.reason;
+      const native = nativeCheck.value;
       requireData(native?.status === "ready", native?.code ?? "regional_routing_unavailable");
-      const scoped = await components({ manifest, directory });
-      await scoped.verifyMap();
-      const session = await regionClient.loadVersion(manifest, directory);
+      if (indexCheck.status === "rejected") throw indexCheck.reason;
+      const session = indexCheck.value;
       requireData(session.identity.build_id === manifest.build_id
         && session.identity.region_id === manifest.region_id
         && session.identity.routing_pack_id === reference.pack_id, "regional_identity_mismatch");

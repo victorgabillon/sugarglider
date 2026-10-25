@@ -127,6 +127,32 @@ export async function runPr42RegionalRuntimeHarness() {
   equal(validations, ["routing", "map", "indexes"], "all components checked before callback");
   cases.push("selected_context_validates_all_components_and_exact_index_identity");
 
+  for (const failure of [null, "native", "indexes"]) {
+    let finishNative, finishIndexes, nativeEntered = false, indexesEntered = false, published = false;
+    const nativePending = new Promise((resolve, reject) => { finishNative = () => failure === "native"
+      ? reject(new RegionalDataError("regional_routing_unavailable")) : resolve({ status: "ready" }); });
+    const indexPending = new Promise((resolve, reject) => { finishIndexes = () => failure === "indexes"
+      ? reject(new RegionalDataError("regional_checksum_mismatch")) : resolve(session); });
+    const concurrent = createRegionalPlanningContext({ versions, selectedRegionId: () => selection,
+      inspectNative: () => { nativeEntered = true; return nativePending; },
+      verifyMap: async () => true,
+      regionClient: { loadVersion: () => { indexesEntered = true; return indexPending; } },
+      bridge: { forRegion: () => ({}) } });
+    const result = concurrent(() => { published = true; });
+    // Own rejection immediately while deliberately holding the other check open.
+    const outcome = result.then(() => null, error => error.code);
+    for (let tick = 0; tick < 20 && !indexesEntered; tick++) await new Promise(resolve => setTimeout(resolve, 0));
+    assert(nativeEntered && indexesEntered && owned && !published, "checks overlap under the existing lease");
+    if (failure === "indexes") finishIndexes(); else finishNative();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert(owned && !published, "one failed or finished check cannot release the other check's lease");
+    if (failure === "indexes") finishNative(); else finishIndexes();
+    equal(await outcome, failure === "native" ? "regional_routing_unavailable"
+      : failure === "indexes" ? "regional_checksum_mismatch" : null, "verification failure remains explicit");
+    assert(!owned && published === (failure === null), "only both verified components authorize the callback");
+  }
+  cases.push("parallel_native_and_index_checks_drain_both_success_and_failure_under_one_lease");
+
   for (const [snapshot, explicit, code] of [
     [[], null, "regional_required"], [[...rows, { ...rows[0], region_id: "second" }], null, "regional_selection_required"],
     [rows, "missing", "regional_required"], [[{ ...rows[0], status: "unavailable", code: "regional_install_incomplete" }], manifest.region_id, "regional_install_incomplete"],
