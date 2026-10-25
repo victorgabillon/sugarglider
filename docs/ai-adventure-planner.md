@@ -77,8 +77,21 @@ covered by seventeen new browser scenarios plus the retained itinerary-import
 harness. They reuse existing validation primitives and bounded leased Places
 queries, preserve unresolved/ambiguous/outside/private outcomes, retain proposed
 versus mapped/approach coordinates, and mark source URLs unverified unless a
-completed research response actually cited them. No routing subset search or
-final adventure UI exists yet. No AI APK has been installed or offered as complete.
+completed research response actually cited them. The Waypoint producer now supports a bounded optional-stop insertion search for
+loops and open routes, reusing its native validation and canonical publisher. A
+single adventure session retains the region lease and shared 16-call gateway
+across two 8-call rounds; exact anchors cannot change during revision. Checked
+mapped approaches, explicit omissions, retained no-optional control and one-time
+Nature enrichment are covered by 21 new routing scenarios across all six profiles.
+The retained manual Waypoint and normal-planner harnesses pass. Twelve synthetic
+request/result pairs (36 candidates) also pass Python canonical and neutral
+submitted-candidate validation. This exposed and corrected a narrow mismatch in
+the Python reconstruction of existing Near endpoint traversal anchors; 27 focused
+Python tests and the existing endpoint browser suite pass.
+
+These are synthetic routing tests, not real geographical acceptance. Real Marly
+quality/latency, deterministic wish assessment, the model revision controller and
+final adventure UI remain outstanding. No AI APK has been installed or offered as complete.
 
 ## Official protocol references (checked 25 October 2026)
 

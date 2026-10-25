@@ -8,9 +8,12 @@ from typing import Any, cast
 import pytest
 from pydantic import ValidationError
 
+from sugarglider.planning.direction.traversal import build_plan_traversal
+from sugarglider.planning.drafts import CandidateDraft
 from sugarglider.planning.models import PLAN_REQUEST_ADAPTER, EndpointSnapPolicy
 from sugarglider.planning.pipeline import PlanService
 from sugarglider.planning.result import PlanCandidate
+from sugarglider.planning.submitted_candidate import validate_submitted_candidate
 from sugarglider.planning.validation import (
     CandidateEvaluationError,
     validate_search_candidate,
@@ -99,3 +102,41 @@ async def test_development_server_does_not_ignore_native_near_policy() -> None:
     service = object.__new__(PlanService)
     with pytest.raises(ValueError, match="on-device planner"):
         await service.generate(PLAN_REQUEST_ADAPTER.validate_python(payload))
+
+
+@pytest.mark.parametrize("endpoint", ["start", "end"])
+@pytest.mark.parametrize("displacement", [0.0, 24.9, 25.0, 25.1, 89.2, 150.0])
+def test_near_traversal_survives_neutral_snapshot_validation(
+    endpoint: str, displacement: float, saved_route_candidate: PlanCandidate
+) -> None:
+    """The Python trust boundary agrees with the native browser's Near anchors."""
+    candidate = saved_route_candidate
+    first, last = candidate.route.geometry[0], candidate.route.geometry[-1]
+    payload = request_payload()
+    payload.update(
+        routing_profile=candidate.routing_profile,
+        topology="point_to_point",
+        start={"lat": first[1], "lon": first[0], "name": "Start"},
+        end={"lat": last[1], "lon": last[0], "name": "End"},
+        waypoints=[],
+        endpoint_snap_policy={"start": "near", "end": "near"},
+    )
+    coordinate = cast(dict[str, Any], payload[endpoint])
+    coordinate["lat"] -= degrees(displacement / 6371008.8)
+    request = PLAN_REQUEST_ADAPTER.validate_python(payload)
+    traversal = build_plan_traversal(
+        request,
+        CandidateDraft(
+            route=candidate.route,
+            routing_points=(),
+            topology=request.topology,
+            construction="near_snapshot_test",
+            search_family="submitted_candidate",
+        ),
+    )
+    anchor = next(a for a in traversal.anchors if a.id == f"endpoint/{endpoint}")
+    assert anchor.constraint_strength == "approach"
+    assert anchor.outcome == ("approximated" if displacement > 25.0 else "reached")
+    validate_submitted_candidate(
+        request, candidate.model_copy(update={"traversal": traversal})
+    )

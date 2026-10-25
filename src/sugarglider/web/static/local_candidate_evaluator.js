@@ -1,6 +1,6 @@
 import { measureEndpointAdjustments, endpointAdjustmentFailure, LOOP_CLOSURE_M, exceedsSnapLimit } from "./endpoint_snapping.js";
 import { UNKNOWN_DETAIL_ANALYSIS } from "./local_analysis_templates.js";
-import { publishLocalNature, publishLocalStops } from "./local_candidate_enrichment.js";
+import { publishLocalNature, publishLocalStops, publishLocalWaypointStops } from "./local_candidate_enrichment.js";
 import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
 import { canonicalTraversal, haversineDistance, localCandidateSignature, locateOnRoutedGeometry, routedGeometryDistance } from "./local_plan_geometry.js";
 
@@ -58,11 +58,9 @@ export async function evaluateLocalCandidateDraft(request, draft) {
   analysis.distance_scale_factor = distance / geometryDistance;
   analysis.unknown_surface.distance_m = distance;
   analysis.spurs.warnings = ["spur_analysis_unavailable"];
-  requireCandidate(request.kind === "waypoint_route"
-    ? request.waypoints.every((waypoint) => waypoint.constraint_strength === "exact")
-    : !request.requested_stops.length, "local_requested_stop_publication_unavailable");
+  requireCandidate(request.kind === "waypoint_route" || !request.requested_stops.length, "local_requested_stop_publication_unavailable");
   const { reached: reachedStops, approximated: approximatedStops, dropped: droppedStops } =
-    request.kind === "auto_tour" ? publishLocalStops(request, draft) : { reached: [], approximated: [], dropped: [] };
+    request.kind === "auto_tour" ? publishLocalStops(request, draft) : publishLocalWaypointStops(request, draft);
   analysis.nature = publishLocalNature(draft);
   analysis.warnings = [...new Set([...analysis.warnings, ...(draft.nature_analysis?.warnings ?? [])])].sort();
   const route = {
@@ -110,9 +108,14 @@ export async function evaluateLocalCandidateDraft(request, draft) {
   const id = await localCandidateSignature(route.geometry, request.routing_profile, request.topology);
   const requestedOrder = request.kind === "waypoint_route" ? request.waypoints.map((point) => point.id) : [];
   const actualOrder = draft.actual_waypoint_order ?? requestedOrder;
-  requireCandidate(actualOrder.length === requestedOrder.length && new Set(actualOrder).size === requestedOrder.length
-    && actualOrder.every((value) => requestedOrder.includes(value)), "invalid_local_waypoint_order");
-  const requiredVisits = request.kind === "waypoint_route" ? actualOrder.map((value) => {
+  const exactOrder = exact.map(point => point.id), visitedHard = actualOrder.filter(id => exactOrder.includes(id));
+  requireCandidate(new Set(actualOrder).size === actualOrder.length
+    && actualOrder.every(value => requestedOrder.includes(value))
+    && visitedHard.length === exactOrder.length
+    && (request.kind !== "waypoint_route" || request.waypoint_order !== "fixed"
+      || JSON.stringify(visitedHard) === JSON.stringify(exactOrder))
+    && reachedStops.every(stop => actualOrder.includes(stop.id)), "invalid_local_waypoint_order");
+  const requiredVisits = request.kind === "waypoint_route" ? visitedHard.map((value) => {
     const index = requestedOrder.indexOf(value), point = request.waypoints[index];
     return { original_index: index, coordinate: { ...point.coordinate, name: point.name } };
   }) : [{ original_index: 0, coordinate: request.start }];

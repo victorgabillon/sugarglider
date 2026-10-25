@@ -35,15 +35,16 @@ export async function publishLocalPlan(request, search, regionalReference = null
       rejected.push({ source_candidate_id: draft.candidate_id, code: error.code });
     }
   }
-  const controlId = request.kind === "auto_tour" ? sourceIds.get(search.no_poi_control_candidate_id) : null;
+  const hasControl = request.kind === "auto_tour" || Object.hasOwn(search, "no_optional_control_candidate_id");
+  const controlId = sourceIds.get(search.no_poi_control_candidate_id ?? search.no_optional_control_candidate_id) ?? null;
   // A POI alternative has no independent promotion evidence. If its required
   // control fails final publication, never quietly recommend the detour.
-  const pool = request.kind === "auto_tour" && !controlId ? [] : evaluated;
+  const pool = hasControl && !controlId ? [] : evaluated;
   const candidates = buildLocalPortfolio(pool, { limit: request.candidate_count, controlId });
   const diagnostics = structuredClone(search.search_diagnostics);
   diagnostics.warnings = [...new Set([...(search.warnings ?? []),
     ...(candidates.length < request.candidate_count ? ["fewer_candidates_than_requested"] : []),
-    ...(request.kind === "auto_tour" && !controlId && evaluated.length ? ["local_no_poi_control_unavailable"] : [])])].sort();
+    ...(hasControl && !controlId && evaluated.length ? ["local_no_poi_control_unavailable"] : [])])].sort();
   const proposals = search.endpoint_proposals ?? search.rejected_attempts?.find(item => item.code === "endpoint_review_required")?.details.endpoint_proposals ?? [];
   const proposalPack = search.rejected_attempts?.find(item => item.code === "endpoint_review_required")?.details.pack_id;
   const endpointProposals = candidates.length ? [] : proposals.slice(0, 2).filter(item =>

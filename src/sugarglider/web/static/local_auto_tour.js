@@ -135,7 +135,19 @@ export function validateLocalAutoTourRequest(value) {
 }
 
 export function generateLocalAutoTourSkeletons(rawRequest) {
-  const request = validateLocalAutoTourRequest(rawRequest);
+  return buildSkeletonProposals(validateLocalAutoTourRequest(rawRequest));
+}
+
+// Reuse the same bounded geometric proposal families for complete adventure routes.
+// This helper supplies coordinates only; native routing remains authoritative.
+export function generateAdventureControlSkeletons(request) {
+  if (!validCoordinate({ lat: request.start.lat, lon: request.start.lon }) || Math.abs(request.start.lat) > 85
+    || !boundedFinite(request.distance_objective.target_m, 1000, 200000)) throw new LocalAutoTourValidationError("invalid_adventure_controls");
+  return buildSkeletonProposals({ start: { lat: request.start.lat, lon: request.start.lon },
+    target_distance_m: request.distance_objective.target_m, seed: request.seed, direction_preference: "any" });
+}
+
+function buildSkeletonProposals(request) {
   const directions = request.direction_preference === "any"
     ? ROUTED_DIRECTIONS
     : [request.direction_preference];

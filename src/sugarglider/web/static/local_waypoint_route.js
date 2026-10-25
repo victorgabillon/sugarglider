@@ -1,7 +1,7 @@
+import { searchWaypointAdventure } from "./local_adventure_search.js";
 import { endpointSnapPolicy, measureEndpointAdjustments, endpointAdjustmentFailure, exceedsSnapLimit, EXACT_ENDPOINT_M, LOOP_CLOSURE_M } from "./endpoint_snapping.js";
 import { createLocalPlanningContext } from "./local_planning_context.js";
 import {
-  MAX_ROUTE_POINTS,
   PUBLIC_LOCAL_ROUTE_PROFILES,
   parseLocalRoutingReply,
 } from "./local_routing.js";
@@ -45,7 +45,7 @@ export class LocalWaypointRouteValidationError extends Error {
   }
 }
 
-export function validateLocalWaypointRouteRequest(value) {
+export function validateLocalWaypointRouteRequest(value, { adventure = false } = {}) {
   if (value?.kind !== "waypoint_route") fail("unsupported_plan_kind");
   if (!fieldsAllowed(value, REQUEST_FIELDS) || value.schema_version !== 1) fail("invalid_request_fields");
   if (!textWithin(value.name, 200)) fail("invalid_request_name");
@@ -81,13 +81,14 @@ export function validateLocalWaypointRouteRequest(value) {
   if (!fieldsAllowed(preferences, new Set(["nature", "path_selection", "loop_geometry"]))) {
     fail("invalid_preferences");
   }
-  if (preferences.nature !== "off" || preferences.path_selection !== "shortest"
-      || preferences.loop_geometry !== "off") {
+  if (!(adventure ? ["off", "prefer"].includes(preferences.nature) : preferences.nature === "off") || preferences.path_selection !== "shortest"
+      || !(adventure ? ["off", "prefer"].includes(preferences.loop_geometry) : preferences.loop_geometry === "off")) {
     fail("unsupported_preference", { supported: { nature: "off", path_selection: "shortest", loop_geometry: "off" } });
   }
+  if (value.topology === "point_to_point" && preferences.loop_geometry !== "off") fail("unsupported_preference");
   const rawWaypoints = value.waypoints === undefined ? [] : value.waypoints;
   if (!Array.isArray(rawWaypoints)) fail("invalid_waypoints");
-  if (rawWaypoints.length + 2 > MAX_ROUTE_POINTS) {
+  if (rawWaypoints.length > (adventure ? 30 : LOCAL_WAYPOINT_MAX_WAYPOINTS)) {
     fail("too_many_waypoints", { maximum: LOCAL_WAYPOINT_MAX_WAYPOINTS });
   }
   if (value.topology === "loop" && rawWaypoints.length === 0) fail("loop_requires_waypoint");
@@ -97,23 +98,27 @@ export function validateLocalWaypointRouteRequest(value) {
     if (!fieldsAllowed(point, WAYPOINT_FIELDS) || !textWithin(point.id, 240) || !textWithin(point.name, 200)) {
       fail("invalid_waypoint", { original_index: index + 1 });
     }
-    if ((point.constraint_strength === undefined ? "exact" : point.constraint_strength) !== "exact") {
+    const strength = point.constraint_strength === undefined ? "exact" : point.constraint_strength;
+    if (!(strength === "exact" || adventure && strength === "approach")) {
       fail("unsupported_constraint_strength", { waypoint_id: point.id, strength: point.constraint_strength });
     }
-    if (point.approach_override != null) fail("unsupported_approach_override", { waypoint_id: point.id });
+    if (point.approach_override != null && (!adventure || strength === "exact")) fail("unsupported_approach_override", { waypoint_id: point.id });
     if (point.maximum_best_effort_distance_m != null) fail("unsupported_best_effort_bound", { waypoint_id: point.id });
     const accessRadius = point.access_search_radius_m === undefined ? 500 : point.access_search_radius_m;
     if (!within(accessRadius, 25, 2_000)) fail("invalid_access_search_radius");
     const position = coordinate(point.coordinate);
+    const override = point.approach_override == null ? null : coordinate(point.approach_override);
+    if (override && haversine(position, override) > 1000) fail("approach_override_outside_semantic_bound");
     if (identities.has(point.id) || coordinates.has(coordinateKey(position))) fail("duplicate_waypoint");
     identities.add(point.id);
     coordinates.add(coordinateKey(position));
     return {
-      id: point.id, name: point.name, coordinate: position, constraint_strength: "exact",
+      id: point.id, name: point.name, coordinate: position, constraint_strength: strength,
       access_search_radius_m: accessRadius,
-      maximum_best_effort_distance_m: null, approach_override: null,
+      maximum_best_effort_distance_m: null, approach_override: override,
     };
   });
+  if (waypoints.filter(point => point.constraint_strength === "exact").length > LOCAL_WAYPOINT_MAX_WAYPOINTS) fail("too_many_waypoints");
   return deepFreeze({
     schema_version: 1, kind: "waypoint_route", name: value.name,
     topology: value.topology, start, end, routing_profile: value.routing_profile,
@@ -123,7 +128,7 @@ export function validateLocalWaypointRouteRequest(value) {
       target_m: objective.target_m, tolerance_m: objective.tolerance_m,
       maximum_m: objective.maximum_m, priority: objective.priority,
     },
-    preferences: { nature: "off", path_selection: "shortest", loop_geometry: "off" },
+    preferences: { nature: preferences.nature, path_selection: "shortest", loop_geometry: preferences.loop_geometry },
     waypoints, waypoint_order: value.waypoint_order,
   });
 }
@@ -183,14 +188,36 @@ export function createLocalWaypointRouteEngine({
   let active = null;
 
   function generate(rawRequest) {
-    const request = validateLocalWaypointRouteRequest(rawRequest);
-    const identity = JSON.stringify(request);
+    return begin(validateLocalWaypointRouteRequest(rawRequest), "manual", (request, owned) => search(request, owned));
+  }
+  function generateAdventure(rawRequest, options) {
+    const request = validateLocalWaypointRouteRequest(rawRequest, { adventure: true });
+    return begin(request, "adventure", async (request, owned) => {
+      const requestId = `local-adventure-${hashText(JSON.stringify(request))}`;
+      return searchWaypointAdventure({ ...options, request,
+        current: () => owns(request, owned),
+        attempt: async (proposal) => {
+          const points = proposal.points;
+          let raw;
+          try { raw = await options.context.requestRoute(points, options.phase); }
+          catch (error) { fail(error.code ?? "local_route_exception"); }
+          if (!owns(request, owned)) return null;
+          const reply = parseLocalRoutingReply(JSON.stringify(raw));
+          if (reply?.type === "local_route_failure") fail(reply.code);
+          const validation = validateRoute(reply, request, proposal, points, options.reference.pack_id);
+          return waypointDraft(request, proposal, reply, points, validation, requestId);
+        },
+      });
+    });
+  }
+  function begin(request, mode, run) {
+    const identity = mode + JSON.stringify(request);
     if (active !== null) {
       if (active.generation === generation && active.identity === identity) return active.promise;
       fail("local_generation_busy");
     }
     const ownedGeneration = ++generation;
-    const promise = search(request, ownedGeneration).finally(() => {
+    const promise = run(request, ownedGeneration).finally(() => {
       if (active?.generation === ownedGeneration) active = null;
     });
     active = { generation: ownedGeneration, identity, promise };
@@ -248,26 +275,7 @@ export function createLocalWaypointRouteEngine({
         }
         const validation = validateRoute(reply, request, proposal, points, selectedPack);
         selectedPack = reply.pack_id;
-        const error = Math.abs(reply.distance_m - request.distance_objective.target_m);
-        const content = JSON.stringify([
-          requestId, proposal.order, reply.pack_id, reply.engine, reply.engine_version,
-          reply.distance_m, reply.duration_s, reply.geometry, reply.snapped_points,
-        ]);
-        candidates.push({
-          candidate_id: `${requestId}-${proposal.order.join("-") || "direct"}-${hashText(content)}`,
-          request_id: requestId, topology: request.topology, profile: request.routing_profile,
-          seed: request.seed, pack_id: reply.pack_id, engine: reply.engine, engine_version: reply.engine_version,
-          geometry: reply.geometry, distance_m: reply.distance_m, duration_s: reply.duration_s,
-          requested_points: points, snapped_points: reply.snapped_points,
-          requested_waypoint_order: request.waypoints.map((point) => point.id),
-          actual_waypoint_order: proposal.order.map((index) => request.waypoints[index].id),
-          original_waypoint_indices: proposal.order.map((index) => index + 1),
-          exact_point_outcomes: validation.outcomes, loop_closure_gap_m: validation.closureGap,
-          target_error_m: error, within_tolerance: error <= request.distance_objective.tolerance_m,
-          construction: proposal, exact_edge_repetition: null, path_attributes: null,
-          nature_score: null, poi_quality: null,
-          warnings: error > request.distance_objective.tolerance_m ? [...WARNINGS, "target_distance_missed"] : WARNINGS,
-        });
+        candidates.push(waypointDraft(request, proposal, reply, points, validation, requestId));
       } catch (error) {
         if (!(error instanceof LocalWaypointRouteValidationError)) throw error;
         reject(error.code, proposal.proposal_id, error.details);
@@ -305,7 +313,30 @@ export function createLocalWaypointRouteEngine({
     });
   }
 
-  return Object.freeze({ generate, invalidate });
+  return Object.freeze({ generate, generateAdventure, invalidate });
+}
+
+function waypointDraft(request, proposal, reply, points, validation, requestId) {
+  const error = Math.abs(reply.distance_m - request.distance_objective.target_m);
+  const content = JSON.stringify([
+    requestId, proposal.order, reply.pack_id, reply.engine, reply.engine_version,
+    reply.distance_m, reply.duration_s, reply.geometry, reply.snapped_points,
+  ]);
+  return {
+    candidate_id: `${requestId}-${proposal.order.join("-") || "direct"}-${hashText(content)}`,
+    request_id: requestId, topology: request.topology, profile: request.routing_profile,
+    seed: request.seed, pack_id: reply.pack_id, engine: reply.engine, engine_version: reply.engine_version,
+    geometry: reply.geometry, distance_m: reply.distance_m, duration_s: reply.duration_s,
+    requested_points: points, snapped_points: reply.snapped_points,
+    requested_waypoint_order: request.waypoints.map((point) => point.id),
+    actual_waypoint_order: proposal.order.map((index) => request.waypoints[index].id),
+    original_waypoint_indices: proposal.order.map((index) => index + 1),
+    exact_point_outcomes: validation.outcomes, loop_closure_gap_m: validation.closureGap,
+    target_error_m: error, within_tolerance: error <= request.distance_objective.tolerance_m,
+    construction: proposal, exact_edge_repetition: null, path_attributes: null,
+    nature_score: null, poi_quality: null,
+    warnings: error > request.distance_objective.tolerance_m ? [...WARNINGS, "target_distance_missed"] : WARNINGS,
+  };
 }
 
 function validateRoute(reply, request, proposal, points, expectedPack) {
@@ -331,20 +362,21 @@ function validateRoute(reply, request, proposal, points, expectedPack) {
     const snap = reply.snapped_points[position];
     const endpoint = position === 0 || position === points.length - 1;
     const adjustment = endpoint ? adjustments[position === 0 ? 0 : 1] : null;
-    const threshold = adjustment?.maximum_distance_m ?? LOCAL_WAYPOINT_EXACT_INTERIOR_FIDELITY_M;
+    const waypointIndex = endpoint ? null : proposal.point_waypoint_indices ? proposal.point_waypoint_indices[position] : proposal.order[position - 1];
+    const waypoint = waypointIndex == null ? null : request.waypoints[waypointIndex];
+    const threshold = adjustment?.maximum_distance_m ?? (waypoint?.constraint_strength === "approach" ? 25 : LOCAL_WAYPOINT_EXACT_INTERIOR_FIDELITY_M);
     const measured = haversine(points[position], snap);
     if (!endpoint && exceedsSnapLimit(measured, threshold)) fail("exact_waypoint_not_reached", {
-      position, waypoint_id: endpoint ? null : request.waypoints[proposal.order[position - 1]].id,
+      position, waypoint_id: waypoint?.id ?? null,
       profile: request.routing_profile, snap_distance_m: measured, maximum_snap_distance_m: threshold,
       suggestion: "Move or remove the exact point; no weaker retry was performed.",
     });
     // PR34 joins continuous leg shapes; each snap is a real leg-boundary vertex.
     while (cursor < geometry.length && (geometry[cursor][0] !== snap.lon || geometry[cursor][1] !== snap.lat)) cursor += 1;
     if (cursor === geometry.length) fail("snapped_waypoint_not_on_ordered_geometry");
-    const originalIndex = endpoint ? (position === 0 || request.topology === "loop" ? 0 : points.length - 1) : proposal.order[position - 1] + 1;
-    const waypoint = endpoint ? null : request.waypoints[originalIndex - 1];
+    const originalIndex = endpoint ? (position === 0 || request.topology === "loop" ? 0 : points.length - 1) : waypointIndex == null ? null : waypointIndex + 1;
     outcomes.push({
-      role: position === 0 ? "start" : endpoint ? "end" : "waypoint",
+      role: position === 0 ? "start" : endpoint ? "end" : waypoint ? "waypoint" : "shape_control",
       waypoint_id: waypoint?.id ?? null, name: waypoint?.name ?? points[position].name,
       original_index: originalIndex, route_position: position, status: adjustment?.status ?? "reached",
       requested_coordinate: points[position], snapped_coordinate: snap,

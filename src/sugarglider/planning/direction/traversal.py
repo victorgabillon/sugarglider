@@ -3,6 +3,7 @@
 from shapely.geometry import Point
 
 from sugarglider.analysis.projection import LocalMetricProjection
+from sugarglider.analysis.route import haversine_distance_m
 from sugarglider.domain.models import Coordinate, GeoJsonPosition
 from sugarglider.planning.direction.analysis import analyze_route_direction
 from sugarglider.planning.drafts import CandidateDraft
@@ -27,6 +28,10 @@ def build_plan_traversal(
 ) -> PlanTraversal:
     """Attach only deliberate, graph-reached anchors in routed order."""
     geometry = draft.route.geometry
+    near_start = (
+        request.endpoint_snap_policy is not None
+        and request.endpoint_snap_policy.start == "near"
+    )
     anchors: list[PlanTraversalAnchor] = [
         PlanTraversalAnchor(
             id="endpoint/start",
@@ -35,8 +40,16 @@ def build_plan_traversal(
             routed_coordinate=_coordinate(geometry[0], request.start.name),
             semantic_coordinate=request.start,
             route_progress=0.0,
-            constraint_strength="exact",
-            outcome="reached",
+            constraint_strength="approach" if near_start else "exact",
+            outcome=(
+                "approximated"
+                if near_start
+                and haversine_distance_m(
+                    (request.start.lon, request.start.lat), geometry[0]
+                )
+                > 25.0 + 1e-6
+                else "reached"
+            ),
         )
     ]
     exact: tuple[ExactWaypoint | RouteWaypoint, ...]
@@ -100,6 +113,10 @@ def build_plan_traversal(
             )
         )
     if request.topology == "point_to_point":
+        near_end = (
+            request.endpoint_snap_policy is not None
+            and request.endpoint_snap_policy.end == "near"
+        )
         anchors.append(
             PlanTraversalAnchor(
                 id="endpoint/end",
@@ -108,8 +125,17 @@ def build_plan_traversal(
                 routed_coordinate=_coordinate(geometry[-1], request.effective_end.name),
                 semantic_coordinate=request.effective_end,
                 route_progress=1.0,
-                constraint_strength="exact",
-                outcome="reached",
+                constraint_strength="approach" if near_end else "exact",
+                outcome=(
+                    "approximated"
+                    if near_end
+                    and haversine_distance_m(
+                        (request.effective_end.lon, request.effective_end.lat),
+                        geometry[-1],
+                    )
+                    > 25.0 + 1e-6
+                    else "reached"
+                ),
             )
         )
     ordered = tuple(
