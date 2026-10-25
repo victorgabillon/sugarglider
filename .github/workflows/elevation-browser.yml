@@ -47,5 +47,7 @@ jobs:
         run: node tests/browser/adventure_controller_acceptance.cjs
       - name: Check adventure dialog, speech editing and elevation ownership
         run: node tests/browser/adventure_ui_acceptance.cjs
+      - name: Check exact adventure restart recovery and optional storage failures
+        run: node tests/browser/adventure_snapshot_acceptance.cjs
       - name: Check the full bundled adventure-to-GPX application flow
         run: node tests/browser/adventure_app_acceptance.cjs

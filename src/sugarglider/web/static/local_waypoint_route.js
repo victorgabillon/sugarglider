@@ -3,6 +3,7 @@ import { endpointSnapPolicy, measureEndpointAdjustments, endpointAdjustmentFailu
 import { createLocalPlanningContext } from "./local_planning_context.js";
 import {
   PUBLIC_LOCAL_ROUTE_PROFILES,
+  MAX_ROUTE_POINTS,
   parseLocalRoutingReply,
 } from "./local_routing.js";
 import { readPlannerOptionsFromControls, waypointPlanRequestSnapshot } from "./state.js";
@@ -88,8 +89,8 @@ export function validateLocalWaypointRouteRequest(value, { adventure = false } =
   if (value.topology === "point_to_point" && preferences.loop_geometry !== "off") fail("unsupported_preference");
   const rawWaypoints = value.waypoints === undefined ? [] : value.waypoints;
   if (!Array.isArray(rawWaypoints)) fail("invalid_waypoints");
-  if (rawWaypoints.length > (adventure ? 30 : LOCAL_WAYPOINT_MAX_WAYPOINTS)) {
-    fail("too_many_waypoints", { maximum: LOCAL_WAYPOINT_MAX_WAYPOINTS });
+  if ((!adventure && rawWaypoints.length + 2 > MAX_ROUTE_POINTS) || rawWaypoints.length > 30) {
+    fail("too_many_waypoints", { maximum: adventure ? 30 : LOCAL_WAYPOINT_MAX_WAYPOINTS });
   }
   if (value.topology === "loop" && rawWaypoints.length === 0) fail("loop_requires_waypoint");
   const identities = new Set();

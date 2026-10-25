@@ -5,7 +5,7 @@ const statuses = { reached: "Checked approach reached", dropped: "Not included i
   identity_conflict: "The suggested identity conflicts with the mapped place",
   non_potable: "Mapped as non-potable; not included",
   no_mapped_approach: "No mapped approach found", researched_coordinate_unverified: "Online suggestion; location remains locally unverified",
-  exact_anchor_satisfied_place_arrival_unverified: "Required route point satisfied; landmark arrival unverified" };
+  exact_anchor_satisfied_place_arrival_unverified: "Required route constraint met; landmark arrival unverified" };
 const reasons = { omitted_for_distance: "The attempted detour exceeded the distance constraints.", route_infeasible: "The attempted route could not reach this place.",
   search_budget_exhausted: "The bounded search finished before this place could be included.", not_selected_for_this_candidate: "Another combination was retained for this route.",
   higher_priority_request_limit: "Higher-priority points used the available stop capacity." };

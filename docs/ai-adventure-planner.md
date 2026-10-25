@@ -151,7 +151,20 @@ diversity proxy to omit near-identical optional loops, while always exposing the
 comparison. The UI explains fewer suitable options when the bounded search cannot
 provide the requested count. This is not an exact graph-overlap measurement. Surface, access and exact repetition remain unknown.
 
-Restart persistence, further Marly quality/diversity work, final comprehensive validation,
+Exact latest-adventure recovery now uses one record in the existing optional PWA
+store. A disposable worker bounds and hashes the record, validates request,
+canonical identities/traversal, strict arrivals, measured assessments and bound
+elevation, then restores the unchanged result and selection. Both actual round
+records and stories are preserved; no search history is fabricated. No model,
+routing or terrain request is made to restore. Startup offers an explicit Reopen
+saved adventure action, keeping the editable planner independent. Missing regions
+remain unavailable for new planning. The UI reports failed persistence and offers
+Forget; clearing saved offline data drains pending writes before removing data.
+No database migration, additional store opener or credential persistence is added.
+Eight storage scenarios and the actual bundled app at mobile/desktop sizes cover
+reload/GPX identity, missing region, stale recovery after editing and clear/forget.
+
+Further Marly quality/diversity work, final comprehensive validation,
 APK audit, review PR and separately authorized live/physical acceptance remain
 outstanding. No AI APK has been installed or offered as complete.
 
@@ -171,3 +184,22 @@ Model discovery does not itself prove web-search/Structured Outputs/tool support
 
 - [SpeechRecognizer](https://developer.android.com/reference/android/speech/SpeechRecognizer): on-device API, main-thread lifecycle and microphone permission.
 - [RecognizerIntent](https://developer.android.com/reference/android/speech/RecognizerIntent): platform recognition and the advisory offline preference.
+
+## Inference and local-search capability boundary
+
+The account-specific model catalog establishes visibility, not tool eligibility.
+The selected Responses API request caps output (including reasoning) at 16,384
+tokens and, when research is enabled, hosted tool calls at four per response.
+There remain at most two model requests for an adventure. Incomplete output is
+rejected, and unsupported optional research/schema can be disabled explicitly;
+there is no automatic retry onto another billing route.
+
+[Responses API fields](https://developers.openai.com/api/reference/python/resources/responses/methods/create)
+and [tool use](https://developers.openai.com/api/docs/guides/tools) document hosted
+and client function mechanisms. That general documentation does not establish
+that an eligible ChatGPT account/model grants each tool. No live account has yet
+proved research, strict schema or function tools. The first implementation uses
+bounded local Places queries after the proposal; it does not ship a model-driven
+client-function loop or upload the index. Such a loop would consume response
+continuations and needs an observed account capability plus an explicit budget;
+it must not silently consume the single strategy-revision allowance.

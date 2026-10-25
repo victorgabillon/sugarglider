@@ -168,7 +168,7 @@ export async function runPr40LocalRegionalDataHarness() {
   scenarios.push("bounded_auto_tour_control_nature_poi_outcomes_and_determinism");
   const canonical=canonicalRequest(request);
   const published=await publishLocalPlan(canonical,result);
-  assert(published.candidates.length===result.candidates.length,'all validated native Auto Tour candidates published');
+  assert(published.candidates.length===result.candidates.length,'all validated native Auto Tour candidates published: '+JSON.stringify(published.search_diagnostics.details.local_planning.rejected_publications));
   equal(published.candidates[0].diagnostics.details.local_routing.source_candidate_id,result.no_poi_control_candidate_id,'canonical recommendation preserves exact no-POI control');
   for (const candidate of published.candidates) {
     assert(candidate.route.analysis.nature.available,'canonical nature evidence available');

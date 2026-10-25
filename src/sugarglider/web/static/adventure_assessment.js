@@ -61,7 +61,7 @@ export function assessAdventure({ proposal, grounding, request, result, bindings
       const available = finite(value), difference = available && wish.value !== null ? value - wish.value : null;
       return { ...wish, status: available ? wish.metric === "elevation_gain" ? "measured_not_directly_optimized" : "measured" : "unavailable",
         measured_value: available ? value : null, unit: metric?.unit ?? null, difference,
-        satisfied: available && wish.goal === "avoid" ? value === 0 : null,
+        met: available && wish.goal === "avoid" ? value === 0 : null,
         loss: available ? wishLoss(wish, value) : null,
         limitation: metric?.limitation ?? "Authoritative native path details for this preference are unavailable." };
     });

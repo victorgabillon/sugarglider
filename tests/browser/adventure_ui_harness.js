@@ -57,8 +57,9 @@ export async function runAdventureUiHarness() {
       assert(f.root.scrollWidth <= f.root.clientWidth + 1 && f.doc.documentElement.scrollWidth <= width + 1, `no horizontal overflow ${width}/${scale}`);
       byId("generate").click(); await until(() => output !== null && !f.root.open, "normal proposal-to-GPX UI");
       assert(r.calls.length === 2 && busy[0] && busy.at(-1) === false, "one bounded AI operation");
-      const alternate = [...f.doc.querySelectorAll(".candidate-select")].at(-1); alternate.click();
-      assert(selected.reached_stops.length > 0, "ordinary candidate selection owns the adventure route");
+      const interesting = output.chosen.result.candidates.find(candidate => candidate.reached_stops.length > 0);
+      const alternate = [...f.doc.querySelectorAll(".candidate-select")].find(button => button.dataset.candidateId === interesting.id); alternate.click();
+      assert(selected.id === interesting.id && selected.reached_stops.length > 0, "ordinary candidate selection owns the adventure route");
       assert(f.doc.querySelectorAll(".adventure-card-summary").length === output.chosen.result.candidates.length, "comparison annotations do not duplicate");
       byId("stories-open").click(); assert(!byId("stories").hidden && byId("stories").textContent.includes("AI story"), "story provenance visible");
       assert([...byId("stories").querySelectorAll("a")].every(link => link.protocol === "https:" && link.rel.includes("noopener")), "links are safe explicit actions");

@@ -140,11 +140,14 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         assert(adventure.active && adventure.improved, JSON.stringify(adventure));
         assert(adventure.result.candidates.some(c => c.reached_stops.length === 2));
         await view('routes'); await page.locator('.candidate-select').last().click();
+        await page.waitForFunction(() => document.querySelector('#adventure-storage-status').textContent.startsWith('Saved on this device'));
+        const exactAdventure = await page.evaluate(() => JSON.stringify(adventureAppState.state.adventureResult));
         await page.locator('#adventure-stories-open').click();
         assert(await page.locator('#adventure-stories').isVisible());
         await page.locator('#download-gpx').click(); await page.waitForFunction(() => adventureSavedGpx !== null);
         const selected = await page.evaluate(async () => { const { selectedCandidate } = await import('/static/state.js'); const c = selectedCandidate();
           const doc = new DOMParser().parseFromString(adventureSavedGpx, 'application/xml'); return { id: c.id, track: [...doc.getElementsByTagName('trkpt')].map(p => [Number(p.getAttribute('lon')), Number(p.getAttribute('lat'))]), geometry: c.route.geometry, ways: doc.getElementsByTagName('wpt').length, reached: c.reached_stops.length, tracks: doc.getElementsByTagName('trk').length, segments: doc.getElementsByTagName('trkseg').length, extensions: doc.getElementsByTagName('extensions').length }; });
+        const exactGpx = await page.evaluate(() => adventureSavedGpx);
         assert.equal(selected.tracks, 1); assert.equal(selected.segments, 1); assert.equal(selected.extensions, 0); assert.equal(selected.ways, selected.reached);
         assert.equal(selected.track.length, selected.geometry.length);
         selected.track.forEach((p, i) => p.forEach((value, j) => assert(Math.abs(value - selected.geometry[i][j]) < 1e-8)));
@@ -161,8 +164,57 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await page.locator('#adventure-close').click(); await view('routes'); await page.locator('#adventure-return-manual').click();
         const restored = await page.evaluate(async () => { const { state, currentPlanRequest } = await import('/static/state.js'); return JSON.stringify({ request: currentPlanRequest(), result: state.generationResult, source: state.generationSourceRequest, selected: state.selectedSignature }); });
         assert.equal(restored, manual, 'Returning to manual restores exact request/result/selection');
+        await page.reload();
+        await page.evaluate(async () => { globalThis.adventureAppState = await import('/static/state.js'); });
+        await page.waitForFunction(() => !document.querySelector('#restore-adventure').hidden);
+        assert.equal(await page.evaluate(() => adventureAppState.state.adventureDisplay), false, 'Startup preserves the editable planner until explicit Reopen');
+        const forbiddenStartup = await page.evaluate(() => adventureNativeCalls.filter(c => ['chatgpt_infer','local_route','route_elevation','adventure_speech_start'].includes(c.type)));
+        assert.deepEqual(forbiddenStartup, [], 'Restart does not infer, route, measure terrain or listen');
+        await view('plan');
+        await page.evaluate(() => {
+          globalThis.actualAdventureWorker = globalThis.Worker;
+          globalThis.Worker = function(...args) {
+            const worker = new actualAdventureWorker(...args);
+            if (String(args[0]).endsWith('/adventure_snapshot_worker.js')) Object.defineProperty(worker, 'onmessage', {
+              set(handler) { worker.addEventListener('message', event => { globalThis.releaseAdventureRecovery = () => handler(event); }); }
+            });
+            return worker;
+          };
+        });
+        await page.locator('#restore-adventure').click();
+        await page.waitForFunction(() => typeof releaseAdventureRecovery === 'function');
+        await page.locator('#target-distance').fill('21');
+        await page.evaluate(() => { globalThis.Worker = actualAdventureWorker; releaseAdventureRecovery(); });
+        await page.waitForFunction(() => document.querySelector('#adventure-recovery-status').textContent.includes('Your plan changed'));
+        assert.equal(await page.evaluate(() => adventureAppState.state.adventureDisplay), false, 'A stale recovery cannot replace newly edited intent');
+        assert.equal(await page.locator('#target-distance').inputValue(), '21', 'Recovery preserves the intervening edit');
+        await view('plan'); await page.locator('#restore-adventure').click();
+        await page.waitForFunction(() => adventureAppState.state.adventureDisplay).catch(async error => { throw Error(error.message + ' Recovery diagnostics: ' + JSON.stringify(await page.evaluate(() => ({ status: document.querySelector('#adventure-recovery-status').textContent, request: adventureAppState.state.request, region: document.querySelector('#planning-region').value }))) + ' Page errors: ' + JSON.stringify(errors)); });
+        assert.equal(await page.evaluate(() => JSON.stringify(adventureAppState.state.adventureResult)), exactAdventure, 'Full exact AI output/stories/measurements recovered');
+        assert.equal(await page.evaluate(() => adventureAppState.state.selectedSignature), selected.id, 'Last selected candidate recovered');
+        await view('routes'); await page.locator('#download-gpx').click(); await page.waitForFunction(() => adventureSavedGpx !== null);
+        assert.equal(await page.evaluate(() => adventureSavedGpx), exactGpx, 'Restart GPX exactly matches the previous native selected line');
+        assert.deepEqual(await page.evaluate(() => adventureNativeCalls.filter(c => ['chatgpt_infer','local_route','route_elevation','adventure_speech_start'].includes(c.type))), [], 'Reopen/selection/export never reroutes or refetches terrain');
+        await page.evaluate(async id => { const { createRegionVersionStore } = await import('/static/region_versions.js'); await createRegionVersionStore().removeRegion(id); }, fixture.manifest.region_id);
+        await page.reload();
+        await page.evaluate(async () => { globalThis.adventureAppState = await import('/static/state.js'); });
+        await page.waitForFunction(() => !document.querySelector('#restore-adventure').hidden);
+        await view('plan'); await page.locator('#restore-adventure').click();
+        await page.waitForFunction(() => adventureAppState.state.adventureDisplay).catch(async error => { throw Error(error.message + ' Recovery diagnostics: ' + JSON.stringify(await page.evaluate(() => ({ status: document.querySelector('#adventure-recovery-status').textContent, request: adventureAppState.state.request, region: document.querySelector('#planning-region').value }))) + ' Page errors: ' + JSON.stringify(errors)); });
+        assert.equal(await page.evaluate(() => adventureAppState.state.selectedSignature), selected.id, 'Missing source region does not destroy the immutable saved view');
+        assert.equal(await page.locator('#planning-region').inputValue(), '', 'Recovery never silently selects a missing region');
+        assert.notEqual(await page.locator('#regional-status').getAttribute('data-state'), 'regional_ready', 'Stored route never makes missing regional data ready');
+        assert.deepEqual(await page.evaluate(() => adventureNativeCalls.filter(c => ['chatgpt_infer','local_route','route_elevation','adventure_speech_start'].includes(c.type))), [], 'Missing-region recovery has no native fallback');
+        await view('routes'); await page.locator('.candidate-select').first().click();
+        await page.evaluate(async () => { await (await import('/static/pwa_runtime.js')).clearSavedOfflineData(); });
+        assert.equal(await page.evaluate(async () => { const { store } = await (await import('/static/pwa_runtime.js')).pwaRuntime(); return (await store.get('public_runtime','latest-adventure')) ?? null; }), null, 'Application clear drains queued adventure writes before clearing the store');
+        assert.equal(await page.evaluate(() => adventureAppState.state.adventureDisplay), true, 'Clearing durable data preserves the displayed valid result');
+        await view('routes'); await page.locator('#forget-adventure').click();
+        await page.waitForFunction(() => document.querySelector('#adventure-storage-status').textContent.startsWith('Saved adventure forgotten'));
+        await page.locator('.candidate-select').first().click();
+        assert.equal(await page.evaluate(async () => { const { store } = await (await import('/static/pwa_runtime.js')).pwaRuntime(); return (await store.get('public_runtime','latest-adventure')) ?? null; }), null, 'Selecting after Forget must not resurrect the saved adventure');
         assert.deepEqual(errors, []); assert.deepEqual(external, []);
-        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, status: 'passed', cases: ['no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual'] }));
+        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, status: 'passed', cases: ['no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
       } finally { await context.close(); }
     }
   } finally { await browser.close(); }

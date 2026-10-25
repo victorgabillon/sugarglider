@@ -145,6 +145,7 @@ const withPlanningRegion = createRegionalPlanningContext({ versions: regionVersi
 const localPlanner = isBundledAndroidApp()
   ? createLocalPlanner({ withRegion: withPlanningRegion }) : null;
 let adventureDialog = null, adventurePlanning = false, manualAdventureSnapshot = null, pendingAdventureSnapshot = null;
+let adventureSnapshots = null, forgottenAdventureOutput = null, adventureRestoreEpoch = 0;
 const adventureElevationViews = new Map();
 const adventureResults = createAdventureResults({ root: byId("adventure-result"), candidatesRoot: byId("candidate-list"),
   onManual: () => returnToManualPlan(),
@@ -201,9 +202,78 @@ async function adventureContext() {
     suggested_profile: request.routing_profile, seed: request.seed,
     endpointSnapPolicy: request.endpoint_snap_policy ?? { start: "near", end: "near" } };
 }
+async function displayExactAdventure(output, selectedId, requestId) {
+  state.adventureDisplay = true; state.adventureResult = output;
+  state.generationResult = output.chosen.result; state.generationSourceRequest = output.chosen.request;
+  state.selectedSignature = selectedId;
+  state.resultsInvalidated = false; state.visualizationCache.clear(); adventureElevationViews.clear();
+  for (const candidate of output.chosen.result.candidates) {
+    const result = output.chosen.elevations[candidate.id] ?? null;
+    adventureElevationViews.set(candidate.id, Object.freeze({ status: result ? "ready" : "unavailable",
+      candidate_id: candidate.id, result, diagnostic: result ? null : "elevation_unavailable", cache_hit: true }));
+  }
+  state.request = { status: "success", id: requestId, startedAt: null };
+  render(); fitCoordinates(selectedCandidate().route.geometry);
+  await selectCandidate(selectedId); appShell?.show("routes");
+}
+async function persistAdventureSelection() {
+  const output = state.adventureDisplay && state.adventureResult, selected = state.selectedSignature;
+  if (!output || output === forgottenAdventureOutput) return;
+  byId("adventure-storage-status").textContent = "Saving this exact adventure on this device…";
+  const saved = adventureSnapshots && await adventureSnapshots.save(output, selected);
+  if (state.adventureResult !== output || state.selectedSignature !== selected || forgottenAdventureOutput === output) return;
+  byId("adventure-storage-status").textContent = saved
+    ? "Saved on this device. Reopen the exact adventure from Plan after restarting. Only the latest adventure is kept."
+    : "This adventure is open, but local recovery could not be saved. Export GPX before closing.";
+  if (saved) byId("restore-adventure").hidden = false;
+}
+async function reopenSavedAdventure() {
+  const owned = ++adventureRestoreEpoch, generation = state.generationResult, requestId = state.request.id;
+  const regionId = selectedRegionId, selection = state.selectedSignature;
+  const allowed = () => owned === adventureRestoreEpoch && !adventurePlanning && !state.adventureDisplay
+    && !state.outingDisplay && !isSavedRouteSnapshotDisplay() && !byId("adventure-dialog").open
+    && !["running", "reversing"].includes(state.request.status) && state.request.id === requestId
+    && state.generationResult === generation && state.selectedSignature === selection
+    && selectedRegionId === regionId;
+  if (!allowed()) return;
+  byId("adventure-recovery-status").textContent = "Checking the saved adventure…";
+  const record = adventureSnapshots && await adventureSnapshots.read();
+  if (!allowed()) {
+    byId("adventure-recovery-status").textContent = "Your plan changed while the saved adventure was checked. Reopen it when you are ready."; return;
+  }
+  if (!record) {
+    byId("restore-adventure").hidden = true;
+    byId("adventure-recovery-status").textContent = "No valid saved adventure is available. Your current plan is unchanged."; return;
+  }
+  manualAdventureSnapshot = { generationResult: state.generationResult, generationSourceRequest: state.generationSourceRequest,
+    selectedSignature: state.selectedSignature, forkedSavedCandidate: state.forkedSavedCandidate,
+    resultsInvalidated: state.resultsInvalidated, request: state.request };
+  forgottenAdventureOutput = null;
+  await displayExactAdventure(record.output, record.selected_id, requestId + 1);
+  byId("request-status").textContent = "Saved adventure reopened exactly. New planning still requires a ready offline region.";
+  byId("adventure-recovery-status").textContent = "";
+}
+async function forgetSavedAdventure() {
+  adventureRestoreEpoch++; forgottenAdventureOutput = state.adventureResult;
+  const cleared = adventureSnapshots && await adventureSnapshots.clear();
+  byId("restore-adventure").hidden = true;
+  byId("adventure-storage-status").textContent = cleared
+    ? "Saved adventure forgotten. The displayed route remains open."
+    : "The local saved adventure could not be removed. Try clearing saved offline data.";
+}
+async function checkAdventureRecovery() {
+  const owned = adventureRestoreEpoch;
+  const record = adventureSnapshots && await adventureSnapshots.read();
+  if (owned !== adventureRestoreEpoch) return;
+  byId("restore-adventure").hidden = !record;
+}
 function initializeAdventure() {
   byId("adventure-launch").hidden = !localPlanner;
   if (!localPlanner) return;
+  byId("plan-with-ai").addEventListener("click", () => { adventureRestoreEpoch++; }, { capture: true });
+  byId("route-form").addEventListener("input", () => { adventureRestoreEpoch++; });
+  byId("restore-adventure").addEventListener("click", () => void reopenSavedAdventure());
+  byId("forget-adventure").addEventListener("click", () => void forgetSavedAdventure());
   let priorRequest = null, requestId = null;
   adventureDialog = initializeAdventureDialog({ root: byId("adventure-dialog"), launcher: byId("plan-with-ai"), planner: localPlanner,
     canOpen: () => !state.outingDisplay && !isSavedRouteSnapshotDisplay() && !["running", "reversing"].includes(state.request.status),
@@ -211,6 +281,7 @@ function initializeAdventure() {
     onBusy: busy => {
       adventurePlanning = busy;
       if (busy) {
+        adventureRestoreEpoch++;
         priorRequest = state.request; requestId = state.request.id + 1;
         if (!state.adventureDisplay) pendingAdventureSnapshot = { generationResult: state.generationResult,
           generationSourceRequest: state.generationSourceRequest, selectedSignature: state.selectedSignature,
@@ -225,19 +296,9 @@ function initializeAdventure() {
     onResult: async output => {
       if (!adventurePlanning || state.request.id !== requestId) throw new DOMException("Adventure cancelled.", "AbortError");
       if (!manualAdventureSnapshot) manualAdventureSnapshot = pendingAdventureSnapshot;
-      state.adventureDisplay = true; state.adventureResult = output;
-      state.generationResult = output.chosen.result; state.generationSourceRequest = output.chosen.request;
-      state.selectedSignature = output.chosen.result.candidates[0].id;
-      state.resultsInvalidated = false; state.visualizationCache.clear(); adventureElevationViews.clear();
-      for (const candidate of output.chosen.result.candidates) {
-        const result = output.chosen.elevations[candidate.id] ?? null;
-        adventureElevationViews.set(candidate.id, Object.freeze({ status: result ? "ready" : "unavailable",
-          candidate_id: candidate.id, result, diagnostic: result ? null : "elevation_unavailable", cache_hit: true }));
-      }
-      state.request = { status: "success", id: requestId, startedAt: null };
+      forgottenAdventureOutput = null;
+      await displayExactAdventure(output, output.chosen.result.candidates[0].id, requestId);
       byId("request-status").textContent = "Your AI adventure is ready. Route calculations used the selected offline region.";
-      render(); fitCoordinates(output.chosen.result.candidates[0].route.geometry);
-      await selectCandidate(state.selectedSignature); appShell?.show("routes");
     },
     onChooseStart: () => { returnToManualPlan(); byId("set-hard-start").click(); appShell?.show("map"); },
     onChooseEnd: () => { returnToManualPlan(); changeMapTopology("point_to_point", "near"); updateControlsFromOptions(); byId("set-hard-end").click(); appShell?.show("map"); },
@@ -1009,6 +1070,7 @@ function activeMapPlacementGuidance() {
 }
 
 function invalidateAndRender() {
+  adventureRestoreEpoch++;
   if (reconcileAutomaticIntent()) updateControlsFromOptions();
   localPlanner?.invalidate();
   saveActivePoints();
@@ -2002,6 +2064,7 @@ function renderStatus() {
     : "Choose a loop back to Start, or a point-to-point route with a destination. Available activities use the routing service.";
   byId("import-itinerary").disabled = readOnly || running;
   byId("plan-with-ai").disabled = running || readOnly && !state.adventureDisplay;
+  byId("restore-adventure").disabled = running || readOnly;
   byId("generate").disabled = readOnly || running || !availability.enabled;
   byId("generate-top").disabled = byId("generate").disabled;
   byId("cancel").classList.toggle("hidden", !running);
@@ -2104,6 +2167,7 @@ function renderPwaApplication() {
 async function selectCandidate(candidateId) {
   if (!currentDisplayedCandidates().some((candidate) => candidate.id === candidateId)) return;
   state.selectedSignature = candidateId;
+  if (state.adventureDisplay) void persistAdventureSelection();
   renderVisualization(null, false);
   if (!pendingGpxExport) byId("export-status").textContent = "";
   render();
@@ -3412,6 +3476,11 @@ async function start() {
   try {
     await initializePwaRuntime({
       render: renderPwaApplication,
+      onStorageCleared: () => {
+        adventureRestoreEpoch++; forgottenAdventureOutput = state.adventureResult;
+        byId("restore-adventure").hidden = true;
+        byId("adventure-storage-status").textContent = "Saved offline data cleared. The displayed route remains open.";
+      },
       retry: retryCurrentConnection,
       rememberParticipant: rememberCurrentOutingParticipant,
       forgetParticipant: forgetCurrentOutingParticipant,
@@ -3427,7 +3496,8 @@ async function start() {
     };
 
     if (localPlanner) {
-      const { store } = await pwaRuntime();
+      const { store, adventures } = await pwaRuntime();
+      adventureSnapshots = adventures;
       regionPreference = createRegionPreference(store);
       // Restore before initializeOfflineMaps performs its first regional scan.
       selectedRegionId = await regionPreference.restore(regionVersions);
@@ -3640,6 +3710,7 @@ async function start() {
     if (localPlanner) initializeNativeItineraryHandoff({ dialog: itineraryDialog });
     render();
     if (!mapInitialized) void prepareRegion();
+    if (localPlanner && !sharedSnapshot) void checkAdventureRecovery();
     if (sharedSnapshot) {
       fitCoordinates(sharedSnapshot.candidate.route.geometry);
       if (state.networkStatus !== "offline") {

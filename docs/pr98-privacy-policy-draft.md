@@ -113,3 +113,52 @@ through an appropriate channel. This proposal has not replaced the historical
 Review evidence and open decisions: [Data Safety matrix](pr98-data-safety-review.md),
 [contract/release gates](pr98-offline-capable-product.md) and
 [PR97 measured evidence](https://github.com/victorgabillon/sugarglider/blob/d891d263888efc664409b56d12e70bacd8255dd7/docs/pr97-webview-autofill-privacy.md).
+
+## Optional AI adventure planning — draft addition
+
+This feature is optional. The user explicitly connects an eligible ChatGPT
+account through the system browser. Opening the AI panel with a connected account
+can refresh its available-model catalog. Inference starts only after Generate.
+Sugarglider sends the entered or
+edited description, chosen Start/End, exact required points, selected activity
+and regional bounds to OpenAI to interpret the adventure and propose places.
+If the user enables online research, the chosen account/model may use OpenAI's
+research service. Account eligibility, model capabilities and usage limits apply.
+A later, optional second request contains a bounded strategy and measured route
+summary; it does not upload the complete routed geometry, regional index or graph.
+Routing, place matching, Nature and terrain analysis continue locally.
+
+The system browser handles ChatGPT authorization. Credentials are encrypted in
+native app-private storage using Android Keystore and excluded from backup; the
+WebView receives narrow application replies, not OAuth tokens. Sign out cancels
+owned operations and removes local credentials. Remote revocation is attempted;
+if it cannot be confirmed, the app discloses that uncertainty. Cancellation or
+sign out cannot withdraw a request already received by OpenAI. Disabling API
+response storage is not a promise that every form of provider processing or
+retention is absent. The publisher must review the relevant account terms,
+OpenAI processing and final Data Safety declarations before release.
+
+Speech input starts from the microphone button and ends after one utterance.
+Where supported, Sugarglider prefers Android's on-device recognizer. It requests
+microphone permission for that action and stops its recognizer when backgrounded.
+If on-device recognition is unavailable, use of the platform speech activity
+requires a separate disclosure/choice; the selected speech provider may process
+audio online. An offline preference is advisory. Sugarglider does not record an
+audio file or send audio to its model interface. The transcript is editable and
+is sent as text only after Generate. Using the microphone does not automatically
+attach the device's current GPS position.
+
+The latest completed adventure, including its validated request, exact routed
+results, selected option, suggested-place descriptions, source labels and measured
+facts, is stored locally for explicit restart recovery when storage is available.
+Only the latest adventure is kept. The record does not store native OAuth
+credentials, ChatGPT account/email metadata, audio, live-position history or the
+raw prompt as a conversation/input field. The model interpretation and stories can
+repeat information from the description and reveal interests and chosen places.
+Reopening does not contact the model, reroute or request terrain again. Forget
+saved adventure or Clear saved offline data removes this record; already exported
+GPX and copies held by user-selected providers are separate. Local storage is
+optional and can fail or be evicted; the app reports when recovery was not saved.
+
+This addition remains a draft. It has no invented effective date or publisher
+approval, and does not replace the currently published privacy policy.

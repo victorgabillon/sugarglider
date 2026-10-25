@@ -122,7 +122,7 @@
     <dialog id="adventure-dialog" class="adventure-dialog" aria-labelledby="adventure-title" aria-describedby="adventure-privacy">
       <header><div><p class="eyebrow">Your next adventure</p><h2 id="adventure-title">✨ Describe your adventure</h2></div><button id="adventure-close" class="button secondary" type="button">Close</button></header>
       <div class="adventure-body">
-        <p id="adventure-privacy" class="field-help">When you Generate, your description, chosen Start/End and required points are sent to OpenAI using your connected ChatGPT account. Research is online. Route calculations, regional data and GPX stay on this device. Your ChatGPT plan limits apply.</p>
+        <p id="adventure-privacy" class="field-help">When you Generate, your description, chosen Start/End and required points are sent to OpenAI using your connected ChatGPT account. Research is online. Route calculations, regional data and GPX stay on this device. Your ChatGPT plan limits apply. The latest completed adventure, including selected places and stories, is kept locally for restart recovery; you can forget it or clear saved offline data.</p>
         <section aria-label="ChatGPT account">
           <p id="adventure-account-status" role="status" aria-live="polite">Connect your ChatGPT account to begin.</p>
           <label>ChatGPT account<select id="adventure-account"><option value="">No account connected</option></select></label>
@@ -294,7 +294,7 @@
         </div>
 
         <div class="plan-readiness"><p id="planning-readiness" class="field-help" role="status">Checking routing availability…</p><button id="plan-regions" class="text-button hidden" type="button">Regions</button></div>
-        <div id="adventure-launch" class="adventure-launch" hidden><button id="plan-with-ai" class="button primary wide" type="button">✨ Plan with AI</button><p class="field-help">Describe a run, hike or ride. ChatGPT suggests places; Sugarglider checks real offline routes.</p></div>
+        <div id="adventure-launch" class="adventure-launch" hidden><button id="plan-with-ai" class="button primary wide" type="button">✨ Plan with AI</button><p class="field-help">Describe a run, hike or ride. ChatGPT suggests places; Sugarglider checks real offline routes.</p><button id="restore-adventure" class="button secondary wide" type="button" hidden>Reopen saved adventure</button><p id="adventure-recovery-status" class="field-help" role="status"></p></div>
         <div class="itinerary-launch"><button id="import-itinerary" class="button secondary" type="button">Import itinerary</button><p class="field-help">Paste named places from an external assistant or a JSON file.</p></div>
         <form id="route-form" novalidate>
           <label class="plan-activity">Activity<select id="profile" aria-describedby="profile-description"></select></label>
@@ -671,7 +671,7 @@
       </section>
 
       <div class="results-panel" id="results-panel">
-        <section id="adventure-result" class="adventure-result" hidden aria-label="AI adventure"><h2 id="adventure-result-title"></h2><p id="adventure-result-summary"></p><p id="adventure-result-limitations" class="field-help"></p><div class="button-row"><button id="adventure-stories-open" class="button secondary" type="button">Places and stories</button><button id="adventure-return-manual" class="text-button" type="button">Return to my manual plan</button></div><div id="adventure-stories" hidden></div></section>
+        <section id="adventure-result" class="adventure-result" hidden aria-label="AI adventure"><h2 id="adventure-result-title"></h2><p id="adventure-result-summary"></p><p id="adventure-result-limitations" class="field-help"></p><div class="button-row"><button id="adventure-stories-open" class="button secondary" type="button">Places and stories</button><button id="adventure-return-manual" class="text-button" type="button">Return to my manual plan</button></div><p id="adventure-storage-status" class="field-help" role="status"></p><button id="forget-adventure" class="text-button" type="button">Forget saved adventure</button><div id="adventure-stories" hidden></div></section>
         <section class="candidate-strip" aria-labelledby="candidates-title">
           <div class="section-heading"><div><p class="eyebrow">Routes</p><h2 id="candidates-title" tabindex="-1">Routes</h2></div></div>
           <p id="search-summary" class="context-note" aria-live="polite"></p>

@@ -1,0 +1,6 @@
+<!doctype html><meta charset="utf-8"><title>Synthetic adventure restart recovery</title><pre>Running</pre><script type="module">
+import { runAdventureSnapshotHarness } from './adventure_snapshot_harness.js';
+const out = document.querySelector('pre');
+try { out.textContent = JSON.stringify(await runAdventureSnapshotHarness()); out.dataset.status = 'passed'; }
+catch (error) { out.textContent = error.stack; out.dataset.status = 'failed'; }
+</script>

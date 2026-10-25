@@ -99,7 +99,7 @@ export async function runAdventureControllerHarness() {
       assert(output.model_calls.every(call => !Object.hasOwn(call.usage, "access_token") && call.elapsed_ms === 13), "only measured whitelisted usage retained");
       const assessed = output.chosen.assessment.assessments;
       assert(assessed.every(a => a.wishes.find(w => w.metric === "asphalt").status === "unavailable"
-        && a.wishes.find(w => w.metric === "asphalt").satisfied === null), "unknown surfaces are never claimed avoided");
+        && a.wishes.find(w => w.metric === "asphalt").met === null), "unknown surfaces are never claimed avoided");
       assert(assessed.some(a => a.places.some(p => p.local_category === "castle" && p.status === "reached")), "local OSM category rather than AI historical label");
       assert(assessed.every(a => a.places.every(p => p.story_status === "source_linked_ai_text")), "linked source does not become independently verified history");
       assert(assessed.every(a => a.places.find(p => p.id === "view").status === "access_restricted"), "private mapped viewpoint stays omitted");

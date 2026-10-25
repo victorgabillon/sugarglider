@@ -1,3 +1,4 @@
+import { createAdventureSnapshotRepository } from "./adventure_snapshot.js";
 import {
   createOfflineSnapshotRepository,
 } from "./offline_snapshots.js";
@@ -18,6 +19,7 @@ import { state } from "./state.js";
 
 let runtimePromise = null;
 let renderApplication = () => {};
+let notifyStorageCleared = () => {};
 let retryConnection = async () => {};
 let rememberParticipantAction = async () => {};
 let forgetParticipantAction = async () => {};
@@ -27,6 +29,7 @@ let controlsBound = false;
 
 export function initializePwaRuntime({
   render = () => {},
+  onStorageCleared = () => {},
   retry = async () => {},
   rememberParticipant = async () => {},
   forgetParticipant = async () => {},
@@ -34,6 +37,7 @@ export function initializePwaRuntime({
   ownsOutboxPresence = () => true,
 } = {}) {
   renderApplication = render;
+  notifyStorageCleared = onStorageCleared;
   retryConnection = retry;
   rememberParticipantAction = rememberParticipant;
   forgetParticipantAction = forgetParticipant;
@@ -223,11 +227,13 @@ export async function createPwaStorageRuntime({
 export async function clearSavedOfflineData() {
   const runtime = await pwaRuntime();
   runtime.durableBridge.invalidate();
+  await runtime.adventures.clear();
   await runtime.store.clearApplicationData();
   state.offlineCopySaved = false;
   state.participantRemembered = false;
   state.durableOutboxPresent = false;
   state.pwaStatus = "storage_cleared";
+  notifyStorageCleared();
   renderPwaState();
 }
 
@@ -429,6 +435,7 @@ async function initializePwaRepositories(store, onPresence) {
   await snapshots.prune();
   return {
     store,
+    adventures: createAdventureSnapshotRepository(store),
     snapshots,
     sessions,
     outbox,

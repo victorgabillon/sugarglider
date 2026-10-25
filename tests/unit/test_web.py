@@ -242,7 +242,8 @@ async def test_application_and_static_assets_are_served(
     assert index.headers["content-type"].startswith("text/html")
     assert "<main" in index.text and "<nav" in index.text and "<footer" in index.text
     assert "maplibre-gl@6.4.1" in index.text
-    assert "latest" not in index.text.lower()
+    dependency_urls = re.findall(r'(?:src|href)="([^\"]+)"', index.text)
+    assert all("latest" not in url.lower() for url in dependency_urls)
     assert missing.status_code == 404
 
 
