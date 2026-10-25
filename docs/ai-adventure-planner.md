@@ -352,3 +352,16 @@ but was rejected because the returned loop included a separate End. No candidate
 or GPX was accepted from that response. The original 23.172 km manual selection
 and byte-identical GPX were restored. This establishes completed native inference,
 while full live AI-to-route/GPX and physical speech acceptance remain outstanding.
+
+
+A further physical retry with an explicit closed-loop description passed proposal
+validation, then failed during local name grounding. The regional worker had
+loaded the full planning index, but name queries required an independently
+initialized lightweight Places session. Name-only suggestions therefore failed
+unless location search had already initialized that session. The worker now
+serves names from its matching full index or existing matching lightweight
+session, with no extra index load or storage. A fresh-worker regression and the
+full bundled-app test reproduce the failure before the fix; the app fixture now
+grounds one suggestion by exact local name without an OSM ID. No private regional
+data changes or hosted lookup is needed. This corrected source still needs its
+own audited staging build and physical retest.

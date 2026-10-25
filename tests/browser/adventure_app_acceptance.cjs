@@ -47,6 +47,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
             end: { name: 'End', lat: .015, lon: .013 }, target_distance_m: 2200, tolerance_m: 700, order: 'fixed' };
           initial.wishes = [{ metric: 'interesting_stops', goal: 'maximize', value: null, importance: 'high' }];
           initial.places[0].location = { name: 'Fixture 1', lat: .01, lon: .005 };
+          initial.places[0].osm_id = null; // Exercise name grounding through the real planning worker, without opening location search first.
           const revised = structuredClone(initial);
           revised.places.push({ ...structuredClone(initial.places[0]), id: 'water', osm_id: 'node/2', category: 'water', location: { name: 'Fixture 2', lat: .01, lon: .007 }, priority: 9 });
           revised.places.push({ ...structuredClone(initial.places[0]), id: 'private', osm_id: 'node/5', category: 'viewpoint', location: { name: 'Fixture 5', lat: .01, lon: .013 }, priority: 8 });
@@ -157,11 +158,13 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         assert.equal(await page.evaluate(() => adventureModelCount), 0, 'Speech alone must not infer');
         await page.locator('#adventure-text').fill('A synthetic 2.2 km historical route with interesting places');
         await page.locator('#adventure-generate').click();
-        await page.waitForFunction(() => !document.querySelector('#adventure-dialog').open, null, { timeout: 30000 });
+        await page.waitForFunction(() => !document.querySelector('#adventure-dialog').open
+          || document.querySelector('#adventure-dialog').getAttribute('aria-busy') === 'false' && document.querySelector('#adventure-error').textContent, null, { timeout: 30000 });
         const adventure = await page.evaluate(async () => { const { state } = await import('/static/state.js'); return { active: state.adventureDisplay,
-          improved: state.adventureResult?.refinement_improved, result: state.generationResult, source: state.generationSourceRequest,
+          improved: state.adventureResult?.refinement_improved, grounding: state.adventureResult?.chosen.grounding, result: state.generationResult, source: state.generationSourceRequest,
           error: document.querySelector('#adventure-error').textContent }; });
         assert(adventure.active && adventure.improved, JSON.stringify(adventure));
+        assert(adventure.grounding.places.some(place => place.match_method === 'exact_local_name'),'Real worker grounds name-only suggestions without a prior location-picker session');
         assert(adventure.result.candidates.some(c => c.reached_stops.length === 2));
         await view('routes'); await page.locator('.candidate-select').last().click();
         await page.waitForFunction(() => document.querySelector('#adventure-storage-status').textContent.startsWith('Saved on this device'));
@@ -238,7 +241,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await page.locator('.candidate-select').first().click();
         assert.equal(await page.evaluate(async () => { const { store } = await (await import('/static/pwa_runtime.js')).pwaRuntime(); return (await store.get('public_runtime','latest-adventure')) ?? null; }), null, 'Selecting after Forget must not resurrect the saved adventure');
         assert.deepEqual(errors, []); assert.deepEqual(external, []);
-        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, status: 'passed', cases: ['optional_endpoints_and_cancelled_map_roundtrip','no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
+        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, status: 'passed', cases: ['name_grounding_without_prior_location_picker','optional_endpoints_and_cancelled_map_roundtrip','no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
       } finally { await context.close(); }
     }
   } finally { await browser.close(); }

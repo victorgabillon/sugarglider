@@ -71,10 +71,14 @@ self.onmessage = ({ data: message }) => {
           result = placesData.identity;
           break;
         }
-        case "search_place_names":
-          if (!placesData || placesData.identity.build_id !== message.value.build_id) throw new Error("regional_data_changed");
-          result = placesData.searchPlaceNames(message.value.query);
+        case "search_place_names": {
+          // Planning already loads the full index. Its name search must work
+          // without first opening the separate lightweight location picker.
+          const names = data?.identity.build_id === message.value.build_id ? data : placesData;
+          if (!names || names.identity.build_id !== message.value.build_id) throw new Error("regional_data_changed");
+          result = names.searchPlaceNames(message.value.query);
           break;
+        }
         case "query_pois":
         case "search_pois":
         case "analyze_nature":
