@@ -261,7 +261,7 @@ function routedReply(input, {
 } = {}) {
   const routedGeometry = geometry ?? input.points.map(({ lon, lat }) => [lon, lat]);
   return {
-    type: "local_route_result",
+    type: "local_route_result", engine: "valhalla-mobile", engine_version: "synthetic",
     profile: input.profile,
     pack_id: "marly-dev-v1",
     distance_m: distanceM ?? geometryDistanceM(routedGeometry) * distanceFactor,

@@ -28,6 +28,7 @@ type StopDecision = Literal["pending", "reached", "approximated", "dropped"]
 type CompromiseSeverity = Literal["info", "warning"]
 type CompromiseCode = Literal[
     "target_distance_missed",
+    "endpoint_adjusted",
     "stop_approximated",
     "stop_dropped",
     "no_profile_compatible_approach",

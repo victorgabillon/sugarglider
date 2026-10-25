@@ -28,6 +28,8 @@ elevation_profile.js
 elevation_sampling.js
 elevation_sampling_worker.js
 elevation_view.js
+endpoint_adjustment_view.js
+endpoint_snapping.js
 fonts/Open Sans Semibold/0-255.pbf
 fonts/Open Sans Semibold/256-511.pbf
 fonts/Open Sans Semibold/8192-8447.pbf

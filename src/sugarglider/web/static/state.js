@@ -460,6 +460,8 @@ function commonPlanState(endpoints, planner = state) {
   return {
     name: planner.options.name,
     topology: endpoints.routeTopology,
+    ...(endpoints.start?.snapPolicy !== undefined || endpoints.end?.snapPolicy !== undefined
+      ? { endpoint_snap_policy: { start: endpoints.start?.snapPolicy ?? "exact", end: endpoints.end?.snapPolicy ?? "exact" } } : {}),
     start: coordinatePayload(endpoints.start, "Start"),
     end: endpoints.routeTopology === "point_to_point"
       ? coordinatePayload(endpoints.end, "End")

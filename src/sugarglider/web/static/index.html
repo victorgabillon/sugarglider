@@ -278,6 +278,7 @@
                 <div class="button-row"><button id="set-hard-start" class="button secondary" type="button">Choose on map</button><button id="clear-hard-start" class="text-button" type="button">Clear</button></div>
                 <details class="start-details"><summary>Edit Start coordinates</summary>
                 <label class="check-control"><input id="hard-start-enabled" type="checkbox"> Use this Start</label>
+                <label>Snap policy<select id="hard-start-snap-policy"><option value="near">Near this point</option><option value="exact">Exact point</option></select></label>
                 <label>Name<input id="hard-start-name" maxlength="200" placeholder="Hard start"></label>
                 <div class="field-pair">
                   <label>Latitude<input id="hard-start-lat" type="number" min="-90" max="90" step="0.000001" placeholder="Optional"></label>
@@ -323,6 +324,7 @@
                 <p id="plan-end-summary" class="field-help">Choose End on the map</p>
                 <details class="end-details"><summary>Edit End coordinates</summary>
                 <label><input id="hard-end-enabled" type="checkbox"> Use this End</label>
+                <label>Snap policy<select id="hard-end-snap-policy"><option value="near">Near this point</option><option value="exact">Exact point</option></select></label>
                 <label>Name<input id="hard-end-name" maxlength="200" placeholder="Hard end"></label>
                 <div class="field-pair">
                   <label>Latitude<input id="hard-end-lat" type="number" min="-90" max="90" step="0.000001" placeholder="Optional"></label>
@@ -420,6 +422,7 @@
             <label><span class="visually-hidden">Finish</span><span class="dock-choice"><span id="dock-finish-label" aria-hidden="true">Loop</span><select id="dock-finish" aria-label="Finish"><option value="loop">Loop</option><option value="point_to_point">Finish elsewhere</option></select></span></label>
             <label><span class="visually-hidden">Order</span><span class="dock-choice"><span id="dock-order-label" aria-hidden="true">As tapped</span><select id="dock-order" aria-label="Order"><option value="fixed">As tapped</option><option value="optimize">Optimize stops</option></select></span></label>
           </div>
+          <section id="endpoint-adjustments-map" class="endpoint-adjustments" aria-label="Endpoint adjustments" hidden></section>
           <div id="route-point-strip" class="route-point-strip" role="group" aria-label="Route points"></div>
           <p id="route-dock-hint" class="visually-hidden" aria-live="polite">Tap the map to choose Start</p>
           <p id="route-strip-help" class="visually-hidden"></p>
@@ -515,7 +518,7 @@
               <button id="local-routing-button" class="button secondary" type="button" aria-busy="false" disabled>Route ordered planner points locally</button>
               <p id="local-routing-status" role="status" aria-live="polite"></p>
               <strong id="local-waypoint-route-title">Local Waypoint Route experiment</strong>
-              <p>Uses a read-only snapshot of the ordinary Waypoint Route planner's topology, endpoints, profile, exact waypoints, order, seed and distance controls. At most 14 interior waypoints and 16 local-route calls. Hard endpoint snaps and graph-derived loop closure must be within 25 m; exact interior waypoint snaps within 300 m, not exact GPS coincidence.</p>
+              <p>Uses a read-only snapshot of the ordinary Waypoint Route planner's topology, endpoints, profile, exact waypoints, order, seed and distance controls. At most 14 interior waypoints and 16 local-route calls. Exact endpoints and graph-derived loop closure stay within 25 m. Near endpoints allow up to 150 m with visible warnings above 25 m; exact interiors stay within 300 m. No GPS coincidence is promised.</p>
               <p>Set nature and loop geometry off, and path selection to shortest. Approach/best-effort points and overrides are rejected. No POI/nature scoring, globally shortest path or GraphHopper parity claim; normal Generate remains server-backed.</p>
               <button id="local-waypoint-route-button" class="button secondary" type="button" aria-busy="false" disabled>Generate experimental Local Waypoint Route from planner</button>
               <p id="local-waypoint-route-status" role="status" aria-live="polite"></p>
@@ -637,6 +640,7 @@
         <section class="candidate-strip" aria-labelledby="candidates-title">
           <div class="section-heading"><div><p class="eyebrow">Routes</p><h2 id="candidates-title" tabindex="-1">Routes</h2></div></div>
           <p id="search-summary" class="context-note" aria-live="polite"></p>
+          <section id="endpoint-adjustments-routes" class="endpoint-adjustments" aria-label="Endpoint adjustments" hidden></section>
           <div id="candidate-list" class="candidate-list"></div>
           <button id="results-back-to-plan" class="button primary" type="button">Return to Plan</button>
         </section>

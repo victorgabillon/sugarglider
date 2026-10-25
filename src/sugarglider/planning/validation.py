@@ -106,6 +106,29 @@ def validate_search_candidate(
         > ENDPOINT_FIDELITY_M
     ):
         raise CandidateEvaluationError("candidate start is not faithfully routed")
+    policy = request.endpoint_snap_policy
+    if policy is not None:
+        for requested, position, mode in (
+            (request.start, route.geometry[0], policy.start),
+            (
+                request.effective_end,
+                route.geometry[-1],
+                policy.start if request.topology == "loop" else policy.end,
+            ),
+        ):
+            if (
+                haversine_distance_m(position, (requested.lon, requested.lat))
+                > (150.0 if mode == "near" else 25.0) + 1e-6
+            ):
+                raise CandidateEvaluationError(
+                    "candidate exceeds its endpoint snap policy"
+                )
+        if (
+            request.topology == "loop"
+            and haversine_distance_m(route.geometry[0], route.geometry[-1])
+            > 25.0 + 1e-6
+        ):
+            raise CandidateEvaluationError("candidate loop is not closed")
     expected_end = request.effective_end
     if (
         haversine_distance_m(route.geometry[-1], (expected_end.lon, expected_end.lat))

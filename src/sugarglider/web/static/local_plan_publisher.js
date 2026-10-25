@@ -44,7 +44,12 @@ export async function publishLocalPlan(request, search, regionalReference = null
   diagnostics.warnings = [...new Set([...(search.warnings ?? []),
     ...(candidates.length < request.candidate_count ? ["fewer_candidates_than_requested"] : []),
     ...(request.kind === "auto_tour" && !controlId && evaluated.length ? ["local_no_poi_control_unavailable"] : [])])].sort();
+  const proposals = search.endpoint_proposals ?? search.rejected_attempts?.find(item => item.code === "endpoint_review_required")?.details.endpoint_proposals ?? [];
+  const proposalPack = search.rejected_attempts?.find(item => item.code === "endpoint_review_required")?.details.pack_id;
+  const endpointProposals = candidates.length ? [] : proposals.slice(0, 2).filter(item =>
+    !reference || (item.pack_id ?? proposalPack) === reference.pack_id);
   diagnostics.details.local_planning = {
+    endpoint_proposals: endpointProposals,
     engine: "valhalla-mobile", pack_id: search.pack_id,
     rejected_attempt_counts: search.rejected_attempt_counts,
     rejected_attempts: search.rejected_attempts ?? [],

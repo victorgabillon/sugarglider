@@ -1,3 +1,4 @@
+import { endpointSnapPolicy, measureEndpointAdjustments, endpointAdjustmentFailure, LOOP_CLOSURE_M } from "./endpoint_snapping.js";
 import { createLocalPlanningContext } from "./local_planning_context.js";
 import { PUBLIC_LOCAL_ROUTE_PROFILES } from "./local_routing.js";
 import { eligibleLocalPoi, unavailableNature } from "./local_region_data.js";
@@ -6,7 +7,7 @@ import { containsPosition } from "./regional_manifest.js";
 const EARTH_RADIUS_M = 6_371_008.8;
 const REQUEST_FIELDS = new Set([
   "start", "target_distance_m", "tolerance_m", "candidate_count", "seed",
-  "profile", "direction_preference", "preferences",
+  "profile", "direction_preference", "preferences", "endpoint_snap_policy",
 ]);
 const COORDINATE_FIELDS = new Set(["lat", "lon"]);
 const DIRECTIONS = Object.freeze(["any", "clockwise", "counterclockwise"]);
@@ -19,8 +20,7 @@ const MAX_TOLERANCE_SHARE = 0.5;
 const MIN_CANDIDATE_COUNT = 1;
 const MAX_CANDIDATE_COUNT = 3;
 const MAX_SEED = 0xffff_ffff;
-const ROUTE_CLOSURE_TOLERANCE_M = 25;
-const HARD_START_SNAP_TOLERANCE_M = 25;
+const ROUTE_CLOSURE_TOLERANCE_M = LOOP_CLOSURE_M;
 const GENERATED_CONTROL_SNAP_TOLERANCE_M = 300;
 const ANALYSIS_MAX_POINTS = 256;
 const DIVERSITY_SAMPLE_COUNT = 32;
@@ -78,10 +78,11 @@ export class LocalAutoTourValidationError extends Error {
 }
 
 export function validateLocalAutoTourRequest(value) {
-  if (plainObject(value)) value = { preferences: { nature: "off", scenic: false, water: false, requested_poi_ids: [] }, ...value };
+  if (plainObject(value)) value = { endpoint_snap_policy: undefined, preferences: { nature: "off", scenic: false, water: false, requested_poi_ids: [] }, ...value };
   if (!plainObject(value) || !exactFields(value, REQUEST_FIELDS)) {
     throw new LocalAutoTourValidationError("invalid_request_fields");
   }
+  endpointSnapPolicy(value.endpoint_snap_policy);
   if (!validCoordinate(value.start) || Math.abs(value.start.lat) > 85) {
     throw new LocalAutoTourValidationError("invalid_start");
   }
@@ -122,6 +123,7 @@ export function validateLocalAutoTourRequest(value) {
   }
   return deepFreeze({
     start: { lat: value.start.lat, lon: value.start.lon },
+    ...(value.endpoint_snap_policy ? { endpoint_snap_policy: endpointSnapPolicy(value.endpoint_snap_policy) } : {}),
     target_distance_m: value.target_distance_m,
     tolerance_m: value.tolerance_m,
     candidate_count: value.candidate_count,
@@ -287,7 +289,7 @@ export function createLocalAutoTourEngine({
     const state = {
       context: createLocalPlanningContext({ profile: request.profile, route, totalLimit: routeCallBudget,
         phaseLimits: { control: routeCallBudget, poi: Math.min(6, routeCallBudget) } }),
-      rejected: new Map(),
+      rejected: new Map(), endpointProposals: [],
       budgetExhausted: false,
       terminalFailure: false,
       packId: null,
@@ -355,6 +357,7 @@ export function createLocalAutoTourEngine({
       route_call_budget: routeCallBudget,
       budget_exhausted: state.budgetExhausted || state.context.totalUsed >= routeCallBudget,
       rejected_attempt_counts: rejectionRecord(state.rejected),
+      endpoint_proposals: state.endpointProposals,
       total_latency_ms: Math.max(0, Math.round(finishedAt - startedAt)),
       warnings: RESULT_WARNINGS.filter((warning) => (
         warning !== "nature_analysis_unavailable" || !control?.nature_analysis.available
@@ -425,6 +428,10 @@ export function createLocalAutoTourEngine({
     );
     if (!validation.valid) {
       reject(state, validation.reason);
+      if (validation.endpoint_proposals?.length && !state.endpointProposals.length) {
+        state.endpointProposals = validation.endpoint_proposals.map(item => ({ ...item, pack_id: reply.pack_id }));
+        state.packId ??= reply.pack_id;
+      }
       return { candidate: null, failure: validation.reason };
     }
     state.packId ??= reply.pack_id;
@@ -710,6 +717,7 @@ function validateRoutedAttempt(reply, points, request, expectedPackId) {
     return invalid("invalid_local_route_reply");
   }
   if (reply.profile !== request.profile) return invalid("profile_identity_mismatch");
+  if (reply.engine !== "valhalla-mobile") return invalid("engine_identity_mismatch");
   if (typeof reply.pack_id !== "string" || reply.pack_id.length < 1) {
     return invalid("pack_identity_missing");
   }
@@ -736,10 +744,6 @@ function validateRoutedAttempt(reply, points, request, expectedPackId) {
       || lastGeometry[0] !== lastSnap.lon || lastGeometry[1] !== lastSnap.lat) {
     return invalid("geometry_snap_boundary_mismatch");
   }
-  if (haversineDistanceM(request.start, firstSnap) > HARD_START_SNAP_TOLERANCE_M
-      || haversineDistanceM(request.start, lastSnap) > HARD_START_SNAP_TOLERANCE_M) {
-    return invalid("hard_start_snap_too_far");
-  }
   for (let index = 1; index < points.length - 1; index += 1) {
     if (haversineDistanceM(points[index], reply.snapped_points[index])
         > GENERATED_CONTROL_SNAP_TOLERANCE_M) {
@@ -751,6 +755,8 @@ function validateRoutedAttempt(reply, points, request, expectedPackId) {
     while (vertex < reply.geometry.length && (reply.geometry[vertex][0] !== snap.lon || reply.geometry[vertex][1] !== snap.lat)) vertex += 1;
     if (vertex === reply.geometry.length) return invalid("snapped_point_missing_from_ordered_geometry");
   }
+  const failure = endpointAdjustmentFailure(measureEndpointAdjustments({ ...request, topology: "loop" }, reply.geometry));
+  if (failure?.code === "endpoint_not_reached") return invalid("hard_start_snap_too_far");
   let metrics;
   try {
     metrics = analyzeLocalLoopGeometry(reply.geometry, reply.distance_m);
@@ -758,6 +764,8 @@ function validateRoutedAttempt(reply, points, request, expectedPackId) {
     return invalid("invalid_routed_geometry");
   }
   if (!metrics.closed) return invalid("route_not_closed");
+  if (failure) return { ...invalid(failure.code === "endpoint_not_reached" ? "hard_start_snap_too_far" : failure.code),
+    endpoint_proposals: failure.code === "endpoint_review_required" ? failure.details.endpoint_proposals : [] };
   return { valid: true, reason: null, metrics };
 }
 

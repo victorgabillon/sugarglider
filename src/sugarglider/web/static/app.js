@@ -8,6 +8,8 @@ import { createLocationSearch } from "./location_search.js";
 import { initializeLocationSearchDialog } from "./location_search_dialog.js";
 import { initializeItineraryDialog } from "./itinerary_dialog.js";
 import { validateLocalWaypointRouteRequest, LOCAL_WAYPOINT_MAX_WAYPOINTS } from "./local_waypoint_route.js";
+import { endpointSnapPolicy, restoreEndpointSnapIntent } from "./endpoint_snapping.js";
+import { renderEndpointAdjustments } from "./endpoint_adjustment_view.js";
 import { renderRouteDock } from "./route_dock.js";
 import { addResolvedRouteLocation, replaceResolvedRouteLocation } from "./route_point_acquisition.js";
 import { resolvedPoiLocation } from "./poi_route_location.js";
@@ -23,7 +25,7 @@ import { createGpxFileSaver } from "./native_gpx_save.js";
 import { escapeHtml, formatCount, formatDistance, formatPercent, friendlyLabel, metricRows } from "./format.js";
 import { parseGpx } from "./gpx.js";
 import { createIcon, decorateIcons } from "./icons.js";
-import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap, keepCoordinateVisible } from "./map.js";
+import { clearRoutes, currentViewportBounds, fitCoordinates, focusCoordinate, focusSpur, initializeMap, positionDirectionLayer, renderCandidates, renderEndpointAdjustmentMap, renderHardEndpoints, renderImportedGpx, renderOptionalMarkers, renderOutingRoutes, renderPois, renderRequestedPlaces as renderRequestedPlaceMarkers, renderRequiredMarkers, renderSpurs, renderVisualization, resizeMap, keepCoordinateVisible } from "./map.js";
 import { createLocalRoutingBridge } from "./local_routing.js";
 import { createLocalPlanner, LocalPlannerError } from "./local_planner.js";
 import { createLocalRegionClient, createRegionInstallerClient } from "./local_region_client.js";
@@ -431,7 +433,7 @@ function schedulePoiRefresh(bounds = currentViewportBounds()) {
 }
 
 function updateOptionsFromControls() {
-  changeMapTopology(byId("route-topology").value);
+  changeMapTopology(byId("route-topology").value, localPlanner ? "near" : undefined);
   state.routingProfile = byId("profile").value;
   state.options = readPlannerOptionsFromControls(byId);
   if (state.planningMode === "auto_tour") {
@@ -574,6 +576,7 @@ function isOpenPlan() {
 
 function assignActiveEndpoint(kind, point) {
   const endpoints = activeEndpoints();
+  if (point && localPlanner && point.snapPolicy === undefined) point = { ...point, snapPolicy: endpoints[kind]?.snapPolicy ?? "near" };
   if (state.planningMode === "auto_tour") {
     saveActivePoints();
     if (!assignRouteEndpoint(endpoints, kind, point)) {
@@ -621,6 +624,8 @@ function updateEndpointControls() {
   for (const kind of ["start", "end"]) {
     const point = endpoints[kind];
     byId(`hard-${kind}-enabled`).checked = Boolean(point);
+    byId(`hard-${kind}-snap-policy`).value = point?.snapPolicy ?? "exact";
+    byId(`hard-${kind}-snap-policy`).parentElement.hidden = !localPlanner;
     byId(`hard-${kind}-name`).value = point?.name ?? "";
     byId(`hard-${kind}-lat`).value = point?.lat ?? "";
     byId(`hard-${kind}-lon`).value = point?.lon ?? "";
@@ -1206,6 +1211,7 @@ function removePoint(index) {
 }
 
 function renderMapData() {
+  if (mapReady) renderEndpointAdjustmentMap(currentEndpointAdjustments());
   if (state.outingDisplay && state.outingSnapshot) {
     if (mapReady) {
       renderOutingRoutes(
@@ -1448,6 +1454,45 @@ function bestExcludedRefinementSummary(diagnostics) {
     && Number(details.approximated_change) === 0
     && Number(details.dropped_change) === 0;
   return `<section class="repair-summary excluded-refinement-summary"><h3>Best excluded route refinement</h3><p>Removed ${escapeHtml(formatDistance(removed))} of repeated travel. ${distanceStatement} ${coverageUnchanged ? "Requested-place coverage unchanged. " : ""}Not included in the displayed portfolio.</p></section>`;
+}
+
+function currentEndpointAdjustments() {
+  if (state.resultsInvalidated || ["running", "reversing"].includes(state.request.status)) return [];
+  const candidate = selectedCandidate();
+  return (candidate ? candidate.diagnostics.details.local_routing?.endpoint_adjustments ?? []
+    : isImmutableSnapshotDisplay() ? [] : state.generationResult?.search_diagnostics.details.local_planning?.endpoint_proposals ?? [])
+    .filter(item => item.status === "adjusted" || item.status === "review_required");
+}
+
+function renderEndpointAdjustmentViews() {
+  const adjustments = currentEndpointAdjustments();
+  const disabled = isImmutableSnapshotDisplay() || ["running", "reversing"].includes(state.request.status);
+  const profile = currentDisplayContext()?.routing_profile ?? state.routingProfile;
+  for (const id of ["endpoint-adjustments-map", "endpoint-adjustments-routes"]) renderEndpointAdjustments(byId(id), adjustments, {
+    profileLabel: profile ? profileDisplayName(profile) : "the selected activity", disabled,
+    onShow: item => {
+      if (!currentEndpointAdjustments().includes(item)) return;
+      appShell?.show("map");
+      fitCoordinates([item.requested_coordinate, item.routed_coordinate].map(point => [point.lon, point.lat]), { maxZoom: 18 });
+    },
+    onMove: item => { if (!disabled && currentEndpointAdjustments().includes(item)) byId(`set-hard-${item.endpoint}`).click(); },
+    onUse: item => {
+      if (disabled || !currentEndpointAdjustments().includes(item)) return;
+      replaceResolvedRouteLocation({ endpoint: item.endpoint }, item.routed_coordinate, { assignEndpoint: assignActiveEndpoint });
+      clearPointPlacement(); hideError(); invalidateAndRender();
+      byId("request-status").textContent = "Routed point adopted. Generate again to use the updated request.";
+      appShell?.show("map");
+    },
+  });
+}
+
+function changeEndpointSnapPolicy(kind, policy) {
+  const point = activeEndpoints()[kind];
+  if (!point || isImmutableSnapshotDisplay() || ["running", "reversing"].includes(state.request.status)) return;
+  endpointSnapPolicy({ start: policy, end: policy });
+  rememberPointEdit(`${kind === "start" ? "Start" : "End"} snap policy changed`);
+  assignActiveEndpoint(kind, { ...point, snapPolicy: policy });
+  invalidateAndRender();
 }
 
 function renderCandidatesPanel() {
@@ -1880,6 +1925,7 @@ function renderStatus() {
     onSelectPoint: selectPoint, onSelectEndpoint: selectEndpoint,
     onClearSelection: () => { clearPointPlacement(); state.selectedPointIndex = null; state.selectedEndpointKind = null; render(); },
     onMove: beginPointMove, onRemove: removePoint, onReorder: movePoint,
+    onEndpointPolicy: localPlanner ? changeEndpointSnapPolicy : null,
     onMoveEndpoint: kind => byId(`set-hard-${kind}`).click(),
     onClearEndpoint: kind => byId(`clear-hard-${kind}`).click(),
     onSearch: openLocationSearch,
@@ -1910,6 +1956,7 @@ function render() {
   renderModeControls();
   renderPoiEditor();
   renderCandidatesPanel();
+  renderEndpointAdjustmentViews();
   renderMetrics();
   renderStatus();
   renderMapData();
@@ -2210,6 +2257,7 @@ function showNoCandidateError(result) {
     const measured = Number.isFinite(details?.snap_distance_m) && Number.isFinite(details?.maximum_snap_distance_m)
       ? `${pointName} snapped ${details.snap_distance_m.toFixed(1)} m away; the permitted limit is ${details.maximum_snap_distance_m.toFixed(0)} m. `
       : "";
+    if (localFailure === "endpoint_review_required") { hideError(); appShell?.show("map"); return; }
     showError(error.message, safeGenerationDiagnostics(result), error.code,
       `${measured}Your requested points and settings are unchanged.`, "Review the points, activity and installed region before trying again.");
     return;
@@ -2273,7 +2321,7 @@ function normalizeImportedRequest(value, { requireKnownProfile = true } = {}) {
   const commonKeys = new Set([
     "schema_version", "kind", "name", "topology", "start", "end",
     "routing_profile", "candidate_count", "seed", "distance_objective",
-    "preferences",
+    "preferences", "endpoint_snap_policy",
   ]);
   const modeKeys = value.kind === "auto_tour"
     ? ["hard_waypoints", "requested_stops", "preferred_discovered_poi_ids", "free_poi_spur_physical_m"]
@@ -2314,6 +2362,7 @@ function normalizeImportedRequest(value, { requireKnownProfile = true } = {}) {
   };
   const start = normalize(value.start, "Start");
   const end = value.end == null ? null : normalize(value.end, "End");
+  restoreEndpointSnapIntent(value, start, end);
   const autoTour = value.kind === "auto_tour";
   const strength = (raw, fallback) => {
     const resolved = raw ?? fallback;
@@ -2738,7 +2787,7 @@ function bindEvents() {
     if (redoPointEdit()) { updateControlsFromOptions(); invalidateAndRender(); }
   });
   byId("dock-finish").addEventListener("change", () => {
-    try { changeMapTopology(byId("dock-finish").value); updateControlsFromOptions(); invalidateAndRender(); }
+    try { changeMapTopology(byId("dock-finish").value, localPlanner ? "near" : undefined); updateControlsFromOptions(); invalidateAndRender(); }
     catch (error) { render(); showError(error.message); }
   });
   byId("dock-order").addEventListener("change", () => {
@@ -2804,6 +2853,7 @@ function bindEvents() {
     });
   });
   for (const kind of ["start", "end"]) {
+    byId(`hard-${kind}-snap-policy`).addEventListener("change", event => changeEndpointSnapPolicy(kind, event.target.value));
     for (const suffix of ["enabled", "name", "lat", "lon"]) {
       byId(`hard-${kind}-${suffix}`).addEventListener("change", () => {
         const point = endpointFromControls(kind);

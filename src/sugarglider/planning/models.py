@@ -137,12 +137,22 @@ class RouteWaypoint(CanonicalModel):
         return self
 
 
+class EndpointSnapPolicy(CanonicalModel):
+    """Explicit endpoint intent; native local planning enforces these bounds."""
+
+    start: Literal["near", "exact"]
+    end: Literal["near", "exact"]
+
+
 class PlanRequestBase(CanonicalModel):
     schema_version: Literal[1]
     kind: PlanKind
     name: Annotated[str, Field(min_length=1, max_length=200)]
     topology: RouteTopology
     start: Coordinate
+    endpoint_snap_policy: EndpointSnapPolicy | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     end: Coordinate | None = None
     routing_profile: RoutingProfileId
     candidate_count: Annotated[int, Field(ge=1, le=5)]

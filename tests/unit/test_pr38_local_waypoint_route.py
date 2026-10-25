@@ -23,16 +23,15 @@ def test_local_endpoints_and_closure_follow_pr35_but_interiors_follow_canonical(
 ):
     source = CORE.read_text()
     auto_tour = (STATIC / "local_auto_tour.js").read_text()
-    assert (
-        _constant(source, "LOCAL_WAYPOINT_HARD_ENDPOINT_SNAP_TOLERANCE_M")
-        == _constant(auto_tour, "HARD_START_SNAP_TOLERANCE_M")
-        == 25
-    )
-    assert (
-        _constant(source, "LOCAL_WAYPOINT_ROUTE_CLOSURE_TOLERANCE_M")
-        == _constant(auto_tour, "ROUTE_CLOSURE_TOLERANCE_M")
-        == 25
-    )
+    policy = (STATIC / "endpoint_snapping.js").read_text()
+    assert _constant(policy, "EXACT_ENDPOINT_M") == 25
+    assert _constant(policy, "NEAR_ENDPOINT_M") == 150
+    assert _constant(policy, "LOOP_CLOSURE_M") == 25
+    assert "LOCAL_WAYPOINT_HARD_ENDPOINT_SNAP_TOLERANCE_M = EXACT_ENDPOINT_M" in source
+    assert "LOCAL_WAYPOINT_ROUTE_CLOSURE_TOLERANCE_M = LOOP_CLOSURE_M" in source
+    for implementation in (source, auto_tour):
+        assert "measureEndpointAdjustments" in implementation
+        assert "endpointAdjustmentFailure" in implementation
     assert (
         _constant(source, "LOCAL_WAYPOINT_EXACT_INTERIOR_FIDELITY_M")
         == EXACT_WAYPOINT_FIDELITY_M
@@ -236,7 +235,7 @@ def test_waypoint_rendering_has_its_own_layers_and_preserves_existing_overlays()
 
 def test_offline_module_is_precached_in_exactly_v28_and_harness_is_local() -> None:
     worker = (STATIC / "service-worker.js").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v104`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v105`" in worker
     assert '"/static/local_waypoint_route.js"' in worker
     html = HARNESS.with_suffix(".html").read_text()
     harness = HARNESS.read_text()

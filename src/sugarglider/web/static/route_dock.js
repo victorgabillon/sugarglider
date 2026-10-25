@@ -28,7 +28,7 @@ function attachPopover(button, popover, root) {
   };
   popover.addEventListener("toggle", toggle); popoverListeners.set(popover, toggle);
 }
-export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, onSelectEndpoint, onMove, onRemove, onReorder, onMoveEndpoint, onClearEndpoint, onChooseMap, onDetails, onClearSelection, onSearch }) {
+export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, onSelectEndpoint, onMove, onRemove, onReorder, onMoveEndpoint, onClearEndpoint, onEndpointPolicy, onChooseMap, onDetails, onClearSelection, onSearch }) {
   const active = document.activeElement;
   const focus = root.contains(active) ? { id: active.id, action: active.dataset.dockAction, chip: active.dataset.routeChip } : null;
   const endpoints = state.planningMode === "auto_tour" ? state.autoTour : state.waypointEndpoints;
@@ -94,6 +94,15 @@ export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, on
   if (point && !placing) {
     const label = kind ? kind === "start" ? "Start" : "End" : `Stop ${stops.findIndex(stop => stop.index === index) + 1}`;
     const title = document.createElement("strong"); title.textContent = label; editor.append(title);
+    if (kind && onEndpointPolicy) {
+      const label = document.createElement("label"); label.textContent = "Snap ";
+      const select = document.createElement("select"); select.dataset.dockAction = "snap-policy"; select.setAttribute("aria-label", `${kind === "start" ? "Start" : "End"} snap policy`);
+      for (const [value, text] of [["near", "Near this point"], ["exact", "Exact point"]]) {
+        const option = document.createElement("option"); option.value = value; option.textContent = text; select.append(option);
+      }
+      select.value = point.snapPolicy ?? "exact"; select.disabled = disabled;
+      select.addEventListener("change", () => onEndpointPolicy(kind, select.value)); label.append(select); editor.append(label);
+    }
     const move = action(editor, "move", "Move", () => {}, disabled);
     const acquisition = document.createElement("div"); acquisition.id = "route-move-menu"; acquisition.popover = "auto";
     acquisition.className = "route-dock-popover"; acquisition.role = "dialog"; acquisition.setAttribute("aria-label", `Move ${label}`);

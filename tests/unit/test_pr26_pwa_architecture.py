@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v104_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v105_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v104"
+    assert generation.group(1) == "v105"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -203,6 +203,8 @@ def test_shared_shell_generation_tracks_v104_cached_assets() -> None:
             "local_auto_tour.js",
             "local_planning_context.js",
             "local_planner.js",
+            "endpoint_snapping.js",
+            "endpoint_adjustment_view.js",
             "canonical_numbers.js",
             "local_analysis_templates.js",
             "local_plan_geometry.js",
@@ -262,7 +264,7 @@ def test_shared_shell_generation_tracks_v104_cached_assets() -> None:
             "5307b28b6bf2c00672938196eca9595201b7470e195bf5cc323107b500dde4cd"
         ),
         "route_dock.js": (
-            "edca98e12782a796b3b7f7d2726ad6aee68be66636760aa39a66bea89c08a00d"
+            "cd1148ddbd79912d619d2145862c6ef205f90d3d07446d7b57f4704b8a1b2afa"
         ),
         "route_point_drag.js": (
             "a61aa834611a65ca108fbedf9645ae6f5a6188c15ba48795b0417e6489808862"
@@ -274,7 +276,7 @@ def test_shared_shell_generation_tracks_v104_cached_assets() -> None:
             "7fb0be59fb37419d41bab341162c222d38f066e0c69c4037db3dcf4b3bfed58b"
         ),
         "automatic_intent.js": (
-            "5e7ca9b810851ab81baf2a365e43f2a6aab7a89015e59a7dfe29fea3f4581c83"
+            "c3f14f96d97c060ad3351ee0ad3c4ca7ad8c7951482514d30755115b704df1d2"
         ),
         "poi_route_location.js": (
             "53321cda828128f43c93aee5b6f513885e77c1435777b7a9eac06c6f15a87e49"
@@ -289,7 +291,7 @@ def test_shared_shell_generation_tracks_v104_cached_assets() -> None:
             "57a69909891fc671ce6d93f615ed4c7789f75afb73d8a3027087d3a62e14876c"
         ),
         "local_planner.js": (
-            "849b02b8f594400956eefdd61b99cc02eead3c92e9818e064a46bf4836c3e29b"
+            "f8315431641e4a24a5a6b69cad8a0807f6a0e5b3328d6e51c79444f44df55575"
         ),
         "canonical_numbers.js": (
             "0c45121c5e89d9dcbd23c126740a7f3760e8c31f9683d8206b70c6d253e65a26"
@@ -304,10 +306,10 @@ def test_shared_shell_generation_tracks_v104_cached_assets() -> None:
             "2d71476066aa440bdebb28c26b1d0eac2b62c37dd1275b0ef8448aee3e7c2ef5"
         ),
         "local_candidate_evaluator.js": (
-            "2b56af7f998db9a2d174670847608ed394de24b40fbed2c84e2242f1037b2788"
+            "90eae952764c206ec3593bc42965375e2b76af5ccc727975577cb6da18998d52"
         ),
         "local_plan_publisher.js": (
-            "4a7162832605f171f32158370b9bc80e606075fbeca78dd2a6b0019118911f30"
+            "c2258051875c5f1ee0690e0913751e382e820a7fe50f3b065b06409ec645107b"
         ),
         "local_plan_worker.js": (
             "3ca9645f88dbe2ff9f57e63190d04d2a5bcbdec017e072850bed0fa0ac1f7eb8"
@@ -316,7 +318,7 @@ def test_shared_shell_generation_tracks_v104_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "9c9f894c369c18715a6c15d5438f6b8d7468bf68c8ebd5309afefed20b5a6e2b"
+            "4f2ffe41f023f3e88c3dd9a5bf94391b9dc8e22bac593a726887f066ce1738e3"
         ),
         "location_search.js": (
             "635f5aaf5603cadbc3b77f035055251e54358b16a831d927e51fe6c44c031c36"
@@ -324,7 +326,13 @@ def test_shared_shell_generation_tracks_v104_cached_assets() -> None:
         "location_search_dialog.js": (
             "60924fa83037b8de5daa90cdfbcde5ab498a2134ff9a97b2b679e11b55c55b40"
         ),
-        "app.js": ("bd237f8ff07deb1b51b790738c8689516849daeb796b060b5b1dcac1de8a53f1"),
+        "endpoint_snapping.js": (
+            "801dfb85e8531421b96417020e5356614a5d1ef4bcd91c0dc4ad53743a7d83f7"
+        ),
+        "endpoint_adjustment_view.js": (
+            "c842db00ce0dc5d4b948b5879902f641b5483262a02625f80a0df00827223ebb"
+        ),
+        "app.js": ("fc5abf00ede5cbb70911fc4f44430ceb3389b66aa4fad4d55e1958679d1d30e4"),
         "region_screen.js": (
             "bc2253c1950d5c1ead08feb3d08bbd830e05c401b405fef65bb2b8a9100425a1"
         ),
@@ -356,11 +364,11 @@ def test_shared_shell_generation_tracks_v104_cached_assets() -> None:
             "aa3c203a3042fb812c1088adc60fa3f07585ef014aec9a8584895e660862a7eb"
         ),
         "state.js": (
-            "74ff475a504f253708888509af61530d59cfc5736edba28649d9462f3690e53e"
+            "c66a0469ff4780e1a7800065f292133ebc177508e1a81ac21d85c7272ad92427"
         ),
-        "map.js": ("e537d6bda14ebb1942e404b54250ab13eaf224f6dfa159b12e7738714b08f0c6"),
+        "map.js": ("f71993cd81e77b48a44ff9039139a0d4012b831d25249a14c6ac1c20ba192cb5"),
         "styles.css": (
-            "3363936d59b71afeadda388ecfe06ce3b6460633836e865b2718d82ace63d99e"
+            "a7900db6b2e8c24b13f1c77ffa0e4d22013e14f0c6b0ddcc66bead15f1c1d4b7"
         ),
         "planner_profile.js": (
             "4183a1318f3aa49df52ca0a46329caaa4f6eee1bec1b49612c446562b1b0030a"
@@ -375,10 +383,10 @@ def test_shared_shell_generation_tracks_v104_cached_assets() -> None:
             "aa6a94b9eee2821d68881b29d84346e8cbb7039a0200db2b0abcb0fd8373c2cd"
         ),
         "local_auto_tour.js": (
-            "2b4c13d1ca70538c28e766937756bc2bece5a852ec8880a06330e2b8cf71fc54"
+            "3156d9e0f6f303136de40131e4a13cd9272001baef29a901b30908ee021a5928"
         ),
         "local_waypoint_route.js": (
-            "45f94090ef1cf08fb405243cc610f366bc370c8dcc1ed12f7e929d6b0e271a8b"
+            "1e08cfd9910bacafd9a0fdcbfd3ee53deec4cf1e9fadff1f176ae2c98196e8ae"
         ),
         "regional_manifest.js": (
             "253de7af724800456d99f4189331aed4f49169cbc5736327c257f22d2e0cdbde"
