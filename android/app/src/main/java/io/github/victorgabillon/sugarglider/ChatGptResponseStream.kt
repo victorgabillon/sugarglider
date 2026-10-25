@@ -24,7 +24,10 @@ internal object ChatGptResponseStream {
             boundDepth(payload)
             val json = try { JSONObject(payload) } catch (_: Exception) { throw IllegalArgumentException("Invalid model stream.") }
             when (json.optString("type")) {
-                "response.failed", "response.incomplete", "error" -> throw IllegalStateException("Model response was not completed.")
+                "response.failed", "response.incomplete", "error" -> {
+                    val code = json.optJSONObject("response")?.optJSONObject("error")?.optString("code") ?: json.optString("code")
+                    throw ChatGptException(if (code in setOf("subscription_sharing_usage_limit_exceeded", "subscription_sharing_usage_unavailable")) ChatGptFailureKind.USAGE_LIMIT else ChatGptFailureKind.INVALID_RESPONSE)
+                }
                 "response.completed" -> {
                     check(!sawCompleted) { "Duplicate model completion." }
                     val response = json.optJSONObject("response") ?: error("Model completion missing.")

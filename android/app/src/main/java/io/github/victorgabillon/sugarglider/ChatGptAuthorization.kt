@@ -69,6 +69,9 @@ internal class ChatGptAuthorization(
     }
 
     @Synchronized
+    fun isActive(): Boolean = !consumed && nowMillis() - createdAt in 0..180_000
+
+    @Synchronized
     fun cancel(): Unit { consumed = true }
 
     companion object {

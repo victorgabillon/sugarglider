@@ -55,13 +55,20 @@ metrics remain unknown. Model narratives never become geometry or GPX extensions
 
 ## Current checkpoint
 
-The native transaction primitive implements random state/nonce/PKCE, exact loopback
-callback validation, a three-minute monotonic deadline, one-time consumption,
-account/client binding and cancellation. Its synthetic JVM tests pass. The bounded
-SSE primitive and tests require a terminal completed response rather than trusting
-partial deltas. Neither primitive is wired into a sign-in UI yet. ID-token verification,
-credential storage, HTTP requests, Android browser loopback behavior and live inference
-remain unverified work; these primitives do not establish authenticated connectivity.
+The native connection core now includes a temporary loopback listener, exact callback
+transactions, RS256 signature/issuer/audience/time/nonce validation, encrypted atomic
+account records in no-backup Android storage, separate registration identities,
+refresh rotation, sign-out and per-operation cancellation. All network endpoints
+are fixed official HTTPS destinations; redirects and custom TLS trust are absent.
+The ID-token algorithm/endpoints were checked against live issuer discovery metadata.
+
+Nineteen focused JVM tests pass without live accounts or network dependencies,
+including signed synthetic identities, tampering, scope reduction, refresh rotation,
+account replacement rejection, cancellation before credential commit, sanitized HTTP
+failures, stream truncation and encrypted-record integrity. Android Debug lint passes.
+These results do not establish Android browser callback feasibility or live account
+access. MainActivity/bridge wiring, model usage/citation metadata, UI and live inference
+remain outstanding. No AI feature has been installed or offered as working yet.
 
 ## Official protocol references (checked 25 October 2026)
 
