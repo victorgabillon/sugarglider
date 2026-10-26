@@ -13,7 +13,7 @@ const TERMINAL = new Set(["unsupported_profile", "routing_pack_unavailable", "no
   "no_compatible_routing_pack", "routing_busy", "routing_pack_identity_changed", "profile_identity_mismatch"]);
 
 export async function searchWaypointAdventure({ request, targets = [], context, phase, maxCalls,
-  reference, current, attempt, data = null }) {
+  reference, current, attempt, data = null, wishes = [] }) {
   if (!Number.isSafeInteger(maxCalls) || maxCalls < 1 || maxCalls > 16
     || !reference?.pack_id || !Array.isArray(reference.bounds) || reference.bounds.length !== 4
     || !Array.isArray(targets) || targets.length > 30) throw new TypeError("Invalid adventure search inputs.");
@@ -75,10 +75,23 @@ export async function searchWaypointAdventure({ request, targets = [], context, 
       corridors.push({ state, skeletonIndex: index, detour });
     }
     corridors.sort((a, b) => a.detour - b.detour || a.skeletonIndex - b.skeletonIndex);
-    seeds.push(...corridors.slice(0, 8 - seeds.length));
+    // Explore another heading before spending every insertion on one corridor.
+    // This ranks proposals only; all feasibility and distances come from native routing.
+    const shortlist = corridors.splice(0, Math.min(corridors.length, 4));
+    corridors.length = 0; corridors.push(...shortlist);
+    const diverse = [];
+    while (corridors.length && diverse.length < 8 - seeds.length) {
+      const index = !diverse.length ? 0 : corridors.reduce((best, corridor, index) => {
+        const separation = item => Math.min(...diverse.map(other => geometryDiversityDistanceM(
+          other.state.map(item => [item.coordinate.lon, item.coordinate.lat]), item.state.map(item => [item.coordinate.lon, item.coordinate.lat]))));
+        return separation(corridor) > separation(corridors[best]) ? index : best;
+      }, 0);
+      diverse.push(corridors.splice(index, 1)[0]);
+    }
+    seeds.push(...diverse);
   }
   const usefulSeeds = seeds.filter(({ state }) => state.length > 2 || request.topology !== "loop");
-  async function evaluate(state, controlId = null, addedId = null) {
+  async function evaluate(state, controlId = null, addedId = null, rootId = null) {
     alive();
     if (!available() || attempts.size >= 32) return null;
     const key = JSON.stringify(state.map(item => [item.coordinate.lat, item.coordinate.lon]));
@@ -98,7 +111,7 @@ export async function searchWaypointAdventure({ request, targets = [], context, 
       publishLocalWaypointStops(request, { ...enriched, optional_stop_outcomes: soft.map(({ point }) => ({ id: point.id,
         status: enriched.selected_optional_ids.includes(point.id) ? "reached" : "dropped",
         reason: enriched.selected_optional_ids.includes(point.id) ? null : "not_selected_for_this_candidate" })) });
-      const entry = { state, draft: enriched, selected, reward: selected.reduce((sum, index) => sum + priority(targetMap.get(request.waypoints[index].id)), 0) };
+      const entry = { state, draft: enriched, selected, root: rootId ?? draft.candidate_id, reward: selected.reduce((sum, index) => sum + priority(targetMap.get(request.waypoints[index].id)), 0) };
       drafts.push(entry);
       return entry;
     } catch (error) {
@@ -112,9 +125,9 @@ export async function searchWaypointAdventure({ request, targets = [], context, 
       return null;
     }
   }
-  // Reserve most of each round for actual optional-stop attempts. Native/cache
+  // Keep at least half of each round for optional-stop attempts. Native/cache
   // accounting remains solely in the shared planning context.
-  const controlAllowance = Math.min(3, Math.max(1, Math.floor(maxCalls / 3)));
+  const controlAllowance = Math.min(4, Math.max(1, request.candidate_count >= 3 ? Math.ceil(maxCalls / 2) : Math.floor(maxCalls / 3)));
   for (const seed of usefulSeeds) {
     if (context.totalUsed - startUsed >= controlAllowance || terminal || !available()) break;
     const entry = await evaluate(seed.state);
@@ -136,11 +149,14 @@ export async function searchWaypointAdventure({ request, targets = [], context, 
   controls.sort(compareEntries);
   const control = controls[0] ?? null;
   if (control) {
-    let beam = controls.slice(0, 2);
+    let beam = (controls.some(entry => entry.draft.within_tolerance) ? controls.filter(entry => entry.draft.within_tolerance) : controls)
+      .slice(0, Math.min(3, request.candidate_count));
+    const branchAttempts = new Map();
+    let bundledAttempts = 0;
     while (available() && !terminal && attempts.size < 32) {
       const proposals = [];
       for (const entry of beam) for (const { point, index } of soft) {
-        if (entry.selected.includes(index) || !covered(targetPoint(index), reference.bounds) || entry.state.length >= 16) continue;
+        if (entry.selected.includes(index) || reasons.get(point.id) === "route_infeasible" || !covered(targetPoint(index), reference.bounds) || entry.state.length >= 16) continue;
         const state = entry.state.map(item => ({ ...item }));
         const delta = insertCheapest(state, { coordinate: targetPoint(index), index });
         const key = JSON.stringify(state.map(item => [item.coordinate.lat, item.coordinate.lon]));
@@ -148,18 +164,45 @@ export async function searchWaypointAdventure({ request, targets = [], context, 
         const predictedError = Math.abs(entry.draft.distance_m + delta - request.distance_objective.target_m);
         proposals.push({ state, entry, id: point.id, predictedError, reward: entry.reward + priority(targetMap.get(point.id)) });
       }
-      proposals.sort((a, b) => Number(a.predictedError > request.distance_objective.tolerance_m)
+      // Try a small useful group in one complete native call instead of always
+      // paying one call per added stop. Failed groups retain single-stop probes.
+      for (const entry of bundledAttempts >= 2 || bundledAttempts === 1 && !reasons.size ? [] : beam) {
+        const state = entry.state.map(item => ({ ...item }));
+        const remaining = soft.filter(({ index }) => !entry.selected.includes(index) && reasons.get(request.waypoints[index].id) !== "route_infeasible" && covered(targetPoint(index), reference.bounds));
+        let delta = 0, reward = entry.reward, added = [];
+        while (remaining.length && added.length < 3 && state.length < 16) {
+          const ranked = remaining.map(item => {
+            const copy = state.map(item => ({ ...item }));
+            return { ...item, delta: insertCheapest(copy, { coordinate: targetPoint(item.index), index: item.index }) };
+          }).sort((a, b) => priority(targetMap.get(b.point.id)) - priority(targetMap.get(a.point.id)) || a.delta - b.delta || a.index - b.index);
+          const next = ranked.find(item => Math.abs(entry.draft.distance_m + delta + item.delta - request.distance_objective.target_m) <= request.distance_objective.tolerance_m);
+          if (!next) break;
+          delta += insertCheapest(state, { coordinate: targetPoint(next.index), index: next.index });
+          reward += priority(targetMap.get(next.point.id)); added.push(next.point.id);
+          remaining.splice(remaining.findIndex(item => item.index === next.index), 1);
+        }
+        const key = JSON.stringify(state.map(item => [item.coordinate.lat, item.coordinate.lon]));
+        if (added.length > 1 && !attempts.has(key)) proposals.push({ state, entry, id: added.at(-1),
+          predictedError: Math.abs(entry.draft.distance_m + delta - request.distance_objective.target_m), reward, bundle: true });
+      }
+      proposals.sort((a, b) => Number((branchAttempts.get(a.entry.root) ?? 0) > 0) - Number((branchAttempts.get(b.entry.root) ?? 0) > 0)
+        || Number(a.predictedError > request.distance_objective.tolerance_m)
         - Number(b.predictedError > request.distance_objective.tolerance_m)
         || b.reward - a.reward || a.predictedError - b.predictedError || compareText(a.id, b.id));
       if (!proposals.length) break;
       const next = proposals[0];
-      const entry = await evaluate(next.state, control.draft.candidate_id, next.id);
-      if (entry) beam = [...beam, entry].sort(compareOptional).slice(0, 3);
+      branchAttempts.set(next.entry.root, (branchAttempts.get(next.entry.root) ?? 0) + 1);
+      if (next.bundle) bundledAttempts++;
+      const entry = await evaluate(next.state, control.draft.candidate_id, next.bundle ? null : next.id, next.entry.root);
+      if (entry) {
+        const untried = beam.filter(item => !branchAttempts.has(item.root));
+        beam = [...new Set([...untried, ...[...beam, entry].sort(compareOptional)])].slice(0, 3);
+      }
     }
   }
   alive();
   const retained = [], seen = new Set();
-  let similarOmitted = false;
+  let similarOmitted = 0;
   // Retain the comparison line independently of the requested alternative count.
   // Final publication puts target eligibility first, then preserves the control
   // gate because unknown repetition cannot justify a POI-based promotion.
@@ -176,11 +219,11 @@ export async function searchWaypointAdventure({ request, targets = [], context, 
       const comparison = entry.selected.length ? retained.filter(other => other.selected.length) : retained;
       if (!entry.selected.length && control?.draft.within_tolerance && !entry.draft.within_tolerance) continue;
       if (comparison.some(other => geometryDiversityDistanceM(other.draft.geometry, entry.draft.geometry) < threshold)) {
-        similarOmitted = true; continue;
+        similarOmitted++; continue;
       }
     }
     seen.add(key); retained.push(entry);
-    if (retained.length === Math.max(2, request.candidate_count)) break;
+    if (retained.length === Math.min(5, Math.max(2, request.candidate_count + (wishes.length ? 2 : 0)))) break;
   }
   const candidates = [];
   for (const entry of retained) {
@@ -193,17 +236,46 @@ export async function searchWaypointAdventure({ request, targets = [], context, 
         ? "outside_coverage" : reasons.get(point.id) ?? (available() ? "not_selected_for_this_candidate" : "search_budget_exhausted") }));
     candidates.push({ ...entry.draft, nature_analysis: nature, optional_stop_outcomes: outcomes, rank: candidates.length + 1 });
   }
+  // Only complete, validated finalists have Nature. Unknown coverage never earns
+  // a preference improvement, and hard distance/loop gates precede soft wishes.
+  const noOptional = candidates.find(candidate => candidate.candidate_id === control?.draft.candidate_id);
+  const options = candidates.filter(candidate => candidate !== noOptional).sort((a, b) => {
+    const base = Number(b.within_tolerance) - Number(a.within_tolerance)
+      || (!a.within_tolerance && !b.within_tolerance ? a.target_error_m - b.target_error_m : 0)
+      || (a.geometry_metrics && b.geometry_metrics ? a.geometry_metrics.geometry_penalty - b.geometry_metrics.geometry_penalty : 0);
+    if (base) return base;
+    const preference = candidate => wishes.reduce((sum, wish) => {
+      const metric = { woodland: "woodland", urban: "urban", water: "near_water" }[wish.metric];
+      if (!metric || !a.nature_analysis.available || !b.nature_analysis.available) return sum;
+      const share = candidate.nature_analysis[metric]?.share;
+      if (!Number.isFinite(share)) return sum;
+      const value = wish.goal === "target" ? Math.abs(share * 100 - wish.value) / 100
+        : ["minimize", "avoid"].includes(wish.goal) ? share : -share;
+      return sum + value * ({ hard: 8, high: 4, medium: 2, low: 1 }[wish.importance] ?? 1);
+    }, 0);
+    return preference(a) - preference(b) || b.selected_optional_ids.length - a.selected_optional_ids.length
+      || a.target_error_m - b.target_error_m || compareText(a.candidate_id, b.candidate_id);
+  });
+  const selected = [noOptional, ...options].filter(Boolean).slice(0, Math.max(2, request.candidate_count));
+  selected.forEach((candidate, index) => { candidate.rank = index + 1; });
+  const families = distinctAdventureRouteFamilies(selected, request.topology, request.distance_objective.target_m);
   const counts = {};
   for (const rejection of rejected) counts[rejection.code] = (counts[rejection.code] ?? 0) + 1;
   return deepFreeze({ schema_version: 1, type: "local_waypoint_route_result", profile: request.routing_profile,
     status: candidates.length ? "success" : "no_candidates", code: candidates.length ? null : terminal ?? rejected[0]?.code ?? "no_valid_local_candidate",
-    request, candidates, pack_id: candidates[0]?.pack_id ?? null,
+    request, candidates: selected, pack_id: selected[0]?.pack_id ?? null,
+    adventure_diagnostics: { requested_count: request.candidate_count, distinct_candidate_ids: families, distinct_route_count: families.length,
+      comparison_variant_count: selected.length - families.length, evaluated_sequences: attempts.size,
+      validated_drafts: drafts.length, nature_finalists: retained.length, diversity_omitted: similarOmitted,
+      returned_count: selected.length, within_tolerance_count: selected.filter(candidate => candidate.within_tolerance).length,
+      budget_finished: !available(), rejected_attempt_counts: counts },
     no_optional_control_candidate_id: control?.draft.candidate_id ?? null,
     route_call_count: context.totalUsed, route_call_budget: context.snapshot().budget.total_limit,
     rejected_attempt_counts: counts, rejected_attempts: rejected, search_diagnostics: context.snapshot(),
     warnings: ["exact_edge_repetition_unavailable", "path_attributes_and_access_unavailable",
       "geometry_distinctness_is_not_corridor_diversity",
-      ...(similarOmitted ? ["similar_loop_alternatives_omitted"] : []), "optional_detours_not_promoted_without_repetition_evidence"] });
+      ...(similarOmitted ? ["similar_loop_alternatives_omitted"] : []),
+      ...(families.length < selected.length ? ["similar_comparison_variants_retained"] : []), "optional_detours_not_promoted_without_repetition_evidence"] });
 }
 
 function insertCheapest(state, item) {
@@ -228,3 +300,26 @@ function compareOptional(a, b) {
     || compareText(a.draft.candidate_id, b.draft.candidate_id);
 }
 function failure(code) { const error = new Error(code); error.code = code; return error; }
+
+// Diversity evidence only, never edge repetition or corridor-equivalence claims.
+// Keep the useful no-POI comparison even when a landmark detour is its variant,
+// but do not count both toward a request for genuinely different loops.
+export function distinctAdventureRouteFamilies(candidates, topology, targetM) {
+  if (topology !== "loop") return candidates.map(candidate => candidate.candidate_id);
+  const threshold = Math.max(150, Math.min(600, targetM * 0.025));
+  const edges = candidates.map(candidate => {
+    const segments = candidate.geometry.slice(1).map((point, index) => {
+      const before = candidate.geometry[index], pair = [JSON.stringify(before), JSON.stringify(point)].sort();
+      return { key: pair.join("/"), length: haversineDistance(before, point) };
+    });
+    return { candidate, segments, keys: new Set(segments.map(segment => segment.key)), total: segments.reduce((sum, segment) => sum + segment.length, 0) };
+  });
+  const representatives = [];
+  for (const entry of edges) {
+    const shared = (a, b) => a.total > 0 ? a.segments.reduce((sum, segment) => sum + (b.keys.has(segment.key) ? segment.length : 0), 0) / a.total : 1;
+    if (representatives.some(other => geometryDiversityDistanceM(entry.candidate.geometry, other.candidate.geometry) < threshold
+      || Math.min(shared(entry, other), shared(other, entry)) >= 0.85)) continue;
+    representatives.push(entry);
+  }
+  return representatives.map(entry => entry.candidate.candidate_id);
+}

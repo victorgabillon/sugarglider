@@ -2,11 +2,12 @@ import { createAdventureController } from "./adventure_controller.js";
 import { createAdventureModel, AdventureModelError } from "./adventure_model.js";
 import { createAdventureSpeech } from "./adventure_speech.js";
 import { createAdventureElevationSampler } from "./adventure_elevation.js";
+import { readSpeechProviderPreference, writeSpeechProviderPreference } from "./pwa_store.js";
 import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
 
 const progressText = { understanding: "Understanding your wishes and researching places…", checking_places: "Checking locations on this device…",
   reviewing: "Review the required places below.", routing: "Calculating actual offline routes…", comparing: "Comparing routes and measuring terrain…",
-  improving: "Improving suggestions using the measured results…", ready: "Your adventure is ready." };
+  researching_stories: "Researching stories for the places actually reached…", improving: "Improving suggestions using the measured results…", ready: "Your adventure is ready." };
 const speechText = { completed: "Transcription added. Check it before Generate; tap Speak to add more.", partial: "Recording ended before final recognition. Check this draft carefully; tap Speak to add more.", cancelled: "Microphone cancelled.",
   unavailable: "Speech recognition is unavailable. You can type your adventure.", permission_denied: "Microphone permission was not granted. Typing still works.",
   language_unavailable: "This language is unavailable for on-device recognition. Try another speech language or type your request.",
@@ -16,12 +17,43 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
   onBusy = () => {}, onResult, onChooseStart, onChooseEnd,
   model = createAdventureModel(), speech = createAdventureSpeech(), elevation = createAdventureElevationSampler() }) {
   const element = id => root.querySelector(`#adventure-${id}`);
+  const french = /^fr(?:-|$)/i.test(navigator.language);
+  const progressMessages = french ? { understanding: "Compréhension et recherche des lieux…", checking_places: "Vérification des lieux sur cet appareil…",
+    reviewing: "Vérifiez les lieux obligatoires.", routing: "Calcul des vrais parcours hors ligne…", comparing: "Comparaison des parcours et mesure du terrain…",
+    improving: "Amélioration des suggestions à partir des mesures…", researching_stories: "Recherche d’anecdotes sur les lieux réellement atteints…", ready: "Votre aventure est prête." } : progressText;
+  const speechMessages = french ? { ...speechText, completed: "Transcription ajoutée. Modifiez-la si nécessaire avant de générer. Parler permet d’ajouter une phrase.",
+    partial: "Transcription provisoire ajoutée : vérifiez ce brouillon avant de générer.", cancelled: "Microphone annulé.",
+    unavailable: "Reconnaissance vocale indisponible. Vous pouvez écrire votre demande.", no_match: "Aucune parole reconnue. Réessayez ou écrivez votre demande." } : speechText;
+  if (french) {
+    const labels = { title: "✨ Décrivez votre aventure", close: "Fermer", microphone: "🎤 Parler", "finish-speech": "J’ai terminé",
+      "stop-speech": "Annuler le micro", generate: "Générer l’aventure", cancel: "Annuler le calcul", "refresh-models": "Actualiser les modèles disponibles" };
+    for (const [id, label] of Object.entries(labels)) element(id).textContent = label;
+    launcher.textContent = "✨ Planifier avec l’IA";
+    element("text").previousElementSibling.textContent = "Quelle aventure souhaitez-vous ?";
+    element("text").placeholder = "Environ 35 km de course dans les bois de Marly, trois parcours différents et des anecdotes sur les lieux visités…";
+    element("language").parentElement.firstChild.textContent = "Langue parlée";
+    element("speech-service").parentElement.firstChild.textContent = "Reconnaissance vocale";
+    element("speech-service").options[0].textContent = "Sur cet appareil si disponible";
+    element("speech-service").options[1].textContent = "Service vocal Android (audio potentiellement envoyé)";
+    element("speech-status").textContent = "Choisissez la langue et le service. Parler ajoute du texte modifiable, sans envoi à ChatGPT. Enregistrement limité à une minute.";
+  }
+  // Only an explicit choice is persisted. Restoring it never records audio;
+  // the native provider disclosure still asks for consent on every use.
+  let providerChoiceVersion = 0, providerWrite = Promise.resolve();
+  void readSpeechProviderPreference().then(mode => {
+    if (providerChoiceVersion === 0 && mode === "platform") element("speech-service").value = "platform";
+  });
+  element("speech-service").addEventListener("change", () => {
+    providerChoiceVersion++;
+    const mode = element("speech-service").value === "platform" ? "platform" : "device";
+    providerWrite = providerWrite.then(() => writeSpeechProviderPreference(mode));
+  });
   let voiceMode = null, voiceFinishing = false;
   let epoch = 0, accountBusy = false, aiBusy = false, voiceBusy = false, accountAbort = null, speechAbort = null, planningAbort = null;
   let accountState = { accounts: [], selected_account: null, models: [] }, review = null, successfulClose = false;
   let contextReady = false, displayedContext = null, planningFinished = Promise.resolve(), finishPlanning = null;
   const controller = createAdventureController({ model, planner, measureElevations: elevation.measure,
-    onProgress: stage => { element("progress").textContent = progressText[stage] ?? "Planning…"; },
+    onProgress: stage => { element("progress").textContent = progressMessages[stage] ?? "Planning…"; },
     confirmProposal: confirm, lifecycleTarget: null });
   const connected = () => accountState.accounts.find(account => account.id === accountState.selected_account);
   const message = text => { element("error").textContent = text; };
@@ -43,7 +75,7 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
     element("sign-out").disabled = accountBusy;
     element("add-account").hidden = !accountState.accounts.length;
     element("add-account").disabled ||= accountState.accounts.length >= 4;
-    element("connect").textContent = account ? "Reconnect this account" : "Sign in with ChatGPT";
+    element("connect").textContent = french ? account ? "Reconnecter ce compte" : "Se connecter avec ChatGPT" : account ? "Reconnect this account" : "Sign in with ChatGPT";
     element("account-status").textContent = accountBusy ? "Connecting to ChatGPT…"
       : eligible ? "ChatGPT connected. Routing stays on this device."
       : account?.connected ? "This account has not granted ChatGPT plan usage. Reconnect with an eligible account."
@@ -147,21 +179,22 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
   });
   // The actual device language must be visible before recording; it is not an
   // automatic language detector. No extra preference store is needed.
-  element("language").options[0].textContent = `Device language (${navigator.language || "en-GB"})`;
+  element("language").options[0].textContent = `${french ? "Langue de l’appareil" : "Device language"} (${navigator.language || "en-GB"})`;
   element("microphone").addEventListener("click", async () => {
     if (voiceBusy || aiBusy) return;
+    providerChoiceVersion++;
     const abort = new AbortController(), owned = epoch; speechAbort = abort; voiceBusy = true; render();
     try {
       const available = await speech.status();
       if (abort.signal.aborted || owned !== epoch || !root.open) return;
       voiceMode = element("speech-service").value === "platform" ? "platform" : available.mode;
       render();
-      if (!["on_device", "platform"].includes(voiceMode)) { element("speech-status").textContent = speechText.unavailable; return; }
+      if (!["on_device", "platform"].includes(voiceMode)) { element("speech-status").textContent = speechMessages.unavailable; return; }
       const language = element("language").value || navigator.language || "en-GB";
       element("speech-status").textContent = voiceMode === "on_device" ? `Listening in ${language} on this device. Tap Done speaking when finished.` : "Android will ask before using your configured speech service. It may send audio to its provider.";
       const result = await speech.start(language, voiceMode, abort.signal);
       if (abort.signal.aborted || owned !== epoch || !root.open) return;
-      element("speech-status").textContent = speechText[result.status] ?? speechText.unavailable;
+      element("speech-status").textContent = speechMessages[result.status] ?? speechMessages.unavailable;
       if (["completed", "partial"].includes(result.status)) {
         // Append to the current editor, including edits made while listening.
         // Keep all text if the combined draft exceeds the sending limit; the
@@ -171,7 +204,7 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
         if (text.value.length > 8000) element("speech-status").textContent = "Transcription added. Shorten the text to 8,000 characters before Generate or more recording.";
         text.focus();
       }
-    } catch (error) { if (speechAbort === abort && owned === epoch && root.open) element("speech-status").textContent = error.name === "AbortError" ? speechText.cancelled : speechText.unavailable; }
+    } catch (error) { if (speechAbort === abort && owned === epoch && root.open) element("speech-status").textContent = error.name === "AbortError" ? speechMessages.cancelled : speechMessages.unavailable; }
     finally { if (speechAbort === abort) { speechAbort = null; voiceBusy = false; voiceMode = null; voiceFinishing = false; render(); } }
   });
   element("generate").addEventListener("click", async () => {
@@ -180,10 +213,11 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
     planningFinished = new Promise(resolve => { finishPlanning = resolve; });
     aiBusy = true; message(""); render(); onBusy(true);
     try {
+      const contextStarted = performance.now();
       const context = endpointContext(await getContext({ includePlaces: true, useStart: element("keep-start").checked, useEnd: element("keep-end").checked, signal: abort.signal }));
       if (owned !== epoch || !root.open || abort.signal.aborted) return;
       const output = await controller.run({ prompt: element("text").value, modelId: element("model").value, context,
-        research: element("research").checked, structured: element("structured").checked, refine: element("refine").checked }, abort.signal);
+        contextPreparationMs: performance.now() - contextStarted, research: element("research").checked, structured: element("structured").checked, refine: element("refine").checked }, abort.signal);
       if (owned !== epoch || !root.open) return;
       await onResult(output);
       successfulClose = true; root.close();

@@ -81,6 +81,13 @@ export async function runAdventureProposalHarness(){
  const transport={nativeAvailable:true,cancelOwner(){},request:async(type,fields,options)=>{nativeCalls.push({type,fields});return options.parseReply(JSON.stringify({schema_version:1,request_id:'test',type:'chatgpt_result',result:{accounts:[],selected_account:null,models:[]},error:null}))}};
  const model=createAdventureModel({transport,origin:'https://appassets.androidplatform.net'});await model.status();assert(nativeCalls[0].type==='chatgpt_status','native model adapter');
  let remoteRejected=false;try{await createAdventureModel({transport,origin:'https://untrusted.invalid'}).status()}catch(e){remoteRejected=e.code==='unavailable'}assert(remoteRejected,'untrusted origin rejected');
+ for(const code of ['cancelled','deadline','network_timeout','usage_limit','auth_expired','invalid_response','unsupported']) {
+  const failing=createAdventureModel({origin:'https://appassets.androidplatform.net',transport:{nativeAvailable:true,request:async(type,fields,options)=>options.parseReply(JSON.stringify({type:'chatgpt_result',schema_version:1,request_id:'synthetic',result:null,error:code}))}});
+  let error;try{await failing.infer({})}catch(value){error=value}
+  assert(error?.code===code,'distinct native outcomes survive the bridge');
+  if(code!=='cancelled')assert(!error.message.toLowerCase().includes('cancelled'),'deadline/network/provider failures must not claim user cancellation');
+ }
+ cases.push('deadline_timeout_user_cancel_and_provider_failures_remain_distinct');
  assert(JSON.stringify(state)===before,'no invalid proposal or grounding result corrupts current plan');cases.push('native-provider-origin-and-plan-preservation');
  return cases;
 }

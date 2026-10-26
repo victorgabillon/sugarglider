@@ -87,3 +87,16 @@ export function buildAdventureIntent(proposal, grounding, { start, end = null, h
   }, { adventure: true });
   return deepFreeze({ request, targets, bindings, exclusions });
 }
+
+// Preserve explicit route counts independently of untrusted model output. Place
+// counts ("trois lieux historiques") do not match this route-only vocabulary.
+export function requestedAdventureAlternatives(prompt) {
+  const words = { un: 1, une: 1, one: 1, deux: 2, two: 2, trois: 3, three: 3, quatre: 4, four: 4, cinq: 5, five: 5 };
+  const normalized = prompt.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  const expression = /\b(\d{1,3}|un|une|one|deux|two|trois|three|quatre|four|cinq|five)\s+(?:(?:different|differents|differentes|distinct|distincts|distinctes|separate)\s+)?(?:parcours|itineraires?|boucles?|alternatives?|options?|routes?|loops?)\b/gu;
+  const matches = [...normalized.matchAll(expression)];
+  if (!matches.length) return 3;
+  const value = words[matches.at(-1)[1]] ?? Number(matches.at(-1)[1]);
+  if (value < 1 || value > 5) throw new AdventureIntentError("adventure_alternative_count", "Choose between one and five route alternatives.");
+  return value;
+}

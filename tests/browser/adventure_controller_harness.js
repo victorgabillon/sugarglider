@@ -4,7 +4,7 @@ import { createAdventureController } from "../../src/sugarglider/web/static/adve
 import { assessAdventure, compactAdventureAssessment, adventureMeasuredImprovement } from "../../src/sugarglider/web/static/adventure_assessment.js";
 import { parseAdventureProposal } from "../../src/sugarglider/web/static/adventure_proposal.js";
 import { validateLocalWaypointRouteRequest } from "../../src/sugarglider/web/static/local_waypoint_route.js";
-import { buildAdventureIntent } from "../../src/sugarglider/web/static/adventure_intent.js";
+import { buildAdventureIntent, requestedAdventureAlternatives } from "../../src/sugarglider/web/static/adventure_intent.js";
 import { createLocalRegionData } from "../../src/sugarglider/web/static/local_region_data.js";
 import { exportCanonicalCandidate } from "../../src/sugarglider/web/static/local_gpx_export.js";
 import { syntheticAdventure } from "./adventure_proposal_harness.js";
@@ -151,7 +151,7 @@ export async function runAdventureControllerHarness() {
       outputs.push(output); cases.push("proposal_grounding_two_round_search_measured_improvement_and_gpx");
     } finally { r.controller.cancel(); r.planner.invalidate(); }
   }
-  for (const failure of ["usage_limit", "auth_expired", "network", "unsupported", "invalid_response"]) {
+  for (const failure of ["deadline", "network_timeout", "usage_limit", "auth_expired", "network", "unsupported", "invalid_response"]) {
     const r = await setup({ failure });
     try {
       const output = await r.controller.run(r.input);
@@ -310,6 +310,58 @@ export async function runAdventureControllerHarness() {
     prior.within_distance_tolerance = false; prior.target_error_m = 100; revised.target_error_m = 200;
     assert(!adventureMeasuredImprovement(prior, revised), "outside-distance error precedes measured shape and wishes");
     cases.push("distance_then_measured_loop_shape_before_soft_wishes");
+  }
+  {
+    for (const [prompt, expected] of [["Propose-moi deux parcours différents",2],["three distinct loops",3],["trois lieux historiques",3],
+      ["Une boucle de 35 km",1],["Deux parcours, finalement trois itinéraires",3],["2 routes",2],["Je veux courir en forêt",3]]) {
+      equal(requestedAdventureAlternatives(prompt),expected,"explicit route count survives natural-language interpretation");
+    }
+    const r=await setup();
+    try {
+      r.proposal.intent.alternatives=5;
+      const output=await r.controller.run({...r.input,prompt:"Propose-moi deux parcours différents",refine:false});
+      assert(output.chosen.request.candidate_count===2&&output.chosen.proposal.intent.alternatives===2,"model cannot change an explicit count");
+      assert(JSON.parse(r.calls[0].input).planning_context.requested_alternatives===2,"count is supplied before model interpretation");
+      assert(output.timings.total_ms>=0&&output.timings.grounding_ms>=0&&output.model_calls[0].timings.request_bytes===null,"sanitized observable timings, unavailable values remain null");
+      cases.push("french_english_count_default_and_model_override");
+    } finally {r.controller.cancel();r.planner.invalidate();}
+  }
+  {
+    const r=await setup();
+    try {
+      r.proposal.intent.target_distance_m=1600;
+      const output=await r.controller.run({...r.input,prompt:"Propose-moi deux parcours"});
+      assert(r.calls.length===1&&output.chosen.result.candidates.length===2,`satisfactory source-linked route set avoids a second call: ${JSON.stringify({calls:r.calls.length, assessments:output.rounds[0].assessment.assessments.map(a=>({within:a.within_distance_tolerance, distance:a.distance_m,hard:a.hard_route_constraints_satisfied})),stories:output.rounds[0].grounding.places.map(p=>[p.anecdote,p.story_status])})}`);
+      cases.push("satisfactory_routes_skip_optional_model_call");
+    } finally {r.controller.cancel();r.planner.invalidate();}
+  }
+  for (const invalid of [false,true]) {
+    const r=await setup();
+    try {
+      r.proposal.places[0].anecdote=null;
+      const infer=r.model.infer;
+      r.model.infer=async (input,signal)=>{
+        if(!r.calls.length)return infer(input,signal);
+        r.calls.push(input);
+        assert(input.output_schema.properties.stories&&!JSON.stringify(JSON.parse(input.input)).includes('"lat"'),"story call supplies only reached identities and no route geometry/coordinates");
+        return {text:JSON.stringify({stories:[{id:r.proposal.places[0].id,osm_id:invalid?"node/999":"node/1",anecdote:"Synthetic reached-place story.",sources:[{title:"Synthetic source",url:"https://example.invalid/source"}]}]}),
+          researched:true,citations:[{url:"https://example.invalid/source"}],elapsed_ms:5,usage:{input_tokens:10,output_tokens:10,total_tokens:20}};
+      };
+      r.proposal.intent.target_distance_m=1600;
+      const output=await r.controller.run({...r.input,prompt:"Propose-moi deux parcours"});
+      assert(r.calls.length===2&&output.model_calls[1].phase==="stories"&&output.rounds.length===1&&output.routing_diagnostics.budget.total_used<=8,"story enrichment cannot reroute or create another routing round");
+      if(invalid)assert(output.refinement_error&&output.chosen.grounding.places[0].anecdote===null,"wrong story identity leaves first result intact");
+      else assert(output.chosen.grounding.places[0].anecdote==="Synthetic reached-place story."&&output.chosen.grounding.places[0].story_status==="source_linked_ai_text","reached identity retains honest citation provenance");
+      const candidate=output.chosen.result.candidates.find(c=>c.reached_stops.length);
+      assert(!(await exportCanonicalCandidate(candidate).blob.text()).includes("Synthetic reached-place story"),"researched text never enters GPX");
+      if(!invalid){
+        const {encodeAdventureSnapshot,decodeAdventureSnapshot}=await import("../../src/sugarglider/web/static/adventure_snapshot_validation.js");
+        const encoded=await encodeAdventureSnapshot(output);
+        const recovered=await decodeAdventureSnapshot({...encoded,selected_id:candidate.id});
+        equal(recovered.output,output,"story research and whitelisted timings recover exactly without rerouting");
+      }
+      outputs.push(output);cases.push(invalid?"story_identity_change_rejected_without_losing_routes":"second_call_researches_reached_places_without_rerouting");
+    } finally {r.controller.cancel();r.planner.invalidate();}
   }
   equal(JSON.stringify(state), beforeState, "controller never corrupts selected/manual plan");
   return cases;

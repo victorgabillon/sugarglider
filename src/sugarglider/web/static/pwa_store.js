@@ -570,3 +570,24 @@ function cloneValue(value) {
 function storageError(error) {
   return error instanceof Error ? error : new Error("PWA storage failed.");
 }
+
+// One optional, non-sensitive preference in the existing runtime store. No
+// transcript, audio, account identity or consent receipt is persisted here.
+export async function readSpeechProviderPreference() {
+  let store;
+  try {
+    store = await openPwaStore();
+    const value = await store.get(PWA_STORES.publicRuntime, "adventure-speech-provider");
+    return value?.schema_version === 1 && ["device", "platform"].includes(value.mode) ? value.mode : null;
+  } catch { return null; } finally { try { store?.close(); } catch { /* Optional storage. */ } }
+}
+export async function writeSpeechProviderPreference(mode) {
+  if (!["device", "platform"].includes(mode)) return false;
+  let store;
+  try {
+    store = await openPwaStore();
+    if (!store.durable) return false;
+    await store.put(PWA_STORES.publicRuntime, "adventure-speech-provider", { schema_version: 1, mode });
+    return true;
+  } catch { return false; } finally { try { store?.close(); } catch { /* Optional storage. */ } }
+}

@@ -1,5 +1,6 @@
 // All geography and native replies in this suite are explicitly synthetic.
 // Production search, gateway, publication worker, Nature and GPX are exercised.
+import { distinctAdventureRouteFamilies } from "../../src/sugarglider/web/static/local_adventure_search.js";
 import { createLocalPlanner } from "../../src/sugarglider/web/static/local_planner.js";
 import { createLocalRegionData } from "../../src/sugarglider/web/static/local_region_data.js";
 import { exportCanonicalCandidate } from "../../src/sugarglider/web/static/local_gpx_export.js";
@@ -82,6 +83,11 @@ function accounting(snapshot, calls) {
 
 export async function runAdventureRoutingHarness() {
   const cases = [];
+  {
+    const base=[[0,0],[.02,0],[.02,.02],[0,.02],[0,0]],variant=[[0,0],[.02,0],[.02,.02],[.021,.02],[.02,.02],[0,.02],[0,0]],other=[[0,0],[-.02,0],[-.02,-.02],[0,-.02],[0,0]];
+    equal(distinctAdventureRouteFamilies([{candidate_id:"control",geometry:base},{candidate_id:"detour",geometry:variant},{candidate_id:"other",geometry:other}],"loop",35000),["control","other"],"a mostly shared comparison/detour pair is one geometry family, not two independent alternatives");
+    cases.push("comparison_detour_is_retained_but_not_counted_as_an_independent_loop");
+  }
   for (const loop of [false, true]) for (const profile of profiles) {
     const r = await rig({ loop, profile });
     try {

@@ -4,6 +4,11 @@ This milestone is not released or complete. The existing manual planner and
 itinerary importer remain available. No AI credentials or device installations
 are part of the development checkpoints below.
 
+The [26 October stabilization report](ai-adventure-planner-stabilization.md) and
+[focused security review](ai-adventure-security-review.md) record the follow-up
+to the real Fairphone acceptance, including distinct deadline reporting, measured
+search limits, honest comparison variants and reached-place story research.
+
 ## Architecture decisions
 
 Native Android owns ChatGPT authorization, credentials, model discovery, network

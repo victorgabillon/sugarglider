@@ -83,15 +83,14 @@ export async function groundAdventurePlaces(proposal, { session, reference, star
   };
   current();
   const bounds = identity.bounds;
-  const citationLinks = new Set(researched ? citations.map(item => citationIdentity(item.url)).filter(Boolean) : []);
+
   const results = [];
   for (const place of proposal.places) {
     current();
     const proposed = place.location.lat === null ? null : place.location;
     const base = { ...place, proposed_coordinate: proposed, semantic_coordinate: null, routing_coordinate: null,
       local_id: null, local_name: null, local_category: null, local_potability: null, match_method: null, approach: null, access_status: "unknown", status: "unresolved_location",
-      story_status: place.sources.some(source => citationLinks.has(citationIdentity(source.url))) ? "source_linked_ai_text" : "unverified_ai_text",
-      sources: place.sources.map(source => ({ ...source, retrieved: citationLinks.has(citationIdentity(source.url)) })) };
+      ...adventureStoryEvidence(place, citations, researched) };
     if (proposed && !covered(proposed, bounds)) { results.push({ ...base, status: "outside_coverage" }); continue; }
     let feature = null, method = null, ambiguous = false;
     if (place.osm_id) {
@@ -143,4 +142,11 @@ export async function groundAdventurePlaces(proposal, { session, reference, star
   }
   current();
   return deepFreeze({ region_id: reference.region_id, build_id: reference.build_id, places: results });
+}
+
+export function adventureStoryEvidence(place, citations = [], researched = false) {
+  const links = new Set(researched ? citations.map(item => citationIdentity(item.url)).filter(Boolean) : []);
+  return { story_status: place.anecdote && place.sources.some(source => links.has(citationIdentity(source.url)))
+    ? "source_linked_ai_text" : "unverified_ai_text",
+    sources: place.sources.map(({ title, url }) => ({ title, url, retrieved: links.has(citationIdentity(url)) })) };
 }

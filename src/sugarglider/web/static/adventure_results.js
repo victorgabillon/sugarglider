@@ -26,15 +26,18 @@ export function createAdventureResults({ root, candidatesRoot, onManual, onShowM
     if (!output) { displayed = null; selectedId = null; stories.replaceChildren(); storyElements.clear(); return; }
     const round = output.chosen;
     element("result-title").textContent = round.proposal.name;
-    element("result-summary").textContent = `${round.result.candidates.length} checked route option${round.result.candidates.length === 1 ? "" : "s"}. ${output.refinement_improved ? "The extra suggestion round improved measured preferences." : output.refinement_error ? "The extra model request could not finish; the first valid routes were kept." : "The best available measured results were retained."}`;
-    element("result-limitations").textContent = (round.result.candidates.length < round.request.candidate_count
-      ? "The bounded search found fewer suitable options than requested. Additional suggestions did not yield distinct, feasible routes within the search limit. " : "") + "Stories are AI text with source labels. Mapped locations and route arrival do not establish current access or historical accuracy. Asphalt, exact retracing and technical difficulty remain unknown.";
+    const distinct = round.result.search_diagnostics.details.local_planning.adventure_search?.distinct_candidate_ids;
+    const eligible = round.result.candidates.filter(candidate => candidate.diagnostics.within_tolerance && (!distinct || distinct.includes(candidate.id))).length;
+    element("result-summary").textContent = `${round.result.candidates.length} checked route option${round.result.candidates.length === 1 ? "" : "s"}; ${eligible} geometrically distinct and within your distance tolerance (target: ${round.request.candidate_count}). ${output.refinement_improved ? "The extra suggestion round improved measured preferences." : output.refinement_error ? "The extra model request could not finish; the first valid routes were kept." : "The best available measured results were retained."}`;
+    element("result-limitations").textContent = (eligible < round.request.candidate_count
+      ? "The bounded search found fewer suitable options than requested. Additional suggestions did not yield distinct, feasible routes within the search limit. " : "") + forestAdventureLimitation(round) + "Stories are AI text with source labels. Mapped locations and route arrival do not establish current access or historical accuracy. Asphalt, exact retracing and technical difficulty remain unknown.";
     for (const button of candidatesRoot.querySelectorAll("[data-candidate-id]")) {
       button.querySelectorAll(".adventure-card-summary").forEach(node => node.remove());
       const assessment = round.assessment.assessments.find(value => value.candidate_id === button.dataset.candidateId);
       if (!assessment) continue;
       const summary = root.ownerDocument.createElement("span"); summary.className = "adventure-card-summary";
-      summary.textContent = `Checked places: ${new Set(assessment.places.filter(place => place.status === "reached").map(place => place.canonical_id)).size} · Woodland ${percent(assessment.nature?.woodland)} · D+ ${metres(assessment.elevation?.ascent_m)} / D− ${metres(assessment.elevation?.descent_m)}`;
+      const variant = distinct && !distinct.includes(button.dataset.candidateId) ? "Comparison variant · " : "";
+      summary.textContent = `${variant}Checked places: ${new Set(assessment.places.filter(place => place.status === "reached").map(place => place.canonical_id)).size} · Woodland ${percent(assessment.nature?.woodland)} · Urban ${percent(assessment.nature?.urban)} · Unknown landcover ${percent(assessment.nature?.unknown_landcover)} · D+ ${metres(assessment.elevation?.ascent_m)} / D− ${metres(assessment.elevation?.descent_m)}`;
       button.append(summary);
     }
     if (displayed === output && selectedId === candidate?.id) return;
@@ -44,7 +47,11 @@ export function createAdventureResults({ root, candidatesRoot, onManual, onShowM
     if (!assessment) return;
     const unavailable = assessment.wishes.filter(wish => wish.status === "unavailable");
     if (unavailable.length) paragraph(stories, `Preferences that remain unknown: ${unavailable.map(wish => wish.metric.replaceAll("_", " ")).join(", ")}.`);
-    for (const place of round.grounding.places) {
+    const reached = assessment.places.filter(place => place.status === "reached");
+    const linked = reached.filter(place => round.grounding.places.some(record => record.id === place.id && record.anecdote && record.story_status === "source_linked_ai_text"));
+    paragraph(stories, `${reached.length} reached places; ${linked.length} with source-linked AI anecdotes. No historical claim has been independently verified.`);
+    const ordered = [...round.grounding.places].sort((a, b) => Number(reached.some(place => place.id === b.id)) - Number(reached.some(place => place.id === a.id)));
+    for (const place of ordered) {
       const outcome = assessment.places.find(value => value.id === place.id);
       const article = root.ownerDocument.createElement("article"); article.className = "adventure-story"; article.tabIndex = -1;
       stories.append(article); storyElements.set(place.id, article);
@@ -81,6 +88,10 @@ export function createAdventureResults({ root, candidatesRoot, onManual, onShowM
     paragraph(details, "Planning details", "summary");
     const elapsed = output.model_calls.reduce((total, call) => total + (call.elapsed_ms ?? 0), 0);
     paragraph(details, `ChatGPT requests: ${output.model_calls.length}. Measured response time: ${(elapsed / 1000).toFixed(1)} s. Offline route calls: ${output.routing_diagnostics.budget.total_used}/${output.routing_diagnostics.budget.total_limit}.`);
+    if (output.timings) paragraph(details, `Total planning: ${(output.timings.total_ms / 1000).toFixed(1)} s · Local grounding: ${(output.timings.grounding_ms / 1000).toFixed(2)} s · Native routing: ${(output.timings.native_routing_ms / 1000).toFixed(2)} s · Nature: ${(output.timings.nature_ms / 1000).toFixed(2)} s · Elevation: ${(output.timings.elevation_ms / 1000).toFixed(2)} s.`);
+    for (const call of output.model_calls) if (call.timings) paragraph(details, `${call.phase}: first response ${call.timings.response_headers_ms === null ? "unknown" : `${(call.timings.response_headers_ms / 1000).toFixed(1)} s`}; observed research span ${call.timings.research_span_ms === null ? "unknown" : `${(call.timings.research_span_ms / 1000).toFixed(1)} s`}.`);
+    const search = round.result.search_diagnostics.details.local_planning.adventure_search;
+    if (search) paragraph(details, `Search: ${search.evaluated_sequences} proposed sequences evaluated, ${search.validated_drafts} valid routed paths, ${search.diversity_omitted} similar lines omitted, ${search.within_tolerance_count}/${search.requested_count} returned within tolerance; ${search.distinct_route_count} geometry families and ${search.comparison_variant_count} retained comparison variants. Coordinate-segment sharing is a geometry proxy, not edge repetition or corridor equivalence. ${search.budget_finished ? "The local search budget finished." : "No more useful proposals remained."}`);
     paragraph(details, "Routes meeting your distance tolerance come first. The distance comparison route is retained and leads options in the same tolerance class because exact path repetition and backtracking are unavailable. Other options contain checked suggested places.");
   }
   function showPlace(id) {
@@ -88,4 +99,14 @@ export function createAdventureResults({ root, candidatesRoot, onManual, onShowM
     stories.hidden = false; onShowStories(); article.focus({ preventScroll: true }); article.scrollIntoView({ block: "nearest" });
   }
   return Object.freeze({ render, showPlace });
+}
+
+export function forestAdventureLimitation(round) {
+  const wish = round.proposal.wishes.find(wish => wish.metric === "woodland" && !["avoid", "minimize"].includes(wish.goal));
+  if (!wish) return "";
+  const eligible = new Set(round.result.candidates.filter(candidate => candidate.diagnostics.within_tolerance).map(candidate => candidate.id));
+  const values = round.assessment.assessments.filter(item => eligible.has(item.candidate_id)).map(item => item.nature?.woodland).filter(Number.isFinite);
+  if (!values.length) return "Woodland coverage remains unknown for routes within tolerance. The forest preference has not been established. ";
+  const best = Math.max(...values) * 100, threshold = wish.value ?? 50;
+  return best < threshold ? `No route within tolerance reached ${threshold}% mapped woodland${wish.value === null ? " (predominantly woodland)" : " as requested"}; the best found was ${best.toFixed(1)}%. Unknown landcover is not counted as forest. ` : "";
 }

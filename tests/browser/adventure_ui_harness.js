@@ -1,8 +1,9 @@
 import { createAdventureSpeech } from "../../src/sugarglider/web/static/adventure_speech.js";
 import { initializeAdventureDialog } from "../../src/sugarglider/web/static/adventure_dialog.js";
-import { createAdventureResults } from "../../src/sugarglider/web/static/adventure_results.js";
+import { createAdventureResults, forestAdventureLimitation } from "../../src/sugarglider/web/static/adventure_results.js";
 import { renderRouteChoices } from "../../src/sugarglider/web/static/route_results.js";
 import { exportCanonicalCandidate } from "../../src/sugarglider/web/static/local_gpx_export.js";
+import { readSpeechProviderPreference, writeSpeechProviderPreference, openPwaStore, PWA_STORES } from "../../src/sugarglider/web/static/pwa_store.js";
 import { setup } from "./adventure_controller_harness.js";
 const assert = (ok, message) => { if (!ok) throw Error(message); };
 async function until(check, label) {
@@ -34,6 +35,15 @@ function accounts(model, initiallyConnected = true) {
 
 export async function runAdventureUiHarness() {
   const cases = [];
+  {
+    const round={proposal:{wishes:[{metric:"woodland",goal:"maximize",value:null}]},result:{candidates:[{id:"a",diagnostics:{within_tolerance:true}}]},assessment:{assessments:[{candidate_id:"a",nature:{woodland:.37}}]}};
+    assert(forestAdventureLimitation(round).includes("37.0%"),"partial forest preference is visibly unsatisfied");
+    round.assessment.assessments[0].nature=null;
+    assert(forestAdventureLimitation(round).includes("unknown"),"missing nature cannot establish forest success");
+    round.assessment.assessments[0].nature={woodland:.6};assert(forestAdventureLimitation(round)==="","actually measured predominant forest can satisfy qualitative wording");
+    cases.push("forest_limitations_distinguish_partial_unknown_and_measured_coverage");
+  }
+
   {
     const calls = []; let finish;
     const transport = { nativeAvailable: true, cancelOwner() { finish?.(null); }, request: async type => {
@@ -107,6 +117,26 @@ export async function runAdventureUiHarness() {
       cases.push("visible_language_provider_done_append_cancel_and_text_bound");
     } finally { dialog.clear(); r.planner.invalidate(); f.element.remove(); }
   }
+  {
+    const r=await setup(),f=await frame(),prior=await readSpeechProviderPreference();let recordings=0;
+    const speech={status:async()=>({mode:"on_device"}),cancel(){},start:async()=>{recordings++;return {status:"cancelled",mode:"platform",text:null};}};
+    await writeSpeechProviderPreference("platform");
+    const dialog=initializeAdventureDialog({root:f.root,launcher:f.doc.getElementById("plan-with-ai"),planner:r.planner,getContext:async()=>r.input.context,model:accounts(r.model),speech,elevation:{clear(){}},onResult(){},onChooseStart(){},onChooseEnd(){}});
+    try {
+      await until(()=>f.byId("speech-service").value==="platform","explicit provider restored");
+      assert(recordings===0&&r.calls.length===0,"remembered provider cannot start recording or inference");
+      const store=await openPwaStore();
+      const record=await store.get(PWA_STORES.publicRuntime,"adventure-speech-provider");store.close();
+      assert(JSON.stringify(record)==='{"schema_version":1,"mode":"platform"}',"remembered choice stores only schema and provider enum");
+      f.byId("speech-service").value="";f.byId("speech-service").dispatchEvent(new Event("change"));
+      for(let i=0;i<100&&await readSpeechProviderPreference()!=="device";i++)await new Promise(resolve=>setTimeout(resolve,10));
+      assert(await readSpeechProviderPreference()==="device","explicit switch back to local is remembered");
+      cases.push("explicit_provider_preference_restores_without_recording_or_consent_bypass");
+    } finally {
+      dialog.clear();r.planner.invalidate();f.element.remove();
+      if(prior)await writeSpeechProviderPreference(prior);else {const store=await openPwaStore();await store.remove(PWA_STORES.publicRuntime,"adventure-speech-provider");store.close();}
+    }
+  }
   for (const [width, height, scale] of [[360, 800, 1], [390, 844, 1], [1280, 800, 1], [360, 640, 2]]) {
     const r = await setup(), f = await frame(width, height, scale), { byId } = f;
     let output = null, selected = null, returned = false, spoken = 0;
@@ -136,6 +166,7 @@ export async function runAdventureUiHarness() {
       assert(selected.id === interesting.id && selected.reached_stops.length > 0, "ordinary candidate selection owns the adventure route");
       assert(f.doc.querySelectorAll(".adventure-card-summary").length === output.chosen.result.candidates.length, "comparison annotations do not duplicate");
       byId("stories-open").click(); assert(!byId("stories").hidden && byId("stories").textContent.includes("AI story"), "story provenance visible");
+      assert(byId("stories").querySelector("article strong").textContent.includes("reached") && byId("stories").textContent.includes("No historical claim has been independently verified"), "reached stories lead and citation matching is not independent verification");
       assert([...byId("stories").querySelectorAll("a")].every(link => link.protocol === "https:" && link.rel.includes("noopener")), "links are safe explicit actions");
       const xml = new DOMParser().parseFromString(await exportCanonicalCandidate(selected).blob.text(), "application/xml");
       assert(xml.getElementsByTagName("trkpt").length === selected.route.geometry.length, "selected UI GPX is canonical native geometry");

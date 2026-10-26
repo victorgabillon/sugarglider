@@ -126,26 +126,34 @@ export function createLocalPlanner({ bridge, getRegionData = async () => null, w
         requireCurrent(ownedGeneration);
         // At most ten retained lines across two rounds. A repeated native line
         // reuses its expensive Nature result, including explicit unavailability.
+        const timings = { native_routing_ms: 0, nature_ms: 0, publication_ms: 0 };
         const natureResults = new Map();
         const data = sourceData ? { ...sourceData, analyzeNature(draft) {
           const key = JSON.stringify([draft.pack_id, draft.distance_m, draft.geometry]);
-          if (!natureResults.has(key)) natureResults.set(key, Promise.resolve().then(() => sourceData.analyzeNature(draft)));
+          if (!natureResults.has(key)) natureResults.set(key, Promise.resolve().then(async () => {
+            const started = performance.now();
+            try { return await sourceData.analyzeNature(draft); }
+            finally { timings.nature_ms += performance.now() - started; }
+          }));
           return natureResults.get(key);
         } } : null;
-        const context = createLocalPlanningContext({ profile, route, totalLimit: 16,
+        const context = createLocalPlanningContext({ profile, route: async input => {
+          const started = performance.now();
+          try { return await route(input); } finally { timings.native_routing_ms += performance.now() - started; }
+        }, totalLimit: 16,
           phaseLimits: { initial: 8, refinement: 8 } });
         let rounds = 0, fixedIntent = null, roundActive = null, sessionOpen = true;
         const session = Object.freeze({ reference: region.reference, data,
-          generate(rawRequest, targets) {
+          generate(rawRequest, targets, wishes = []) {
             if (!sessionOpen) return Promise.reject(new DOMException("Adventure session closed.", "AbortError"));
             if (roundActive) return Promise.reject(new LocalPlannerError("local_generation_busy"));
-            const pending = generateRound(rawRequest, targets).finally(() => { if (roundActive === pending) roundActive = null; });
+            const pending = generateRound(rawRequest, targets, wishes).finally(() => { if (roundActive === pending) roundActive = null; });
             roundActive = pending;
             return pending;
           },
-          diagnostics: () => context.snapshot(),
+          diagnostics: () => context.snapshot(), timings: () => ({ ...timings }),
         });
-        async function generateRound(rawRequest, targets) {
+        async function generateRound(rawRequest, targets, wishes) {
           requireCurrent(ownedGeneration);
           if (rounds >= 2) throw new LocalPlannerError("adventure_refinement_limit");
           const request = validateLocalWaypointRouteRequest(rawRequest, { adventure: true });
@@ -158,9 +166,11 @@ export function createLocalPlanner({ bridge, getRegionData = async () => null, w
           fixedIntent = intent;
           const phase = rounds++ === 0 ? "initial" : "refinement";
           const search = await waypoint.generateAdventure(request, { context, phase, maxCalls: 8,
-            targets, reference: region.reference, data });
+            targets, reference: region.reference, data, wishes });
           requireCurrent(ownedGeneration);
+          const publicationStarted = performance.now();
           const result = await publisher.publish(request, search, region.reference);
+          timings.publication_ms += performance.now() - publicationStarted;
           requireCurrent(ownedGeneration);
           return deepFreeze({ request, result });
         }

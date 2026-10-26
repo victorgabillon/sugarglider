@@ -33,6 +33,10 @@ export async function runAdventureSnapshotHarness() {
     } finally { inferred.controller.cancel();inferred.planner.invalidate(); }
     const output = await r.controller.run(r.input);
     const selected = output.chosen.result.candidates.at(-1), id = selected.id;
+    const legacy=structuredClone(output);delete legacy.timings;legacy.model_calls.forEach(call=>{delete call.timings;});
+    const legacyRecord=await encodeAdventureSnapshot(legacy);
+    assert(same((await decodeAdventureSnapshot({...legacyRecord,selected_id:id})).output,legacy),'existing saved adventures without new timings restore exactly');
+    cases.push('legacy_snapshot_without_metrics_restores_exactly');
     const encoded = await encodeAdventureSnapshot(output);
     assert(!encoded.payload.includes('user_request') && !encoded.payload.includes('oaiapp_'), 'No prompt or account metadata is retained');
     cases.push('exact_result_passes_shared_identity_arrival_assessment_validation');

@@ -41,19 +41,24 @@ export async function decodeAdventureSnapshot(record) {
   return { output, selected_id: record.selected_id };
 }
 async function validateOutput(output) {
-  requireValue(exact(output, outputKeys) && Array.isArray(output.rounds) && output.rounds.length >= 1 && output.rounds.length <= 2
+  requireValue(exact(output, output.timings === undefined ? outputKeys : [...outputKeys, "timings"]) && Array.isArray(output.rounds) && output.rounds.length >= 1 && output.rounds.length <= 2
     && Number.isSafeInteger(output.selected_round) && output.selected_round >= 0 && output.selected_round < output.rounds.length
     && same(output.chosen, output.rounds[output.selected_round]) && typeof output.refinement_improved === "boolean"
     && (output.refinement_error === null || /^[a-z_]{1,80}$/.test(output.refinement_error))
     && Array.isArray(output.model_calls) && output.model_calls.length >= 1 && output.model_calls.length <= 2);
   for (const call of output.model_calls) {
-    requireValue(exact(call, ["phase", "status", "usage", "elapsed_ms", "error"])
-      && ["initial", "refinement"].includes(call.phase) && ["completed", "failed"].includes(call.status)
+    requireValue(exact(call, ["phase", "status", "usage", "elapsed_ms", "error", ...(call.timings === undefined ? [] : ["timings"])])
+      && ["initial", "refinement", "stories"].includes(call.phase) && ["completed", "failed"].includes(call.status)
       && (call.usage === null || Object.entries(call.usage).every(([key, value]) =>
         ["input_tokens", "output_tokens", "total_tokens"].includes(key) && Number.isSafeInteger(value) && value >= 0))
       && (call.elapsed_ms === null || Number.isFinite(call.elapsed_ms) && call.elapsed_ms >= 0)
       && (call.error === null || /^[a-z_]{1,80}$/.test(call.error)));
   }
+  const timingKeys = ["context_preparation_ms", "input_preparation_ms", "structured_validation_ms", "grounding_ms", "routing_and_nature_ms", "elevation_ms", "refinement_ms", "native_routing_ms", "nature_ms", "publication_ms", "total_ms"];
+  const modelTimingKeys = ["response_headers_ms", "first_event_ms", "first_text_ms", "research_span_ms", "stream_ms", "request_bytes", "output_chars"];
+  if (output.timings !== undefined) requireValue(exact(output.timings, timingKeys) && Object.values(output.timings).every(value => Number.isFinite(value) && value >= 0));
+  for (const call of output.model_calls) if (call.timings !== undefined) requireValue(exact(call.timings, modelTimingKeys)
+    && Object.values(call.timings).every(value => value === null || Number.isFinite(value) && value >= 0));
   let source = null;
   for (const round of output.rounds) {
     requireValue(exact(round, ["proposal", "grounding", "request", "targets", "bindings", "exclusions", "result", "assessment", "elevations", "endpoint_resolution"]));

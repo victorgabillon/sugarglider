@@ -52,6 +52,7 @@ export async function publishLocalPlan(request, search, regionalReference = null
   const proposalPack = search.rejected_attempts?.find(item => item.code === "endpoint_review_required")?.details.pack_id;
   const endpointProposals = candidates.length ? [] : proposals.slice(0, 2).filter(item =>
     !reference || (item.pack_id ?? proposalPack) === reference.pack_id);
+  const publishedFamilies = search.adventure_diagnostics?.distinct_candidate_ids.map(id => sourceIds.get(id)).filter(id => candidates.some(candidate => candidate.id === id)) ?? [];
   diagnostics.details.local_planning = {
     endpoint_proposals: endpointProposals,
     engine: "valhalla-mobile", pack_id: search.pack_id,
@@ -66,6 +67,10 @@ export async function publishLocalPlan(request, search, regionalReference = null
     regional_data: search.regional_data ?? null,
     poi_outcomes: search.poi_outcomes ?? [],
     distinctness: "routed_geometry_only", exact_repetition_available: false,
+    ...(adventure ? { adventure_search: search.adventure_diagnostics ? { ...search.adventure_diagnostics,
+      distinct_candidate_ids: publishedFamilies, distinct_route_count: publishedFamilies.length,
+      comparison_variant_count: candidates.length - publishedFamilies.length,
+      within_tolerance_count: candidates.filter(candidate => candidate.diagnostics.within_tolerance).length } : null } : {}),
   };
   if (regionalVersion) diagnostics.details.local_planning.regional_version = regionalVersion;
   return deepFreeze({ schema_version: 1, kind: request.kind, topology: request.topology,
