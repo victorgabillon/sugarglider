@@ -27,7 +27,11 @@ internal object ApplicationLanguage {
     fun context(context: Context): Context {
         val configuration = Configuration(context.resources.configuration)
         configuration.setLocale(Locale.forLanguageTag(current(context)))
-        return ContextThemeWrapper(context.createConfigurationContext(configuration), context.theme)
+        // Keep the Activity as the base so dialogs inherit its window token.
+        // A standalone configuration context loses that Activity window manager.
+        return ContextThemeWrapper(context, context.theme).apply {
+            applyOverrideConfiguration(configuration)
+        }
     }
 
     fun text(context: Context, id: Int, vararg args: Any): String = context(context).getString(id, *args)
