@@ -1,6 +1,6 @@
 import { measureEndpointAdjustments, endpointAdjustmentFailure, LOOP_CLOSURE_M, exceedsSnapLimit } from "./endpoint_snapping.js";
 import { UNKNOWN_DETAIL_ANALYSIS } from "./local_analysis_templates.js";
-import { publishLocalNature, publishLocalStops } from "./local_candidate_enrichment.js";
+import { publishLocalNature, publishLocalStops, publishLocalWaypointStops } from "./local_candidate_enrichment.js";
 import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
 import { canonicalTraversal, haversineDistance, localCandidateSignature, locateOnRoutedGeometry, routedGeometryDistance } from "./local_plan_geometry.js";
 
@@ -15,7 +15,6 @@ export class LocalCandidateEvaluationError extends Error {
 // Complete native lines enter the shared evaluator. It builds an unranked
 // canonical candidate; only the portfolio may assign public rank and roles.
 export async function evaluateLocalCandidateDraft(request, draft) {
-  const profile = PUBLIC_PROFILE_METADATA[request.routing_profile];
   requireCandidate(Object.hasOwn(PUBLIC_PROFILE_METADATA, request.routing_profile)
     && draft.profile === request.routing_profile && draft.engine === "valhalla-mobile"
     && typeof draft.pack_id === "string" && draft.pack_id.length > 0, "local_candidate_identity_mismatch");
@@ -52,19 +51,10 @@ export async function evaluateLocalCandidateDraft(request, draft) {
     || distance <= objective.maximum_m, "maximum_distance_exceeded");
   const geometryDistance = routedGeometryDistance(draft.geometry);
   requireCandidate(Number.isFinite(geometryDistance) && geometryDistance > 0, "invalid_local_candidate_geometry");
-  const analysis = structuredClone(UNKNOWN_DETAIL_ANALYSIS[profile.activity_kind]);
-  analysis.route_distance_m = distance;
-  analysis.geometry_distance_m = geometryDistance;
-  analysis.distance_scale_factor = distance / geometryDistance;
-  analysis.unknown_surface.distance_m = distance;
-  analysis.spurs.warnings = ["spur_analysis_unavailable"];
-  requireCandidate(request.kind === "waypoint_route"
-    ? request.waypoints.every((waypoint) => waypoint.constraint_strength === "exact")
-    : !request.requested_stops.length, "local_requested_stop_publication_unavailable");
+  requireCandidate(request.kind === "waypoint_route" || !request.requested_stops.length, "local_requested_stop_publication_unavailable");
   const { reached: reachedStops, approximated: approximatedStops, dropped: droppedStops } =
-    request.kind === "auto_tour" ? publishLocalStops(request, draft) : { reached: [], approximated: [], dropped: [] };
-  analysis.nature = publishLocalNature(draft);
-  analysis.warnings = [...new Set([...analysis.warnings, ...(draft.nature_analysis?.warnings ?? [])])].sort();
+    request.kind === "auto_tour" ? publishLocalStops(request, draft) : publishLocalWaypointStops(request, draft);
+  const analysis = localCandidateAnalysis(request.routing_profile, distance, geometryDistance, publishLocalNature(draft), draft.nature_analysis?.warnings ?? []);
   const route = {
     name: request.name, routing_profile: request.routing_profile,
     summary: { distance_m: distance, duration_ms: durationMs, ascend_m: null, descend_m: null,
@@ -90,11 +80,7 @@ export async function evaluateLocalCandidateDraft(request, draft) {
     reason: "The route uses the graph-derived endpoint returned for the selected activity.",
     profile: request.routing_profile, suggestion: "Review the adjustment, move your point, or explicitly use the routed point and generate again.",
   });
-  const traversal = canonicalTraversal(request, route.geometry, reachedStops, approximatedStops);
-  for (const item of adjustments.filter(item => item.policy === "near")) {
-    const anchor = traversal.anchors.find(anchor => anchor.id === `endpoint/${item.role}`);
-    if (anchor) { anchor.constraint_strength = "approach"; anchor.outcome = item.status === "adjusted" ? "approximated" : "reached"; }
-  }
+  const traversal = localCandidateTraversal(request, route.geometry, reachedStops, approximatedStops, adjustments);
   const unmet = [];
   if (request.preferences.path_selection === "low_overlap") unmet.push(
     "Exact edge repetition is unavailable, so the low-overlap preference could not be evaluated.");
@@ -110,9 +96,13 @@ export async function evaluateLocalCandidateDraft(request, draft) {
   const id = await localCandidateSignature(route.geometry, request.routing_profile, request.topology);
   const requestedOrder = request.kind === "waypoint_route" ? request.waypoints.map((point) => point.id) : [];
   const actualOrder = draft.actual_waypoint_order ?? requestedOrder;
-  requireCandidate(actualOrder.length === requestedOrder.length && new Set(actualOrder).size === requestedOrder.length
-    && actualOrder.every((value) => requestedOrder.includes(value)), "invalid_local_waypoint_order");
-  const requiredVisits = request.kind === "waypoint_route" ? actualOrder.map((value) => {
+  const exactOrder = exact.map(point => point.id), visitedHard = actualOrder.filter(id => exactOrder.includes(id));
+  if (request.kind === "waypoint_route") requireCandidate(new Set(actualOrder).size === actualOrder.length
+    && actualOrder.every(value => requestedOrder.includes(value))
+    && visitedHard.length === exactOrder.length
+    && (request.waypoint_order !== "fixed" || JSON.stringify(visitedHard) === JSON.stringify(exactOrder))
+    && reachedStops.every(stop => actualOrder.includes(stop.id)), "invalid_local_waypoint_order");
+  const requiredVisits = request.kind === "waypoint_route" ? visitedHard.map((value) => {
     const index = requestedOrder.indexOf(value), point = request.waypoints[index];
     return { original_index: index, coordinate: { ...point.coordinate, name: point.name } };
   }) : [{ original_index: 0, coordinate: request.start }];
@@ -137,12 +127,36 @@ export async function evaluateLocalCandidateDraft(request, draft) {
         waypoint_order: draft.actual_waypoint_order ?? [], original_waypoint_indices: draft.original_waypoint_indices ?? [],
         loop_geometry: draft.geometry_metrics ?? null,
         poi_outcomes: draft.poi_outcomes ?? [],
-        nature: draft.nature_analysis ? { identity: draft.nature_analysis.identity,
-          method: draft.nature_analysis.method, operation_count: draft.nature_analysis.operation_count,
+        nature: draft.nature_analysis ? { identity: draft.nature_analysis.identity ?? null,
+          method: draft.nature_analysis.method ?? null, operation_count: draft.nature_analysis.operation_count,
           operation_budget: draft.nature_analysis.operation_budget } : null,
         path_details_available: false, exact_repetition_available: false,
         score_model: "local_target_distance_v1" } } },
   });
+}
+
+// The shared unknown-detail projection is also the stored-result trust boundary.
+// Reloading cannot turn absent native path details into observed measurements.
+export function localCandidateAnalysis(profileId, distance, geometryDistance, nature, warnings) {
+  const analysis = structuredClone(UNKNOWN_DETAIL_ANALYSIS[PUBLIC_PROFILE_METADATA[profileId].activity_kind]);
+  analysis.route_distance_m = distance;
+  analysis.geometry_distance_m = geometryDistance;
+  analysis.distance_scale_factor = distance / geometryDistance;
+  analysis.unknown_surface.distance_m = distance;
+  analysis.spurs.warnings = ["spur_analysis_unavailable"];
+  analysis.nature = nature;
+  analysis.warnings = [...new Set([...analysis.warnings, ...warnings])].sort();
+  return analysis;
+}
+
+// Shared canonical traversal for publication and exact stored-result validation.
+export function localCandidateTraversal(request, geometry, reachedStops, approximatedStops, adjustments) {
+  const traversal = canonicalTraversal(request, geometry, reachedStops, approximatedStops);
+  for (const item of adjustments.filter(item => item.policy === "near")) {
+    const anchor = traversal.anchors.find(anchor => anchor.id === `endpoint/${item.role}`);
+    if (anchor) { anchor.constraint_strength = "approach"; anchor.outcome = item.status === "adjusted" ? "approximated" : "reached"; }
+  }
+  return traversal;
 }
 
 export function deepFreeze(value) {

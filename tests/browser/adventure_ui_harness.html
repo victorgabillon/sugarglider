@@ -1,0 +1,7 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Synthetic adventure UI</title><pre>running</pre>
+<script type="module">
+import { runAdventureUiHarness } from './adventure_ui_harness.js';
+const result = document.querySelector('pre');
+try { result.textContent = JSON.stringify(await runAdventureUiHarness()); result.dataset.status = 'passed'; }
+catch (error) { result.textContent = error.stack; result.dataset.status = 'failed'; }
+</script></html>

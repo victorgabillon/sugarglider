@@ -62,6 +62,9 @@ const LOCAL_ROUTE_CASING_LAYER = "local-routing-experiment-casing";
 const LOCAL_ROUTE_LAYER = "local-routing-experiment-line";
 const LOCAL_AUTO_TOUR_PREFIX = "local-auto-tour-experiment-";
 const LOCAL_WAYPOINT_ROUTE_PREFIX = "local-waypoint-route-experiment-";
+const ADVENTURE_SOURCE = "adventure-suggested-places";
+const ADVENTURE_MARKERS = "adventure-suggested-markers";
+const ADVENTURE_LABELS = "adventure-suggested-labels";
 const OUTING_LIVE_POSITION_SOURCE = "outing-live-position-current";
 const OUTING_LIVE_ACCURACY_SOURCE = "outing-live-accuracy-current";
 const OUTING_LIVE_ACCURACY_FILL_LAYER = "outing-live-accuracy-fill";
@@ -171,6 +174,8 @@ let spurPopup = null;
 let outingLiveParticipantSelectHandler = null;
 let plannerLocationPositionCount = 0;
 let plannerLocationAccuracyCount = 0;
+let adventurePlaceHandler = null;
+let adventurePlaceIds = new Set();
 
 export function initialMapStyle(config, bootstrap = offlineMapBootstrapForConfig(config)) {
   const offline = Boolean(config.offline_mode);
@@ -254,6 +259,11 @@ export function initializeMap(config, handlers) {
     });
   }
   map.on("click", (event) => {
+    const adventureLayers = [ADVENTURE_MARKERS, ADVENTURE_LABELS].filter(id => map.getLayer(id));
+    const adventure = adventureLayers.length ? map.queryRenderedFeatures(event.point, { layers: adventureLayers })[0] : null;
+    if (adventure && adventurePlaceIds.has(adventure.properties?.place_id)) {
+      adventurePlaceHandler?.(adventure.properties.place_id); return;
+    }
     const liveLayers = [
       OUTING_LIVE_POSITION_SELECTED_LAYER,
       OUTING_LIVE_POSITION_LABEL_LAYER,
@@ -389,6 +399,7 @@ function resetMapInstance() {
   waypointMarkers = [];
   plannerLocationPositionCount = 0;
   plannerLocationAccuracyCount = 0;
+  adventurePlaceHandler = null; adventurePlaceIds = new Set();
   removePoiPopup();
   requestedPlacePopup?.remove();
   spurPopup?.remove();
@@ -2316,6 +2327,7 @@ export function renderVisualization(collection, showNature = false) {
 }
 
 export function clearRoutes() {
+  renderAdventurePlaces(null, null);
   renderEndpointAdjustmentMap([]);
   clearElevationMapPosition();
   if (!ready) return;
@@ -2332,6 +2344,37 @@ export function clearRoutes() {
   clearMarkers(optionalMarkers);
   clearLocalExperimentalRoute();
   clearLocalWaypointRouteCandidates();
+}
+
+// Neutral circles distinguish proposed places from required/start mascot pins.
+// A point stays at its semantic/proposed position; no invented line connects it
+// to the route. Only validated outcomes receive the reached styling.
+export function renderAdventurePlaces(round, candidateId, onPlace = null) {
+  adventurePlaceHandler = onPlace;
+  adventurePlaceIds = new Set();
+  if (!ready) return;
+  if (!round) {
+    removeLayer(ADVENTURE_LABELS); removeLayer(ADVENTURE_MARKERS); removeSource(ADVENTURE_SOURCE); return;
+  }
+  const outcomes = round.assessment.assessments.find(item => item.candidate_id === candidateId)?.places ?? [];
+  const features = round.grounding.places.flatMap(place => {
+    const coordinate = place.semantic_coordinate ?? place.proposed_coordinate;
+    if (!coordinate || !Number.isFinite(coordinate.lat) || !Number.isFinite(coordinate.lon)) return [];
+    adventurePlaceIds.add(place.id);
+    return [{ type: "Feature", id: place.id, geometry: { type: "Point", coordinates: [coordinate.lon, coordinate.lat] },
+      properties: { place_id: place.id, name: place.local_name ?? place.location.name, reached: outcomes.find(item => item.id === place.id)?.status === "reached" } }];
+  });
+  const collection = { type: "FeatureCollection", features };
+  if (map.getSource(ADVENTURE_SOURCE)) map.getSource(ADVENTURE_SOURCE).setData(collection);
+  else map.addSource(ADVENTURE_SOURCE, { type: "geojson", data: collection });
+  if (!map.getLayer(ADVENTURE_MARKERS)) map.addLayer({ id: ADVENTURE_MARKERS, type: "circle", source: ADVENTURE_SOURCE,
+    paint: { "circle-radius": ["case", ["get", "reached"], 7, 5], "circle-color": ["case", ["get", "reached"], "#376b43", "#787b73"],
+      "circle-stroke-color": "#fcfdf9", "circle-stroke-width": 2 } });
+  if (!map.getLayer(ADVENTURE_LABELS)) map.addLayer({ id: ADVENTURE_LABELS, type: "symbol", source: ADVENTURE_SOURCE,
+    layout: { "text-field": ["get", "name"], "text-font": ["Open Sans Semibold"], "text-size": 12,
+      "text-offset": [0, 1], "text-anchor": "top", "text-allow-overlap": false },
+    paint: { "text-color": "#263d2e", "text-halo-color": "#fcfdf9", "text-halo-width": 1.5 } });
+  moveRequiredLabelsToTop(); positionDirectionLayer();
 }
 
 // Chart inspection updates only this one marker. It never renders route layers

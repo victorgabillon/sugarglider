@@ -135,7 +135,27 @@ export function validateLocalAutoTourRequest(value) {
 }
 
 export function generateLocalAutoTourSkeletons(rawRequest) {
-  const request = validateLocalAutoTourRequest(rawRequest);
+  return buildSkeletonProposals(validateLocalAutoTourRequest(rawRequest));
+}
+
+// Reuse the same bounded geometric proposal families for complete adventure routes.
+// This helper supplies coordinates only; native routing remains authoritative.
+export function generateAdventureControlSkeletons(request, correctionFactor = 1) {
+  if (!validCoordinate({ lat: request.start.lat, lon: request.start.lon }) || Math.abs(request.start.lat) > 85
+    || !boundedFinite(request.distance_objective.target_m, 1000, 200000)) throw new LocalAutoTourValidationError("invalid_adventure_controls");
+  if (!boundedFinite(correctionFactor, MIN_CORRECTION_FACTOR, MAX_CORRECTION_FACTOR)) {
+    throw new LocalAutoTourValidationError("invalid_scale_correction");
+  }
+  const skeletons = buildSkeletonProposals({ start: { lat: request.start.lat, lon: request.start.lon },
+    target_distance_m: request.distance_objective.target_m, seed: request.seed, direction_preference: "any" });
+  if (correctionFactor === 1) return skeletons;
+  return deepFreeze(skeletons.map(skeleton => makeSkeleton({ request: skeleton.request,
+    familyId: skeleton.family, heading: skeleton.heading_degrees, direction: skeleton.direction,
+    offsets: skeleton.control_offsets_m.map(offset => offset.map(value => value * correctionFactor)),
+    correctionStep: 1, correctionFactor })));
+}
+
+function buildSkeletonProposals(request) {
   const directions = request.direction_preference === "any"
     ? ROUTED_DIRECTIONS
     : [request.direction_preference];
@@ -910,7 +930,7 @@ function geometryIdentity(geometry) {
   return hashText(forwardText < reverseText ? forwardText : reverseText);
 }
 
-function geometryDiversityDistanceM(left, right) {
+export function geometryDiversityDistanceM(left, right) {
   const leftSamples = resampleMetricPolyline(projectGeometry(left), DIVERSITY_SAMPLE_COUNT);
   const rightSamples = resampleMetricPolyline(projectGeometry(right), DIVERSITY_SAMPLE_COUNT);
   const reversed = [...rightSamples].reverse();

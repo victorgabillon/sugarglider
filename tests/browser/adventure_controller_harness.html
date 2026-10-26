@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Synthetic adventure controller</title>
+<pre>running</pre><script type="module">
+import { runAdventureControllerHarness } from './adventure_controller_harness.js';
+const result = document.querySelector('pre');
+try { result.textContent = JSON.stringify(await runAdventureControllerHarness()); result.dataset.status = 'passed'; }
+catch (error) { result.textContent = error.stack; result.dataset.status = 'failed'; }
+</script></html>

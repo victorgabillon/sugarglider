@@ -51,6 +51,10 @@ try{
  const scoped=(manifest,directory)=>createVersionedRegionComponents({manifest,directory,fetchResource:async url=>new Response(download.files.get(new URL(url).pathname.slice(1))),pageLocation:location});
  await versions.withStagedVersion(ticket,async({manifest,directory})=>{const components=await scoped(manifest,directory);await components.installMap(location.origin+'/manifest.json');await components.installIndexes(location.origin+'/manifest.json')});
  await versions.activate(ticket,{verifyComponent:async(kind,manifest,directory)=>kind==='routing'?true:kind==='map'?(await scoped(manifest,directory)).verifyMap():(await scoped(manifest,directory)).verifyIndexes()});
+ const fullDirectory=await versions.committedDirectory(download.manifest.region_id,download.manifest.build_id);
+ const fullSession=await worker.loadVersion(download.manifest,fullDirectory);
+ const fullRows=await fullSession.searchPlaceNames(feature.display_name);
+ assert(fullRows.identity.build_id===download.manifest.build_id&&fullRows.results.some(row=>row.name===feature.display_name),'full planning session serves name search without a prior lightweight load');cases.push('fresh_full_region_worker_serves_name_queries');
  const query=createLocalPlaceNameSearch({versions,selectedRegionId:()=>download.manifest.region_id,regionClient:{loadVersion:(...args)=>worker.loadPlacesVersion(...args)}});
  const realRows=await query(feature.display_name);assert(realRows.results.length,'worker name query');cases.push('real_opfs_worker_lease_name_search');
  const directory=await versions.committedDirectory(download.manifest.region_id,download.manifest.build_id),components=await directory.getDirectoryHandle('sugarglider-region-components'),region=await components.getDirectoryHandle(download.manifest.region_id),version=await region.getDirectoryHandle(download.manifest.build_id),nature=await version.getDirectoryHandle('nature'),file=await nature.getFileHandle('index.json.gz');const bytes=new Uint8Array(await(await file.getFile()).arrayBuffer());bytes[bytes.length-1]^=1;const writable=await file.createWritable();await writable.write(bytes);await writable.close();

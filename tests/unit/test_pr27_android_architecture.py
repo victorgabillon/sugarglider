@@ -36,6 +36,7 @@ def test_local_only_manifest_retains_only_planner_permissions() -> None:
         "android.permission.INTERNET",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO",
     }
     application = root.find("application")
     assert application is not None

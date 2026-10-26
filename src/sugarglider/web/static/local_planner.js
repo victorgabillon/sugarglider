@@ -9,6 +9,7 @@ import { createLocalPlanPublisher } from "./local_plan_client.js";
 import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
 import { deepFreeze } from "./local_candidate_evaluator.js";
 import { RegionalDataError } from "./regional_manifest.js";
+import { createLocalPlanningContext } from "./local_planning_context.js";
 
 export class LocalPlannerError extends Error {
   constructor(code) {
@@ -64,7 +65,7 @@ export function createLocalPlanner({ bridge, getRegionData = async () => null, w
       modeRequest = request.kind === "waypoint_route" ? validateLocalWaypointRouteRequest(request)
         : validateLocalAutoTourPlanRequest(request);
     } catch (error) { return Promise.reject(error instanceof LocalPlannerError ? error
-      : new LocalPlannerError(/^[a-z_]{1,80}$/.test(error.code) ? error.code : "invalid_local_plan_request")); }
+      : new LocalPlannerError(typeof error.code === "string" && /^[a-z_]{1,80}$/.test(error.code) ? error.code : "invalid_local_plan_request")); }
     const identity = JSON.stringify(request);
     if (active) return active.identity === identity && active.generation === generation
       ? active.promise : Promise.reject(new LocalPlannerError("local_generation_busy"));
@@ -100,6 +101,98 @@ export function createLocalPlanner({ bridge, getRegionData = async () => null, w
       } finally { if (requestRegion === region) requestRegion = null; }
     });
   }
+  // A complete adventure owns one region lease, cache and 16-call budget across
+  // initial search and at most one revision. The caller may research/ground places
+  // inside this lease; it never receives the raw native routing adapter.
+  function planAdventure(profile, run, signal) {
+    if (signal?.aborted) return Promise.reject(new DOMException("Planning cancelled.", "AbortError"));
+    if (active) return Promise.reject(new LocalPlannerError("local_generation_busy"));
+    if (!Object.hasOwn(PUBLIC_PROFILE_METADATA, profile) || typeof run !== "function") {
+      return Promise.reject(new LocalPlannerError("invalid_local_plan_request"));
+    }
+    const ownedGeneration = ++generation;
+    const abort = () => { if (generation === ownedGeneration) invalidate(); };
+    signal?.addEventListener("abort", abort, { once: true });
+    const promise = enterRegion(async region => {
+      requireCurrent(ownedGeneration);
+      requestRegion = region;
+      try {
+        const capabilities = region.capabilities ?? await region.bridge.capabilities();
+        requireCurrent(ownedGeneration);
+        if (!capabilities?.enabled) throw new LocalPlannerError("local_routing_unavailable");
+        if (!region.reference || !capabilities.installed_pack_count) throw new LocalPlannerError("routing_pack_unavailable");
+        if (!capabilities.supported_profile_ids.includes(profile)) throw new LocalPlannerError("unsupported_profile");
+        const sourceData = await region.getRegionData(region.reference.pack_id);
+        requireCurrent(ownedGeneration);
+        // Strong woodland requests may measure every complete validated native
+        // line (at most sixteen backend calls). Other requests enrich finalists.
+        // Repeated lines reuse Nature, including explicit unavailability.
+        const timings = { native_routing_ms: 0, nature_ms: 0, publication_ms: 0 };
+        const natureResults = new Map();
+        const data = sourceData ? { ...sourceData, analyzeNature(draft) {
+          const key = JSON.stringify([draft.pack_id, draft.distance_m, draft.geometry]);
+          if (!natureResults.has(key)) natureResults.set(key, Promise.resolve().then(async () => {
+            const started = performance.now();
+            try { return await sourceData.analyzeNature(draft); }
+            finally { timings.nature_ms += performance.now() - started; }
+          }));
+          return natureResults.get(key);
+        } } : null;
+        const context = createLocalPlanningContext({ profile, route: async input => {
+          const started = performance.now();
+          try { return await route(input); } finally { timings.native_routing_ms += performance.now() - started; }
+        }, totalLimit: 16,
+          phaseLimits: { initial: 8, refinement: 8 } });
+        let rounds = 0, fixedIntent = null, roundActive = null, sessionOpen = true;
+        const session = Object.freeze({ reference: region.reference, data,
+          generate(rawRequest, targets, wishes = []) {
+            if (!sessionOpen) return Promise.reject(new DOMException("Adventure session closed.", "AbortError"));
+            if (roundActive) return Promise.reject(new LocalPlannerError("local_generation_busy"));
+            const pending = generateRound(rawRequest, targets, wishes).finally(() => { if (roundActive === pending) roundActive = null; });
+            roundActive = pending;
+            return pending;
+          },
+          diagnostics: () => context.snapshot(), timings: () => ({ ...timings }),
+        });
+        async function generateRound(rawRequest, targets, wishes) {
+          requireCurrent(ownedGeneration);
+          if (rounds >= 2) throw new LocalPlannerError("adventure_refinement_limit");
+          const request = validateLocalWaypointRouteRequest(rawRequest, { adventure: true });
+          const intent = JSON.stringify({ profile: request.routing_profile, start: request.start, end: request.end,
+            topology: request.topology, objective: request.distance_objective, order: request.waypoint_order,
+            hard: request.waypoints.filter(point => point.constraint_strength === "exact") });
+          if (request.routing_profile !== profile || fixedIntent !== null && intent !== fixedIntent) {
+            throw new LocalPlannerError("adventure_hard_intent_changed");
+          }
+          fixedIntent = intent;
+          const phase = rounds++ === 0 ? "initial" : "refinement";
+          const search = await waypoint.generateAdventure(request, { context, phase, maxCalls: 8,
+            targets, reference: region.reference, data, wishes });
+          requireCurrent(ownedGeneration);
+          const publicationStarted = performance.now();
+          const result = await publisher.publish(request, search, region.reference);
+          timings.publication_ms += performance.now() - publicationStarted;
+          requireCurrent(ownedGeneration);
+          return deepFreeze({ request, result });
+        }
+        try {
+          const result = await run(session);
+          requireCurrent(ownedGeneration);
+          return result;
+        } finally {
+          sessionOpen = false;
+          if (roundActive) { waypoint.invalidate(); await roundActive.catch(() => {}); }
+          natureResults.clear();
+        }
+      } finally { if (requestRegion === region) requestRegion = null; }
+    }).catch(error => { throw error instanceof RegionalDataError ? new LocalPlannerError(error.code) : error; })
+      .finally(() => {
+        signal?.removeEventListener("abort", abort);
+        if (active?.generation === ownedGeneration) active = null;
+      });
+    active = { identity: null, generation: ownedGeneration, promise };
+    return promise;
+  }
   function requireCurrent(ownedGeneration) {
     if (ownedGeneration !== generation) throw new DOMException("Planning cancelled.", "AbortError");
   }
@@ -110,7 +203,7 @@ export function createLocalPlanner({ bridge, getRegionData = async () => null, w
     // page operation must not authorize an overlapping native restart.
   }
   lifecycleTarget?.addEventListener?.("pagehide", invalidate);
-  return Object.freeze({ generate, invalidate });
+  return Object.freeze({ generate, planAdventure, invalidate });
 }
 
 export function validateLocalAutoTourPlanRequest(request) {

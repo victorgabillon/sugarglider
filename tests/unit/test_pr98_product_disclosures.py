@@ -88,6 +88,7 @@ def test_new_contract_preserves_packaged_capabilities_and_strict_uid_assertion()
         "android.permission.INTERNET",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO",
     }
     assert not manifest.findall(".//service")
     config = json.loads(

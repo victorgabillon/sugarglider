@@ -49,11 +49,11 @@ submitted yes/no response. Do not export this matrix as a completed Console form
 | Device/app identifiers, diagnostics and crashes | Not intentionally uploaded by first-party planning; Android/WebView may have provider behavior outside page-resource observation | **REVIEW REQUIRED** using provider-specific facts. Missing Advertising ID permission does not prove absence of every identifier or diagnostic flow. |
 | Social membership / live location | Fixed `V1ReleasePolicy` rejects sharing origins/messages; no sharing service, deep link, notification or background-location permission in the manifest; bundled config disables social | Proposed: no collection through enabled social/live functionality. Retained source modules are not a declaration of enabled features. Future activation requires a new review. |
 | Encryption in transit | Production app blocks cleartext; installer and explicit IGN client use HTTPS without redirects/credentials; local intercepted origin has no remote fallback | Proposed supported first-party transports are encrypted. Whole-app/global answer remains a review item for provider flows and user-selected transfers. TLS does not establish end-to-end encryption or anonymity. |
-| Storage/deletion/account management | Private app storage and OPFS; region removal; app backup/transfer excluded; Android app-data removal; no social account; exports remain destination-controlled | Document exact controls. No provider/server deletion API or retention promise is established for hosting/platform recipients. No enabled app account exists; do not invent account-deletion functionality. |
+| Storage/deletion/account management | Private app storage and OPFS; region removal; app backup/transfer excluded; Android app-data removal; no social account; exports remain destination-controlled | Document exact controls. No provider/server deletion API or retention promise is established for hosting/platform recipients. No Sugarglider social account exists. Optional ChatGPT connection, local sign out and attempted remote revocation now require the additional review below; do not imply deletion of the external ChatGPT account. |
 
 ## Package/source checks
 
-Normal Debug/Release retain Internet, coarse and fine location; there is no
+Normal Debug/Release retain Internet, coarse/fine location and explicit speech-input microphone permission; there is no
 background-location, location-FGS, notification, advertising-ID or broad-storage
 permission. Android Save uses a user-selected document URI. Source anchors:
 `MainActivity`, `V1ReleasePolicy`, `BundledShellPolicy`, `NativeRuntime`,
@@ -95,3 +95,17 @@ not be confused with that live page. `code4-privacy-policy-proposed.md` and
 `pr44-privacy-data-safety.md` remain historical proposals. This PR adds a separate
 [V2 draft](pr98-privacy-policy-draft.md); it neither rewrites those records nor
 copies a new page into the deployment directory.
+
+## AI Adventure Planner delta — REVIEW REQUIRED, NOT SUBMITTED
+
+| Added flow | Verified implementation | Remaining publisher/provider review |
+| --- | --- | --- |
+| Optional ChatGPT authorization | System-browser OAuth; per-install registration/host UUID; encrypted native credentials; narrow public account status in the UI; no OAuth tokens in browser storage or adventure snapshots | Review account identity/identifier processing by OpenAI, supported account terms, retention, purposes and roles. No live account or Android callback acceptance has yet been demonstrated. Local Sign out is not external account deletion. |
+| Description and chosen planning locations | Explicit Generate submits description/edited transcript, chosen Start/End, exact anchors, activity and regional bounds to OpenAI; optional second request submits a bounded strategy/measured summary, not raw geometry or the private graph/index | Review submitted text and location-related data categories, optionality, functionality purposes, disclosure and provider processing. Do not declare universally no off-device data. No declaration is accepted on the publisher’s behalf. |
+| Optional research | Enabled only by the disclosed research choice; selected account/model may receive hosted web-search tools; capped tool work and two total model requests | Verify actual eligible-account capability and relevant provider/subprocessor behavior. General API documentation does not prove each model/account has tools. No live research evidence exists yet. |
+| Speech | RECORD_AUDIO only for explicit on-device recognition when available; separate disclosed platform recognition fallback can process audio online; transcript is editable before Generate | Verify physical recognizer/provider behavior and review applicable audio/text declaration treatment. An offline preference is not proof that the provider keeps audio local. No raw audio file or first-party model audio upload is implemented. |
+| Latest adventure recovery | One bounded local result/selection/stories/source record in existing optional storage; no raw prompt input field, native OAuth credential, ChatGPT account/email metadata or live-position history; model text may repeat user-supplied details; explicit Reopen, Forget and existing clear controls | Include these user-chosen places and model interpretation in local-storage disclosure. Exported copies/provider retention are separate. Optional browser storage is not a durability guarantee. |
+
+The pre-existing WebView/platform unknowns remain unresolved. These additions do
+not authorize Google Play answers, a new public policy, an effective date or a
+release. The current public policy URL and availability remain unchanged.

@@ -32,7 +32,7 @@ function location(value, label, stop = false) {
 }
 // Bound nesting before JSON.parse, ignoring braces inside strings. No recursive walk
 // over untrusted input, prose extraction, repair, geocoding or remote dependencies.
-function boundDepth(source) {
+function boundDepth(source, maximum = 4) {
   let depth = 0, quoted = false, escaped = false;
   for (const character of source) {
     if (quoted) {
@@ -41,7 +41,7 @@ function boundDepth(source) {
       else if (character === '"') quoted = false;
     } else if (character === '"') quoted = true;
     else if (character === "{" || character === "[") {
-      depth += 1; requireValue(depth <= 4, "Itinerary JSON is too deeply nested (maximum depth 4).");
+      depth += 1; requireValue(depth <= maximum, `JSON is too deeply nested (maximum depth ${maximum}).`);
     } else if (character === "}" || character === "]") depth -= 1;
   }
 }
@@ -128,3 +128,6 @@ Null coordinates in the template are placeholders, never valid locations. Return
 Template:
 ${JSON.stringify(template, null, 2)}`;
 }
+
+// Shared strict input primitives for assistant proposals; neither parser mutates planner state.
+export { fields as requireDraftFields, text as draftText, number as draftNumber, boundDepth as boundDraftDepth };

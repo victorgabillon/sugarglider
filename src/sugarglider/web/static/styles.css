@@ -1127,3 +1127,26 @@ body.outing-mode .route-dock { display: none; }
 .endpoint-adjustment-marker.routed { border-radius: 3px; background: #825719; color: white; }
 .route-quick-editor label { font-size: .8rem; min-width: 0; }
 .route-quick-editor select { max-width: 145px; min-height: 44px; }
+/* A focused, foreground adventure flow. The route remains visible behind it. */
+.adventure-dialog { width: min(44rem, calc(100vw - 1.5rem)); max-height: calc(100dvh - 2rem); padding: 0; border: 1px solid #b9c8bd; border-radius: 1rem; color: #19392f; background: #fcfdf9; }
+.adventure-dialog[open] { display: flex; flex-direction: column; }
+.adventure-dialog [hidden] { display: none !important; }
+.adventure-dialog::backdrop { background: #11251db3; }
+.adventure-dialog > header, .adventure-dialog > footer { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: 1rem; background: #f3f7ef; flex-shrink: 0; flex-wrap: wrap; }
+.adventure-dialog h2 { margin: .25rem 0; font-size: clamp(1.25rem, 4vw, 1.75rem); overflow-wrap: anywhere; }
+.adventure-body { padding: 1rem; min-height: 0; overflow: auto; }
+.adventure-body > section { margin: .75rem 0; }
+.adventure-body textarea, .adventure-body select { width: 100%; max-width: 100%; }
+.adventure-body textarea { resize: vertical; min-height: 7rem; padding: .75rem; font: inherit; border: 1px solid #a7b9ac; border-radius: .5rem; }
+.adventure-body details { margin-top: 1rem; padding-top: .5rem; border-top: 1px solid #d5dfd1; }
+.adventure-body details > label { margin: .75rem 0; }
+.adventure-check { display: flex; align-items: flex-start; gap: .6rem; margin: .75rem 0; line-height: 1.45; }
+.adventure-check input { flex: 0 0 auto; margin-top: .3rem; }
+.adventure-launch { padding: .75rem; margin: .75rem 0; background: #edf4e6; border: 1px solid #cbdcc2; border-radius: .8rem; }
+.adventure-launch p { margin-bottom: 0; }
+.adventure-result { padding: 1rem; margin-bottom: 1rem; border: 1px solid #cbdcc2; border-radius: .8rem; background: #f4f8ef; }
+.adventure-story { padding: .75rem 0; border-top: 1px solid #d5dfd1; }
+.adventure-story h3 { margin-bottom: .35rem; }
+.adventure-story p { margin: .4rem 0; }
+.adventure-story ul { padding-left: 1.25rem; }
+.adventure-card-summary { display: block; padding-top: .5rem; font-size: .9rem; line-height: 1.4; color: #314e40; }

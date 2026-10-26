@@ -12,6 +12,11 @@ internal sealed interface BridgeRequest {
     val requestId: String
     val pageNonce: String
 
+    class ChatGpt(override val requestId: String, override val pageNonce: String,
+        val command: ChatGptCommand) : BridgeRequest
+    class AdventureSpeech(override val requestId: String, override val pageNonce: String,
+        val action: String, val language: String? = null, val mode: AdventureSpeechMode? = null) : BridgeRequest
+
     data class Hello(
         override val requestId: String,
         override val pageNonce: String,
@@ -126,10 +131,23 @@ internal object BridgeProtocol {
         } catch (_: JSONException) {
             return null
         }
-        if (payload.length > 8_192 && value.optString("type") != "route_elevation") return null
+        if (payload.length > 8_192 && value.optString("type") != "route_elevation"
+            && !(value.optString("type") == "chatgpt_infer" && payload.toByteArray(StandardCharsets.UTF_8).size <= 98_304)) return null
         if (value.optInt("schema_version", -1) != SCHEMA_VERSION) return null
         val requestId = value.optString("request_id", "")
         val pageNonce = pageNonce(requestId) ?: return null
+        if (value.optString("type").startsWith("chatgpt_")) return ChatGptProtocol.parse(value)?.let { BridgeRequest.ChatGpt(requestId,pageNonce,it) }
+        if (value.optString("type").startsWith("adventure_speech_")) {
+            val action = value.getString("type").removePrefix("adventure_speech_")
+            val fields = value.keys().asSequence().toSet()
+            val base = setOf("schema_version", "request_id", "type")
+            if (action in setOf("status", "cancel", "stop") && fields == base) return BridgeRequest.AdventureSpeech(requestId, pageNonce, action)
+            if (action == "start" && fields == base + setOf("language", "mode") && value.get("language") is String
+                && AdventureSpeechPolicy.language(value.getString("language")) && value.optString("mode") in setOf("on_device", "platform")) {
+                return BridgeRequest.AdventureSpeech(requestId, pageNonce, action, value.getString("language"), AdventureSpeechMode.valueOf(value.getString("mode").uppercase()))
+            }
+            return null
+        }
         return when (value.optString("type", "")) {
             "hello" -> if (hasExactly(value, baseFields)) {
                 BridgeRequest.Hello(requestId, pageNonce)

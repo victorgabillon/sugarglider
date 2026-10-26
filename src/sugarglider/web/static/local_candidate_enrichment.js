@@ -80,6 +80,72 @@ export function publishLocalStops(request, draft) {
   return { reached, approximated: [], dropped };
 }
 
+// Soft Waypoint stops are deliberate, checked approaches. Generated shape
+// controls and coincidentally nearby features never enter this list.
+export function publishLocalWaypointStops(request, draft) {
+  const soft = request.waypoints.filter(point => point.constraint_strength !== "exact");
+  const outcomes = draft.optional_stop_outcomes ?? [];
+  const targets = draft.adventure_targets ?? [];
+  requireEvidence(outcomes.length === soft.length && targets.length <= 30
+    && new Set(outcomes.map(item => item.id)).size === outcomes.length
+    && new Set(targets.map(item => item.id)).size === targets.length
+    && outcomes.every(item => soft.some(point => point.id === item.id)));
+  const reached = [], dropped = [];
+  for (const point of soft) {
+    const outcome = outcomes.find(item => item.id === point.id);
+    const target = targets.find(item => item.id === point.id);
+    requireEvidence(target?.status === "grounded" && target.approach && point.approach_override
+      && haversineDistance(position(point.coordinate), position(target.semantic_coordinate)) < 0.001
+      && haversineDistance(position(point.approach_override), position(target.approach.coordinate)) < 0.001);
+    const approach = target.approach;
+    requireEvidence(validApproach(approach) && !["private", "restricted"].includes(target.access_status)
+      && haversineDistance(position(point.coordinate), position(approach.coordinate)) <= 1000);
+    const base = { id: point.id, name: point.name, semantic_coordinate: canonicalCoordinate(point.coordinate),
+      category: target.category, importance: target.importance === "prefer" ? "prefer" : null,
+      selection_origin: "requested" };
+    if (outcome?.status === "dropped") {
+      requireEvidence(typeof outcome.reason === "string" && outcome.reason.length > 0 && outcome.reason.length <= 200
+        && !draft.actual_waypoint_order.includes(point.id));
+      dropped.push({ ...base, reason: outcome.reason, considered_approaches: [approach] });
+      continue;
+    }
+    requireEvidence(outcome?.status === "reached" && outcome.reason === null);
+    const evidence = draft.exact_point_outcomes?.filter(item => item.waypoint_id === point.id) ?? [];
+    requireEvidence(evidence.length === 1 && evidence[0].status === "reached"
+      && draft.actual_waypoint_order.filter(id => id === point.id).length === 1);
+    const snap = evidence[0].snapped_coordinate;
+    const vertex = evidence[0].geometry_vertex_index;
+    requireEvidence(Number.isSafeInteger(vertex) && vertex >= 0 && vertex < draft.geometry.length
+      && draft.geometry[vertex][0] === snap.lon && draft.geometry[vertex][1] === snap.lat);
+    const arrival = haversineDistance(position(approach.coordinate), position(snap));
+    const tolerance = Math.min(25, approach.arrival_tolerance_m);
+    const located = locateOnRoutedGeometry(draft.geometry, snap);
+    requireEvidence(arrival <= tolerance && located.distance_m < 0.001);
+    reached.push({ ...base, selection_method: "deliberate_insertion",
+      resolved_approach: { ...approach, coordinate: { ...canonicalCoordinate(snap), name: null },
+        arrival_tolerance_m: tolerance, graph_snap_distance_m: arrival,
+        semantic_distance_m: haversineDistance(position(point.coordinate), position(snap)) },
+      route_progress: located.route_progress, route_to_approach_m: located.distance_m });
+  }
+  reached.sort((a, b) => a.route_progress - b.route_progress || compareText(a.id, b.id));
+  return { reached, approximated: [], dropped };
+}
+
+function validApproach(value) {
+  return typeof value.id === "string" && value.id.length > 0 && value.id.length <= 320
+    && ["exact_feature", "drinking_water_source", "viewpoint_location", "mapped_entrance", "mapped_gate",
+      "public_path_boundary", "nearby_public_path", "user_override", "strict_graph_snap"].includes(value.kind)
+    && ["osm_feature", "osm_entrance", "osm_gate", "osm_path_intersection", "osm_spatial_boundary_inference",
+      "imported_coordinate", "user_override"].includes(value.source)
+    && ["public", "unknown"].includes(value.access)
+    && Number.isFinite(value.arrival_tolerance_m) && value.arrival_tolerance_m > 0 && value.arrival_tolerance_m <= 100
+    && Number.isFinite(value.semantic_distance_m) && value.semantic_distance_m >= 0
+    && Number.isFinite(value.coordinate?.lon) && Math.abs(value.coordinate.lon) <= 180
+    && Number.isFinite(value.coordinate?.lat) && Math.abs(value.coordinate.lat) <= 90
+    && value.coordinate.name == null && Array.isArray(value.warnings)
+    && JSON.stringify(value.warnings) === JSON.stringify([...new Set(value.warnings)].sort());
+}
+
 function position(point) { return [point.lon, point.lat]; }
 function compareText(left, right) { return left < right ? -1 : left > right ? 1 : 0; }
 function requireEvidence(condition) {

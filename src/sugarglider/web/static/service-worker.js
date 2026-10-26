@@ -6,7 +6,7 @@ import {
 } from "/static/service_worker_policy.js";
 
 const SHELL_CACHE_PREFIX = "sugarglider-shell-";
-const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v106`;
+const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v115`;
 const ROOT_SHELL = "/";
 const shellCache = createCurrentCacheAccess(caches, SHELL_CACHE);
 
@@ -20,6 +20,20 @@ const CORE_ASSETS = Object.freeze([
   "/static/vendor/pmtiles-4.5.0/pmtiles.js",
   "/static/vendor/protomaps-basemaps-5.7.2/basemaps.js",
   "/static/app.js",
+  "/static/adventure_model.js",
+  "/static/adventure_proposal.js",
+  "/static/adventure_grounding.js",
+  "/static/adventure_assessment.js",
+  "/static/adventure_controller.js",
+  "/static/adventure_intent.js",
+  "/static/adventure_elevation.js",
+  "/static/adventure_speech.js",
+  "/static/adventure_dialog.js",
+  "/static/adventure_results.js",
+  "/static/adventure_snapshot.js",
+  "/static/adventure_snapshot_validation.js",
+  "/static/adventure_snapshot_worker.js",
+  "/static/local_adventure_search.js",
   "/static/elevation_profile.js",
   "/static/elevation_view.js",
   "/static/elevation_map_marker.js",

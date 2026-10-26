@@ -77,7 +77,7 @@
         <div>
           <p class="eyebrow">Local trail profile</p>
           <h2 id="trail-profile-title">Welcome to Sugarglider</h2>
-          <p class="profile-privacy">This nickname and badge stay in this browser. There is no account. In an outing, both are visible to anyone with the public link.</p>
+          <p class="profile-privacy">This nickname and badge stay in this browser and do not create a Sugarglider account. In an outing, both are visible to anyone with the public link. Connecting ChatGPT is a separate optional action.</p>
         </div>
         <label for="trail-profile-name">What should we call you?</label>
         <input id="trail-profile-name" maxlength="80" autocomplete="nickname" required>
@@ -119,10 +119,49 @@
       </div>
     </dialog>
 
+    <dialog id="adventure-dialog" class="adventure-dialog" aria-labelledby="adventure-title" aria-describedby="adventure-privacy">
+      <header><div><p class="eyebrow">Your next adventure</p><h2 id="adventure-title">✨ Describe your adventure</h2></div><button id="adventure-close" class="button secondary" type="button">Close</button></header>
+      <div class="adventure-body">
+        <p id="adventure-privacy" class="field-help">When you Generate, your description, chosen Start/End, required points and up to 24 nearby mapped places (names, IDs and coordinates) are sent to OpenAI using your connected ChatGPT account. Research is online. Route calculations, complete regional packs and GPX stay on this device. Your ChatGPT plan limits apply. If the extra request is enabled, measured route summaries and reached mapped place names/OSM IDs may be sent to research stories or improve suggestions. The latest completed adventure, including selected places and stories, is kept locally for restart recovery; you can forget it or clear saved offline data.</p>
+        <section aria-label="ChatGPT account">
+          <p id="adventure-account-status" role="status" aria-live="polite">Connect your ChatGPT account to begin.</p>
+          <label>ChatGPT account<select id="adventure-account"><option value="">No account connected</option></select></label>
+          <div class="button-row"><button id="adventure-connect" class="button secondary" type="button">Sign in with ChatGPT</button><button id="adventure-add-account" class="text-button" type="button" hidden>Add account</button><button id="adventure-sign-out" class="text-button" type="button" hidden>Sign out</button></div>
+        </section>
+        <section id="adventure-input">
+          <label for="adventure-text">What would you like to do?</label>
+          <textarea id="adventure-text" rows="5" maxlength="8000" placeholder="A 35 km trail run in the woods around Marly, with historical places and viewpoints…"></textarea>
+          <label>Speech language<select id="adventure-language"><option value="">Device language</option><option value="fr-FR">Français</option><option value="en-GB">English (UK)</option><option value="en-US">English (US)</option></select></label>
+          <label>Speech recognition<select id="adventure-speech-service"><option value="">On this device if available</option><option value="platform">Android speech service (may send audio)</option></select></label>
+          <div class="button-row"><button id="adventure-microphone" class="button secondary" type="button" aria-pressed="false">🎤 Speak</button><button id="adventure-finish-speech" class="button secondary" type="button" hidden>Done speaking</button><button id="adventure-stop-speech" class="text-button" type="button" hidden>Cancel microphone</button></div>
+          <p id="adventure-speech-status" class="field-help" role="status" aria-live="polite">Choose the language you will speak. Speak adds to your text; check it before Generate. Recording lasts at most one minute. If Android finishes early, tap Speak to continue.</p>
+          <details><summary>Advanced settings</summary>
+            <label>Model<select id="adventure-model"><option value="">Connect an eligible account to load models</option></select></label>
+            <button id="adventure-refresh-models" class="text-button" type="button">Refresh available models</button>
+            <label class="adventure-check"><input id="adventure-research" type="checkbox" checked> Research places and sources online</label>
+            <label class="adventure-check"><input id="adventure-structured" type="checkbox" checked> Use structured answers when supported by this model</label>
+            <label class="adventure-check"><input id="adventure-refine" type="checkbox" checked> Allow one extra model request for reached-place stories or route suggestions</label>
+            <p class="field-help">Asphalt, exact retracing, technical difficulty and current access cannot yet be verified. Elevation is measured after routing; a climbing target is not guaranteed.</p>
+          </details>
+        </section>
+        <section aria-label="Start and End">
+          <p id="adventure-start" class="field-help"></p>
+          <label class="adventure-check"><input id="adventure-keep-start" type="checkbox" checked> Keep my chosen Start</label>
+          <label class="adventure-check"><input id="adventure-keep-end" type="checkbox" checked> Keep my chosen End</label>
+          <p class="field-help">Start and End are optional here: describe them by text or speech, or choose them on the map. Suggested locations are reviewed before routing. A loop returns to its Start.</p>
+          <div class="button-row"><button id="adventure-choose-start" class="text-button" type="button">Choose Start on map</button><button id="adventure-choose-end" class="text-button" type="button">Choose End on map</button></div>
+        </section>
+        <section id="adventure-review" hidden aria-labelledby="adventure-review-title"><h3 id="adventure-review-title">Confirm required places</h3><p id="adventure-interpretation"></p><div id="adventure-required"></div><div id="adventure-limitations"></div><button id="adventure-confirm" class="button primary" type="button">Keep these requirements and calculate</button></section>
+        <p id="adventure-progress" role="status" aria-live="polite"></p>
+        <p id="adventure-error" class="validation" role="alert" aria-live="assertive"></p>
+      </div>
+      <footer><button id="adventure-cancel" class="button secondary" type="button" hidden>Cancel planning</button><button id="adventure-generate" class="button primary" type="button">Generate adventure</button></footer>
+    </dialog>
+
     <dialog id="itinerary-dialog" class="itinerary-dialog" aria-labelledby="itinerary-title" aria-describedby="itinerary-introduction">
       <div class="itinerary-header"><h2 id="itinerary-title">Import itinerary</h2></div>
       <div class="itinerary-body">
-        <p id="itinerary-introduction">Sugarglider does not contact an AI service. Paste itinerary JSON generated elsewhere, or choose a JSON file.</p>
+        <p id="itinerary-introduction">This importer reads itinerary JSON locally. Paste JSON generated elsewhere, or choose a JSON file. Plan with AI connects to ChatGPT separately in the Android app.</p>
         <p id="itinerary-source" class="field-help" role="status" hidden></p>
         <section id="itinerary-input-stage">
           <label for="itinerary-text">Itinerary draft JSON</label>
@@ -261,6 +300,7 @@
         </div>
 
         <div class="plan-readiness"><p id="planning-readiness" class="field-help" role="status">Checking routing availability…</p><button id="plan-regions" class="text-button hidden" type="button">Regions</button></div>
+        <div id="adventure-launch" class="adventure-launch" hidden><button id="plan-with-ai" class="button primary wide" type="button">✨ Plan with AI</button><p class="field-help">Describe a run, hike or ride. ChatGPT suggests places; Sugarglider checks real offline routes.</p><button id="restore-adventure" class="button secondary wide" type="button" hidden>Reopen saved adventure</button><p id="adventure-recovery-status" class="field-help" role="status"></p></div>
         <div class="itinerary-launch"><button id="import-itinerary" class="button secondary" type="button">Import itinerary</button><p class="field-help">Paste named places from an external assistant or a JSON file.</p></div>
         <form id="route-form" novalidate>
           <label class="plan-activity">Activity<select id="profile" aria-describedby="profile-description"></select></label>
@@ -637,6 +677,7 @@
       </section>
 
       <div class="results-panel" id="results-panel">
+        <section id="adventure-result" class="adventure-result" hidden aria-label="AI adventure"><h2 id="adventure-result-title"></h2><p id="adventure-result-summary"></p><p id="adventure-result-limitations" class="field-help"></p><div class="button-row"><button id="adventure-stories-open" class="button secondary" type="button">Places and stories</button><button id="adventure-return-manual" class="text-button" type="button">Return to my manual plan</button></div><p id="adventure-storage-status" class="field-help" role="status"></p><button id="forget-adventure" class="text-button" type="button">Forget saved adventure</button><div id="adventure-stories" hidden></div></section>
         <section class="candidate-strip" aria-labelledby="candidates-title">
           <div class="section-heading"><div><p class="eyebrow">Routes</p><h2 id="candidates-title" tabindex="-1">Routes</h2></div></div>
           <p id="search-summary" class="context-note" aria-live="polite"></p>

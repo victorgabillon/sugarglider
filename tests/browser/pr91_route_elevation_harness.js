@@ -1,6 +1,7 @@
 import {sampleElevationGeometry,elevationGeometryDigest} from '../../src/sugarglider/web/static/elevation_sampling.js';
 import {createSelectedRouteElevation,createRouteElevationClient,parseRouteElevationReply,prepareRouteElevation} from '../../src/sugarglider/web/static/route_elevation.js';
 import {regionalRoutingReference} from '../../src/sugarglider/web/static/regional_routing_reference.js';
+import {createAdventureElevationSampler} from '../../src/sugarglider/web/static/adventure_elevation.js';
 const assert=(v,m)=>{if(!v)throw Error(m);};const pause=()=>new Promise(r=>setTimeout(r,0));
 async function until(check){for(let i=0;i<200;i++){if(check())return;await new Promise(r=>setTimeout(r,10));}throw Error('did not settle');}
 async function rejected(action){assert(await action().then(()=>false,()=>true),'expected explicit rejection');}
@@ -59,5 +60,26 @@ export async function runElevationHarness(){
  controller.sync(null,null,null);assert(controller.snapshot().status==='idle','editing invalidates');cases.push('regeneration_edit_and_explicit_cancel_cannot_republish_old_result');
  const events=new EventTarget();const life=createSelectedRouteElevation({versions,client:fake,prepare:async()=>realWorker,lifecycleTarget:events});life.sync(a,{},manifest.region_id);await until(()=>pending.length===5);events.dispatchEvent(new Event('pagehide'));pending[4].resolve(reply(pending[4].fields));await pause();assert(life.snapshot().status==='idle','page lifecycle');cases.push('pagehide_discards_inflight_results');
  const changed=createSelectedRouteElevation({versions,client:fake,prepare:async()=>realWorker,lifecycleTarget:null});changed.sync(a,{},'different-region');await until(()=>changed.snapshot().status==='unavailable');assert(requests===5,'region mismatch before native');cases.push('regional_build_and_selection_isolation');
+ const batchCalls=[];
+ const batchClient=createRouteElevationClient({transport:{request:async(type,input)=>{batchCalls.push(input);return reply(input);}}});
+ let preparations=0;
+ const sampler=createAdventureElevationSampler({client:batchClient,prepare:async(g,d,s)=>{preparations++;return prepareRouteElevation(g,d,s);},operationId:()=> 'e'.repeat(32)});
+ const batchBefore=JSON.stringify([a,b]);
+ const measured=await sampler.measure([a,b],reference,new AbortController().signal);
+ assert(Object.keys(measured).length===2&&batchCalls.length===2,'bounded sequential native elevation batch');
+ await sampler.measure([a,b],reference,new AbortController().signal);
+ assert(batchCalls.length===2&&preparations===2,'one sampling and native analysis per retained identity across rounds');
+ assert(JSON.stringify([a,b])===batchBefore,'batch elevation leaves canonical candidates unchanged');
+ await rejected(()=>sampler.measure([{...a,diagnostics:{details:{local_routing:{regional_version:{region_id:'wrong'}}}}}],reference));
+ assert(batchCalls.length===2,'region mismatch before native work');
+ sampler.clear();cases.push('adventure_elevation_batch_reuses_strict_client_worker_and_source_bound_cache');
+ let finishNative,finishCancel,cancelRequested=false,settled=false;
+ const draining=createAdventureElevationSampler({prepare:async()=>realWorker,client:{analyze:()=>new Promise(resolve=>{finishNative=resolve;}),cancel:()=>{cancelRequested=true;return new Promise(resolve=>{finishCancel=resolve;});}},operationId:()=> 'e'.repeat(32)});
+ const batchAbort=new AbortController();
+ const batchOutcome=draining.measure([a],reference,batchAbort.signal).then(()=>{throw Error('cancelled result accepted');},()=>{settled=true;});
+ await until(()=>Boolean(finishNative));batchAbort.abort();await until(()=>cancelRequested);
+ await rejected(()=>draining.measure([b],reference));
+ finishNative({});await pause();assert(!settled,'native cancel must drain too');finishCancel({});await batchOutcome;
+ assert(settled,'cancelled batch settles only after native and cancel drain');draining.clear();cases.push('adventure_elevation_cancellation_drains_before_replacement');
  return cases;
 }
