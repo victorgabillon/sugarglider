@@ -1,6 +1,6 @@
 import { createAdventureSpeech } from "../../src/sugarglider/web/static/adventure_speech.js";
 import { initializeAdventureDialog } from "../../src/sugarglider/web/static/adventure_dialog.js";
-import { createAdventureResults, forestAdventureLimitation } from "../../src/sugarglider/web/static/adventure_results.js";
+import { createAdventureResults, forestAdventureLimitation, adventureTradeoffLabels } from "../../src/sugarglider/web/static/adventure_results.js";
 import { renderRouteChoices } from "../../src/sugarglider/web/static/route_results.js";
 import { exportCanonicalCandidate } from "../../src/sugarglider/web/static/local_gpx_export.js";
 import { readSpeechProviderPreference, writeSpeechProviderPreference, openPwaStore, PWA_STORES } from "../../src/sugarglider/web/static/pwa_store.js";
@@ -35,6 +35,22 @@ function accounts(model, initiallyConnected = true) {
 
 export async function runAdventureUiHarness() {
   const cases = [];
+  {
+    const place = id => ({ canonical_id: id, status: "reached", local_category: "ruins" });
+    const round = { proposal: { wishes: [{ metric: "woodland", goal: "maximize", importance: "high", value: null }] },
+      result: { candidates: ["forest", "history", "other"].map(id => ({ id, diagnostics: { within_tolerance: true } })) },
+      assessment: { assessments: [{ candidate_id: "forest", nature: { woodland: .55 }, places: [] },
+        { candidate_id: "history", nature: { woodland: .51 }, places: [place("a"), place("b")] },
+        { candidate_id: "other", nature: { woodland: .3 }, places: [] }] } };
+    const before = JSON.stringify(round), labels = adventureTradeoffLabels(round);
+    assert(labels.get("forest") === "Forest-focused" && labels.get("history") === "Historical highlights" && !labels.has("other"), "only measured tradeoffs earn labels; no manufactured third category");
+    assert(JSON.stringify(round) === before, "tradeoff labels never mutate immutable results");
+    round.assessment.assessments.forEach(item => { item.nature = null; });
+    assert(adventureTradeoffLabels(round).size === 0, "unknown woodland never earns a forest label");
+    round.assessment.assessments.forEach(item => { item.nature = { woodland: .8 }; item.loop_geometry = { severe_out_and_back: true }; });
+    assert(adventureTradeoffLabels(round).size === 0 && forestAdventureLimitation(round).includes("No reasonably shaped"), "forest cannot make an unacceptable loop earn a quality label");
+    cases.push("tradeoff_labels_use_checked_places_and_measured_forest_without_relabeling_unknowns");
+  }
   {
     const round={proposal:{wishes:[{metric:"woodland",goal:"maximize",value:null}]},result:{candidates:[{id:"a",diagnostics:{within_tolerance:true}}]},assessment:{assessments:[{candidate_id:"a",nature:{woodland:.37}}]}};
     assert(forestAdventureLimitation(round).includes("37.0%"),"partial forest preference is visibly unsatisfied");

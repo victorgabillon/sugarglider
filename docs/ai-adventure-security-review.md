@@ -51,6 +51,16 @@ See the [official preview contract](https://developers.openai.com/siwc/token-sha
 [accounts and sessions](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions)
 and [completed streaming events](https://developers.openai.com/api/reference/resources/responses/streaming-events).
 
-Keep PR #110 draft until the remaining product/physical acceptance and required
-CI checks are satisfactory. This review authorizes neither installation nor
-production publication.
+The subsequent [woodland route-quality change](ai-adventure-route-quality.md)
+adds a bounded, build-owned read-only query to the existing regional worker.
+It classifies at most 128 proposal points under a two-million-operation budget;
+exhaustion or missing data returns explicit unknowns. Routing and Nature still
+validate complete native lines. No credential, account, native bridge, remote
+service, persistence, disclosure or permission boundary changes. Existing
+authentication and speech regressions remain required. Installation and further
+real account use need the separate authorization described in that report.
+
+The earlier recommendation to keep the PR draft concerned the then-unresolved
+forest-quality requirement. Current acceptance and merge status are recorded in
+the route-quality report. This security review authorizes neither installation
+nor production publication.

@@ -124,8 +124,9 @@ export function createLocalPlanner({ bridge, getRegionData = async () => null, w
         if (!capabilities.supported_profile_ids.includes(profile)) throw new LocalPlannerError("unsupported_profile");
         const sourceData = await region.getRegionData(region.reference.pack_id);
         requireCurrent(ownedGeneration);
-        // At most ten retained lines across two rounds. A repeated native line
-        // reuses its expensive Nature result, including explicit unavailability.
+        // Strong woodland requests may measure every complete validated native
+        // line (at most sixteen backend calls). Other requests enrich finalists.
+        // Repeated lines reuse Nature, including explicit unavailability.
         const timings = { native_routing_ms: 0, nature_ms: 0, publication_ms: 0 };
         const natureResults = new Map();
         const data = sourceData ? { ...sourceData, analyzeNature(draft) {

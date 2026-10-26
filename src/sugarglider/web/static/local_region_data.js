@@ -126,6 +126,31 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
 
   const searchPlaceNames = createPlaceNameSearch(manifest, poiFeatures, identity, pois !== null);
 
+  // Proposal guidance only: classify at most 128 geographical points in the
+  // already loaded index. These are never route distances or Nature shares.
+  function queryWoodlandPoints({ points }) {
+    requireData(Array.isArray(points) && points.length <= 128 && points.every(validCoordinate), "invalid_local_nature_query");
+    const work = { remaining: 2_000_000 };
+    try {
+      const woodland = points.map(point => {
+        if (!natureAvailable || !containsPosition(manifest.bounds, [point.lon, point.lat])) return null;
+        const p = project([point.lon, point.lat]);
+        const classes = queryTree(natureTree, [...p, ...p], [], work).filter(item => item.polygons.some(polygon => {
+          spend(work);
+          const [outer, ...holes] = polygon.rings;
+          return inRing(p, outer.points, work, outer.blocks) >= 0
+            && holes.every(ring => inRing(p, ring.points, work, ring.blocks) <= 0);
+        })).map(item => item.feature.primary_class);
+        const category = PRIMARY_CLASSES.find(category => classes.includes(category));
+        return category === undefined ? null : category === "woodland";
+      });
+      return freezeData({ available: natureAvailable, woodland, identity, operation_count: 2_000_000 - work.remaining });
+    } catch (error) {
+      if (!(error instanceof RegionalDataError)) throw error;
+      return freezeData({ available: false, woodland: points.map(() => null), identity, operation_count: 2_000_000 });
+    }
+  }
+
   function analyzeNature(candidate) {
     requireData(Number.isFinite(candidate.distance_m) && candidate.distance_m > 0
       && Array.isArray(candidate.geometry) && candidate.geometry.length >= 2 && candidate.geometry.length <= 20_000
@@ -212,7 +237,7 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
     });
   }
 
-  return Object.freeze({ identity, queryPois, searchPois, searchPlaceNames, analyzeNature });
+  return Object.freeze({ identity, queryPois, searchPois, searchPlaceNames, analyzeNature, queryWoodlandPoints });
 }
 
 export function createLocalPlacesSession(data) {

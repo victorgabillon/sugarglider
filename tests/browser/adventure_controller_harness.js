@@ -1,7 +1,7 @@
 // Synthetic completed model answers and native replies; normal regional data,
 // local search, shared gateway, publication worker and GPX exporter are used.
 import { createAdventureController } from "../../src/sugarglider/web/static/adventure_controller.js";
-import { assessAdventure, compactAdventureAssessment, adventureMeasuredImprovement } from "../../src/sugarglider/web/static/adventure_assessment.js";
+import { assessAdventure, compactAdventureAssessment, adventureMeasuredImprovement, compareAdventureAssessments } from "../../src/sugarglider/web/static/adventure_assessment.js";
 import { parseAdventureProposal } from "../../src/sugarglider/web/static/adventure_proposal.js";
 import { validateLocalWaypointRouteRequest } from "../../src/sugarglider/web/static/local_waypoint_route.js";
 import { buildAdventureIntent, requestedAdventureAlternatives } from "../../src/sugarglider/web/static/adventure_intent.js";
@@ -315,6 +315,33 @@ export async function runAdventureControllerHarness() {
     prior.within_distance_tolerance = false; prior.target_error_m = 100; revised.target_error_m = 200;
     assert(!adventureMeasuredImprovement(prior, revised), "outside-distance error precedes measured shape and wishes");
     cases.push("distance_then_measured_loop_shape_before_soft_wishes");
+  }
+  {
+    const prior = structuredClone(outputs[0].chosen.assessment.assessments[0]);
+    prior.hard_route_constraints_satisfied = true; prior.within_distance_tolerance = true;
+    prior.distance_m = 35000; prior.target_error_m = 0;
+    prior.wishes = [{ metric: "woodland", goal: "maximize", value: null, importance: "high", loss: -.2 }];
+    prior.nature = { woodland: .2, urban: .4, unknown_landcover: .3 };
+    prior.loop_geometry = { geometry_penalty: 1, degenerate: false, severe_out_and_back: false };
+    const revised = structuredClone(prior);
+    revised.candidate_id = "measured-woodland"; revised.nature = { woodland: .55, urban: .25, unknown_landcover: .1 };
+    revised.loop_geometry.geometry_penalty = 1.7;
+    assert(adventureMeasuredImprovement(prior, revised), "a substantial measured forest gain can outweigh a modest shape penalty for a strong woodland request");
+    assert(compareAdventureAssessments(revised, prior) < 0, "round selection uses the same measured preference rule");
+    for (const invalid of ["severe_out_and_back", "degenerate"]) {
+      revised.loop_geometry[invalid] = true;
+      assert(!adventureMeasuredImprovement(prior, revised), "forest cannot excuse an unacceptable loop");
+      revised.loop_geometry[invalid] = false;
+    }
+    revised.within_distance_tolerance = false;
+    assert(!adventureMeasuredImprovement(prior, revised), "forest cannot outrank distance eligibility");
+    revised.within_distance_tolerance = true; revised.hard_route_constraints_satisfied = false;
+    assert(!adventureMeasuredImprovement(prior, revised), "forest cannot bypass mandatory validity");
+    revised.hard_route_constraints_satisfied = true; revised.nature = null;
+    assert(!adventureMeasuredImprovement(prior, revised), "unknown coverage cannot earn the forest improvement");
+    revised.nature = { woodland: .55, urban: .25 }; prior.wishes[0].importance = revised.wishes[0].importance = "low";
+    assert(!adventureMeasuredImprovement(prior, revised), "ordinary soft wishes retain the legacy shape ordering");
+    cases.push("strong_woodland_changes_measured_selection_without_weakening_hard_or_loop_gates");
   }
   {
     for (const [prompt, expected] of [["Propose-moi deux parcours différents",2],["three distinct loops",3],["trois lieux historiques",3],

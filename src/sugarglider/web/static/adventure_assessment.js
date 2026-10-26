@@ -109,10 +109,39 @@ function compareMeasured(a, b) {
   return Number(b.hard_route_constraints_satisfied) - Number(a.hard_route_constraints_satisfied)
     || Number(b.within_distance_tolerance) - Number(a.within_distance_tolerance)
     || (!a.within_distance_tolerance && !b.within_distance_tolerance ? a.target_error_m - b.target_error_m : 0)
+    || (strongWoodlandPreference(a.wishes) && strongWoodlandPreference(b.wishes)
+      ? compareWoodlandTradeoff(a, b, a.wishes) : 0)
     || (finite(a.loop_geometry?.geometry_penalty) && finite(b.loop_geometry?.geometry_penalty)
       ? a.loop_geometry.geometry_penalty - b.loop_geometry.geometry_penalty : 0)
     || commonDifference
     || a.target_error_m - b.target_error_m;
+}
+
+export function strongWoodlandPreference(wishes) {
+  return wishes.find(wish => wish.metric === "woodland" && ["high", "hard"].includes(wish.importance)
+    && (["maximize", "prefer"].includes(wish.goal) || wish.goal === "target" && wish.value >= 50)) ?? null;
+}
+
+// A small adventure-only rule, after validity and distance eligibility. One
+// percentage point of mapped woodland offsets four points of urban exposure or
+// half a loop-penalty unit. Grossly unsuitable loops remain a separate gate.
+// Only common measured fields contribute; unknown landcover is never woodland.
+export function compareWoodlandTradeoff(a, b, wishes) {
+  const wish = strongWoodlandPreference(wishes);
+  if (!wish) return 0;
+  const unacceptable = item => Number(Boolean(item.loop_geometry?.degenerate || item.loop_geometry?.severe_out_and_back));
+  const gate = unacceptable(a) - unacceptable(b);
+  if (gate || !finite(a.nature?.woodland) || !finite(b.nature?.woodland)) return gate;
+  const measuredUrban = finite(a.nature.urban) && finite(b.nature.urban);
+  const measuredShape = finite(a.loop_geometry?.geometry_penalty) && finite(b.loop_geometry?.geometry_penalty);
+  const cost = item => {
+    const woodland = item.nature.woodland * 100;
+    return (wish.goal === "target" ? Math.abs(woodland - wish.value) : -woodland)
+      + (measuredUrban ? item.nature.urban * 25 : 0)
+      + (measuredShape ? item.loop_geometry.geometry_penalty * 2 : 0)
+      + 10 * item.target_error_m / Math.max(1000, item.distance_m);
+  };
+  return cost(a) - cost(b);
 }
 export function adventureMeasuredImprovement(previous, revised) {
   return revised.hard_route_constraints_satisfied && compareMeasured(revised, previous) < 0;

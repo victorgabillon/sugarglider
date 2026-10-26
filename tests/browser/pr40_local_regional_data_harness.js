@@ -39,6 +39,18 @@ export async function runPr40LocalRegionalDataHarness() {
   close(analysis.nature_score, fixture.expected.nature_score, 1e-6, "shared nature score");
   equal(JSON.stringify(fixture.route), original, "analysis never mutates route");
   scenarios.push("python_nature_golden_holes_priority_multipolygons_overlays");
+  {
+    const points = [{ lat: .01, lon: .001 }, { lat: .01, lon: .005 }, { lat: .01, lon: .013 },
+      { lat: .01, lon: .016 }, { lat: .03, lon: .001 }];
+    const guidance = data.queryWoodlandPoints({ points });
+    equal(guidance.woodland, [true, false, null, false, null], "point guidance preserves primary-class priority and unknown coverage");
+    assert(guidance.available && guidance.operation_count <= 2_000_000 && Object.isFrozen(guidance), "point guidance bounded and immutable");
+    equal(createLocalRegionData(manifest).queryWoodlandPoints({ points }).woodland, points.map(() => null), "missing index does not fabricate woodland hints");
+    let rejected = false; try { data.queryWoodlandPoints({ points: Array.from({ length: 129 }, () => points[0]) }); } catch { rejected = true; }
+    assert(rejected, "oversized point guidance rejected");
+    equal(data.analyzeNature(fixture.route), analysis, "geographical guidance never changes routed Nature analysis");
+    scenarios.push("bounded_local_woodland_point_guidance_is_not_route_analysis");
+  }
 
   const doubled = data.analyzeNature({ ...fixture.route, distance_m: fixture.route.distance_m * 2 });
   for (const key of ["woodland", "urban", "unknown_landcover", "near_water"]) close(doubled[key].distance_m, analysis[key].distance_m * 2, 1e-6, "authoritative distance normalization");
@@ -238,8 +250,13 @@ export async function runPr40LocalRegionalDataHarness() {
     equal(actualSession.identity.build_id, download.manifest.build_id, "worker reopens actual OPFS version");
     const actualNature = await actualSession.analyzeNature(fixture.route);
     close(actualNature.nature_score, fixture.expected.nature_score, 1e-6, "worker computes independently");
+    const pointRequest = { points: [{ lat: .01, lon: .001 }, { lat: .01, lon: .005 }, { lat: .03, lon: .001 }] };
+    const actualGuidance = await actualSession.queryWoodlandPoints(pointRequest);
+    equal(actualGuidance.woodland, [true, false, null], "loaded worker classifies proposal points locally");
+    equal(actualGuidance.identity.build_id, actualSession.identity.build_id, "guidance owns the loaded regional build");
     await realClient.remove("fixture");
     await rejects(() => actualSession.analyzeNature(fixture.route), "regional_data_unavailable");
+    await rejects(() => actualSession.queryWoodlandPoints(pointRequest), "regional_data_unavailable");
   } finally {
     realClient.close();
     await realStore.remove("fixture").catch(() => {});
