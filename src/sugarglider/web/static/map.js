@@ -1,7 +1,7 @@
 import { t, tr, onLanguageChange, setLocalizedText } from "./i18n.js";
 import { routeColor } from "./route_results.js";
 import { createElevationMapMarker } from "./elevation_map_marker.js";
-import { keepMapCoordinateVisible } from "./map_viewport.js";
+import { keepMapCoordinateVisible, unobstructedPointOffset } from "./map_viewport.js";
 import * as maplibregl from "./vendor/maplibre-gl-6.4.1/maplibre-gl.mjs";
 import { gpxFeatureCollection } from "./gpx.js";
 import {
@@ -244,13 +244,15 @@ function settleCompactAttribution(instance) {
 
 export function initializeMap(config, handlers) {
   resetMapInstance();
+  const touchMobile = matchMedia("(max-width: 840px) and (any-pointer: coarse)");
   try {
     map = new maplibregl.Map({
       container: "map",
       center: config.initial_center,
       zoom: config.initial_zoom,
       style: initialMapStyle(config),
-      attributionControl: { customAttribution: config.tile_attribution },
+      attributionControl: { customAttribution: config.tile_attribution,
+        ...(touchMobile.matches && navigator.maxTouchPoints > 0 ? { compact: true } : {}) },
     });
   } catch {
     handlers.onError(t("MapLibre loaded, but this browser could not initialize WebGL. Route controls remain available."));
@@ -258,7 +260,37 @@ export function initializeMap(config, handlers) {
   }
   elevationMapMarker.attach(map);
   settleCompactAttribution(map);
-  map.addControl(new maplibregl.NavigationControl(), "top-left");
+  const instance = map;
+  const navigation = new maplibregl.NavigationControl();
+  let navigationShown = false;
+  const updateNavigation = () => {
+    const show = !(touchMobile.matches && navigator.maxTouchPoints > 0);
+    if (show === navigationShown) return;
+    if (show) instance.addControl(navigation, "top-left");
+    else instance.removeControl(navigation);
+    navigationShown = show; localizeMapControls();
+  };
+  updateNavigation(); touchMobile.addEventListener("change", updateNavigation);
+  // MapLibre handles the gestures. Ignore any compatibility click emitted by a
+  // multi-finger gesture; it must never enter the ordinary point-add handler.
+  let multipleTouches = false, ignoreTouchClickUntil = 0;
+  const container = instance.getContainer();
+  const touchesStarted = event => {
+    if (event.touches.length > 1) multipleTouches = true;
+  };
+  const touchesEnded = event => {
+    if (multipleTouches) ignoreTouchClickUntil = performance.now() + 500;
+    if (!event.touches.length) multipleTouches = false;
+  };
+  container.addEventListener("touchstart", touchesStarted, { capture: true, passive: true });
+  container.addEventListener("touchend", touchesEnded, { capture: true, passive: true });
+  container.addEventListener("touchcancel", touchesEnded, { capture: true, passive: true });
+  instance.on("remove", () => {
+    touchMobile.removeEventListener("change", updateNavigation);
+    container.removeEventListener("touchstart", touchesStarted, true);
+    container.removeEventListener("touchend", touchesEnded, true);
+    container.removeEventListener("touchcancel", touchesEnded, true);
+  });
   localizeMapControls();
   map.on("load", async () => {
     const loadedMap = map;
@@ -299,6 +331,7 @@ export function initializeMap(config, handlers) {
     });
   }
   map.on("click", (event) => {
+    if (multipleTouches || performance.now() < ignoreTouchClickUntil) return;
     const adventureLayers = [ADVENTURE_MARKERS, ADVENTURE_LABELS].filter(id => map.getLayer(id));
     const adventure = adventureLayers.length ? map.queryRenderedFeatures(event.point, { layers: adventureLayers })[0] : null;
     if (adventure && adventurePlaceIds.has(adventure.properties?.place_id)) {
@@ -2863,8 +2896,33 @@ export function renderImportedGpx(imported) {
   moveRequiredLabelsToTop();
 }
 
-export function fitCoordinates(coordinates, { maxZoom = 15, padding = 70 } = {}) {
+// All values come from the actual rendered surfaces, including an expanded
+// editor or attribution. No routing or geometry semantics live here.
+export function mapViewportPadding(minimum = 24) {
+  if (!map) return { top: minimum, right: minimum, bottom: minimum, left: minimum };
+  const canvas = map.getContainer().getBoundingClientRect();
+  const padding = { top: Math.max(80, minimum), right: minimum, bottom: minimum, left: minimum };
+  const panel = map.getContainer().closest(".map-panel");
+  for (const selector of [".topbar", "#route-dock", ".maplibregl-ctrl-attrib", ".planner-location-control"]) {
+    const element = panel?.querySelector(selector);
+    if (!element?.getClientRects().length) continue;
+    const r = element.getBoundingClientRect();
+    if (!r.width || !r.height) continue;
+    if (selector === ".topbar" || selector === ".planner-location-control" && r.top < canvas.top + canvas.height / 2) padding.top = Math.max(padding.top, r.bottom - canvas.top + minimum);
+    else padding.bottom = Math.max(padding.bottom, canvas.bottom - r.top + minimum);
+  }
+  // Short landscape maps still need a nonempty fitting area.
+  padding.top = Math.min(padding.top, canvas.height * .3);
+  padding.bottom = Math.min(padding.bottom, Math.max(minimum, canvas.height - padding.top - 44));
+  return padding;
+}
+
+export function fitCoordinates(coordinates, { maxZoom = 15, padding = 24 } = {}) {
   if (!map) return;
+  // A workspace transition may have resized the DOM in this animation frame.
+  // Fit against its current size, rather than the previous split workspace.
+  const canvas = map.getCanvas(), container = map.getContainer();
+  if (canvas.clientWidth !== container.clientWidth || canvas.clientHeight !== container.clientHeight) map.resize();
   const valid = coordinates.filter((coordinate) => Array.isArray(coordinate)
     && coordinate.length >= 2
     && Number.isFinite(coordinate[0])
@@ -2874,8 +2932,10 @@ export function fitCoordinates(coordinates, { maxZoom = 15, padding = 70 } = {})
     (result, coordinate) => result.extend(coordinate),
     new maplibregl.LngLatBounds(valid[0], valid[0]),
   );
+  const measured = mapViewportPadding(typeof padding === "number" ? padding : 24);
+  const insets = typeof padding === "number" ? measured : Object.fromEntries(Object.entries(measured).map(([side, value]) => [side, Math.max(value, padding[side] ?? 0)]));
   map.fitBounds(bounds, {
-    padding,
+    padding: insets,
     maxZoom,
     duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 500,
   });
@@ -2891,18 +2951,24 @@ export function focusCoordinate(coordinate) {
 }
 
 export function resizeMap() { map?.resize(); }
+export function zoomMap(direction) { if (map) direction > 0 ? map.zoomIn() : map.zoomOut(); }
+export function resetMapNorth() { map?.resetNorth(); }
 
 // Called only after a Plan layout resize, never from render or map movement.
 export function keepCoordinateVisible(coordinate) {
   if (!map) return null;
   keepMapCoordinateVisible(map, coordinate);
-  const dock = document.getElementById("route-dock");
-  if (dock?.getClientRects().length) {
-    const top = map.getContainer().getBoundingClientRect().top;
-    const bottom = Math.max(60, dock.getBoundingClientRect().top - top - 12);
-    const point = map.project(coordinate);
-    if (point.y > bottom) map.panBy([0, point.y - bottom], { duration: 0 });
-  }
+  const container = map.getContainer(), canvas = container.getBoundingClientRect();
+  const panel = container.closest(".map-panel");
+  const obstacles = [".topbar", "#route-dock", ".maplibregl-ctrl-attrib", ".planner-location-control", ".header-tools-menu"]
+    .map(selector => panel?.querySelector(selector)).filter(element => element?.getClientRects().length)
+    .map(element => element.getBoundingClientRect()).filter(r => r.width && r.height)
+    .map(r => ({ left: r.left - canvas.left, right: r.right - canvas.left, top: r.top - canvas.top, bottom: r.bottom - canvas.top }));
+  const marker = container.querySelector('.required-marker[aria-pressed="true"]') ?? container.querySelector(".required-marker");
+  const painted = marker?.getBoundingClientRect();
+  const offset = unobstructedPointOffset(map.project(coordinate), canvas.width, canvas.height, obstacles,
+    { width: Math.max(48, painted?.width ?? 0), height: Math.max(80, painted?.height ?? 0) });
+  if (offset) map.panBy(offset, { duration: 0 });
   const point = map.project(coordinate);
   return { x: point.x, y: point.y };
 }

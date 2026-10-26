@@ -1217,3 +1217,58 @@ body.outing-mode .route-dock { display: none; }
 .header-ai-action .ai-planner-icon { width: 42px; max-height: 38px; }
 .application-language-setting { display: grid; gap: .35rem; }
 .application-language-setting select { min-height: 44px; width: 100%; }
+
+/* Map display owns the existing settings; opening Tools never rebuilds them. */
+.header-tools-menu .map-tools {
+  position: static; max-width: none; max-height: none; margin: 0;
+  overflow: visible; border: 0; border-bottom: 1px solid var(--border);
+  border-radius: 0; background: transparent; box-shadow: none;
+}
+.header-tools-menu .map-tool-options { padding: .4rem 0 .75rem; gap: .65rem; }
+.ui-shell:not(.outing-mode) .header-tools-menu .map-tools label { min-height: 44px; font-size: .875rem; }
+.header-tools-menu .map-tools .legend { position: static; max-width: none; }
+.map-view-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.map-view-actions > button { min-width: 44px; min-height: 44px; }
+.map-view-actions #map-reset-north { flex: 1; color: var(--text); background: var(--panel-background); border-color: var(--border); }
+
+.route-dock-summary { display: flex; align-items: stretch; gap: 5px; }
+.route-dock-summary #route-editor-toggle { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 5px 7px; font-size: .8125rem; text-align: left; }
+#route-collapsed-summary { min-width: 0; overflow-wrap: anywhere; line-height: 1.3; }
+.route-dock[data-expanded="false"] #route-editor-toggle > [aria-hidden] { transform: rotate(180deg); }
+.route-editor-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.route-editor-heading strong { font-size: .875rem; }
+.route-editor-heading button { padding: 5px 10px; font-size: .875rem; }
+#route-editor-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+#route-editor-body[hidden] { display: none; }
+@media (min-width: 841px) {
+  .route-dock-summary, .route-editor-heading { display: none; }
+}
+@media (max-width: 840px) {
+  .ui-shell.mobile-map-view .topbar {
+    position: absolute; z-index: 20; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right));
+    width: auto; padding: 0; min-height: 0; gap: 0; background: transparent; box-shadow: none;
+    pointer-events: none;
+  }
+  .ui-shell.mobile-map-view .topbar .brand { display: none; }
+  .ui-shell.mobile-map-view .topbar nav { margin: 0; gap: 6px; pointer-events: auto; }
+  .ui-shell.mobile-map-view .header-tools > summary { min-width: 48px; min-height: 48px; justify-content: center; padding: .5rem; color: white; background: var(--primary-action); border-color: #9bb1a5; box-shadow: var(--shadow-small); }
+  .ui-shell.mobile-map-view .header-ai-action { box-shadow: var(--shadow-small); }
+  .ui-shell.mobile-map-view .header-tools-menu { max-height: calc(100dvh - 10rem); max-height: calc(100cqh - 80px); width: min(22rem, calc(100vw - 16px)); }
+  .ui-shell.mobile-map-view .map-panel:not(:has(.maplibregl-ctrl-zoom-in)) .planner-location-control { top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); right: auto; bottom: auto; width: 44px; height: 44px; }
+  .ui-shell:not(.outing-mode) .route-dock { display: flex; flex-direction: column; gap: 4px; max-height: calc(100% - 76px - var(--route-attribution-clearance, 62px)); }
+  .ui-shell:not(.outing-mode) .route-dock.hidden { display: none; }
+  .route-dock-summary { flex: 0 0 auto; }
+  .route-dock #generate-map { min-width: 5rem; }
+  .route-dock .endpoint-adjustments { flex: 0 0 auto; max-height: 25cqh; margin: 0; }
+  .route-dock .endpoint-adjustments[hidden] { display: none; }
+  #route-editor-body { flex: 0 1 auto; }
+  .route-editor-heading { position: sticky; top: 0; z-index: 1; background: var(--panel-background); }
+  .route-quick-editor { flex-wrap: wrap; }
+  .route-quick-editor > strong { flex-basis: 100%; }
+  .map-panel[data-dock-layout="compact"] .route-dock {
+    left: 8px; right: calc(var(--map-credit-width, 44px) + 18px); bottom: 8px;
+    transform: none; width: auto; max-height: calc(100% - 84px);
+  }
+  .ui-shell.mobile-map-view .map-empty-state { display: none; }
+  .route-dock #map-edit-notice { flex: 0 0 auto; max-height: 30cqh; overflow-y: auto; }
+}

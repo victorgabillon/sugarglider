@@ -58,7 +58,9 @@ async function run(browser,touch){
   await page.waitForTimeout(600); // The declared 500 ms map camera transition.
   const box=await canvas.boundingBox();
   await canvas.click({position:{x:box.width*.4,y:box.height*.3}});
+  if(!await page.locator('#dock-finish').isVisible())await page.locator('#route-editor-toggle').click();
   await page.locator('#dock-finish').selectOption('point_to_point');
+  if(await page.locator('#route-editor-close').isVisible())await page.locator('#route-editor-close').click();
   await canvas.click({position:{x:box.width*.7,y:box.height*.45}});
   const request=await page.evaluate(async()=>{const {state,currentPlanRequest}=await import('/static/state.js');return {request:currentPlanRequest(),points:state.points.length};});
   assert.equal(request.request.endpoint_snap_policy.start,'near');assert.equal(request.request.endpoint_snap_policy.end,'near');
@@ -79,20 +81,21 @@ async function run(browser,touch){
   const mapEvidence=await page.evaluate(async()=>{const {mapPresentationDiagnostics}=await import('/static/map.js');return mapPresentationDiagnostics();});
   const connector=mapEvidence.sources['endpoint-adjustment-source'].data.features[0];
   assert.equal(connector.properties.label,'89 m');
-  assert(mapEvidence.zoom>15,'Show adjustment separates nearby endpoint markers at street scale');
+  assert(mapEvidence.zoom>15,'Show adjustment separates nearby endpoint markers at street scale: '+mapEvidence.zoom);
   assert.equal(connector.geometry.coordinates.length,2);
   assert.deepEqual(connector.geometry.coordinates[1],snapshot.candidate.route.geometry[0]);
   assert.deepEqual(mapEvidence.layers.find(l=>l.id==='endpoint-adjustment-line').paint['line-dasharray'],[2,3]);
   if(process.env.ENDPOINT_EVIDENCE_DIR){await fs.mkdir(process.env.ENDPOINT_EVIDENCE_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.ENDPOINT_EVIDENCE_DIR,touch?'touch-warning.png':'keyboard-warning.png')});}
   assert(!gpx.includes('endpoint-adjustment'));cases.push('normal-map-intent-native-warning-keyboard-markers-gpx');
   // Actual policy control keeps strict choice and restores it through Undo.
+  if(!await page.locator('[data-route-chip="start"]').isVisible())await page.locator('#route-editor-toggle').click();
   await page.click('[data-route-chip="start"]');
   await page.selectOption('[data-dock-action="snap-policy"]','exact');
   assert.equal(await page.locator('.endpoint-adjustment-marker').count(),0);
   if(await mapTab.isVisible())await mapTab.click();await page.click('#generate-map');await page.waitForFunction(french=>document.querySelector('#error-banner')?.textContent.includes(french?'limite stricte de rapprochement':'strict snap limit'),french);
   assert.equal(await page.evaluate(async()=>{const{state}=await import('/static/state.js');return state.generationResult.candidates.length;}),0);
   if(await mapTab.isVisible())await mapTab.click();
-  await page.click('#undo-point-edit');
+  if(!await page.locator('#undo-point-edit').isVisible())await page.locator('#route-editor-toggle').click();await page.click('#undo-point-edit');
   await page.evaluate(()=>{snapDistance=240;});if(await mapTab.isVisible())await mapTab.click();await page.click('#generate-map');
   await page.waitForFunction(french=>document.querySelector('#endpoint-adjustments-map')?.textContent.includes(french?'vérifier le rapprochement de 240 m':'review 240 m'),french);
   const before=await page.evaluate(async()=>{const{state}=await import('/static/state.js');return {lat:state.waypointEndpoints.start.lat,count:snapNativeCalls.filter(c=>c.type==='local_route').length};});
@@ -103,7 +106,7 @@ async function run(browser,touch){
     const dock=document.querySelector('#route-dock').getBoundingClientRect();
     return [...document.querySelectorAll('.endpoint-adjustment-marker')].map(marker=>{
       const r=marker.getBoundingClientRect();
-      return {label:marker.getAttribute('aria-label'),visible:r.left>canvas.left&&r.right<canvas.right&&r.top>canvas.top&&r.bottom<Math.min(canvas.bottom,dock.top)};
+      return {label:marker.getAttribute('aria-label'),rect:r.toJSON(),canvas:canvas.toJSON(),dock:dock.toJSON(),visible:r.left>canvas.left&&r.right<canvas.right&&r.top>canvas.top&&r.bottom<Math.min(canvas.bottom,dock.top)};
     });
   });
   assert.equal(visibility.length,2);assert(visibility.every(item=>item.visible),'Show adjustment must expose both markers above the dock: '+JSON.stringify(visibility));
@@ -117,7 +120,7 @@ async function run(browser,touch){
   const adopted=await page.evaluate(async()=>{const{state}=await import('/static/state.js');return {lat:state.waypointEndpoints.start.lat,result:state.generationResult,calls:snapNativeCalls.filter(c=>c.type==='local_route').length};});
   assert(adopted.lat!==before.lat);assert.equal(adopted.result,null);assert.equal(adopted.calls,before.count,'adoption never automatically routes');
   assert.equal(await page.locator('.endpoint-adjustment-marker').count(),0);
-  await page.click('#undo-point-edit');assert.equal(await page.evaluate(async()=>{const{state}=await import('/static/state.js');return state.waypointEndpoints.start.lat;}),before.lat);
+  if(!await page.locator('#undo-point-edit').isVisible())await page.locator('#route-editor-toggle').click();await page.click('#undo-point-edit');assert.equal(await page.evaluate(async()=>{const{state}=await import('/static/state.js');return state.waypointEndpoints.start.lat;}),before.lat);
   cases.push('strict-intent-large-displacement-explicit-adoption-invalidation-undo');
   // JSON restoration preserves exact intent, and each candidate owns its adjustment.
   const imported=structuredClone(snapshot.request);delete imported.endpoint_snap_policy;

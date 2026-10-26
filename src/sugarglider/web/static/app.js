@@ -4,7 +4,7 @@ import { initializeAdventureDialog } from "./adventure_dialog.js";
 import { nativeBridgeTransport } from "./native_bridge_transport.js";
 import { nearbyAdventurePlaceContext } from "./adventure_grounding.js";
 import { createAdventureResults } from "./adventure_results.js";
-import { renderAdventurePlaces } from "./map.js";
+import { renderAdventurePlaces, zoomMap, resetMapNorth, mapViewportPadding } from "./map.js";
 import { regionalRoutingReference } from "./regional_routing_reference.js";
 import { selectCommittedRegion } from "./regional_planning.js";
 import { initializeSourceInformation } from "./data_notices.js";
@@ -18,7 +18,7 @@ import { initializeItineraryDialog } from "./itinerary_dialog.js";
 import { validateLocalWaypointRouteRequest, LOCAL_WAYPOINT_MAX_WAYPOINTS } from "./local_waypoint_route.js";
 import { endpointSnapPolicy, restoreEndpointSnapIntent } from "./endpoint_snapping.js";
 import { renderEndpointAdjustments } from "./endpoint_adjustment_view.js";
-import { renderRouteDock } from "./route_dock.js";
+import { renderRouteDock, setRouteDockExpanded } from "./route_dock.js";
 import { addResolvedRouteLocation, replaceResolvedRouteLocation } from "./route_point_acquisition.js";
 import { resolvedPoiLocation } from "./poi_route_location.js";
 import { reconcileAutomaticIntent, hasDiscoveryIntent, routeIntentPresentation, rememberPointEdit, undoPointEdit, clearPointUndo, pointUndoLabel, redoPointEdit, changeMapTopology } from "./automatic_intent.js";
@@ -1200,6 +1200,7 @@ function updatePoiSelection(scrollSelected = false) {
 function selectPoint(index, { scrollSelected = false, requestPopup = false } = {}) {
   if (state.planningMode === "auto_tour" && state.autoTour.start && index === 0) { selectEndpoint("start"); return; }
   if (!Number.isInteger(index) || index < 0 || index >= state.points.length) return;
+  setRouteDockExpanded(byId("route-dock"), true);
   clearPointPlacement();
   state.selectedEndpointKind = null;
   state.selectedPointIndex = index;
@@ -1223,6 +1224,7 @@ function clearPointPlacement() {
 }
 
 function selectEndpoint(kind) {
+  setRouteDockExpanded(byId("route-dock"), true);
   clearPointPlacement();
   state.selectedEndpointKind = kind;
   state.selectedPointIndex = null;
@@ -1697,6 +1699,7 @@ function renderEndpointAdjustmentViews() {
     onShow: item => {
       if (!currentEndpointAdjustments().includes(item)) return;
       appShell?.show("map");
+      setRouteDockExpanded(byId("route-dock"), false);
       const disclosures = byId("endpoint-adjustments-map").querySelectorAll("details");
       for (const disclosure of disclosures) {
         disclosure.open = false;
@@ -1705,11 +1708,9 @@ function renderEndpointAdjustmentViews() {
       // Wait for the shell's map resize, then keep both markers above the dock.
       requestAnimationFrame(() => {
         if (!currentEndpointAdjustments().includes(item)) return;
-        const canvas = byId("map").getBoundingClientRect();
-        const dock = byId("route-dock").getBoundingClientRect();
         fitCoordinates([item.requested_coordinate, item.routed_coordinate].map(point => [point.lon, point.lat]), {
           maxZoom: 18,
-          padding: { top: 40, left: 40, right: 40, bottom: Math.max(40, canvas.bottom - dock.top + 40) },
+          padding: mapViewportPadding(24),
         });
       });
     },
@@ -2149,7 +2150,7 @@ function renderStatus() {
   byId("route-form").closest(".panel.controls").inert = readOnly && !state.adventureDisplay;
   byId("route-form").hidden = Boolean(state.adventureDisplay);
   byId("planning-points").hidden = Boolean(state.adventureDisplay);
-  byId("route-dock").classList.toggle("hidden", Boolean(state.adventureDisplay));
+  byId("route-dock").classList.toggle("hidden", Boolean(state.adventureDisplay || readOnly));
   if (state.adventureDisplay) setLocalizedText(byId("planning-readiness"), () => tr`Viewing ${state.adventureResult.chosen.proposal.name}. Your manual plan is kept; return to it from Routes.`);
   byId("clear-results").disabled = readOnly;
   byId("request-status").classList.toggle("running", running);
@@ -2167,6 +2168,7 @@ function renderStatus() {
     if (localPlanner) localAvailabilityStatusText = placementGuidance || (!availability.enabled ? availability.reason : null);
   }
   renderRouteDock({ root: byId("route-dock"), disabled: running || readOnly,
+    requiresReview: currentEndpointAdjustments().some(item => item.status === "review_required"),
     visits: selectedCandidate()?.diagnostics.details.required_waypoint_order ?? [],
     onSelectPoint: selectPoint, onSelectEndpoint: selectEndpoint,
     onClearSelection: () => { clearPointPlacement(); state.selectedPointIndex = null; state.selectedEndpointKind = null; render(); },
@@ -2301,6 +2303,7 @@ async function generate() {
   state.resultsInvalidated = false;
   const id = state.request.id + 1;
   state.request = { status: "running", id, startedAt: Date.now() };
+  setRouteDockExpanded(byId("route-dock"), false);
   state.abortController = new AbortController();
   const planningLabel = isOpenPlan() ? t("Planning your route") : t("Planning your loop");
   byId("request-status").textContent = `${planningLabel}… 0 s elapsed`;
@@ -3038,6 +3041,10 @@ function updateFailedExactPoint(action) {
 let itineraryDialog = null;
 function bindEvents() {
   initializeAdventure();
+  byId("map-zoom-in").addEventListener("click", () => zoomMap(1));
+  byId("map-zoom-out").addEventListener("click", () => zoomMap(-1));
+  byId("map-reset-north").addEventListener("click", resetMapNorth);
+  byId("map-fit-points").addEventListener("click", () => byId("fit-points").click());
   byId("redo-point-edit").addEventListener("click", () => {
     if (redoPointEdit()) { updateControlsFromOptions(); invalidateAndRender(); }
   });
@@ -3052,13 +3059,20 @@ function bindEvents() {
   });
   const dockPanel = byId("route-dock").closest(".map-panel");
   const measureDock = () => {
-    dockPanel.style.setProperty("--route-dock-height", `${byId("route-dock").getBoundingClientRect().height}px`);
+    const dock = byId("route-dock");
+    dockPanel.style.setProperty("--route-dock-height", `${dock.getBoundingClientRect().height}px`);
     const attribution = dockPanel.querySelector(".maplibregl-ctrl-attrib");
     if (attribution) dockObserver.observe(attribution);
-    dockPanel.style.setProperty("--route-attribution-clearance", `${Math.max(32, (attribution?.getBoundingClientRect().height ?? 0) + 18)}px`);
+    const credits = attribution?.getBoundingClientRect();
+    const canvas = byId("map").getBoundingClientRect();
+    const compact = attribution?.classList.contains("maplibregl-compact") && !attribution.classList.contains("maplibregl-compact-show");
+    dockPanel.dataset.dockLayout = matchMedia("(max-width: 840px)").matches && dock.dataset.expanded === "false" && compact ? "compact" : "stacked";
+    dockPanel.style.setProperty("--map-credit-width", `${credits?.width ?? 44}px`);
+    dockPanel.style.setProperty("--route-attribution-clearance", `${Math.max(8, credits ? canvas.bottom - credits.top + 8 : 8)}px`);
   };
   const dockObserver = new ResizeObserver(measureDock);
   dockObserver.observe(byId("route-dock")); dockObserver.observe(dockPanel);
+  byId("route-dock").addEventListener("route-dock-layout", measureDock);
   new MutationObserver(measureDock).observe(dockPanel, { childList: true, subtree: true });
   byId("cancel-point-placement").addEventListener("click", () => { clearPointPlacement(); render(); appShell?.show("map"); });
   byId("dismiss-error").addEventListener("click", hideError);

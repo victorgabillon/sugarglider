@@ -5,6 +5,38 @@ import { pointUndoLabel, pointRedoLabel } from "./route_edit_history.js";
 import { configurePointStripDrag } from "./route_point_drag.js";
 
 const popoverListeners = new WeakMap();
+const dockViews = new WeakMap();
+
+// Disclosure state is presentation only. Closing preserves the selected point,
+// canonical route, candidate and the existing Undo/Redo authority.
+function dockView(root) {
+  if (dockViews.has(root)) return dockViews.get(root);
+  const mobile = root.ownerDocument.defaultView.matchMedia("(max-width: 840px)");
+  const toggle = root.querySelector("#route-editor-toggle"), body = root.querySelector("#route-editor-body");
+  const view = { expanded: !mobile.matches, review: false, set(expanded, focus = false) {
+    view.expanded = Boolean(expanded) || !mobile.matches;
+    if (!view.expanded) for (const menu of root.querySelectorAll(":popover-open")) menu.hidePopover();
+    root.dataset.expanded = String(view.expanded); body.hidden = !view.expanded;
+    toggle.setAttribute("aria-expanded", String(view.expanded));
+    const generate = root.querySelector("#generate-map");
+    const destination = root.querySelector(mobile.matches ? ".route-dock-summary" : ".route-dock-actions");
+    if (generate?.parentElement !== destination) destination.append(generate);
+    if (focus) toggle.focus({ preventScroll: true });
+    root.dispatchEvent(new CustomEvent("route-dock-layout", { bubbles: true }));
+  } };
+  toggle.addEventListener("click", () => view.set(!view.expanded));
+  root.querySelector("#route-editor-close").addEventListener("click", () => view.set(false, true));
+  root.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || event.defaultPrevented || !view.expanded || !mobile.matches
+      || root.ownerDocument.querySelector("dialog[open], :popover-open")) return;
+    view.set(false, true); event.preventDefault();
+  });
+  mobile.addEventListener("change", () => view.set(!mobile.matches));
+  dockViews.set(root, view); view.set(view.expanded); return view;
+}
+export function setRouteDockExpanded(root, expanded, options = {}) {
+  if (root) dockView(root).set(expanded, options.focus ?? false);
+}
 
 function action(parent, key, text, callback, disabled) {
   const button = document.createElement("button"); button.type = "button";
@@ -29,7 +61,10 @@ function attachPopover(button, popover, root) {
   };
   popover.addEventListener("toggle", toggle); popoverListeners.set(popover, toggle);
 }
-export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, onSelectEndpoint, onMove, onRemove, onReorder, onMoveEndpoint, onClearEndpoint, onEndpointPolicy, onChooseMap, onDetails, onClearSelection, onSearch }) {
+export function renderRouteDock({ root, disabled, visits = [], requiresReview = false, onSelectPoint, onSelectEndpoint, onMove, onRemove, onReorder, onMoveEndpoint, onClearEndpoint, onEndpointPolicy, onChooseMap, onDetails, onClearSelection, onSearch }) {
+  const view = dockView(root);
+  if (requiresReview && !view.review) view.set(true);
+  view.review = requiresReview;
   const active = document.activeElement;
   const focus = root.contains(active) ? { id: active.id, action: active.dataset.dockAction, chip: active.dataset.routeChip } : null;
   const endpoints = state.planningMode === "auto_tour" ? state.autoTour : state.waypointEndpoints;
@@ -61,12 +96,19 @@ export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, on
         button.title = canReorder ? t("Drag to reorder or remove; More actions has keyboard alternatives") : t("Drag to remove; choose As tapped to reorder");
       }
     }
-    button.addEventListener("click", selected && onClearSelection ? onClearSelection : select); strip.append(button);
+    button.addEventListener("click", () => { view.set(true); (selected && onClearSelection ? onClearSelection : select)(); }); strip.append(button);
   }
   if (endpoints.start) chip("start", "S", t("Start"), state.selectedEndpointKind === "start", () => onSelectEndpoint("start"));
   const visitOrder = new Map(visits.map((visit, i) => [visit.original_index, i]));
   const stops = state.points.slice(offset).map((point, i) => ({ point, index: i + offset }));
   if (visits.length) stops.sort((a, b) => (visitOrder.get(a.index) ?? a.index) - (visitOrder.get(b.index) ?? b.index));
+  setLocalizedText(root.querySelector("#route-collapsed-summary"), () => {
+    if (!endpoints.start) return t("Tap the map to choose Start");
+    const order = [t("Start"), ...stops.map((_, i) => String(i + 1))];
+    if (endpoints.end) order.push(t("End"));
+    return `${order.join(" → ")} · ${endpoints.routeTopology === "loop" ? t("Loop") : t("Point-to-point")}`;
+  });
+  root.querySelector("#route-editor-toggle").title = t("Edit route");
   stops.forEach(({ point, index }, i) => chip(String(index), String(i + 1), tr`Stop ${i + 1}: ${point.name || t("Unnamed stop")}`,
     state.selectedPointIndex === index && !state.selectedEndpointKind, () => onSelectPoint(index), index));
   if (endpoints.end) chip("end", "E", t("End"), state.selectedEndpointKind === "end", () => onSelectEndpoint("end"));
@@ -76,7 +118,7 @@ export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, on
     attachPopover(add, root.querySelector("#route-add-menu"), root);
   }
   const chooseMap = root.querySelector('[data-dock-action="choose-map"]');
-  chooseMap.disabled = disabled; chooseMap.onclick = () => { root.querySelector("#route-add-menu").hidePopover(); onChooseMap(); };
+  chooseMap.disabled = disabled; chooseMap.onclick = () => { view.set(true); root.querySelector("#route-add-menu").hidePopover(); onChooseMap(); };
   const searchLocation = root.querySelector('[data-dock-action="search-location"]');
   searchLocation.disabled = disabled || !onSearch;
   searchLocation.onclick = event => { root.querySelector("#route-add-menu").hidePopover(); onSearch?.(null, event.currentTarget); };
@@ -91,6 +133,11 @@ export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, on
   const kind = state.selectedEndpointKind, index = state.selectedPointIndex;
   const point = kind ? endpoints[kind] : index !== null && index >= offset ? state.points[index] : null;
   const placing = state.endpointSetMode || state.movingPointIndex !== null || state.addPointMode || state.settingRequestedApproachId;
+  // Choosing a map position is an explicit transition. Keep its instruction and
+  // Cancel action visible, while returning secondary editing controls to the bar.
+  if (placing && !view.placing) { view.returnAfterPlacement = view.expanded; view.set(false); }
+  if (!placing && view.placing && view.returnAfterPlacement) view.set(true);
+  view.placing = Boolean(placing);
   editor.hidden = !point || Boolean(placing);
   if (point && !placing) {
     const label = kind ? kind === "start" ? t("Start") : t("End") : tr`Stop ${stops.findIndex(stop => stop.index === index) + 1}`;
@@ -124,7 +171,7 @@ export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, on
       if (!canReorder) { const note = document.createElement("p"); setLocalizedText(note, () => t("Choose As tapped to reorder stops.")); menu.append(note); }
     }
     action(menu, "remove", kind ? tr`Clear ${label}` : t("Remove"), () => kind ? onClearEndpoint(kind) : onRemove(index), disabled);
-    action(menu, "details", t("Edit details in Plan"), onDetails, disabled);
+    action(menu, "details", t("Edit details in Plan"), () => { menu.hidePopover(); onDetails(); }, disabled);
     editor.append(menu); attachPopover(more, menu, root);
   }
   if (focus) {

@@ -197,12 +197,12 @@ async function responsiveControlScenario() {
       attribution.style.cssText = "position:absolute;right:0;bottom:0;width:150px;height:24px";
       document.querySelector(".map-panel").append(attribution);
       const controlRect = control.getBoundingClientRect();
-      const layersRect = document.querySelector(".map-tools").getBoundingClientRect();
-      const legendRect = document.querySelector(".legend").getBoundingClientRect();
+      const layers = document.querySelector(".map-tools");
+      const legend = document.querySelector(".legend");
       const attributionRect = attribution.getBoundingClientRect();
       assert(controlRect.width >= 44 && controlRect.height >= 44, `touch target ${width}`);
-      assert(!overlaps(controlRect, layersRect), `does not cover Layers ${width}`);
-      assert(!overlaps(controlRect, legendRect), `does not cover legend ${width}`);
+      assert(layers.closest(".header-tools") && legend.closest(".header-tools"), `map display and legend are secondary Tools content ${width}`);
+      assert(!document.querySelector(".map-panel > .map-tools"), `no competing map menu over private location ${width}`);
       assert(!overlaps(controlRect, attributionRect), `does not cover attribution ${width}`);
       assert(
         document.documentElement.scrollWidth <= document.documentElement.clientWidth,

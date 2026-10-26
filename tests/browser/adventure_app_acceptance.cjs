@@ -3,6 +3,7 @@
 // synthetic CI fixtures; no real account, geographic evidence or device install.
 const fs = require('node:fs/promises'), path = require('node:path'), assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const { checkMinimalMobileMap } = require('./map_minimalism_checks.cjs');
 const root = path.resolve(__dirname, '../..'), origin = 'https://appassets.androidplatform.net';
 const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bike', 'road_bike'];
 
@@ -11,7 +12,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
     ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
   try {
     for (const [width, height, locale] of [[372, 760, "fr-FR"], [412, 844, "en-GB"], [320, 720, "fr-FR"], [800, 372, "fr-FR"], [1280, 844, "en-GB"]].filter(row => !process.env.FOCUSED_WIDTH || row[0] === Number(process.env.FOCUSED_WIDTH))) {
-      const context = await browser.newContext({ viewport: { width, height }, locale: locale === "fr-FR" ? "en-US" : locale, serviceWorkers: 'block' });
+      const context = await browser.newContext({ viewport: { width, height }, locale: locale === "fr-FR" ? "en-US" : locale, serviceWorkers: 'block', hasTouch: width <= 840 });
       const errors = [], external = [], unexpected = [];
       try {
         await context.route('**/*', async route => {
@@ -162,7 +163,8 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           });
           assert(!layout.overflow, JSON.stringify(layout));
           assert(layout.ai.height >= 44 && layout.ai.right <= width && layout.ai.right <= layout.tools.left + 1, JSON.stringify(layout));
-          assert(layout.dock.bottom <= layout.credits.top + 1 && layout.credits.bottom <= layout.nav.top + 1, JSON.stringify(layout));
+          const overlaps = (a,b) => a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1;
+          assert(!overlaps(layout.dock, layout.credits) && (width > 840 || layout.credits.bottom <= layout.nav.top + 1), JSON.stringify(layout));
           return layout;
         };
         assert(await page.locator('#ask-chatgpt').isVisible(), 'Ask ChatGPT is visible on startup without opening Plan');
@@ -190,7 +192,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         const links = [];
         await context.route('https://www.openstreetmap.org/copyright', route => { links.push(route.request().url()); return route.fulfill({ body: 'Synthetic attribution link target', contentType: 'text/html' }); });
         await screenshot('map-initial');
-        if (width <= 640) {
+        if (width <= 840) {
           await page.waitForFunction(() => !document.querySelector('.maplibregl-ctrl-attrib').classList.contains('maplibregl-compact-show'));
           await checkLayout(); await screenshot('map-settled');
           const creditsButton = page.locator('.maplibregl-ctrl-attrib summary');
@@ -202,7 +204,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         }
         const popup = page.waitForEvent('popup'); await osm.click(); const linked = await popup;
         await linked.waitForLoadState(); await linked.close(); assert.equal(links.length, 1);
-        if (width <= 640) { await page.locator('.maplibregl-ctrl-attrib summary').click(); }
+        if (width <= 840) { await page.locator('.maplibregl-ctrl-attrib summary').click(); }
         const tools = page.locator('.header-tools');
         await tools.evaluate(node => { node.open = true; });
         await page.locator('#native-privacy').click();
@@ -258,6 +260,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           await page.locator('#adventure-close').click();
           await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
         }
+        const minimalCases = await checkMinimalMobileMap({ page, width, screenshot, checkLayout });
         const initialContext = await page.evaluate(() => adventureAppState.currentAdventureContext());
         assert.equal(initialContext.start,null);assert.equal(initialContext.end,null);
         const initialPlanView = page.locator('[data-shell-view="plan"]');if(await initialPlanView.isVisible())await initialPlanView.click();
@@ -368,6 +371,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         assert(adventure.result.candidates.some(c => c.reached_stops.length === 2));
         await view('routes'); await page.locator('.candidate-select').last().click();
         await page.waitForFunction(french => document.querySelector('#adventure-storage-status').textContent.startsWith(french ? 'Enregistrée sur cet appareil' : 'Saved on this device'),locale==='fr-FR');
+        await view('map'); await screenshot('minimal-ai-three-alternatives-map'); await view('routes'); await screenshot('minimal-ai-three-alternatives-routes');
         const exactAdventure = await page.evaluate(() => JSON.stringify(adventureAppState.state.adventureResult));
         const adventureBeforeLanguage = await languageFingerprint();
         await page.evaluate(async language => { const { setLanguage } = await import('/static/i18n.js'); await setLanguage(language); }, originalLanguage === 'fr' ? 'en' : 'fr');
@@ -463,7 +467,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await screenshot('dialog-region-unavailable');
         await page.locator('#adventure-close').click();
         assert.deepEqual(errors, []); assert.deepEqual(external, []);
-        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, height, locale, status: 'passed', cases: ['french_default_on_english_device', 'icon_only_localized_accessible_map_action', 'remembered_english_survives_restart', 'language_preserves_canonical_request_result_selection_form_camera_and_gpx', 'language_does_not_acquire_location_route_infer_or_record', 'supplied_ai_artwork_map_plan_dialog_loaded_accessible_and_clickable','startup_map_ai_cta_shared_lifecycle_privacy_build_identity','initial_settled_keyboard_credits_and_active_region_switch','french_portrait_landscape_large_text','region_unavailable_visible_without_automatic_request','bounded_local_landmark_context_before_research','name_grounding_without_prior_location_picker','optional_endpoints_and_cancelled_map_roundtrip','no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
+        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, height, locale, status: 'passed', cases: [...minimalCases,'french_default_on_english_device', 'icon_only_localized_accessible_map_action', 'remembered_english_survives_restart', 'language_preserves_canonical_request_result_selection_form_camera_and_gpx', 'language_does_not_acquire_location_route_infer_or_record', 'supplied_ai_artwork_map_plan_dialog_loaded_accessible_and_clickable','startup_map_ai_cta_shared_lifecycle_privacy_build_identity','initial_settled_keyboard_credits_and_active_region_switch','french_portrait_landscape_large_text','region_unavailable_visible_without_automatic_request','bounded_local_landmark_context_before_research','name_grounding_without_prior_location_picker','optional_endpoints_and_cancelled_map_roundtrip','no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
       } finally { await context.close(); }
     }
   } finally { await browser.close(); }

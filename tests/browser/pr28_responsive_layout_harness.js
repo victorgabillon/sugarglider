@@ -119,7 +119,12 @@ function plannerScenario(frame, width) {
   const empty = document.querySelector(".map-empty-state");
 
   assertNoPageOverflow(frame, `planner ${width}px`);
-  assertInside(tools, mapPanel, `map tools stay inside map at ${width}px`);
+  const menu = document.querySelector(".header-tools");
+  const wasOpen = menu.open; menu.open = true; tools.open = true;
+  assert(tools.closest(".header-tools") === menu, "one map display disclosure belongs to Tools");
+  assertInside(tools, menu.querySelector(".header-tools-menu"), `map display stays inside Tools at ${width}px`);
+  assertWithinViewport(frame, tools, `map display at ${width}px`);
+  tools.open = false; menu.open = wasOpen;
   assertInside(empty, mapPanel, `map onboarding stays inside map at ${width}px`);
   assert(
     document.querySelectorAll(".candidate-card").length === 2,

@@ -1,5 +1,10 @@
 // Complete interface messages only. Canonical data, user text, place names and original source notices remain unchanged.
 export const FRENCH = Object.freeze({
+  "Close route editor": "Fermer l’éditeur de parcours",
+  "Map display": "Affichage de la carte",
+  "Map navigation": "Navigation sur la carte",
+  "Reset north": "Revenir au nord",
+  "Done": "Terminer",
   " (AI suggestion: {0})": " (suggestion de l’IA : {0})",
   " (predominantly woodland)": " (principalement en forêt)",
   " (required-point index {0})": " (indice du point obligatoire {0})",

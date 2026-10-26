@@ -48,6 +48,133 @@
             </details>
             <button class="button secondary" id="edit-trail-profile" type="button"><span data-i18n="My profile">My profile</span></button>
             <button class="button secondary" id="native-privacy" type="button" hidden><span data-i18n="Privacy">Privacy</span></button>
+        <details class="map-tools" aria-label="Map display controls" data-i18n-aria-label="Map display controls">
+          <summary><span data-i18n="Map display">Map display</span></summary>
+          <div class="map-tool-options">
+            <div class="map-view-actions" role="group" aria-label="Map navigation" data-i18n-aria-label="Map navigation"><button id="map-zoom-in" class="button secondary" type="button" aria-label="Zoom in" data-i18n-aria-label="Zoom in">+</button><button id="map-zoom-out" class="button secondary" type="button" aria-label="Zoom out" data-i18n-aria-label="Zoom out">−</button><button id="map-reset-north" class="button secondary" type="button" data-i18n="Reset north">Reset north</button><button id="map-fit-points" class="button secondary" type="button" data-i18n="Fit points">Fit points</button></div>
+            <label data-icon="alternatives"><input id="show-all" type="checkbox" checked> <span data-i18n="Show alternatives">Show alternatives</span></label>
+            <label data-icon="nature"><input id="show-nature" type="checkbox"> <span data-i18n="Show nature">Show nature</span></label>
+            <label data-icon="direction"><input id="show-direction" type="checkbox" checked> <span data-i18n="Show direction arrows">Show direction arrows</span></label>
+            <label id="show-dropped-requested-radii-control" class="advanced-map-control" title="Advanced requested-stop display" data-i18n-title="Advanced requested-stop display"><input id="show-dropped-requested-radii" type="checkbox"> <span data-i18n="Dropped access-search areas">Dropped access-search areas</span></label>
+            <details class="legend">
+              <summary><span data-i18n="Map legend">Map legend</span></summary>
+              <div class="legend-items">
+                <span><i class="line selected"></i><span data-i18n="Selected route">Selected route</span></span>
+                <span><i class="line alternative"></i><span data-i18n="Alternative">Alternative</span></span>
+                <span><i class="line repeated"></i><span data-i18n="Repeated">Repeated</span></span>
+                <span><i class="line backtrack"></i><span data-i18n="Immediate out-and-back">Immediate out-and-back</span></span>
+                <span><i class="line spur"></i><span data-i18n="Detected excursion">Detected excursion</span></span>
+                <span><i class="marker mandatory">1</i><span data-i18n="Required mascot pin">Required mascot pin</span></span>
+                <span><i class="marker start">1</i><span data-i18n="Start/end">Start/end</span></span>
+                <span class="legend-group"><span data-i18n="Your plan">Your plan</span></span>
+                <span><i class="marker requested-pending"><span data-i18n="R1">R1</span></i><span data-i18n="Requested, pending">Requested, pending</span></span>
+                <span><i class="marker requested-selected"><span data-i18n="R1">R1</span></i><span data-i18n="Requested, reached">Requested, reached</span></span>
+                <span><i class="marker requested-pending"><span data-i18n="R1">R1</span></i><span data-i18n="Requested, approximated">Requested, approximated</span></span>
+                <span><i class="marker requested-dropped"><span data-i18n="R1">R1</span></i><span data-i18n="Requested, dropped">Requested, dropped</span></span>
+                <span><i class="marker access"></i><span data-i18n="Selected approach">Selected approach</span></span>
+                <span><i class="marker optional"></i><span data-i18n="Generated point">Generated point</span></span>
+                <span><i class="marker waypoint"></i><span data-i18n="GPX waypoint">GPX waypoint</span></span>
+                <span class="legend-group"><span data-i18n="Mapped OSM discovery">Mapped OSM discovery</span></span>
+                <span><i class="marker place-scenic">▲</i><span data-i18n="Scenic place">Scenic place</span></span>
+                <span><i class="marker place-water mascot-water"></i><span data-i18n="Verified water mascot pin">Verified water mascot pin</span></span>
+                <span><i class="marker visited-place"></i><span data-i18n="Visited place">Visited place</span></span>
+                <span><i class="marker place-unknown">?</i><span data-i18n="Unknown potability">Unknown potability</span></span>
+                <span><i class="line imported"></i><span data-i18n="Imported GPX">Imported GPX</span></span>
+                <span class="nature-legend"><i class="line woodland"></i><span data-i18n="Woodland">Woodland</span></span>
+                <span class="nature-legend"><i class="line open-natural"></i><span data-i18n="Open natural">Open natural</span></span>
+                <span class="nature-legend"><i class="line agriculture"></i><span data-i18n="Agriculture">Agriculture</span></span>
+                <span class="nature-legend"><i class="line urban"></i><span data-i18n="Urban/developed">Urban/developed</span></span>
+                <span class="nature-legend"><i class="line water"></i><span data-i18n="Water crossing">Water crossing</span></span>
+                <span class="nature-legend"><i class="line nature-unknown"></i><span data-i18n="Unknown land cover">Unknown land cover</span></span>
+              </div>
+            </details>
+            <details id="offline-maps" class="offline-maps" aria-labelledby="offline-maps-title">
+              <summary><strong id="offline-maps-title"><span data-i18n="Offline maps">Offline maps</span></strong></summary>
+              <div class="offline-maps-body">
+                <button type="button" class="text-button" data-source-information><span data-i18n="Map data sources and licences">Map data sources and licences</span></button>
+                <p id="offline-map-storage-support"><span data-i18n="Checking browser storage support…">Checking browser storage support…</span></p>
+                <p id="offline-map-pack-status" role="status" aria-live="polite"><span data-i18n="Checking installed map packs…">Checking installed map packs…</span></p>
+                <p id="offline-map-active"><span data-i18n="No local map pack is active.">No local map pack is active.</span></p>
+                <ul id="offline-map-pack-list" class="offline-map-pack-list"></ul>
+                <form id="offline-map-install-form" class="offline-map-install-form">
+                  <label for="offline-map-manifest-url"><span data-i18n="Pack manifest URL">Pack manifest URL</span></label>
+                  <input id="offline-map-manifest-url" type="url" inputmode="url" autocomplete="off" placeholder="https://example.org/marly/manifest.json" required data-i18n-placeholder="https://example.org/marly/manifest.json">
+                  <div class="button-row">
+                    <button id="offline-map-install" class="button secondary" type="submit" aria-busy="false"><span data-i18n="Install map pack">Install map pack</span></button>
+                    <button id="offline-map-cancel-install" class="text-button hidden" type="button"><span data-i18n="Cancel download">Cancel download</span></button>
+                  </div>
+                </form>
+                <p class="help"><span data-i18n="Installation is explicit. Regional PMTiles stay in this browser; remote raster tiles are never copied into offline storage.">Installation is explicit. Regional PMTiles stay in this browser; remote raster tiles are never copied into offline storage.</span></p>
+              </div>
+            </details>
+            <section id="local-routing-experiment" class="local-routing-experiment advanced-map-control hidden" aria-labelledby="local-routing-title">
+              <strong id="local-routing-title"><span data-i18n="Local routing experiment">Local routing experiment</span></strong>
+              <p><span data-i18n="Debug Android only. Uses experimental local Valhalla policies; these are not claimed equivalent to production GraphHopper profiles.">Debug Android only. Uses experimental local Valhalla policies; these are not claimed equivalent to production GraphHopper profiles.</span></p>
+              <label for="local-routing-profile"><span data-i18n="Public profile">Public profile</span></label>
+              <select id="local-routing-profile">
+                <option value="trail_run" data-i18n="Trail run">Trail run</option>
+                <option value="hike" selected data-i18n="Hike">Hike</option>
+                <option value="city_bike" data-i18n="City bike">City bike</option>
+                <option value="gravel_bike" data-i18n="Gravel bike">Gravel bike</option>
+                <option value="mountain_bike" data-i18n="Mountain bike">Mountain bike</option>
+                <option value="road_bike" data-i18n="Road bike">Road bike</option>
+              </select>
+              <button id="local-routing-smoke-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Run Marly offline smoke test">Run Marly offline smoke test</span></button>
+              <button id="local-routing-paris-smoke-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Run Paris offline smoke test">Run Paris offline smoke test</span></button>
+              <button id="local-routing-via-smoke-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Run Marly three-point via test">Run Marly three-point via test</span></button>
+              <button id="local-routing-cross-pack-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Test no common regional pack">Test no common regional pack</span></button>
+              <button id="local-routing-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Route ordered planner points locally">Route ordered planner points locally</span></button>
+              <p id="local-routing-status" role="status" aria-live="polite"></p>
+              <strong id="local-waypoint-route-title"><span data-i18n="Local Waypoint Route experiment">Local Waypoint Route experiment</span></strong>
+              <p><span data-i18n="Uses a read-only snapshot of the ordinary Waypoint Route planner&#x27;s topology, endpoints, profile, exact waypoints, order, seed and distance controls. At most 14 interior waypoints and 16 local-route calls. Exact endpoints and graph-derived loop closure stay within 25 m. Near endpoints allow up to 150 m with visible warnings above 25 m; exact interiors stay within 300 m. No GPS coincidence is promised.">Uses a read-only snapshot of the ordinary Waypoint Route planner's topology, endpoints, profile, exact waypoints, order, seed and distance controls. At most 14 interior waypoints and 16 local-route calls. Exact endpoints and graph-derived loop closure stay within 25 m. Near endpoints allow up to 150 m with visible warnings above 25 m; exact interiors stay within 300 m. No GPS coincidence is promised.</span></p>
+              <p><span data-i18n="Set nature and loop geometry off, and path selection to shortest. Approach/best-effort points and overrides are rejected. No POI/nature scoring, globally shortest path or GraphHopper parity claim; normal Generate remains server-backed.">Set nature and loop geometry off, and path selection to shortest. Approach/best-effort points and overrides are rejected. No POI/nature scoring, globally shortest path or GraphHopper parity claim; normal Generate remains server-backed.</span></p>
+              <button id="local-waypoint-route-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Generate experimental Local Waypoint Route from planner">Generate experimental Local Waypoint Route from planner</span></button>
+              <p id="local-waypoint-route-status" role="status" aria-live="polite"></p>
+              <ol id="local-waypoint-route-results" class="local-auto-tour-results"></ol>
+              <strong id="local-auto-tour-title"><span data-i18n="Local Auto Tour experiment">Local Auto Tour experiment</span></strong>
+              <fieldset>
+                <legend><span data-i18n="Development regional places and nature">Development regional places and nature</span></legend>
+                <p><span data-i18n="Install PR39 places/nature data for an already installed routing region. Map and routing files stay separate.">Install PR39 places/nature data for an already installed routing region. Map and routing files stay separate.</span></p>
+                <label for="local-region-data-url"><span data-i18n="Regional manifest URL">Regional manifest URL</span></label>
+                <input id="local-region-data-url" type="url" autocomplete="off" spellcheck="false">
+                <button id="local-region-data-install" type="button" class="button secondary"><span data-i18n="Install places and nature">Install places and nature</span></button>
+                <button id="local-region-data-cancel" type="button" class="button secondary" disabled><span data-i18n="Cancel installation">Cancel installation</span></button>
+                <p id="local-region-data-status" role="status" aria-live="polite"></p>
+                <ul id="local-region-data-regions"></ul>
+              </fieldset>
+              <label for="local-auto-tour-nature"><span data-i18n="Nature preference">Nature preference</span></label>
+              <select id="local-auto-tour-nature"><option value="off" data-i18n="Off">Off</option><option value="prefer" data-i18n="Prefer mapped nature below loop quality">Prefer mapped nature below loop quality</option></select>
+              <label><input id="local-auto-tour-scenic" type="checkbox"> <span data-i18n="Consider scenic places">Consider scenic places</span></label>
+              <label><input id="local-auto-tour-water" type="checkbox"> <span data-i18n="Consider mapped verified drinking water">Consider mapped verified drinking water</span></label>
+              <label for="local-auto-tour-requested-pois"><span data-i18n="Requested local OSM place IDs (comma-separated)">Requested local OSM place IDs (comma-separated)</span></label>
+              <input id="local-auto-tour-requested-pois" type="text" autocomplete="off" spellcheck="false">
+              <p><span data-i18n="POI alternatives retain the no-POI recommendation while exact repetition/backtracking evidence is unavailable. Mapped water does not guarantee current potability or operation.">POI alternatives retain the no-POI recommendation while exact repetition/backtracking evidence is unavailable. Mapped water does not guarantee current potability or operation.</span></p>
+              <p><span data-i18n="Loop-only and bounded, with optional installed places/nature. Exact edge repetition and GraphHopper parity remain unavailable.">Loop-only and bounded, with optional installed places/nature. Exact edge repetition and GraphHopper parity remain unavailable.</span></p>
+              <label for="local-auto-tour-target-km"><span data-i18n="Target distance (km)">Target distance (km)</span></label>
+              <input id="local-auto-tour-target-km" type="number" min="2" max="60" step="0.5" value="12" disabled>
+              <label for="local-auto-tour-tolerance-km"><span data-i18n="Tolerance (km)">Tolerance (km)</span></label>
+              <input id="local-auto-tour-tolerance-km" type="number" min="0.1" max="15" step="0.1" value="2.5" disabled>
+              <label for="local-auto-tour-candidate-count"><span data-i18n="Candidate count">Candidate count</span></label>
+              <select id="local-auto-tour-candidate-count" disabled>
+                <option value="1">1</option>
+                <option value="2" selected>2</option>
+                <option value="3">3</option>
+              </select>
+              <label for="local-auto-tour-seed"><span data-i18n="Deterministic seed">Deterministic seed</span></label>
+              <input id="local-auto-tour-seed" type="number" min="0" max="4294967295" step="1" value="35" disabled>
+              <label for="local-auto-tour-direction"><span data-i18n="Direction preference">Direction preference</span></label>
+              <select id="local-auto-tour-direction" disabled>
+                <option value="any" selected data-i18n="Any">Any</option>
+                <option value="clockwise" data-i18n="Clockwise">Clockwise</option>
+                <option value="counterclockwise" data-i18n="Counterclockwise">Counterclockwise</option>
+              </select>
+              <button id="local-auto-tour-smoke-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Run fixed Marly local Auto Tour">Run fixed Marly local Auto Tour</span></button>
+              <button id="local-auto-tour-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Generate local Auto Tour from first planner point">Generate local Auto Tour from first planner point</span></button>
+              <p id="local-auto-tour-status" role="status" aria-live="polite"></p>
+              <ol id="local-auto-tour-results" class="local-auto-tour-results"></ol>
+            </section>
+          </div>
+        </details>
             <details class="app-status-details"><summary><span data-i18n="App status">App status</span></summary><p id="app-build-identity" class="field-help" hidden></p><p id="app-status-summary"><span data-i18n="Checking app status…">Checking app status…</span></p></details>
             <details id="offline-regions" class="offline-regions hidden">
               <summary><strong><span data-i18n="Regions">Regions</span></strong><span><span data-i18n="Maps, routing, places, nature and elevation on this device">Maps, routing, places, nature and elevation on this device</span></span></summary>
@@ -469,14 +596,21 @@
         <h2 id="map-title" class="visually-hidden"><span data-i18n="Interactive route map">Interactive route map</span></h2>
         <div id="map" role="application" aria-label="Interactive trail route map" data-i18n-aria-label="Interactive trail route map"></div>
         <section id="route-dock" class="route-dock" aria-label="Edit route" data-i18n-aria-label="Edit route">
+          <div class="route-dock-summary">
+            <button id="route-editor-toggle" type="button" aria-expanded="false" aria-controls="route-editor-body" aria-describedby="route-collapsed-summary" aria-label="Edit route" data-i18n-aria-label="Edit route"><span id="route-collapsed-summary"></span><span aria-hidden="true">⌃</span></button>
+            <button id="generate-map" class="button primary" type="button" aria-describedby="request-status" hidden><span data-i18n="Generate">Generate</span></button>
+          </div>
+          <section id="endpoint-adjustments-map" class="endpoint-adjustments" aria-label="Endpoint adjustments" hidden data-i18n-aria-label="Endpoint adjustments"></section>
+          <div id="route-editor-body" hidden>
+            <div class="route-editor-heading"><strong data-i18n="Edit route">Edit route</strong><button id="route-editor-close" type="button" aria-label="Close route editor" data-i18n-aria-label="Close route editor" data-i18n="Done">Done</button></div>
           <div class="route-dock-controls">
             <button id="undo-point-edit" type="button" aria-label="Undo route edit" disabled data-i18n-aria-label="Undo route edit"><span aria-hidden="true">↶</span><span class="visually-hidden"><span data-i18n="Undo">Undo</span></span></button>
             <button id="redo-point-edit" type="button" aria-label="Redo route edit" disabled data-i18n-aria-label="Redo route edit"><span aria-hidden="true">↷</span><span class="visually-hidden"><span data-i18n="Redo">Redo</span></span></button>
             <label><span class="visually-hidden"><span data-i18n="Finish">Finish</span></span><span class="dock-choice"><span id="dock-finish-label" aria-hidden="true"><span data-i18n="Loop">Loop</span></span><select id="dock-finish" aria-label="Finish" data-i18n-aria-label="Finish"><option value="loop" data-i18n="Loop">Loop</option><option value="point_to_point" data-i18n="Finish elsewhere">Finish elsewhere</option></select></span></label>
             <label><span class="visually-hidden"><span data-i18n="Order">Order</span></span><span class="dock-choice"><span id="dock-order-label" aria-hidden="true"><span data-i18n="As tapped">As tapped</span></span><select id="dock-order" aria-label="Order" data-i18n-aria-label="Order"><option value="fixed" data-i18n="As tapped">As tapped</option><option value="optimize" data-i18n="Optimize stops">Optimize stops</option></select></span></label>
           </div>
-          <section id="endpoint-adjustments-map" class="endpoint-adjustments" aria-label="Endpoint adjustments" hidden data-i18n-aria-label="Endpoint adjustments"></section>
-          <div class="route-dock-actions"><div id="route-point-strip" class="route-point-strip" role="group" aria-label="Route points" data-i18n-aria-label="Route points"></div><button id="generate-map" class="button primary" type="button" aria-describedby="request-status" hidden><span data-i18n="Generate">Generate</span></button></div>
+
+          <div class="route-dock-actions"><div id="route-point-strip" class="route-point-strip" role="group" aria-label="Route points" data-i18n-aria-label="Route points"></div></div>
           <p id="route-dock-hint" class="visually-hidden" aria-live="polite"><span data-i18n="Tap the map to choose Start">Tap the map to choose Start</span></p>
           <p id="route-strip-help" class="visually-hidden"></p>
           <div id="route-add-menu" class="route-dock-popover" popover="auto" role="dialog" aria-label="Add point" data-i18n-aria-label="Add point"><button type="button" data-dock-action="search-location"><span data-i18n="Search place or address">Search place or address</span></button><button type="button" data-dock-action="choose-map"><span data-i18n="Choose on map">Choose on map</span></button></div>
@@ -484,6 +618,7 @@
           <p id="route-drag-status" class="visually-hidden" role="status" aria-live="polite"></p>
           <section id="map-route-intent" class="visually-hidden" aria-label="Route summary" aria-live="polite" data-i18n-aria-label="Route summary"><strong id="map-route-summary"></strong><p id="map-route-help"></p></section>
           <section id="route-quick-editor" class="route-quick-editor" aria-label="Selected route point" hidden data-i18n-aria-label="Selected route point"></section>
+          </div>
           <div id="map-edit-notice" class="map-edit-notice hidden" role="status"><p id="map-edit-guidance"></p><button id="cancel-point-placement" class="button secondary" type="button"><span data-i18n="Cancel">Cancel</span></button></div>
         </section>
         <button id="planner-location-control" class="planner-location-control hidden" type="button" aria-label="Show my location" aria-pressed="false" aria-busy="false" aria-describedby="planner-location-status" title="Show my location" data-i18n-aria-label="Show my location" data-i18n-title="Show my location">
@@ -494,132 +629,7 @@
           <img src="/static/brand/sugarglider-flying-map.png" width="1024" height="1024" loading="lazy" alt="">
           <div><h2 id="empty-title"><span data-i18n="Start on the map">Start on the map</span></h2><p><span data-i18n="Tap or click the map to choose your starting point.">Tap or click the map to choose your starting point.</span></p></div>
         </section>
-        <details class="map-tools" aria-label="Map display controls" data-i18n-aria-label="Map display controls">
-          <summary><span data-i18n="Map options">Map options</span></summary>
-          <div class="map-tool-options">
-            <label data-icon="alternatives"><input id="show-all" type="checkbox" checked> <span data-i18n="Show alternatives">Show alternatives</span></label>
-            <label data-icon="nature"><input id="show-nature" type="checkbox"> <span data-i18n="Show nature">Show nature</span></label>
-            <label data-icon="direction"><input id="show-direction" type="checkbox" checked> <span data-i18n="Show direction arrows">Show direction arrows</span></label>
-            <label id="show-dropped-requested-radii-control" class="advanced-map-control" title="Advanced requested-stop display" data-i18n-title="Advanced requested-stop display"><input id="show-dropped-requested-radii" type="checkbox"> <span data-i18n="Dropped access-search areas">Dropped access-search areas</span></label>
-            <details class="legend">
-              <summary><span data-i18n="Map legend">Map legend</span></summary>
-              <div class="legend-items">
-                <span><i class="line selected"></i><span data-i18n="Selected route">Selected route</span></span>
-                <span><i class="line alternative"></i><span data-i18n="Alternative">Alternative</span></span>
-                <span><i class="line repeated"></i><span data-i18n="Repeated">Repeated</span></span>
-                <span><i class="line backtrack"></i><span data-i18n="Immediate out-and-back">Immediate out-and-back</span></span>
-                <span><i class="line spur"></i><span data-i18n="Detected excursion">Detected excursion</span></span>
-                <span><i class="marker mandatory">1</i><span data-i18n="Required mascot pin">Required mascot pin</span></span>
-                <span><i class="marker start">1</i><span data-i18n="Start/end">Start/end</span></span>
-                <span class="legend-group"><span data-i18n="Your plan">Your plan</span></span>
-                <span><i class="marker requested-pending"><span data-i18n="R1">R1</span></i><span data-i18n="Requested, pending">Requested, pending</span></span>
-                <span><i class="marker requested-selected"><span data-i18n="R1">R1</span></i><span data-i18n="Requested, reached">Requested, reached</span></span>
-                <span><i class="marker requested-pending"><span data-i18n="R1">R1</span></i><span data-i18n="Requested, approximated">Requested, approximated</span></span>
-                <span><i class="marker requested-dropped"><span data-i18n="R1">R1</span></i><span data-i18n="Requested, dropped">Requested, dropped</span></span>
-                <span><i class="marker access"></i><span data-i18n="Selected approach">Selected approach</span></span>
-                <span><i class="marker optional"></i><span data-i18n="Generated point">Generated point</span></span>
-                <span><i class="marker waypoint"></i><span data-i18n="GPX waypoint">GPX waypoint</span></span>
-                <span class="legend-group"><span data-i18n="Mapped OSM discovery">Mapped OSM discovery</span></span>
-                <span><i class="marker place-scenic">▲</i><span data-i18n="Scenic place">Scenic place</span></span>
-                <span><i class="marker place-water mascot-water"></i><span data-i18n="Verified water mascot pin">Verified water mascot pin</span></span>
-                <span><i class="marker visited-place"></i><span data-i18n="Visited place">Visited place</span></span>
-                <span><i class="marker place-unknown">?</i><span data-i18n="Unknown potability">Unknown potability</span></span>
-                <span><i class="line imported"></i><span data-i18n="Imported GPX">Imported GPX</span></span>
-                <span class="nature-legend"><i class="line woodland"></i><span data-i18n="Woodland">Woodland</span></span>
-                <span class="nature-legend"><i class="line open-natural"></i><span data-i18n="Open natural">Open natural</span></span>
-                <span class="nature-legend"><i class="line agriculture"></i><span data-i18n="Agriculture">Agriculture</span></span>
-                <span class="nature-legend"><i class="line urban"></i><span data-i18n="Urban/developed">Urban/developed</span></span>
-                <span class="nature-legend"><i class="line water"></i><span data-i18n="Water crossing">Water crossing</span></span>
-                <span class="nature-legend"><i class="line nature-unknown"></i><span data-i18n="Unknown land cover">Unknown land cover</span></span>
-              </div>
-            </details>
-            <details id="offline-maps" class="offline-maps" aria-labelledby="offline-maps-title">
-              <summary><strong id="offline-maps-title"><span data-i18n="Offline maps">Offline maps</span></strong></summary>
-              <div class="offline-maps-body">
-                <button type="button" class="text-button" data-source-information><span data-i18n="Map data sources and licences">Map data sources and licences</span></button>
-                <p id="offline-map-storage-support"><span data-i18n="Checking browser storage support…">Checking browser storage support…</span></p>
-                <p id="offline-map-pack-status" role="status" aria-live="polite"><span data-i18n="Checking installed map packs…">Checking installed map packs…</span></p>
-                <p id="offline-map-active"><span data-i18n="No local map pack is active.">No local map pack is active.</span></p>
-                <ul id="offline-map-pack-list" class="offline-map-pack-list"></ul>
-                <form id="offline-map-install-form" class="offline-map-install-form">
-                  <label for="offline-map-manifest-url"><span data-i18n="Pack manifest URL">Pack manifest URL</span></label>
-                  <input id="offline-map-manifest-url" type="url" inputmode="url" autocomplete="off" placeholder="https://example.org/marly/manifest.json" required data-i18n-placeholder="https://example.org/marly/manifest.json">
-                  <div class="button-row">
-                    <button id="offline-map-install" class="button secondary" type="submit" aria-busy="false"><span data-i18n="Install map pack">Install map pack</span></button>
-                    <button id="offline-map-cancel-install" class="text-button hidden" type="button"><span data-i18n="Cancel download">Cancel download</span></button>
-                  </div>
-                </form>
-                <p class="help"><span data-i18n="Installation is explicit. Regional PMTiles stay in this browser; remote raster tiles are never copied into offline storage.">Installation is explicit. Regional PMTiles stay in this browser; remote raster tiles are never copied into offline storage.</span></p>
-              </div>
-            </details>
-            <section id="local-routing-experiment" class="local-routing-experiment advanced-map-control hidden" aria-labelledby="local-routing-title">
-              <strong id="local-routing-title"><span data-i18n="Local routing experiment">Local routing experiment</span></strong>
-              <p><span data-i18n="Debug Android only. Uses experimental local Valhalla policies; these are not claimed equivalent to production GraphHopper profiles.">Debug Android only. Uses experimental local Valhalla policies; these are not claimed equivalent to production GraphHopper profiles.</span></p>
-              <label for="local-routing-profile"><span data-i18n="Public profile">Public profile</span></label>
-              <select id="local-routing-profile">
-                <option value="trail_run" data-i18n="Trail run">Trail run</option>
-                <option value="hike" selected data-i18n="Hike">Hike</option>
-                <option value="city_bike" data-i18n="City bike">City bike</option>
-                <option value="gravel_bike" data-i18n="Gravel bike">Gravel bike</option>
-                <option value="mountain_bike" data-i18n="Mountain bike">Mountain bike</option>
-                <option value="road_bike" data-i18n="Road bike">Road bike</option>
-              </select>
-              <button id="local-routing-smoke-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Run Marly offline smoke test">Run Marly offline smoke test</span></button>
-              <button id="local-routing-paris-smoke-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Run Paris offline smoke test">Run Paris offline smoke test</span></button>
-              <button id="local-routing-via-smoke-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Run Marly three-point via test">Run Marly three-point via test</span></button>
-              <button id="local-routing-cross-pack-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Test no common regional pack">Test no common regional pack</span></button>
-              <button id="local-routing-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Route ordered planner points locally">Route ordered planner points locally</span></button>
-              <p id="local-routing-status" role="status" aria-live="polite"></p>
-              <strong id="local-waypoint-route-title"><span data-i18n="Local Waypoint Route experiment">Local Waypoint Route experiment</span></strong>
-              <p><span data-i18n="Uses a read-only snapshot of the ordinary Waypoint Route planner&#x27;s topology, endpoints, profile, exact waypoints, order, seed and distance controls. At most 14 interior waypoints and 16 local-route calls. Exact endpoints and graph-derived loop closure stay within 25 m. Near endpoints allow up to 150 m with visible warnings above 25 m; exact interiors stay within 300 m. No GPS coincidence is promised.">Uses a read-only snapshot of the ordinary Waypoint Route planner's topology, endpoints, profile, exact waypoints, order, seed and distance controls. At most 14 interior waypoints and 16 local-route calls. Exact endpoints and graph-derived loop closure stay within 25 m. Near endpoints allow up to 150 m with visible warnings above 25 m; exact interiors stay within 300 m. No GPS coincidence is promised.</span></p>
-              <p><span data-i18n="Set nature and loop geometry off, and path selection to shortest. Approach/best-effort points and overrides are rejected. No POI/nature scoring, globally shortest path or GraphHopper parity claim; normal Generate remains server-backed.">Set nature and loop geometry off, and path selection to shortest. Approach/best-effort points and overrides are rejected. No POI/nature scoring, globally shortest path or GraphHopper parity claim; normal Generate remains server-backed.</span></p>
-              <button id="local-waypoint-route-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Generate experimental Local Waypoint Route from planner">Generate experimental Local Waypoint Route from planner</span></button>
-              <p id="local-waypoint-route-status" role="status" aria-live="polite"></p>
-              <ol id="local-waypoint-route-results" class="local-auto-tour-results"></ol>
-              <strong id="local-auto-tour-title"><span data-i18n="Local Auto Tour experiment">Local Auto Tour experiment</span></strong>
-              <fieldset>
-                <legend><span data-i18n="Development regional places and nature">Development regional places and nature</span></legend>
-                <p><span data-i18n="Install PR39 places/nature data for an already installed routing region. Map and routing files stay separate.">Install PR39 places/nature data for an already installed routing region. Map and routing files stay separate.</span></p>
-                <label for="local-region-data-url"><span data-i18n="Regional manifest URL">Regional manifest URL</span></label>
-                <input id="local-region-data-url" type="url" autocomplete="off" spellcheck="false">
-                <button id="local-region-data-install" type="button" class="button secondary"><span data-i18n="Install places and nature">Install places and nature</span></button>
-                <button id="local-region-data-cancel" type="button" class="button secondary" disabled><span data-i18n="Cancel installation">Cancel installation</span></button>
-                <p id="local-region-data-status" role="status" aria-live="polite"></p>
-                <ul id="local-region-data-regions"></ul>
-              </fieldset>
-              <label for="local-auto-tour-nature"><span data-i18n="Nature preference">Nature preference</span></label>
-              <select id="local-auto-tour-nature"><option value="off" data-i18n="Off">Off</option><option value="prefer" data-i18n="Prefer mapped nature below loop quality">Prefer mapped nature below loop quality</option></select>
-              <label><input id="local-auto-tour-scenic" type="checkbox"> <span data-i18n="Consider scenic places">Consider scenic places</span></label>
-              <label><input id="local-auto-tour-water" type="checkbox"> <span data-i18n="Consider mapped verified drinking water">Consider mapped verified drinking water</span></label>
-              <label for="local-auto-tour-requested-pois"><span data-i18n="Requested local OSM place IDs (comma-separated)">Requested local OSM place IDs (comma-separated)</span></label>
-              <input id="local-auto-tour-requested-pois" type="text" autocomplete="off" spellcheck="false">
-              <p><span data-i18n="POI alternatives retain the no-POI recommendation while exact repetition/backtracking evidence is unavailable. Mapped water does not guarantee current potability or operation.">POI alternatives retain the no-POI recommendation while exact repetition/backtracking evidence is unavailable. Mapped water does not guarantee current potability or operation.</span></p>
-              <p><span data-i18n="Loop-only and bounded, with optional installed places/nature. Exact edge repetition and GraphHopper parity remain unavailable.">Loop-only and bounded, with optional installed places/nature. Exact edge repetition and GraphHopper parity remain unavailable.</span></p>
-              <label for="local-auto-tour-target-km"><span data-i18n="Target distance (km)">Target distance (km)</span></label>
-              <input id="local-auto-tour-target-km" type="number" min="2" max="60" step="0.5" value="12" disabled>
-              <label for="local-auto-tour-tolerance-km"><span data-i18n="Tolerance (km)">Tolerance (km)</span></label>
-              <input id="local-auto-tour-tolerance-km" type="number" min="0.1" max="15" step="0.1" value="2.5" disabled>
-              <label for="local-auto-tour-candidate-count"><span data-i18n="Candidate count">Candidate count</span></label>
-              <select id="local-auto-tour-candidate-count" disabled>
-                <option value="1">1</option>
-                <option value="2" selected>2</option>
-                <option value="3">3</option>
-              </select>
-              <label for="local-auto-tour-seed"><span data-i18n="Deterministic seed">Deterministic seed</span></label>
-              <input id="local-auto-tour-seed" type="number" min="0" max="4294967295" step="1" value="35" disabled>
-              <label for="local-auto-tour-direction"><span data-i18n="Direction preference">Direction preference</span></label>
-              <select id="local-auto-tour-direction" disabled>
-                <option value="any" selected data-i18n="Any">Any</option>
-                <option value="clockwise" data-i18n="Clockwise">Clockwise</option>
-                <option value="counterclockwise" data-i18n="Counterclockwise">Counterclockwise</option>
-              </select>
-              <button id="local-auto-tour-smoke-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Run fixed Marly local Auto Tour">Run fixed Marly local Auto Tour</span></button>
-              <button id="local-auto-tour-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Generate local Auto Tour from first planner point">Generate local Auto Tour from first planner point</span></button>
-              <p id="local-auto-tour-status" role="status" aria-live="polite"></p>
-              <ol id="local-auto-tour-results" class="local-auto-tour-results"></ol>
-            </section>
-          </div>
-        </details>
+
 
       </section>
 
