@@ -1225,10 +1225,12 @@ body.outing-mode .route-dock { display: none; }
   border-radius: 0; background: transparent; box-shadow: none;
 }
 .header-tools-menu .map-tool-options { padding: .4rem 0 .75rem; gap: .65rem; }
+.ui-shell:not(.outing-mode) .header-tools-menu .map-tools[open] { max-width: none; max-height: none; overflow: visible; }
 .ui-shell:not(.outing-mode) .header-tools-menu .map-tools label { min-height: 44px; font-size: .875rem; }
 .header-tools-menu .map-tools .legend { position: static; max-width: none; }
 .map-view-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
 .map-view-actions > button { min-width: 44px; min-height: 44px; }
+.header-tools-menu .map-view-actions > .button { width: auto; }
 .map-view-actions #map-reset-north { flex: 1; color: var(--text); background: var(--panel-background); border-color: var(--border); }
 
 .route-dock-summary { display: flex; align-items: stretch; gap: 5px; }
@@ -1253,7 +1255,7 @@ body.outing-mode .route-dock { display: none; }
   .ui-shell.mobile-map-view .topbar nav { margin: 0; gap: 6px; pointer-events: auto; }
   .ui-shell.mobile-map-view .header-tools > summary { min-width: 48px; min-height: 48px; justify-content: center; padding: .5rem; color: white; background: var(--primary-action); border-color: #9bb1a5; box-shadow: var(--shadow-small); }
   .ui-shell.mobile-map-view .header-ai-action { box-shadow: var(--shadow-small); }
-  .ui-shell.mobile-map-view .header-tools-menu { max-height: calc(100dvh - 10rem); max-height: calc(100cqh - 80px); width: min(22rem, calc(100vw - 16px)); }
+  .ui-shell.mobile-map-view .header-tools-menu { left: auto; right: 0; max-height: calc(100dvh - 10rem); max-height: calc(100cqh - max(80px, 3rem)); width: min(22rem, calc(100vw - 16px)); }
   .ui-shell.mobile-map-view .map-panel:not(:has(.maplibregl-ctrl-zoom-in)) .planner-location-control { top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); right: auto; bottom: auto; width: 44px; height: 44px; }
   .ui-shell:not(.outing-mode) .route-dock { display: flex; flex-direction: column; gap: 4px; max-height: calc(100% - 76px - var(--route-attribution-clearance, 62px)); }
   .ui-shell:not(.outing-mode) .route-dock.hidden { display: none; }

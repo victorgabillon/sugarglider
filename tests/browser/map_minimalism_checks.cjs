@@ -26,6 +26,11 @@ exports.checkMinimalMobileMap = async ({ page, width, screenshot, checkLayout })
     if (await page.locator('#route-editor-toggle').getAttribute('aria-expanded') === 'true') await page.locator('#route-editor-close').click();
     assert(!await page.locator('#route-editor-body').isVisible());
   };
+  const checkTools = async () => {
+    const menu=await page.locator('.header-tools-menu').boundingBox(),map=await page.locator('#map').boundingBox();
+    assert(menu.x>=0&&menu.x+menu.width<=width&&menu.y>=0&&menu.y+menu.height<=map.y+map.height,'Floating Tools stays within the map, including large text: '+JSON.stringify({menu,map}));
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&!scrollX),'Opening Map display does not horizontally scroll the page');
+  };
   const view = async name => { await page.locator(`[data-shell-view="${name}"]`).click(); };
   const stationary = () => page.waitForFunction(async () => !(await import('/static/map.js')).mapPresentationDiagnostics().moving);
   const mapTap = async coordinate => {
@@ -51,6 +56,7 @@ exports.checkMinimalMobileMap = async ({ page, width, screenshot, checkLayout })
   const untouched = await fingerprint();
   await page.locator('.header-tools > summary').click();
   await page.locator('.header-tools .map-tools > summary').click();
+  await checkTools();
   await screenshot('minimal-tools-map-display');
   const count = await page.evaluate(() => adventureNativeCalls.length);
   assert(await page.locator('#show-nature').isDisabled(), 'Unavailable nature coloring stays explicitly disabled in the bundled planner');
@@ -112,7 +118,7 @@ exports.checkMinimalMobileMap = async ({ page, width, screenshot, checkLayout })
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Expanded editor fits at 200% text');
     assert((await page.locator('#route-editor-body').boundingBox()).height>=44,'Expanded editor retains usable scrolling space');
     await screenshot('minimal-editor-large-text');
-    await page.locator('.header-tools > summary').click();await page.locator('#application-language').selectOption('en');await page.locator('.header-tools > summary').click();
+    await page.locator('.header-tools > summary').click();await checkTools();await page.locator('#application-language').selectOption('en');await page.locator('.header-tools > summary').click();
     assert(await page.locator('#route-editor-body').isVisible(),'Language switch retains the expanded editor');await screenshot('minimal-editor-large-text-en');
     await page.locator('.header-tools > summary').click();await page.locator('#application-language').selectOption('fr');await page.locator('.header-tools > summary').click();
     await closeEditor();await checkLayout();await screenshot('minimal-route-large-text-collapsed');

@@ -428,9 +428,9 @@ def test_shared_shell_generation_tracks_v119_cached_assets() -> None:
         "state.js": (
             "ae7c5e7acc9d5e91957c275b227957a95855aee7853f15178858a0c52c0cc1c3"
         ),
-        "map.js": ("e14e1492fc9c28c3d09fb95e5acc5b7f4011b933ca2f226a24ab8eddcfa8c4a7"),
+        "map.js": ("1f3c8bb2894224d109f39f3c84d2a89fcd75a0090ae238c16f1e25eef083e430"),
         "styles.css": (
-            "b48e08b07f1cb2fffe623bcbbc6366fcb4a69112946e2f585726fa87c5dcddf0"
+            "319bd69cfb6ff205eba4ca5385891bb7eb631521d90456691a2b6f675dcd1ed2"
         ),
         "planner_profile.js": (
             "4183a1318f3aa49df52ca0a46329caaa4f6eee1bec1b49612c446562b1b0030a"

@@ -2960,7 +2960,8 @@ export function keepCoordinateVisible(coordinate) {
   keepMapCoordinateVisible(map, coordinate);
   const container = map.getContainer(), canvas = container.getBoundingClientRect();
   const panel = container.closest(".map-panel");
-  const obstacles = [".topbar", "#route-dock", ".maplibregl-ctrl-attrib", ".planner-location-control", ".header-tools-menu"]
+  // Closed details descendants can retain layout rectangles in Chromium.
+  const obstacles = [".topbar", "#route-dock", ".maplibregl-ctrl-attrib", ".planner-location-control", ".header-tools[open] .header-tools-menu"]
     .map(selector => panel?.querySelector(selector)).filter(element => element?.getClientRects().length)
     .map(element => element.getBoundingClientRect()).filter(r => r.width && r.height)
     .map(r => ({ left: r.left - canvas.left, right: r.right - canvas.left, top: r.top - canvas.top, bottom: r.bottom - canvas.top }));
