@@ -7,7 +7,12 @@ are part of the development checkpoints below.
 The [26 October stabilization report](ai-adventure-planner-stabilization.md) and
 [focused security review](ai-adventure-security-review.md) record the follow-up
 to the real Fairphone acceptance, including distinct deadline reporting, measured
-search limits, honest comparison variants and reached-place story research. The [real c84048d follow-up](ai-adventure-fairphone-stabilization-acceptance.md) records the failed latency/source-quality goals alongside successful exact GPX and restart recovery.
+search limits, honest comparison variants and reached-place story research. The
+[real Fairphone follow-ups](ai-adventure-fairphone-stabilization-acceptance.md)
+record three distance-feasible geometry families, source-linked anecdotes for
+three of four selected visits, improved latency versus the preceding exact-request
+run and successful exact GPX/restart recovery. Predominantly woodland routes
+remain unachieved; PR #110 stays draft.
 
 ## Architecture decisions
 

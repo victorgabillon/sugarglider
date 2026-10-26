@@ -4,8 +4,11 @@ This is a focused source review and deterministic regression assessment for PR
 #110, continuing commit `7760936`. It is not a third-party security audit or a
 claim that physical sign-in exercises every credential lifecycle. The previous
 Fairphone acceptance establishes actual authorization, signed identity validation,
-model discovery and completed research; live refresh and remote revocation still
-need separately authorized testing.
+model discovery and completed research. The separately authorized c84048d and
+ea746cf physical follow-ups preserve the protected account across retained-data
+installation and complete force-stop/restart, then perform actual inference with
+the account-discovered model. Live refresh and remote revocation were not
+deliberately exercised and remain distinct from this evidence.
 
 ## Reviewed boundaries
 
@@ -32,6 +35,14 @@ review. Live refresh rotation, expired authorization, account switching and remo
 sign-out still need physical lifecycle evidence; no credential extraction is
 authorized to obtain it. Debug staging requires the existing trusted-device
 development conditions.
+
+The latest physical source check independently supports two narrow historical
+claims and leaves a third catalogue claim unconfirmed after retrieval failures.
+Application source labels remain AI-generated and unverified; no matching URL or
+provider citation is promoted into claim verification. Exact result and GPX
+hashes survive map/story interaction and restart, with no extra model/native
+calls. Reports omit credentials, account identities, private coordinates and
+complete model output; exact backups/receipts stay outside Git.
 
 The provider preview rejects server output-token/tool caps. The client keeps its
 existing time, stream, research and two-request bounds; these are not billing

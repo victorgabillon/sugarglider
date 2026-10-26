@@ -2,9 +2,11 @@
 
 PR #110 continues on `feat/ai-adventure-integration` in its existing isolated
 worktree, from `7760936`. The original workspace, private regional data, staging
-installation and selected user route are preserved. This milestone remains draft:
-three good forest/history alternatives and improved live model latency are not
-yet physically accepted.
+data and selected user route are preserved. Separately authorized staging updates
+retain app data. The latest physical run establishes three distance-feasible
+geometry families, improved latency versus the preceding exact-request run and
+three source-linked reached-place anecdotes. This milestone remains draft:
+three good forest/history alternatives are still not physically accepted.
 
 ## Request reliability and measurements
 
@@ -56,8 +58,14 @@ not a latency success. GPX/restart equality passed and the original route was
 restored. The follow-up now makes the initial historical-planning pass without
 research or anecdotes, then prioritizes checked reached identities for final
 research. Identity-bound source improvements survive a rejected route strategy.
-This revised policy needs a new authorized live test; synthetic times are not
-substituted for model latency.
+The separately authorized ea746cf follow-up completed two real calls in
+60.346 s and 65.008 s, with 28,106 tokens and 130.968 s total. Against c84048d's
+same typed request, end-to-end time decreased 13.8% and token use 36.9%. This is a
+single observed comparison, not a general latency guarantee; the earlier
+two-alternative voice run was faster overall and used fewer tokens. Initial
+research is now absent, final research observes 17 source URLs, and three of four
+selected visits have source-linked anecdotes. Full timings, route-quality limits
+and exact GPX/restart checks are in the linked physical report.
 
 ## Alternative count and real graph experiment
 
@@ -117,6 +125,19 @@ distance partitions, original component hashes and GPX vertex equality. Each
 export has one track/segment, checked waypoints only and no extensions.
 Private evidence and exact coordinates/GPX remain outside Git.
 
+The latest **real-account Fairphone** test is separate from that fixture. It
+retains 35.987 / 33.735 / 38.195 km native lines, all within the actual request's
+35 km ±3.5 km tolerance, with 0 / 1 / 4 checked visits. All three pass the existing
+geometry-family proxies, although the first and third still share substantial
+linework. Exactly 16 native calls and two cache hits were observed. The retained
+woodland shares are only 20.8% / 15.8% / 19.8%, with 30.8–48.4% unknown landcover.
+The revised round reaches 34.3% woodland but loses the loop-shape comparison;
+valid researched stories survive that rejection. Thus count interpretation,
+inference, native validation and three distance-feasible families now pass.
+Bounded candidate search and the portfolio quality tradeoff still limit forest
+adherence; graph infeasibility has not been established. The UI states the
+woodland shortfall explicitly and does not count unknown landcover as forest.
+
 ## Anecdotes and claim evidence
 
 Reached places lead the story list. Each card retains proposal identity, local
@@ -132,7 +153,12 @@ stories. The c84048d physical run also had zero observed-source anecdotes on its
 three reached places. The host fixtures are not completed model research and
 remain labeled accordingly. The follow-up requests hosted-search source metadata
 as well as response citations and preserves their distinct provenance; neither
-independently verifies a claim. No live coverage improvement is claimed yet.
+independently verifies a claim. The latest ea746cf physical run improves selected
+reached-place coverage to three source-linked anecdotes out of four visits.
+Independent retrieval supports the narrow Auberderie and Arches claims described
+in the physical report. The Champ-de-Mars catalogue claim remains unconfirmed
+after retrieval failures, and the hunting table has no anecdote/source. Saved AI
+stories retain their unverified labels; the review does not mutate the snapshot.
 
 Independent source retrieval for two of the physically visited names is feasible:
 the Ministry of Culture's [Mérimée notice IA00050244](https://pop.culture.gouv.fr/notice/merimee/IA00050244),
@@ -166,18 +192,25 @@ distinct from source review and synthetic tests.
 
 ## Integration status
 
-Python uses 3.13, uv, Ruff and strict mypy. Final `make check`, all 61 browser
-harnesses, 18 self-contained browser drivers, Android Debug/Release/staging JVM
-tests, all three lints/assemblies, exact APK assets and required GitHub checks are
-recorded in the delivery evidence. Six older real-service visual drivers require
+Python uses 3.13, uv, Ruff and strict mypy. At the installed ea746cf source,
+`make check` passes (303 typed files; 1,612 tests; 16 integration tests deselected;
+nine existing NumPy warnings). All 61 browser harnesses, 18 self-contained browser
+drivers and Android JVM tests (Debug 288, Release 283, staging 283) pass, as do all
+three lints/assemblies. All 153 declared web assets match each APK. The staging
+certificate, CA/catalog, unchanged native library and 16 KiB alignment are audited;
+no private regional database is packaged. All four required GitHub workflows pass.
+The final documentation-only follow-up does not change the tested APK source.
+Six older real-service visual drivers require
 their separate six-profile server/map fixture and are not represented as passing
 by the component harnesses. No CI requirement is removed.
 
-The installed staging APK was independently checked against the previous
-authorized SHA-256 `bbeb85de319c9da5fdad5b553b80127ba34de01a02003e732524c6b74c59d6e8`.
-The user separately authorized the c84048d staging installation and two-call
-live test. Exact native GPX and restart recovery passed, and the original route
-and editor text were restored. That installed artifact remains in place while
-the follow-up is prepared. A different APK and further real calls require new
-separate approval. No app-data clearing, production/Play/hosting change or merge
-is authorized by this report.
+The user separately authorized both staging installations and each two-call live
+test. The latest installed artifact is ea746cf, SHA-256
+`bc17d1d8ef48fbae6c885361d71557bf2c3fe72247605de304bbb27b50d97796`.
+Exact native GPX and restart recovery pass. The original 23.172 km route, editor
+text and explicit Android speech-provider choice are restored, with no recording
+started. All four authorized calls across the two tests are used; there is no
+pending installation approval. A different APK or further real calls need new
+separate approval. No app-data clearing or production/Play/hosting change occurred.
+PR #110 remains draft and unmerged because the forest/history quality target is
+not satisfied.
