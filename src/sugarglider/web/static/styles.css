@@ -1272,3 +1272,6 @@ body.outing-mode .route-dock { display: none; }
   .ui-shell.mobile-map-view .map-empty-state { display: none; }
   .route-dock #map-edit-notice { flex: 0 0 auto; max-height: 30cqh; overflow-y: auto; }
 }
+@media (max-width: 840px) and (max-height: 450px) {
+  .route-quick-editor > strong { flex: 1; }
+}

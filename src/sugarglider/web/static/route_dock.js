@@ -17,6 +17,7 @@ function dockView(root) {
     view.expanded = Boolean(expanded) || !mobile.matches;
     if (!view.expanded) for (const menu of root.querySelectorAll(":popover-open")) menu.hidePopover();
     root.dataset.expanded = String(view.expanded); body.hidden = !view.expanded;
+    if (view.expanded) body.scrollTop = 0;
     toggle.setAttribute("aria-expanded", String(view.expanded));
     const generate = root.querySelector("#generate-map");
     const destination = root.querySelector(mobile.matches ? ".route-dock-summary" : ".route-dock-actions");
@@ -123,7 +124,14 @@ export function renderRouteDock({ root, disabled, visits = [], requiresReview = 
   searchLocation.disabled = disabled || !onSearch;
   searchLocation.onclick = event => { root.querySelector("#route-add-menu").hidePopover(); onSearch?.(null, event.currentTarget); };
   strip.scrollLeft = scroll;
-  if (strip.clientWidth) strip.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  // Reveal only within the horizontal ribbon. scrollIntoView would also scroll
+  // the containing sheet past the selected point's contextual actions.
+  const selectedChip = strip.querySelector('[aria-pressed="true"]');
+  if (strip.clientWidth && selectedChip) {
+    const bounds = strip.getBoundingClientRect(), selected = selectedChip.getBoundingClientRect();
+    if (selected.left < bounds.left) strip.scrollLeft -= bounds.left - selected.left;
+    else if (selected.right > bounds.right) strip.scrollLeft += selected.right - bounds.right;
+  }
   const hint = root.querySelector("#route-dock-hint");
   setLocalizedText(hint, () => !endpoints.start ? t("Tap the map to choose Start") : endpoints.routeTopology !== "loop" && !endpoints.end ? t("Tap the map to choose End") : "");
   setLocalizedText(root.querySelector("#route-strip-help"), () => canReorder

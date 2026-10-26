@@ -22,6 +22,7 @@ export async function runPlanningHarness() {
   same(unobstructedPointOffset(originalPoint,800,319,occupied),shifted,'screen correction is deterministic');
   same(originalPoint,{x:400,y:150},'viewport correction does not edit its input');
   same(unobstructedPointOffset({x:180,y:230},360,240,[{left:8,right:300,top:180,bottom:240}]),[0,58],'painted pin clears bottom bar with margin');
+  same(unobstructedPointOffset({x:180,y:170},360,240,[{left:8,right:300,top:180,bottom:240}],{width:48,height:80,bottom:16}),[0,14],'bottom anchor offset clears the entire marker rather than its coordinate alone');
   cases.push('painted_pin_clearance_actual_rectangles_landscape_and_portrait');
   const coordinate = [2.13, 48.806], calls = [];
   let projected = { x: 72, y: 295 };

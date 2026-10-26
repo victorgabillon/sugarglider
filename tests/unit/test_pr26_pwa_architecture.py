@@ -280,7 +280,7 @@ def test_shared_shell_generation_tracks_v119_cached_assets() -> None:
             "f3551e7904a08cde405faaa9250a41ce8624daa3b084b506d525c4219afbf39c"
         ),
         "route_dock.js": (
-            "0b9f776dd9af856c5c38877d19c3694e5773f22c29d937d23c209a9ac558e29c"
+            "194587c573ef4095b28bec859e6af43e5a6d7b77463b5020d46702019fff5673"
         ),
         "route_point_drag.js": (
             "a61aa834611a65ca108fbedf9645ae6f5a6188c15ba48795b0417e6489808862"
@@ -420,7 +420,7 @@ def test_shared_shell_generation_tracks_v119_cached_assets() -> None:
             "b7612e9b9c15ba8050019110480bcde2d0f11f058910f5b5c5a1552ae10f4b01"
         ),
         "map_viewport.js": (
-            "327a2d112f917bb61b512a17a6a7aaa7423b43116c552fee874e1d99138391f7"
+            "b106a498748884750ec77f283ca8bae0892a66bc6e08d12f6d8efca34b74b874"
         ),
         "app_shell.js": (
             "0f366f76e092051913c114987361b2d7dc171945d6d029bd4a4d0f897b5c4ca7"
@@ -428,9 +428,9 @@ def test_shared_shell_generation_tracks_v119_cached_assets() -> None:
         "state.js": (
             "ae7c5e7acc9d5e91957c275b227957a95855aee7853f15178858a0c52c0cc1c3"
         ),
-        "map.js": ("0d357f4fcff4f82b725a393dfe4c60a98666a6bef2d78719778ab8032bfb7686"),
+        "map.js": ("e14e1492fc9c28c3d09fb95e5acc5b7f4011b933ca2f226a24ab8eddcfa8c4a7"),
         "styles.css": (
-            "3c961f23b80cdbba0c2f79b4a7163af21a32bbee11833da5ff7a697f4cbcd082"
+            "b48e08b07f1cb2fffe623bcbbc6366fcb4a69112946e2f585726fa87c5dcddf0"
         ),
         "planner_profile.js": (
             "4183a1318f3aa49df52ca0a46329caaa4f6eee1bec1b49612c446562b1b0030a"

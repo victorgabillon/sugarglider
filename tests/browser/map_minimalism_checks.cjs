@@ -29,11 +29,14 @@ exports.checkMinimalMobileMap = async ({ page, width, screenshot, checkLayout })
   const view = async name => { await page.locator(`[data-shell-view="${name}"]`).click(); };
   const stationary = () => page.waitForFunction(async () => !(await import('/static/map.js')).mapPresentationDiagnostics().moving);
   const mapTap = async coordinate => {
+    await stationary();
     const point = await page.evaluate(async coordinate => (await import('/static/map.js')).keepCoordinateVisible(coordinate), coordinate);
     const box = await page.locator('#map').boundingBox();
     const hit=await page.evaluate(([x,y])=>document.elementFromPoint(x,y)?.outerHTML.slice(0,240),[box.x+point.x,box.y+point.y]);assert(hit?.includes('maplibregl-canvas'),'Map tap targets uncovered canvas: '+JSON.stringify({coordinate,point,box,hit}));
     await page.touchscreen.tap(box.x+point.x,box.y+point.y);
-    await page.waitForTimeout(100);
+    // These are separate placement taps, outside MapLibre's 500 ms double-tap
+    // window. Evidence screenshots must not supply implicit synchronization.
+    await page.waitForTimeout(550);await stationary();
   };
   assert(!await page.locator('.brand').isVisible(), 'Mobile Map has no permanent brand row');
   assert.equal(await page.locator('.maplibregl-ctrl-zoom-in').count(), 0, 'Touch mobile has no navigation tower');
@@ -83,18 +86,25 @@ exports.checkMinimalMobileMap = async ({ page, width, screenshot, checkLayout })
   cases.push('real_browser_multitouch_pinch_rotation_pan_preserve_plan');
 
   await page.evaluate(async()=>{(await import('/static/map.js')).resetMapNorth();});await stationary();
-  await page.evaluate(async()=>{(await import('/static/map.js')).fitCoordinates([[.003,.003],[.017,.017]],{maxZoom:15});});await stationary();
+  await page.evaluate(async()=>{(await import('/static/map.js')).fitCoordinates([[.003,.003],[.017,.017]],{maxZoom:15});});await page.waitForTimeout(650);await stationary();
   await mapTap([.006,.006]); assert(!await page.locator('#route-editor-body').isVisible()); await screenshot('minimal-start');
-  await mapTap([.008,.009]);await mapTap([.013,.011]);
+  // Keep placements clear of the tall existing pins, even at landscape's
+  // lower fitted zoom. Selecting a marker is tested separately below.
+  await mapTap([.018,.006]);assert.equal((await request()).waypoints.length,1,'First separate canvas tap adds the first stop');await mapTap([.002,.018]);
   assert.equal((await request()).waypoints.length,2);assert(!await page.locator('#route-editor-body').isVisible());
   await page.locator('.header-tools > summary').click();await page.locator('#map-fit-points').click();await page.locator('.header-tools > summary').click();await page.waitForTimeout(650);await stationary();await screenshot('minimal-two-stops');await measure('two-stops-collapsed');
   assert(await page.evaluate(()=>{const map=document.querySelector('#map').getBoundingClientRect();return [...document.querySelectorAll('#map .required-marker')].every(n=>{const r=n.getBoundingClientRect();return r.left>=map.left&&r.right<=map.right&&r.top>=map.top&&r.bottom<=map.bottom;});}),'Fit points exposes Start and both stop pins');
   const beforeSelection=await fingerprint();
   await page.locator('#map .required-marker[data-point-index="0"]').click();
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   assert(await page.locator('#route-editor-body').isVisible(),'Selecting a marker reveals its contextual editor');
+  assert(await page.locator('[data-dock-action="move"]').isVisible());
+  const actions = await page.evaluate(()=>{const body=document.querySelector('#route-editor-body').getBoundingClientRect(),move=document.querySelector('[data-dock-action="move"]').getBoundingClientRect(),heading=document.querySelector('.route-editor-heading').getBoundingClientRect();return {visible:move.top>=heading.bottom&&move.bottom<=body.bottom,body:body.toJSON(),move:move.toJSON(),heading:heading.toJSON(),scroll:document.querySelector('#route-editor-body').scrollTop};});
+  await screenshot('minimal-selected-actions-check');
+  assert(actions.visible,'Selected point actions are visible immediately, including short landscape sheets: '+JSON.stringify(actions));
   assert.equal(await fingerprint(),beforeSelection,'Selection does not edit canonical route');
-  const clear=await page.evaluate(()=>{const pin=document.querySelector('#map .required-marker[data-point-index="0"]').getBoundingClientRect(),canvas=document.querySelector('#map').getBoundingClientRect();const obstacles=['.topbar','#route-dock','.planner-location-control','.maplibregl-ctrl-attrib'].map(s=>document.querySelector(s)).filter(n=>n?.getClientRects().length).map(n=>n.getBoundingClientRect());return pin.left>=canvas.left&&pin.right<=canvas.right&&pin.top>=canvas.top&&pin.bottom<=canvas.bottom&&obstacles.every(r=>!(pin.left<r.right&&pin.right>r.left&&pin.top<r.bottom&&pin.bottom>r.top));});
-  assert(clear,'Selected painted pin remains visible beside/above actual controls');
+  const clear=await page.evaluate(()=>{const pin=document.querySelector('#map .required-marker[data-point-index="0"]').getBoundingClientRect(),canvas=document.querySelector('#map').getBoundingClientRect();const obstacles=['.topbar','#route-dock','.planner-location-control','.maplibregl-ctrl-attrib'].map(s=>document.querySelector(s)).filter(n=>n?.getClientRects().length).map(n=>n.getBoundingClientRect());return {visible:pin.left>=canvas.left&&pin.right<=canvas.right&&pin.top>=canvas.top&&pin.bottom<=canvas.bottom&&obstacles.every(r=>!(pin.left<r.right&&pin.right>r.left&&pin.top<r.bottom&&pin.bottom>r.top)),pin:pin.toJSON(),canvas:canvas.toJSON(),obstacles:obstacles.map(r=>r.toJSON())};});
+  assert(clear.visible,'Selected painted pin remains visible beside/above actual controls: '+JSON.stringify(clear));
   await screenshot('minimal-selected-stop-expanded');await measure('selected-expanded');
   if(width===372){
     const original=await fingerprint();await page.evaluate(()=>{document.documentElement.style.fontSize='32px';});
@@ -116,7 +126,7 @@ exports.checkMinimalMobileMap = async ({ page, width, screenshot, checkLayout })
   cases.push('map_taps_grammar_marker_context_dismiss_reselect_keyboard');
 
   const beforeMove=await request();
-  await page.locator('[data-dock-action="move"]').click();await page.locator('[data-dock-action="move-map"]').click();await mapTap([.004,.014]);
+  await page.locator('[data-dock-action="move"]').click();await page.locator('[data-dock-action="move-map"]').click();await mapTap([.018,.002]);
   const moved=await request();assert.equal(moved.waypoints.length,2);assert.notDeepEqual(moved.waypoints[0].coordinate,beforeMove.waypoints[0].coordinate);
   await page.locator('#undo-point-edit').click();assert.deepEqual(await request(),beforeMove);await page.locator('#redo-point-edit').click();assert.deepEqual(await request(),moved);
   await page.locator('[data-dock-action="more"]').click();await page.locator('[data-dock-action="later"]').click();const reordered=await request();assert.deepEqual({...reordered.waypoints[1],id:moved.waypoints[0].id},moved.waypoints[0]);assert.equal(reordered.waypoints[1].id,'route-waypoint-2','Canonical positional IDs follow the existing visit order');

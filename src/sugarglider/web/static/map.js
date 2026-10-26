@@ -2967,7 +2967,8 @@ export function keepCoordinateVisible(coordinate) {
   const marker = container.querySelector('.required-marker[aria-pressed="true"]') ?? container.querySelector(".required-marker");
   const painted = marker?.getBoundingClientRect();
   const offset = unobstructedPointOffset(map.project(coordinate), canvas.width, canvas.height, obstacles,
-    { width: Math.max(48, painted?.width ?? 0), height: Math.max(80, painted?.height ?? 0) });
+    // Required markers use bottom anchoring with an existing 13–16 px offset.
+    { width: Math.max(48, painted?.width ?? 0), height: Math.max(80, painted?.height ?? 0), bottom: 16 });
   if (offset) map.panBy(offset, { duration: 0 });
   const point = map.project(coordinate);
   return { x: point.x, y: point.y };
