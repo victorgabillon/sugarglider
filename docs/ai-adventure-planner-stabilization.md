@@ -1,5 +1,11 @@
 # AI Adventure Planner stabilization — 26 October 2026
 
+This report records the earlier ea746cf/88bdb8c stabilization milestone. The
+subsequent [woodland route-quality report](ai-adventure-route-quality.md) supersedes
+its search/selection description and draft-status conclusion. Its physical
+measurements remain historical evidence; the newer algorithm has not been
+installed on the Fairphone.
+
 PR #110 continues on `feat/ai-adventure-integration` in its existing isolated
 worktree, from `7760936`. The original workspace, private regional data, staging
 data and selected user route are preserved. Separately authorized staging updates
@@ -212,5 +218,6 @@ text and explicit Android speech-provider choice are restored, with no recording
 started. All four authorized calls across the two tests are used; there is no
 pending installation approval. A different APK or further real calls need new
 separate approval. No app-data clearing or production/Play/hosting change occurred.
-PR #110 remains draft and unmerged because the forest/history quality target is
-not satisfied.
+At this milestone PR #110 remained draft and unmerged because the forest/history
+quality target was not satisfied. See the subsequent route-quality report for
+the current measured acceptance and merge status.

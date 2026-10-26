@@ -1,5 +1,6 @@
 import { t, tr, getLanguage, setLocalizedText } from "./i18n.js";
 import { safeAdventureLink } from "./adventure_proposal.js";
+import { strongWoodlandPreference } from "./adventure_assessment.js";
 
 const statuses = { reached: "Checked approach reached", dropped: "Not included in this route", unresolved_location: "Location unresolved",
   ambiguous_location: "Location is ambiguous", outside_coverage: "Outside the installed region", access_restricted: "Mapped access is restricted",
@@ -26,6 +27,7 @@ export function createAdventureResults({ root, candidatesRoot, onManual, onShowM
     root.hidden = !output;
     if (!output) { displayed = null; selectedId = null; stories.replaceChildren(); storyElements.clear(); return; }
     const round = output.chosen;
+    const tradeoffs = adventureTradeoffLabels(round);
     element("result-title").textContent = round.proposal.name;
     const distinct = round.result.search_diagnostics.details.local_planning.adventure_search?.distinct_candidate_ids;
     const eligible = round.result.candidates.filter(candidate => candidate.diagnostics.within_tolerance && (!distinct || distinct.includes(candidate.id))).length;
@@ -37,7 +39,8 @@ export function createAdventureResults({ root, candidatesRoot, onManual, onShowM
       const assessment = round.assessment.assessments.find(value => value.candidate_id === button.dataset.candidateId);
       if (!assessment) continue;
       const summary = root.ownerDocument.createElement("span"); summary.className = "adventure-card-summary";
-      const variant = distinct && !distinct.includes(button.dataset.candidateId) ? t("Comparison variant · ") : "";
+      const variant = (tradeoffs.has(button.dataset.candidateId) ? `${t(tradeoffs.get(button.dataset.candidateId))} · ` : "")
+        + (distinct && !distinct.includes(button.dataset.candidateId) ? t("Comparison variant · ") : "");
       setLocalizedText(summary, () => tr`${variant}Checked places: ${new Set(assessment.places.filter(place => place.status === "reached").map(place => place.canonical_id)).size} · Woodland ${percent(assessment.nature?.woodland)} · Urban ${percent(assessment.nature?.urban)} · Unknown landcover ${percent(assessment.nature?.unknown_landcover)} · D+ ${metres(assessment.elevation?.ascent_m)} / D− ${metres(assessment.elevation?.descent_m)}`);
       button.append(summary);
     }
@@ -95,6 +98,7 @@ export function createAdventureResults({ root, candidatesRoot, onManual, onShowM
     const search = round.result.search_diagnostics.details.local_planning.adventure_search;
     if (search) paragraph(details, tr`Search: ${search.evaluated_sequences} proposed sequences evaluated, ${search.validated_drafts} valid routed paths, ${search.diversity_omitted} similar lines omitted, ${search.within_tolerance_count}/${search.requested_count} returned within tolerance; ${search.distinct_route_count} geometry families and ${search.comparison_variant_count} retained comparison variants. Coordinate-segment sharing is a geometry proxy, not edge repetition or corridor equivalence. ${search.budget_finished ? t("The local search budget finished.") : t("No more useful proposals remained.")}`);
     paragraph(details, t("Routes meeting your distance tolerance come first. The distance comparison route is retained and leads options in the same tolerance class because exact path repetition and backtracking are unavailable. Other options contain checked suggested places."));
+    if (strongWoodlandPreference(round.proposal.wishes)) paragraph(details, t("Your strong woodland preference guides exploration and selection using local mapped landcover. Among valid routes within tolerance, more mapped woodland can outweigh a modest loop-shape penalty; degenerate and severe out-and-back loops cannot earn preference from forest coverage. A useful landmark detour may remain as a comparison variant without counting as another distinct loop. Unknown landcover never counts as woodland."));
   }
   function showPlace(id) {
     const article = storyElements.get(id); if (!article) return;
@@ -103,11 +107,37 @@ export function createAdventureResults({ root, candidatesRoot, onManual, onShowM
   return Object.freeze({ render, showPlace });
 }
 
+// Describe measured differences only. These display labels never change public
+// roles/ranks, route identity, source requests, selection, stories or GPX.
+export function adventureTradeoffLabels(round) {
+  const labels = new Map();
+  if (!strongWoodlandPreference(round.proposal.wishes)) return labels;
+  const eligible = new Set(round.result.candidates.filter(candidate => candidate.diagnostics.within_tolerance).map(candidate => candidate.id));
+  const pool = round.assessment.assessments.filter(item => eligible.has(item.candidate_id)
+    && !item.loop_geometry?.degenerate && !item.loop_geometry?.severe_out_and_back);
+  const measured = pool.filter(item => Number.isFinite(item.nature?.woodland)).sort((a, b) => b.nature.woodland - a.nature.woodland
+    || (a.candidate_id < b.candidate_id ? -1 : a.candidate_id > b.candidate_id ? 1 : 0));
+  const forest = measured[0];
+  if (!forest || measured.length < 2 || forest.nature.woodland - measured.at(-1).nature.woodland < 0.05) return labels;
+  labels.set(forest.candidate_id, forest.nature.woodland >= 0.5 ? "Forest-focused" : "Most mapped woodland found");
+  const visits = item => new Set(item.places.filter(place => place.status === "reached").map(place => place.canonical_id)).size;
+  const historical = item => new Set(item.places.filter(place => place.status === "reached"
+    && ["castle", "ruins", "archaeological_site"].includes(place.local_category)).map(place => place.canonical_id)).size;
+  const highlights = [...pool].sort((a, b) => historical(b) - historical(a) || visits(b) - visits(a)
+    || (a.candidate_id < b.candidate_id ? -1 : a.candidate_id > b.candidate_id ? 1 : 0))[0];
+  if (highlights && (historical(highlights) > historical(forest) || visits(highlights) > visits(forest))) labels.set(highlights.candidate_id,
+    historical(highlights) > historical(forest) ? "Historical highlights" : "More checked places");
+  return labels;
+}
+
 export function forestAdventureLimitation(round) {
   const wish = round.proposal.wishes.find(wish => wish.metric === "woodland" && !["avoid", "minimize"].includes(wish.goal));
   if (!wish) return "";
   const eligible = new Set(round.result.candidates.filter(candidate => candidate.diagnostics.within_tolerance).map(candidate => candidate.id));
-  const values = round.assessment.assessments.filter(item => eligible.has(item.candidate_id)).map(item => item.nature?.woodland).filter(Number.isFinite);
+  const candidates = round.assessment.assessments.filter(item => eligible.has(item.candidate_id));
+  const useful = candidates.filter(item => !item.loop_geometry?.degenerate && !item.loop_geometry?.severe_out_and_back);
+  if (candidates.length && !useful.length) return t("No reasonably shaped route within tolerance established the forest preference. Required places may force retracing. ");
+  const values = useful.map(item => item.nature?.woodland).filter(Number.isFinite);
   if (!values.length) return t("Woodland coverage remains unknown for routes within tolerance. The forest preference has not been established. ");
   const best = Math.max(...values) * 100, threshold = wish.value ?? 50;
   return best < threshold ? tr`No route within tolerance reached ${threshold}% mapped woodland${wish.value === null ? t(" (predominantly woodland)") : t(" as requested")}; the best found was ${best.toFixed(1)}%. Unknown landcover is not counted as forest. ` : "";

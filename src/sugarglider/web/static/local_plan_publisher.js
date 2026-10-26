@@ -41,7 +41,8 @@ export async function publishLocalPlan(request, search, regionalReference = null
   // A POI alternative has no independent promotion evidence. If its required
   // control fails final publication, never quietly recommend the detour.
   const pool = hasControl && !controlId ? [] : evaluated;
-  const candidates = buildLocalPortfolio(pool, { limit: adventure ? Math.max(2, request.candidate_count) : request.candidate_count,
+  const candidates = buildLocalPortfolio(pool, { limit: search.adventure_diagnostics?.preference_strategy === "strong_woodland"
+    ? Math.min(5, Math.max(2, request.candidate_count + 2)) : adventure ? Math.max(2, request.candidate_count) : request.candidate_count,
     controlId, adventure });
   const diagnostics = structuredClone(search.search_diagnostics);
   diagnostics.warnings = [...new Set([...(search.warnings ?? []),

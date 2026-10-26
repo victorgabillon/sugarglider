@@ -1383,5 +1383,11 @@ export const FRENCH = Object.freeze({
   "The revision changed confirmed route requirements.": "La révision a modifié des exigences de parcours confirmées.",
   "Choose between one and five route alternatives.": "Choisissez entre un et cinq parcours différents.",
   "The previous adventure is still finishing.": "L’aventure précédente se termine encore.",
-  "Choose an installed region and describe your adventure.": "Choisissez une région installée et décrivez votre aventure."
+  "Choose an installed region and describe your adventure.": "Choisissez une région installée et décrivez votre aventure.",
+  "Forest-focused": "Priorité à la forêt",
+  "Most mapped woodland found": "Le plus de forêt cartographiée trouvé",
+  "Historical highlights": "Lieux historiques",
+  "More checked places": "Plus de lieux vérifiés",
+  "No reasonably shaped route within tolerance established the forest preference. Required places may force retracing. ": "Aucun parcours de forme raisonnable dans la tolérance n’a satisfait la préférence forestière. Les lieux obligatoires peuvent imposer des allers-retours. ",
+  "Your strong woodland preference guides exploration and selection using local mapped landcover. Among valid routes within tolerance, more mapped woodland can outweigh a modest loop-shape penalty; degenerate and severe out-and-back loops cannot earn preference from forest coverage. A useful landmark detour may remain as a comparison variant without counting as another distinct loop. Unknown landcover never counts as woodland.": "Votre forte préférence pour la forêt guide la recherche et le choix à partir des données locales. Parmi les parcours valides dans la tolérance, davantage de forêt peut compenser une pénalité de forme modérée ; une boucle dégénérée ou avec un aller-retour majeur ne devient pas préférable grâce à sa forêt. Un détour utile vers un lieu peut rester une variante de comparaison sans compter comme une boucle distincte. Les zones inconnues ne comptent jamais comme forêt."
 });

@@ -84,6 +84,32 @@ function accounting(snapshot, calls) {
 export async function runAdventureRoutingHarness() {
   const cases = [];
   {
+    const runs = [];
+    for (let repeat = 0; repeat < 2; repeat++) {
+      const r = await rig({ loop: true });
+      try {
+        const source = await r.region.getRegionData(); let guidance = 0;
+        r.region.getRegionData = async () => ({ ...source, queryWoodlandPoints: async query => {
+          assert(r.lease && r.calls.length > 0, "guidance owns the regional lease and follows actual native distance measurement");
+          assert(query.points.length <= 128, "strict geographical guidance bound"); guidance++;
+          return source.queryWoodlandPoints(query);
+        } });
+        const output = await r.planner.planAdventure("trail_run", session => session.generate(r.request, r.targets,
+          [{ metric: "woodland", goal: "maximize", value: null, importance: "high" }]));
+        accounting(output.result.search_diagnostics, r.calls);
+        assert(guidance <= 1 && r.analyses <= r.calls.length, "one bounded hint query and cached Nature on complete native replies only");
+        assert(output.result.search_diagnostics.details.local_planning.adventure_search.preference_strategy === "strong_woodland", "explicit strong-forest strategy diagnosed");
+        assert(output.result.candidates.length <= 5 && output.result.candidates.some(candidate => candidate.id === output.result.search_diagnostics.details.local_planning.no_poi_control_candidate_id), "comparison independently retained in a bounded canonical portfolio");
+        const before = r.calls.length;
+        const gpx = await Promise.all(output.result.candidates.map(async candidate => exportCanonicalCandidate(candidate).blob.text()));
+        equal(r.calls.length, before, "forest selection and GPX never reroute");
+        runs.push({ candidates: output.result.candidates, gpx });
+      } finally { r.planner.invalidate(); }
+    }
+    equal(runs[0], runs[1], "strong-woodland candidates, ranks, exact stops and GPX deterministic");
+    cases.push("strong_woodland_guidance_complete_route_enrichment_budget_control_and_determinism");
+  }
+  {
     const base=[[0,0],[.02,0],[.02,.02],[0,.02],[0,0]],variant=[[0,0],[.02,0],[.02,.02],[.021,.02],[.02,.02],[0,.02],[0,0]],other=[[0,0],[-.02,0],[-.02,-.02],[0,-.02],[0,0]];
     equal(distinctAdventureRouteFamilies([{candidate_id:"control",geometry:base},{candidate_id:"detour",geometry:variant},{candidate_id:"other",geometry:other}],"loop",35000),["control","other"],"a mostly shared comparison/detour pair is one geometry family, not two independent alternatives");
     cases.push("comparison_detour_is_retained_but_not_counted_as_an_independent_loop");

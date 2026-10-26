@@ -1,10 +1,15 @@
 # Fairphone stabilization acceptance — 26 October 2026
 
+This is the historical ea746cf physical acceptance. Later host real-graph
+improvements and current PR status are documented in the
+[woodland route-quality report](ai-adventure-route-quality.md). They do not change
+these actual phone measurements or the installed APK.
+
 The latest actual connected-account/native Android run establishes three
 distance-feasible geometry families and source-linked anecdotes for three of the
 selected route's four reached places. GPX equality and exact restart recovery
 pass. **Three good forest/history routes remain unestablished:** retained mapped
-woodland is only 15.8–20.8%. PR #110 remains draft and unmerged.
+woodland is only 15.8–20.8%. At that milestone PR #110 remained draft and unmerged.
 
 Both follow-ups used the real Fairphone 6 and actual native Valhalla, Places,
 Nature and elevation, with no fabricated model answer or routing output. The

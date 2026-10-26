@@ -11,6 +11,18 @@ export async function runAdventureSnapshotHarness() {
   const r = await setup(), cases = [];
   let store;
   try {
+    const forest = await setup();
+    try {
+      forest.proposal.wishes = [{ metric: "woodland", goal: "maximize", value: null, importance: "high" }];
+      const value = await forest.controller.run({ ...forest.input, refine: false });
+      assert(value.chosen.result.search_diagnostics.details.local_planning.adventure_search.preference_strategy === "strong_woodland", "new preference strategy exercised");
+      const selected_id = value.chosen.result.candidates.at(-1).id, calls = forest.nativeCalls.length, models = forest.calls.length;
+      const record = await encodeAdventureSnapshot(value), recovered = await decodeAdventureSnapshot({ ...record, selected_id });
+      assert(same(recovered.output, value) && forest.nativeCalls.length === calls && forest.calls.length === models, "strong woodland strategy and candidate portfolio recover exactly without a search or model call");
+      assert(await exportCanonicalCandidate(recovered.output.chosen.result.candidates.at(-1)).blob.text()
+        === await exportCanonicalCandidate(value.chosen.result.candidates.at(-1)).blob.text(), "strong woodland restored GPX exact");
+      cases.push("strong_woodland_portfolio_and_gpx_restore_exactly_without_ranking_or_routing");
+    } finally { forest.controller.cancel(); forest.planner.invalidate(); }
     const control=await setup();
     try {
       control.proposal.intent.topology='loop';control.proposal.intent.end=null;control.proposal.places=[];control.input.context.end=null;
