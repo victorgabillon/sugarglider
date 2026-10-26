@@ -207,6 +207,7 @@ internal fun adventureChatGptPayload(
     val payload = JSONObject().put("model",model).put("store",false).put("stream",true)
         .put("instructions",instructions).put("input",JSONArray().put(JSONObject().put("role","user").put("content",input)))
     if (research) payload.put("tools",JSONArray().put(JSONObject().put("type","web_search")))
+        .put("include",JSONArray().put("web_search_call.action.sources"))
     if (schema != null) payload.put("text",JSONObject().put("format",JSONObject().put("type","json_schema")
         .put("name","sugarglider_adventure").put("strict",true).put("schema",schema)))
     return payload

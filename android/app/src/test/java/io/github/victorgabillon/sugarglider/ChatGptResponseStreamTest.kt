@@ -18,6 +18,27 @@ class ChatGptResponseStreamTest {
     private fun emptyCompletion(): String = event(JSONObject().put("type","response.completed")
         .put("response",JSONObject().put("status","completed").put("output",JSONArray())
             .put("usage",JSONObject().put("input_tokens",3).put("output_tokens",2).put("total_tokens",5))))
+    @Test fun preservesHostedSearchSourcesSeparatelyFromResponseCitations() {
+        val url = "https://official.invalid/landmark"
+        val search = JSONObject().put("type","web_search_call").put("status","completed")
+            .put("action",JSONObject().put("sources",org.json.JSONArray()
+                .put(JSONObject().put("type","url").put("url",url).put("title","Official landmark"))
+                .put(JSONObject().put("type","url").put("url","javascript:unsafe"))
+                .put(JSONObject().put("type","url").put("url","https://user:synthetic@official.invalid/"))))
+        val response = JSONObject().put("output",org.json.JSONArray().put(search))
+        val result = ChatGptCompletion.from(response,"synthetic JSON answer")
+        assertEquals(1,result.citations.length())
+        assertEquals("research_source",result.citations.getJSONObject(0).getString("evidence"))
+        val message = JSONObject().put("content",org.json.JSONArray().put(JSONObject().put("annotations",org.json.JSONArray()
+            .put(JSONObject().put("type","url_citation").put("url",url)))))
+        response.getJSONArray("output").put(message)
+        val cited = ChatGptCompletion.from(response,"synthetic JSON answer")
+        assertEquals(1,cited.citations.length())
+        assertEquals("response_citation",cited.citations.getJSONObject(0).getString("evidence"))
+        search.put("status","failed")
+        assertEquals(0,ChatGptCompletion.from(response,"synthetic").citations.length())
+    }
+
     @Test fun acceptsOnlyCompletedTerminalOutputNotDeltas() {
         val delta = event(JSONObject().put("type", "response.output_text.delta").put("delta", "not authoritative"))
         assertEquals("synthetic answer", ChatGptResponseStream.read(StringReader(delta + completed())))

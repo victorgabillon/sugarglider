@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v113_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v114_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v113"
+    assert generation.group(1) == "v114"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -332,7 +332,7 @@ def test_shared_shell_generation_tracks_v113_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "0994d93cd3a9c6435c52b3f8f50d0a7086433d053e763512e0be2baff4362f48"
+            "2f920a09caa90a2b4e51dcc618656293446914539a11117792fab3885c39b2a3"
         ),
         "location_search.js": (
             "635f5aaf5603cadbc3b77f035055251e54358b16a831d927e51fe6c44c031c36"
@@ -353,13 +353,13 @@ def test_shared_shell_generation_tracks_v113_cached_assets() -> None:
             "718c55d35e5cfb43dd44461825cb95cbc972959cebaeaea96bade331a1dcd77d"
         ),
         "adventure_grounding.js": (
-            "709b8da728f0660ebc30f460b84a5feea9043aa270b01f324c5f0099d56ff3ce"
+            "64560d708dbe0a46c91c8bb111351fcad22f7aaf1978abc3c32a089e22b639ca"
         ),
         "adventure_assessment.js": (
             "b43fee68ac2ce4c550b5a2aea7a0e72dbbae6cd92d4aeb91537f932a30d919a0"
         ),
         "adventure_controller.js": (
-            "fc7a12bd22cef973497556d5c1f63e017e495846fffea7ebd81803bc86658319"
+            "bc851ea29dc82a646006b1c0a3669cc447d0f094b71e37d0bf15ea8578613dfb"
         ),
         "adventure_intent.js": (
             "f858a28b903d8a255744a45b1a9bb2719c7158f02916414ce1e0ad10eb09c390"
@@ -371,16 +371,16 @@ def test_shared_shell_generation_tracks_v113_cached_assets() -> None:
             "886d1a7348fee81b78d8b8ee16cb2cc90655d8f49d720c1f6b8f5a89a8f516a2"
         ),
         "adventure_dialog.js": (
-            "5123871ad6e2226a794095db11ce36b4ab28487058a65db9a8b03ce18beaef06"
+            "3bb1ac8fbb615db9dcd0357f315f825963fec7b21d652ea481182168758563c8"
         ),
         "adventure_results.js": (
-            "6d5d09d13015ec48a0e99170fe173358f3b8fd0bea73a3ce6476ce74847bb84e"
+            "cac75ceed60897dc109629d4245e15253b5db3ddd1cc1febabcf76f892f17220"
         ),
         "adventure_snapshot.js": (
             "fd1610e5d2b3655fe7187561921bb2f69a153c3522749257efb788a40898597c"
         ),
         "adventure_snapshot_validation.js": (
-            "003d1957dc82aa1f3edc205b0fc9c67e68a8bd7804c07be263d3a2a11b86a473"
+            "df01e8d8c152bb3343ceb714fcb245ad1d4a076e8297940990fefbceb13c4bb7"
         ),
         "adventure_snapshot_worker.js": (
             "212e4c0a9cd53aec3b19384119d2921a27293eb054cb9e0ce399c10edd933d3b"

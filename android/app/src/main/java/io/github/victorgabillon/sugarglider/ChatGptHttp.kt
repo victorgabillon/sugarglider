@@ -37,7 +37,7 @@ internal class ChatGptRejection private constructor(private val status: Int, pri
                 "chatpass_v2_scope_not_authorized","chatpass_v2_invalid_authorization_context")
             val parameter = error?.optString("param")
             val knownParameters = setOf("input","model","instructions","tools","tools[0]","tools[0].type","text","text.format","text.format.schema",
-                "max_output_tokens","max_tool_calls","store","stream")
+                "max_output_tokens","max_tool_calls","store","stream","include")
             return ChatGptRejection(status,code?.takeIf(knownCodes::contains) ?: "other",parameter?.takeIf(knownParameters::contains) ?: "other")
         }
     }

@@ -64,7 +64,12 @@ export async function runAdventureProposalHarness(){
  const water=structuredClone(syntheticAdventure);water.places[0].category='water';
  for(const potability of ['verified','unknown','non_potable']){const waterSession={...session,queryPois:async()=>({identity,requested:[{id:'node/1',feature:{...feature,category:'fountain',potability}}],features:[]})};const result=(await groundAdventurePlaces(parse(water),{...options,session:waterSession})).places[0];assert(result.local_potability===potability&&result.status===(potability==='non_potable'?'non_potable':'grounded'),'water distinctions remain explicit');}cases.push('water_potability_remains_distinct_from_access_and_arrival');
  assert(grounded.places[0].proposed_coordinate.lat===.02&&grounded.places[0].routing_coordinate.lat===.0201,'proposed and approach distinct');
- assert(grounded.places[0].sources[0].retrieved,'actual citation evidence retained');cases.push('local-grounding-preserves-coordinate-access-and-provenance');
+ assert(grounded.places[0].sources[0].retrieved,'actual citation evidence retained');
+ const observed=await groundAdventurePlaces(valid,{...options,citations:[{url:'https://example.invalid/source',evidence:'research_source'}]});
+ assert(observed.places[0].sources[0].provenance==='research_source'&&observed.places[0].story_status==='source_linked_ai_text','hosted search observations remain distinct from response citations and independent claim verification');
+ const explicit=await groundAdventurePlaces(valid,{...options,citations:[{url:'https://example.invalid/source',evidence:'research_source'},{url:'https://example.invalid/source',evidence:'response_citation'}]});
+ assert(explicit.places[0].sources[0].provenance==='response_citation','an explicit annotation takes precedence over a search-source observation');
+cases.push('local-grounding-preserves-coordinate-access-and-provenance');
  const tracked=await groundAdventurePlaces(valid,{...options,citations:[{url:'https://example.invalid/source?utm_source=openai'}]});
  assert(tracked.places[0].sources[0].retrieved&&tracked.places[0].story_status==='source_linked_ai_text','known provider tracking does not hide real citation evidence');
  for(const url of ['https://example.invalid/source?id=different&utm_source=openai','https://example.invalid/other?utm_source=openai','https://example.invalid/source?utm_source=someone-else']){

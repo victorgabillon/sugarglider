@@ -145,8 +145,14 @@ export async function groundAdventurePlaces(proposal, { session, reference, star
 }
 
 export function adventureStoryEvidence(place, citations = [], researched = false) {
-  const links = new Set(researched ? citations.map(item => citationIdentity(item.url)).filter(Boolean) : []);
+  const links = new Map();
+  if (researched) for (const citation of citations) {
+    const identity = citationIdentity(citation.url); if (!identity) continue;
+    const evidence = citation.evidence === "research_source" ? "research_source" : "response_citation";
+    if (!links.has(identity) || evidence === "response_citation") links.set(identity, evidence);
+  }
   return { story_status: place.anecdote && place.sources.some(source => links.has(citationIdentity(source.url)))
     ? "source_linked_ai_text" : "unverified_ai_text",
-    sources: place.sources.map(({ title, url }) => ({ title, url, retrieved: links.has(citationIdentity(url)) })) };
+    sources: place.sources.map(({ title, url }) => ({ title, url, retrieved: links.has(citationIdentity(url)),
+      provenance: links.get(citationIdentity(url)) ?? "unverified" })) };
 }

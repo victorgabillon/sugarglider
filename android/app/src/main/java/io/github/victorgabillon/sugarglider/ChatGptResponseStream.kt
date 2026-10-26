@@ -155,19 +155,32 @@ internal class ChatGptCompletion(val text: String, val usage: JSONObject, val ci
             val researched = (0 until output.length()).any { val item = output.getJSONObject(it); item.optString("type") == "web_search_call" && item.optString("status") == "completed" }
             val citations = org.json.JSONArray()
             val seen = mutableSetOf<String>()
-            if (researched) for (i in 0 until output.length()) {
-                val content = output.getJSONObject(i).optJSONArray("content") ?: continue
-                for (n in 0 until content.length()) {
-                    val annotations = content.getJSONObject(n).optJSONArray("annotations") ?: continue
-                    for (k in 0 until minOf(annotations.length(),40)) {
-                        val source = annotations.getJSONObject(k)
-                        if (source.optString("type") != "url_citation") continue
-                        val url = source.optString("url")
-                        val uri = runCatching { java.net.URI(url) }.getOrNull() ?: continue
-                        if (citations.length() >= 40 || url.length > 2048 || uri.scheme != "https" || uri.host.isNullOrEmpty() || uri.rawUserInfo != null || !seen.add(url)) continue
-                        val title = source.optString("title").take(300).filterNot(Char::isISOControl)
-                        citations.put(JSONObject().put("url",url).put("title",title))
+            fun source(value: JSONObject, evidence: String) {
+                val url = value.optString("url")
+                val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return
+                if (citations.length() >= 40 || url.length > 2048 || uri.scheme != "https" || uri.host.isNullOrEmpty() || uri.rawUserInfo != null || !seen.add(url)) return
+                val title = value.optString("title").take(300).filterNot(Char::isISOControl)
+                citations.put(JSONObject().put("url",url).put("title",title).put("evidence",evidence))
+            }
+            if (researched) {
+                // Prefer explicit response citations. Structured JSON may have no
+                // annotations: hosted-search sources remain separately labelled
+                // observations, never proof that a historical claim is supported.
+                for (i in 0 until output.length()) {
+                    val content = output.getJSONObject(i).optJSONArray("content") ?: continue
+                    for (n in 0 until content.length()) {
+                        val annotations = content.getJSONObject(n).optJSONArray("annotations") ?: continue
+                        for (k in 0 until minOf(annotations.length(),40)) {
+                            val value = annotations.getJSONObject(k)
+                            if (value.optString("type") == "url_citation") source(value,"response_citation")
+                        }
                     }
+                }
+                for (i in 0 until output.length()) {
+                    val item = output.getJSONObject(i)
+                    if (item.optString("type") != "web_search_call" || item.optString("status") != "completed") continue
+                    val sources = item.optJSONObject("action")?.optJSONArray("sources") ?: continue
+                    for (k in 0 until minOf(sources.length(),40)) source(sources.getJSONObject(k),"research_source")
                 }
             }
             return ChatGptCompletion(text,usage,citations,researched)

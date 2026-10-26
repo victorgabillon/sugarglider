@@ -47,7 +47,9 @@ async function validateOutput(output) {
     && (output.refinement_error === null || /^[a-z_]{1,80}$/.test(output.refinement_error))
     && Array.isArray(output.model_calls) && output.model_calls.length >= 1 && output.model_calls.length <= 2);
   for (const call of output.model_calls) {
-    requireValue(exact(call, ["phase", "status", "usage", "elapsed_ms", "error", ...(call.timings === undefined ? [] : ["timings"])])
+    requireValue(exact(call, ["phase", "status", "usage", "elapsed_ms", "error", ...(call.timings === undefined ? [] : ["timings"]), ...(call.research_enabled === undefined ? [] : ["research_enabled"]), ...(call.observed_source_count === undefined ? [] : ["observed_source_count"])])
+      && (call.observed_source_count === undefined || call.observed_source_count === null || Number.isSafeInteger(call.observed_source_count) && call.observed_source_count >= 0 && call.observed_source_count <= 40)
+      && (call.research_enabled === undefined || typeof call.research_enabled === "boolean")
       && ["initial", "refinement", "stories"].includes(call.phase) && ["completed", "failed"].includes(call.status)
       && (call.usage === null || Object.entries(call.usage).every(([key, value]) =>
         ["input_tokens", "output_tokens", "total_tokens"].includes(key) && Number.isSafeInteger(value) && value >= 0))

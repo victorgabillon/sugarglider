@@ -133,6 +133,7 @@ class ChatGptConnectionTest {
         assertEquals("synthetic description",message.getString("content"))
         assertEquals(1,payload.getJSONArray("tools").length())
         assertEquals("web_search",payload.getJSONArray("tools").getJSONObject(0).getString("type"))
+        assertEquals("web_search_call.action.sources",payload.getJSONArray("include").getString(0))
         val format = payload.getJSONObject("text").getJSONObject("format")
         assertEquals("json_schema",format.getString("type"));assertTrue(format.getBoolean("strict"))
         assertEquals(schema.toString(),format.getJSONObject("schema").toString())
@@ -140,7 +141,7 @@ class ChatGptConnectionTest {
     }
     @Test fun inferenceCanOmitUnsupportedOptionalResearchAndSchema() {
         val payload = adventureChatGptPayload("another-visible-model","instructions","synthetic description",false,null)
-        assertFalse(payload.has("tools"));assertFalse(payload.has("max_tool_calls"));assertFalse(payload.has("text"))
+        assertFalse(payload.has("tools"));assertFalse(payload.has("include"));assertFalse(payload.has("max_tool_calls"));assertFalse(payload.has("text"))
         assertFalse(payload.has("max_output_tokens"))
     }
 

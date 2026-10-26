@@ -49,9 +49,15 @@ the first valid routes and narratives. The limit remains two model requests.
 Publishing a provisional result before refinement was deliberately left out of
 this change to preserve the existing atomic result/recovery transition.
 
-**After-change live model time/token usage remains unmeasured pending separate
-installation and real-account authorization.** Synthetic completion times are
-not substituted for live latency.
+The separately authorized [c84048d physical acceptance](ai-adventure-fairphone-stabilization-acceptance.md)
+completed the exact French request: 104.462 s initial, 41.969 s second call,
+44,520 tokens and 152.017 s total. This is worse than the previous observation,
+not a latency success. GPX/restart equality passed and the original route was
+restored. The follow-up now makes the initial historical-planning pass without
+research or anecdotes, then prioritizes checked reached identities for final
+research. Identity-bound source improvements survive a rejected route strategy.
+This revised policy needs a new authorized live test; synthetic times are not
+substituted for model latency.
 
 ## Alternative count and real graph experiment
 
@@ -122,8 +128,11 @@ preserves the enriched result exactly and accepts earlier snapshots without the
 new optional timing fields.
 
 The previous physical run had four reached places and zero source-linked reached
-stories. The host fixtures are not completed model research and remain labeled
-accordingly; no after-change live coverage improvement is claimed yet.
+stories. The c84048d physical run also had zero observed-source anecdotes on its
+three reached places. The host fixtures are not completed model research and
+remain labeled accordingly. The follow-up requests hosted-search source metadata
+as well as response citations and preserves their distinct provenance; neither
+independently verifies a claim. No live coverage improvement is claimed yet.
 
 Independent source retrieval for two of the physically visited names is feasible:
 the Ministry of Culture's [Mérimée notice IA00050244](https://pop.culture.gouv.fr/notice/merimee/IA00050244),
@@ -166,7 +175,9 @@ by the component harnesses. No CI requirement is removed.
 
 The installed staging APK was independently checked against the previous
 authorized SHA-256 `bbeb85de319c9da5fdad5b553b80127ba34de01a02003e732524c6b74c59d6e8`.
-No installation, app-data clearing, live account request, production/Play/hosting
-change or merge is authorized by this report. The exact final French live
-acceptance, exported-file equality and physical restart recovery still require
-the separate user-authorized staging test.
+The user separately authorized the c84048d staging installation and two-call
+live test. Exact native GPX and restart recovery passed, and the original route
+and editor text were restored. That installed artifact remains in place while
+the follow-up is prepared. A different APK and further real calls require new
+separate approval. No app-data clearing, production/Play/hosting change or merge
+is authorized by this report.

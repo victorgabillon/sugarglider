@@ -5,7 +5,7 @@ import { createAdventureElevationSampler } from "./adventure_elevation.js";
 import { readSpeechProviderPreference, writeSpeechProviderPreference } from "./pwa_store.js";
 import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
 
-const progressText = { understanding: "Understanding your wishes and researching places…", checking_places: "Checking locations on this device…",
+const progressText = { understanding: "Understanding your wishes and proposing places…", checking_places: "Checking locations on this device…",
   reviewing: "Review the required places below.", routing: "Calculating actual offline routes…", comparing: "Comparing routes and measuring terrain…",
   researching_stories: "Researching stories for the places actually reached…", improving: "Improving suggestions using the measured results…", ready: "Your adventure is ready." };
 const speechText = { completed: "Transcription added. Check it before Generate; tap Speak to add more.", partial: "Recording ended before final recognition. Check this draft carefully; tap Speak to add more.", cancelled: "Microphone cancelled.",
@@ -18,7 +18,7 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
   model = createAdventureModel(), speech = createAdventureSpeech(), elevation = createAdventureElevationSampler() }) {
   const element = id => root.querySelector(`#adventure-${id}`);
   const french = /^fr(?:-|$)/i.test(navigator.language);
-  const progressMessages = french ? { understanding: "Compréhension et recherche des lieux…", checking_places: "Vérification des lieux sur cet appareil…",
+  const progressMessages = french ? { understanding: "Compréhension des envies et proposition des lieux…", checking_places: "Vérification des lieux sur cet appareil…",
     reviewing: "Vérifiez les lieux obligatoires.", routing: "Calcul des vrais parcours hors ligne…", comparing: "Comparaison des parcours et mesure du terrain…",
     improving: "Amélioration des suggestions à partir des mesures…", researching_stories: "Recherche d’anecdotes sur les lieux réellement atteints…", ready: "Votre aventure est prête." } : progressText;
   const speechMessages = french ? { ...speechText, completed: "Transcription ajoutée. Modifiez-la si nécessaire avant de générer. Parler permet d’ajouter une phrase.",
@@ -29,6 +29,8 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
       "stop-speech": "Annuler le micro", generate: "Générer l’aventure", cancel: "Annuler le calcul", "refresh-models": "Actualiser les modèles disponibles" };
     for (const [id, label] of Object.entries(labels)) element(id).textContent = label;
     launcher.textContent = "✨ Planifier avec l’IA";
+    element("privacy").textContent = "Lorsque vous générez, votre description, les départ/arrivée conservés, les points obligatoires et jusqu’à 24 lieux cartographiés proches (noms, identifiants, coordonnées) sont envoyés à OpenAI avec votre compte ChatGPT. Si la demande supplémentaire est autorisée, un résumé des mesures et les noms/identifiants OSM des lieux atteints peuvent être envoyés pour rechercher leurs anecdotes ou améliorer les suggestions. La recherche est en ligne ; les calculs de parcours, les données régionales complètes et le GPX restent sur cet appareil. Les limites de votre compte s’appliquent. La dernière aventure complète est conservée localement pour la rouvrir après redémarrage ; vous pouvez l’oublier ou effacer les données hors ligne.";
+    element("refine").parentElement.lastChild.textContent = " Autoriser une demande supplémentaire pour les anecdotes des lieux atteints ou les suggestions de parcours";
     element("text").previousElementSibling.textContent = "Quelle aventure souhaitez-vous ?";
     element("text").placeholder = "Environ 35 km de course dans les bois de Marly, trois parcours différents et des anecdotes sur les lieux visités…";
     element("language").parentElement.firstChild.textContent = "Langue parlée";

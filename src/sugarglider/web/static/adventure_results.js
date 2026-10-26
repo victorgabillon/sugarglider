@@ -62,7 +62,7 @@ export function createAdventureResults({ root, candidatesRoot, onManual, onShowM
       paragraph(article, place.reason);
       if (place.anecdote) paragraph(article, place.anecdote);
       paragraph(article, place.story_status === "source_linked_ai_text"
-        ? "AI story with a link cited during research. Its historical claims have not been independently verified."
+        ? "AI story linked to an observed research source. Its historical claims have not been independently verified."
         : "Unverified AI text. No matching source citation was available.");
       paragraph(article, place.access_status === "public" ? "Public access is mapped; opening and current conditions remain unverified."
         : place.access_status === "unknown" ? "Access is unknown. Check locally before visiting." : "Mapped access is restricted; this place is not selected.");
@@ -76,7 +76,7 @@ export function createAdventureResults({ root, candidatesRoot, onManual, onShowM
         const href = safeAdventureLink(source.url); if (!href) continue;
         const item = root.ownerDocument.createElement("li"), link = root.ownerDocument.createElement("a");
         link.href = href; link.target = "_blank"; link.rel = "noopener noreferrer"; link.textContent = source.title;
-        item.append(link, root.ownerDocument.createTextNode(source.retrieved ? " — cited during model research" : " — link supplied by AI; unverified")); list.append(item);
+        item.append(link, root.ownerDocument.createTextNode(source.retrieved ? source.provenance === "research_source" ? " — returned by hosted research; claim support unverified" : " — cited during model research; claim support unverified" : " — link supplied by AI; unverified")); list.append(item);
       }
       const coordinate = place.semantic_coordinate ?? place.proposed_coordinate;
       if (coordinate) {
@@ -89,6 +89,7 @@ export function createAdventureResults({ root, candidatesRoot, onManual, onShowM
     const elapsed = output.model_calls.reduce((total, call) => total + (call.elapsed_ms ?? 0), 0);
     paragraph(details, `ChatGPT requests: ${output.model_calls.length}. Measured response time: ${(elapsed / 1000).toFixed(1)} s. Offline route calls: ${output.routing_diagnostics.budget.total_used}/${output.routing_diagnostics.budget.total_limit}.`);
     if (output.timings) paragraph(details, `Total planning: ${(output.timings.total_ms / 1000).toFixed(1)} s · Local grounding: ${(output.timings.grounding_ms / 1000).toFixed(2)} s · Native routing: ${(output.timings.native_routing_ms / 1000).toFixed(2)} s · Nature: ${(output.timings.nature_ms / 1000).toFixed(2)} s · Elevation: ${(output.timings.elevation_ms / 1000).toFixed(2)} s.`);
+    for (const call of output.model_calls) if (call.research_enabled !== undefined) paragraph(details, `${call.phase}: online research ${call.research_enabled ? "enabled" : "deferred or disabled"}; observed source URLs ${call.observed_source_count ?? "unknown"}. This is provenance, not independent claim verification.`);
     for (const call of output.model_calls) if (call.timings) paragraph(details, `${call.phase}: first response ${call.timings.response_headers_ms === null ? "unknown" : `${(call.timings.response_headers_ms / 1000).toFixed(1)} s`}; observed research span ${call.timings.research_span_ms === null ? "unknown" : `${(call.timings.research_span_ms / 1000).toFixed(1)} s`}.`);
     const search = round.result.search_diagnostics.details.local_planning.adventure_search;
     if (search) paragraph(details, `Search: ${search.evaluated_sequences} proposed sequences evaluated, ${search.validated_drafts} valid routed paths, ${search.diversity_omitted} similar lines omitted, ${search.within_tolerance_count}/${search.requested_count} returned within tolerance; ${search.distinct_route_count} geometry families and ${search.comparison_variant_count} retained comparison variants. Coordinate-segment sharing is a geometry proxy, not edge repetition or corridor equivalence. ${search.budget_finished ? "The local search budget finished." : "No more useful proposals remained."}`);

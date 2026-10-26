@@ -130,7 +130,11 @@ export async function runAdventureControllerHarness() {
       assert(output.chosen.result.candidates.some(c => c.reached_stops.length === 2), "actual checked subset uses revised places");
       assert(output.chosen.result.candidates.some(c => c.reached_stops.length === 0), "canonical comparison route retained");
       assert(output.chosen.result.candidates[0].diagnostics.within_tolerance, "distance tolerance takes priority over the outside-tolerance comparison");
-      assert(r.calls.every(call => call.research && call.output_schema && call.instructions.includes("never geometry")), "one protected proposal contract");
+      assert(!r.calls[0].research && r.calls[1].research && r.calls.every(call => call.output_schema && call.instructions.includes("never geometry")), "geographical pass defers research without weakening the proposal contract");
+      assert(output.model_calls[0].research_enabled===false&&output.model_calls[1].research_enabled===true,"observed research policy is public in model diagnostics");
+      assert(r.calls[0].instructions.includes("Set every anecdote to null"),"the first geographical pass must not generate historical stories");
+      const researched=JSON.parse(r.calls[1].input).reached_place_research;
+      assert(researched.length>0&&researched.every(place=>place.osm_id&&place.name)&&!JSON.stringify(researched).includes('"lat"'),"final research is grounded in checked reached identities without route coordinates");
       const sent = JSON.parse(r.calls[1].input).measurements;
       const encoded = JSON.stringify(sent);
       assert(!encoded.includes('"geometry"') && !encoded.includes('"lat"') && !encoded.includes('"lon"'), "revision summary has no raw line or coordinates");
@@ -157,6 +161,7 @@ export async function runAdventureControllerHarness() {
       const output = await r.controller.run(r.input);
       assert(output.rounds.length === 1 && output.chosen.result.candidates.length && output.refinement_error === failure, "valid first candidates survive second-call failure");
       assert(r.calls.length === 2 && !output.refinement_improved, "no hidden retry or falsely improved route");
+      assert(output.chosen.grounding.places.every(place=>place.anecdote===null&&place.sources.length===0),"failed final research cannot turn the geography-only pass into ungrounded history");
     } finally { r.controller.cancel(); r.planner.invalidate(); }
     cases.push(`revision_${failure}_retains_first_valid_candidates`);
   }
@@ -361,6 +366,19 @@ export async function runAdventureControllerHarness() {
         equal(recovered.output,output,"story research and whitelisted timings recover exactly without rerouting");
       }
       outputs.push(output);cases.push(invalid?"story_identity_change_rejected_without_losing_routes":"second_call_researches_reached_places_without_rerouting");
+    } finally {r.controller.cancel();r.planner.invalidate();}
+  }
+  {
+    const r=await setup();
+    try {
+      r.revision.places=[{...structuredClone(r.proposal.places[0]),anecdote:"Synthetic source-linked story from the rejected route revision."}];
+      const output=await r.controller.run(r.input);
+      assert(output.selected_round===0&&!output.refinement_improved&&output.rounds.length===2,"equal routed strategies do not falsely improve route quality");
+      assert(output.chosen.grounding.places[0].anecdote==="Synthetic source-linked story from the rejected route revision."&&output.chosen.grounding.places[0].story_status==="source_linked_ai_text","verified citation provenance for the same reached identity survives a non-improving routing round");
+      const candidate=output.chosen.result.candidates.find(c=>c.reached_stops.length);
+      assert(!(await exportCanonicalCandidate(candidate).blob.text()).includes("rejected route revision"),"retained research never alters GPX");
+      const {encodeAdventureSnapshot}=await import("../../src/sugarglider/web/static/adventure_snapshot_validation.js");await encodeAdventureSnapshot(output);
+      cases.push("reached_story_research_survives_rejected_route_strategy_without_rerouting_first_result");
     } finally {r.controller.cancel();r.planner.invalidate();}
   }
   equal(JSON.stringify(state), beforeState, "controller never corrupts selected/manual plan");
