@@ -1,3 +1,4 @@
+import { t, tr, setLocalizedText } from "./i18n.js";
 import { appendMapSources } from "./data_notices.js";
 
 // Notices are code-pinned to reviewed payload identities, never manifest source text.
@@ -98,23 +99,23 @@ function disclosure(parent, text) {
 
 function appendTerrainContent(parent, manifest, source) {
   if (source === "copernicus") {
-    for (const text of ["Copernicus GLO-30, 2021 COG release. Surface model: trees and buildings may affect heights. Converted from EGM2008 to EGM96 with NGA geoid grids.", CREDIT, DISCLAIMER]) paragraph(parent, text);
-    link(parent, "Copernicus WorldDEM-30 license", LICENSE);
+    for (const text of [t("Copernicus GLO-30, 2021 COG release. Surface model: trees and buildings may affect heights. Converted from EGM2008 to EGM96 with NGA geoid grids."), CREDIT, DISCLAIMER]) paragraph(parent, text);
+    link(parent, t("Copernicus WorldDEM-30 license"), LICENSE);
     return;
   }
-  paragraph(parent, `${IGN_NAME} · ground-elevation model. Height reference: NGF-IGN69 normal heights (EPSG:5720).`);
-  paragraph(parent, "Runtime terrain: one-arcsecond HGT, resampled from the 5 m source grid and quantized to integer metres. The derived HGT does not retain the original 5 m resolution.");
+  paragraph(parent, tr`${IGN_NAME} · ground-elevation model. Height reference: NGF-IGN69 normal heights (EPSG:5720).`);
+  paragraph(parent, t("Runtime terrain: one-arcsecond HGT, resampled from the 5 m source grid and quantized to integer metres. The derived HGT does not retain the original 5 m resolution."));
   const routing = manifest?.components?.routing?.files;
   paragraph(parent, Array.isArray(routing) && routing.length === 2 && matches(routing[1], IGN.routing_archive)
-    ? "Derived IGN terrain is also incorporated into this region’s Valhalla routing graph."
-    : "Terrain provenance for this routing graph is unavailable; this credit identifies the elevation HGT only.");
+    ? t("Derived IGN terrain is also incorporated into this region’s Valhalla routing graph.")
+    : t("Terrain provenance for this routing graph is unavailable; this credit identifies the elevation HGT only."));
   const licence = parent.ownerDocument.createElement("p"); parent.append(licence);
-  link(licence, "Licence Ouverte 2.0", IGN_LICENSE);
-  licence.append(" · "); link(licence, "IGN RGE ALTI source", "https://www.data.gouv.fr/datasets/rge-alti-r");
-  paragraph(parent, "These credits do not imply endorsement by IGN or OpenStreetMap contributors.");
-  const editions = disclosure(parent, `Source archive editions (${IGN.editions.length})`);
+  link(licence, t("Licence Ouverte 2.0"), IGN_LICENSE);
+  licence.append(" · "); link(licence, t("IGN RGE ALTI source"), "https://www.data.gouv.fr/datasets/rge-alti-r");
+  paragraph(parent, t("These credits do not imply endorsement by IGN or OpenStreetMap contributors."));
+  const editions = disclosure(parent, tr`Source archive editions (${IGN.editions.length})`);
   editions.dataset.sourceDisclosure = "editions";
-  paragraph(editions, "The dates in these original archive names identify source editions, not the terrain acquisition date of each individual cell.");
+  paragraph(editions, t("The dates in these original archive names identify source editions, not the terrain acquisition date of each individual cell."));
   const list = parent.ownerDocument.createElement("ul"); list.className = "terrain-editions";
   for (const name of IGN.editions) {
     const item = parent.ownerDocument.createElement("li"), code = parent.ownerDocument.createElement("code");
@@ -127,20 +128,20 @@ function appendTerrainContent(parent, manifest, source) {
 export function appendTerrainAttribution(parent, manifest) {
   const source = sourceIdentity(manifest);
   if (!source) return false;
-  appendTerrainContent(disclosure(parent, "Elevation source and license"), manifest, source);
+  appendTerrainContent(disclosure(parent, t("Elevation source and license")), manifest, source);
   return true;
 }
 
 // Descriptors come from the installed manifest. No extra I/O or legal authorization.
 export function appendRegionSources(parent, manifest) {
-  const details = disclosure(parent, "Data sources and licences");
+  const details = disclosure(parent, t("Data sources and licences"));
   details.className = "region-sources"; details.dataset.sourceDisclosure = "sources";
-  const terrain = parent.ownerDocument.createElement("h4"); terrain.textContent = "Terrain elevation sources"; details.append(terrain);
+  const terrain = parent.ownerDocument.createElement("h4"); setLocalizedText(terrain, () => t("Terrain elevation sources")); details.append(terrain);
   const source = sourceIdentity(manifest);
   if (source) appendTerrainContent(details, manifest, source);
-  else paragraph(details, "Terrain source information is unavailable or unsupported for this installed data. No terrain source or licence is inferred.");
-  const map = parent.ownerDocument.createElement("h4"); map.textContent = "Map data sources"; details.append(map);
-  paragraph(details, "See the separate credits on the map for its data sources and licences. Terrain licensing does not cover other map data.");
+  else paragraph(details, t("Terrain source information is unavailable or unsupported for this installed data. No terrain source or licence is inferred."));
+  const map = parent.ownerDocument.createElement("h4"); setLocalizedText(map, () => t("Map data sources")); details.append(map);
+  paragraph(details, t("See the separate credits on the map for its data sources and licences. Terrain licensing does not cover other map data."));
   appendMapSources(details, manifest);
   return details;
 }
@@ -149,8 +150,8 @@ export function appendRegionSources(parent, manifest) {
 export function appendElevationSource(parent, heightReference) {
   parent.replaceChildren();
   if (typeof heightReference === "string" && heightReference.startsWith("IGN69 normal metres; IGN RGE ALTI 5 m;")) {
-    parent.append(`${IGN_NAME} · ground model · NGF-IGN69 normal heights (EPSG:5720). `);
-    link(parent, "Licence Ouverte 2.0", IGN_LICENSE);
-  } else parent.textContent = typeof heightReference === "string" && heightReference.startsWith("EGM96 orthometric")
-    ? "Height reference: EGM96 orthometric metres." : "Height reference: unresolved vertical datum.";
+    parent.append(tr`${IGN_NAME} · ground model · NGF-IGN69 normal heights (EPSG:5720). `);
+    link(parent, t("Licence Ouverte 2.0"), IGN_LICENSE);
+  } else setLocalizedText(parent, () => typeof heightReference === "string" && heightReference.startsWith("EGM96 orthometric")
+    ? t("Height reference: EGM96 orthometric metres.") : t("Height reference: unresolved vertical datum."));
 }

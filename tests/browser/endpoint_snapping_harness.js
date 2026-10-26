@@ -1,3 +1,8 @@
+// This existing fixture exercises explicit English output. French defaults and
+// both-language state preservation are covered by localization_harness and the
+// full bundled-app acceptance, with strict canonical and GPX comparisons.
+import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
+await setLanguage("en", { persist: false, document: null });
 import { createLocalPlanner } from '../../src/sugarglider/web/static/local_planner.js';
 import { createLocalPlanPublisher } from '../../src/sugarglider/web/static/local_plan_client.js';
 import { PUBLIC_PROFILE_METADATA } from '../../src/sugarglider/web/static/public_profile_metadata.js';

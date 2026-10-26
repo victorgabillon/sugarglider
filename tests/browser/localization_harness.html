@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Localization harness</title>
+<label for="application-language">Langue / Language</label>
+<select id="application-language"><option value="fr">Français</option><option value="en">English</option></select>
+<p id="language-storage-status" hidden></p>
+<button id="ai" data-i18n-aria-label="Plan an adventure with ChatGPT" aria-label="Plan an adventure with ChatGPT"></button>
+<span id="loop" data-i18n="Loop">Loop</span>
+<input id="user-text" value="Loop Unknown Start: user text stays exact">
+<p id="place-name">Start</p><p id="anecdote">Original historical story.</p><p id="dynamic"></p>
+<pre id="result">running</pre>
+<script type="module">
+try {
+  const { runLocalizationHarness } = await import('./localization_harness.js');
+  const cases = await runLocalizationHarness();
+  document.querySelector('#result').dataset.status = 'passed';
+  document.querySelector('#result').textContent = JSON.stringify(cases);
+} catch (error) {
+  document.querySelector('#result').dataset.status = 'failed';
+  document.querySelector('#result').textContent = error.stack;
+}
+</script>
+</html>

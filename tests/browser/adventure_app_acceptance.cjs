@@ -10,8 +10,8 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
   const browser = await chromium.launch({ headless: true, args: ['--enable-unsafe-swiftshader'],
     ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
   try {
-    for (const [width, height, locale] of [[372, 760, "fr-FR"], [390, 844, "en-GB"], [800, 372, "fr-FR"], [1280, 844, "en-GB"]]) {
-      const context = await browser.newContext({ viewport: { width, height }, locale, serviceWorkers: 'block' });
+    for (const [width, height, locale] of [[372, 760, "fr-FR"], [412, 844, "en-GB"], [320, 720, "fr-FR"], [800, 372, "fr-FR"], [1280, 844, "en-GB"]].filter(row => !process.env.FOCUSED_WIDTH || row[0] === Number(process.env.FOCUSED_WIDTH))) {
+      const context = await browser.newContext({ viewport: { width, height }, locale: locale === "fr-FR" ? "en-US" : locale, serviceWorkers: 'block' });
       const errors = [], external = [], unexpected = [];
       try {
         await context.route('**/*', async route => {
@@ -35,6 +35,10 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         });
         const page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
         await page.goto(origin + '/seed.html');
+        if (locale.startsWith('en')) await page.evaluate(async () => {
+          const { writeLanguagePreference } = await import('/static/pwa_store.js');
+          await writeLanguagePreference('en');
+        });
         const fixture = await page.evaluate(async () => {
           const data = await (await fetch('/tests/fixtures/pr40_regional_data.json')).json();
           const { createRegionVersionStore } = await import('/static/region_versions.js');
@@ -72,7 +76,8 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
               adventureSavedGpx = new TextDecoder().decode(new Uint8Array(payload, 4 + length));
             } else request = JSON.parse(payload);
             adventureNativeCalls.push(request); let reply;
-            if (request.type === 'show_privacy') reply = { type: 'show_privacy_result', shown: true };
+            if (request.type === 'set_ui_language') reply = { type: 'set_ui_language_result', language: request.language, selected: true };
+            else if (request.type === 'show_privacy') reply = { type: 'show_privacy_result', shown: true };
             else if (request.type === 'get_app_identity') reply = { type: 'app_identity_result', label: 'SG AI Test', revision: '88bdb8c', variant: 'v2Staging', version: '1.2.0-v2-staging' };
             else if (request.type === 'hello') reply = { type: 'hello_result', outing_slug: null, participant_id: null, active: false, state: 'stopped', last_published_at: null, pending_sample: false, stop_warning: null };
             else if (request.type === 'itinerary_dialog_state') reply = { type: 'itinerary_dialog_state_result', open: request.open };
@@ -168,7 +173,8 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           return image.width >= 32 && image.left >= bounds.left && image.right <= bounds.right && image.top >= bounds.top && image.bottom <= bounds.bottom;
         });
         assert(imageBounds, 'The supplied Map icon remains recognizable and contained within the touch target');
-        assert.equal((await page.locator('#ask-chatgpt .ai-action-label').textContent()).trim(), locale === 'fr-FR' ? 'Demander à ChatGPT' : 'Ask ChatGPT');
+        assert.equal(await page.locator('#ask-chatgpt .ai-action-label').count(), 0, 'Map action is icon-only');
+        assert.equal(await page.locator('#ask-chatgpt').getAttribute('aria-label'), locale === 'fr-FR' ? 'Planifier une aventure avec ChatGPT' : 'Plan an adventure with ChatGPT');
 
         await page.waitForFunction(() => document.querySelector('.maplibregl-ctrl-attrib-inner').textContent.includes('Synthetic pack A'));
         const creditText = await page.locator('.maplibregl-ctrl-attrib-inner').textContent();
@@ -256,7 +262,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await page.waitForFunction(()=>document.querySelector('#adventure-model').value==='synthetic-model');
         await page.locator('#adventure-text').fill('Describe the endpoints, or choose them while planning');
         await page.waitForFunction(()=>!document.querySelector('#adventure-generate').disabled);
-        assert((await page.locator('#adventure-start').textContent()).includes('from your description'),'Blank editor supports AI without serializing missing manual endpoints');
+        assert((await page.locator('#adventure-start').textContent()).includes(locale === 'fr-FR' ? 'selon votre description' : 'from your description'),'Blank editor supports AI without serializing missing manual endpoints');
         await page.locator('#adventure-endpoints').evaluate(node => { node.open = true; });
         await page.locator('#adventure-choose-start').click();
         await page.waitForFunction(()=>adventureAppState.state.endpointSetMode==='start');
@@ -270,7 +276,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await page.locator('#adventure-choose-start').click();
         await page.waitForFunction(()=>adventureAppState.state.endpointSetMode==='start');
         await tapMap();
-        await page.waitForFunction(()=>document.querySelector('#adventure-dialog').open&&document.querySelector('#adventure-start').textContent.includes('Start:'));
+        await page.waitForFunction(french=>document.querySelector('#adventure-dialog').open&&document.querySelector('#adventure-start').textContent.includes(french ? 'Départ:' : 'Start:'),locale==='fr-FR');
         assert.equal(await page.locator('#adventure-text').inputValue(),'Describe the endpoints, or choose them while planning','Map selection resumes the same description');
         assert(await page.evaluate(()=>adventureAppState.currentAdventureContext().start!==null),'The ordinary map handler supplies the selected Start');
         assert.equal(await page.evaluate(()=>adventureModelCount),0,'Map selection does not infer automatically');
@@ -289,6 +295,40 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await page.waitForFunction(() => adventureAppState.state.request.status === 'success');
         const manual = await page.evaluate(async () => { const { state, currentPlanRequest } = await import('/static/state.js'); return JSON.stringify({ request: currentPlanRequest(), result: state.generationResult, source: state.generationSourceRequest, selected: state.selectedSignature }); });
         assert(JSON.parse(manual).result.candidates.length && JSON.parse(manual).selected, 'The prior manual route must actually be generated and selected');
+        // A language change is presentation only, even with an existing route.
+        const languageFingerprint = () => page.evaluate(async () => {
+          const { state, currentPlanRequest, selectedCandidate } = await import('/static/state.js');
+          const { exportCanonicalCandidate } = await import('/static/local_gpx_export.js');
+          const { currentViewportBounds, mapPresentationDiagnostics } = await import('/static/map.js');
+          return { canonical: JSON.stringify({ request: currentPlanRequest(), result: state.generationResult,
+            source: state.generationSourceRequest, selected: state.selectedSignature, editorPoints: state.points }),
+            gpx: await exportCanonicalCandidate(selectedCandidate()).blob.text(), bounds: currentViewportBounds(), camera: mapPresentationDiagnostics().camera,
+            routeCalls: adventureNativeCalls.filter(call => ['local_route','route_elevation','chatgpt_infer','adventure_speech_start'].includes(call.type)).length,
+            form: [...document.querySelectorAll('#route-form input, #route-form select, #route-form textarea')].map(node => [node.id,node.value,node.checked]) };
+        });
+        await view('map');
+        // Normal Generate fits the selected geometry with a 500 ms animation.
+        // Settle that independent camera operation before testing language.
+        await page.waitForTimeout(650);
+        await page.waitForFunction(async () => !(await import('/static/map.js')).mapPresentationDiagnostics().moving);
+        const originalLanguage = locale === 'fr-FR' ? 'fr' : 'en';
+        for (const language of [originalLanguage === 'fr' ? 'en' : 'fr', originalLanguage]) {
+          const beforeLanguage = await languageFingerprint();
+          await page.locator('.header-tools').evaluate(node => { node.open = true; });
+          await page.locator('#application-language').selectOption(language);
+          await page.waitForFunction(language => document.documentElement.lang === language, language);
+          await page.locator('.header-tools').evaluate(node => { node.open = false; });
+          await page.waitForTimeout(150);
+          const afterLanguage = await languageFingerprint();
+          assert.equal(afterLanguage.canonical, beforeLanguage.canonical, 'Language never changes canonical route state');
+          assert.equal(afterLanguage.gpx, beforeLanguage.gpx, 'Language never changes GPX bytes');
+          assert.equal(afterLanguage.routeCalls, beforeLanguage.routeCalls, 'Language never routes, measures terrain, infers or records');
+          assert.deepEqual(afterLanguage.form, beforeLanguage.form, 'Language preserves every planner form value');
+          assert.deepEqual(afterLanguage.camera, beforeLanguage.camera, 'Language preserves camera: '+JSON.stringify({before:beforeLanguage.camera,after:afterLanguage.camera}));
+          assert.equal(await page.locator('#ask-chatgpt').getAttribute('aria-label'), language === 'fr' ? 'Planifier une aventure avec ChatGPT' : 'Plan an adventure with ChatGPT');
+          assert.equal(await page.locator('#dock-finish option[value="loop"]').textContent(), language === 'fr' ? 'Boucle' : 'Loop');
+          await screenshot('localized-map-'+language);
+        }
         await view('plan'); await page.locator('#plan-with-ai').click();
         await page.locator('#adventure-account-settings').evaluate(node => { node.open = true; });
         await page.locator('#adventure-connect').click();
@@ -319,8 +359,16 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         assert(adventure.grounding.places.some(place => place.match_method === 'exact_local_name'),'Real worker grounds name-only suggestions without a prior location-picker session');
         assert(adventure.result.candidates.some(c => c.reached_stops.length === 2));
         await view('routes'); await page.locator('.candidate-select').last().click();
-        await page.waitForFunction(() => document.querySelector('#adventure-storage-status').textContent.startsWith('Saved on this device'));
+        await page.waitForFunction(french => document.querySelector('#adventure-storage-status').textContent.startsWith(french ? 'Enregistrée sur cet appareil' : 'Saved on this device'),locale==='fr-FR');
         const exactAdventure = await page.evaluate(() => JSON.stringify(adventureAppState.state.adventureResult));
+        const adventureBeforeLanguage = await languageFingerprint();
+        await page.evaluate(async language => { const { setLanguage } = await import('/static/i18n.js'); await setLanguage(language); }, originalLanguage === 'fr' ? 'en' : 'fr');
+        await page.evaluate(async language => { const { setLanguage } = await import('/static/i18n.js'); await setLanguage(language); }, originalLanguage);
+        const adventureAfterLanguage = await languageFingerprint();
+        assert.equal(await page.evaluate(() => JSON.stringify(adventureAppState.state.adventureResult)), exactAdventure, 'Original model stories and adventure remain exact across language changes');
+        assert.equal(adventureAfterLanguage.gpx, adventureBeforeLanguage.gpx);
+        assert.equal(adventureAfterLanguage.routeCalls, adventureBeforeLanguage.routeCalls);
+
         await page.locator('#adventure-stories-open').click();
         assert(await page.locator('#adventure-stories').isVisible());
         await page.locator('#download-gpx').click(); await page.waitForFunction(() => adventureSavedGpx !== null);
@@ -344,6 +392,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         const restored = await page.evaluate(async () => { const { state, currentPlanRequest } = await import('/static/state.js'); return JSON.stringify({ request: currentPlanRequest(), result: state.generationResult, source: state.generationSourceRequest, selected: state.selectedSignature }); });
         assert.equal(restored, manual, 'Returning to manual restores exact request/result/selection');
         await page.reload();
+        await page.waitForFunction(language => document.documentElement.lang === language, locale === "fr-FR" ? "fr" : "en");
         await page.evaluate(async () => { globalThis.adventureAppState = await import('/static/state.js'); });
         await page.waitForFunction(() => !document.querySelector('#restore-adventure').hidden);
         assert.equal(await page.evaluate(() => adventureAppState.state.adventureDisplay), false, 'Startup preserves the editable planner until explicit Reopen');
@@ -364,7 +413,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await page.waitForFunction(() => typeof releaseAdventureRecovery === 'function');
         await page.locator('#target-distance').fill('21');
         await page.evaluate(() => { globalThis.Worker = actualAdventureWorker; releaseAdventureRecovery(); });
-        await page.waitForFunction(() => document.querySelector('#adventure-recovery-status').textContent.includes('Your plan changed'));
+        await page.waitForFunction(french => document.querySelector('#adventure-recovery-status').textContent.includes(french ? 'Votre plan a changé' : 'Your plan changed'), locale==='fr-FR');
         assert.equal(await page.evaluate(() => adventureAppState.state.adventureDisplay), false, 'A stale recovery cannot replace newly edited intent');
         assert.equal(await page.locator('#target-distance').inputValue(), '21', 'Recovery preserves the intervening edit');
         await view('plan'); await page.locator('#restore-adventure').click();
@@ -376,6 +425,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         assert.deepEqual(await page.evaluate(() => adventureNativeCalls.filter(c => ['chatgpt_infer','local_route','route_elevation','adventure_speech_start'].includes(c.type))), [], 'Reopen/selection/export never reroutes or refetches terrain');
         await page.evaluate(async id => { const { createRegionVersionStore } = await import('/static/region_versions.js'); await createRegionVersionStore().removeRegion(id); }, fixture.manifest.region_id);
         await page.reload();
+        await page.waitForFunction(language => document.documentElement.lang === language, locale === "fr-FR" ? "fr" : "en");
         await page.evaluate(async () => { globalThis.adventureAppState = await import('/static/state.js'); });
         await page.waitForFunction(() => !document.querySelector('#restore-adventure').hidden);
         await view('plan'); await page.locator('#restore-adventure').click();
@@ -389,7 +439,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         assert.equal(await page.evaluate(async () => { const { store } = await (await import('/static/pwa_runtime.js')).pwaRuntime(); return (await store.get('public_runtime','latest-adventure')) ?? null; }), null, 'Application clear drains queued adventure writes before clearing the store');
         assert.equal(await page.evaluate(() => adventureAppState.state.adventureDisplay), true, 'Clearing durable data preserves the displayed valid result');
         await view('routes'); await page.locator('#forget-adventure').click();
-        await page.waitForFunction(() => document.querySelector('#adventure-storage-status').textContent.startsWith('Saved adventure forgotten'));
+        await page.waitForFunction(french => document.querySelector('#adventure-storage-status').textContent.startsWith(french ? 'Aventure enregistrée oubliée' : 'Saved adventure forgotten'),locale==='fr-FR');
         await page.locator('.candidate-select').first().click();
         assert.equal(await page.evaluate(async () => { const { store } = await (await import('/static/pwa_runtime.js')).pwaRuntime(); return (await store.get('public_runtime','latest-adventure')) ?? null; }), null, 'Selecting after Forget must not resurrect the saved adventure');
         await view('map');

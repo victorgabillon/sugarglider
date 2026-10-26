@@ -1,3 +1,4 @@
+import { t, tr, onLanguageChange, setLocalizedText } from "./i18n.js";
 import { DEFAULT_AVATAR_KEY, normalizeAvatarKey } from "./avatar.js";
 import { normalizeGeolocationPosition } from "./outing_tracking.js";
 
@@ -63,7 +64,7 @@ export function createPlannerLocationController({
     detachPermissionStatus();
     if (!supported()) {
       permissionState = "unavailable";
-      announce("Location is unavailable on this device.");
+      announce(t("Location is unavailable on this device."));
       renderControl();
       return;
     }
@@ -115,7 +116,7 @@ export function createPlannerLocationController({
     } else if (permissionState === "denied") {
       if (!activeWatch && !currentFix) {
         announce(
-          "Location permission may be blocked. Use the GPS button to check.",
+          t("Location permission may be blocked. Use the GPS button to check."),
         );
       }
     } else {
@@ -127,13 +128,13 @@ export function createPlannerLocationController({
   function activate() {
     if (suspended) return;
     if (!supported() || permissionState === "unavailable") {
-      announce("Location is unavailable on this device.");
+      announce(t("Location is unavailable on this device."));
       renderControl();
       return;
     }
     if (geolocationDenied) {
       announce(
-        "Location permission is blocked. Enable it in browser or app settings.",
+        t("Location permission is blocked. Enable it in browser or app settings."),
       );
       renderControl();
       return;
@@ -143,7 +144,7 @@ export function createPlannerLocationController({
     if (!activeWatch) startWatch();
     if (!currentFix) {
       acquiring = true;
-      announce("Locating your private position.");
+      announce(t("Locating your private position."));
     }
     renderControl();
   }
@@ -153,7 +154,7 @@ export function createPlannerLocationController({
     const watch = { generation: lifecycleGeneration, id: null };
     activeWatch = watch;
     acquiring = currentFix === null;
-    if (acquiring) announce("Locating your private position.");
+    if (acquiring) announce(t("Locating your private position."));
     renderControl();
     try {
       watch.id = geolocation.watchPosition(
@@ -168,7 +169,7 @@ export function createPlannerLocationController({
       acquiring = false;
       permissionState = "unavailable";
       followMode = false;
-      announce("Location is unavailable on this device.");
+      announce(t("Location is unavailable on this device."));
       renderControl();
       return false;
     }
@@ -189,7 +190,7 @@ export function createPlannerLocationController({
     acquiring = false;
     renderCurrentFix();
     if (followMode) centerFix(currentFix);
-    if (firstFix) announce("Private location available.");
+    if (firstFix) announce(t("Private location available."));
     renderControl();
   }
 
@@ -203,11 +204,11 @@ export function createPlannerLocationController({
       followMode = false;
       acquiring = false;
       announce(
-        "Location permission is blocked. Enable it in browser or app settings.",
+        t("Location permission is blocked. Enable it in browser or app settings."),
       );
     } else {
       acquiring = currentFix === null;
-      announce("Location is temporarily unavailable.");
+      announce(t("Location is temporarily unavailable."));
     }
     renderControl();
   }
@@ -215,7 +216,7 @@ export function createPlannerLocationController({
   function manualMapInteraction() {
     if (!followMode) return;
     followMode = false;
-    announce("Location remains visible; follow mode is off.");
+    announce(t("Location remains visible; follow mode is off."));
     renderControl();
   }
 
@@ -261,6 +262,7 @@ export function createPlannerLocationController({
   }
 
   function dispose() {
+    stopLanguage();
     suspend();
     control?.removeEventListener("click", activate);
     windowTarget?.removeEventListener("pagehide", suspend);
@@ -287,7 +289,7 @@ export function createPlannerLocationController({
   function announce(message) {
     if (message === lastAnnouncement) return;
     lastAnnouncement = message;
-    if (status) status.textContent = message;
+    if (status) setLocalizedText(status, () => t(message));
   }
 
   function renderControl() {
@@ -308,16 +310,16 @@ export function createPlannerLocationController({
     control.setAttribute("aria-pressed", String(active));
     control.setAttribute("aria-busy", String(state === "acquiring"));
     const label = active
-      ? "Following my location"
+      ? t("Following my location")
       : currentFix
-        ? "Center map on my location"
+        ? t("Center map on my location")
         : state === "denied"
-          ? "Location permission blocked"
+          ? t("Location permission blocked")
           : state === "unavailable"
-            ? "Location unavailable"
-            : "Show my location";
-    control.setAttribute("aria-label", label);
-    control.title = label;
+            ? t("Location unavailable")
+            : t("Show my location");
+    control.setAttribute("aria-label", t(label));
+    control.title = t(label);
   }
 
   function diagnostics() {
@@ -332,6 +334,7 @@ export function createPlannerLocationController({
     });
   }
 
+  const stopLanguage = onLanguageChange(renderControl);
   return {
     initialize,
     activate,

@@ -1,3 +1,8 @@
+// This existing fixture exercises explicit English output. French defaults and
+// both-language state preservation are covered by localization_harness and the
+// full bundled-app acceptance, with strict canonical and GPX comparisons.
+import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
+await setLanguage("en", { persist: false, document: null });
 import { state, saveActivePoints, assignRouteEndpoint, currentPlanRequest, invalidateCandidates } from '../../src/sugarglider/web/static/state.js';
 import { appendMapIntent, changeMapTopology, reconcileAutomaticIntent } from '../../src/sugarglider/web/static/automatic_intent.js';
 import { rememberPointEdit, commitPointEdit, undoPointEdit, redoPointEdit, clearPointUndo, pointRedoLabel, ROUTE_HISTORY_LIMIT } from '../../src/sugarglider/web/static/route_edit_history.js';

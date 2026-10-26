@@ -1,3 +1,8 @@
+// This existing fixture exercises explicit English output. French defaults and
+// both-language state preservation are covered by localization_harness and the
+// full bundled-app acceptance, with strict canonical and GPX comparisons.
+import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
+await setLanguage("en", { persist: false, document: null });
 import { initializeAppShell } from '../../src/sugarglider/web/static/app_shell.js';
 import { createPolishRegionFixture } from './ui2_polish_fixture.js';
 import { renderPwaStatus } from '../../src/sugarglider/web/static/pwa_view.js';

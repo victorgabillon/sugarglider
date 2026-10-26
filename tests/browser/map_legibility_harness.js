@@ -1,3 +1,8 @@
+// This existing fixture exercises explicit English output. French defaults and
+// both-language state preservation are covered by localization_harness and the
+// full bundled-app acceptance, with strict canonical and GPX comparisons.
+import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
+await setLanguage("en", { persist: false, document: null });
 import {layers,namedFlavor} from '../../src/sugarglider/web/static/vendor/protomaps-basemaps-5.7.2/basemaps.js';
 import {offlineBasemapPresentationLayer} from '../../src/sugarglider/web/static/offline_label_policy.js';
 import {isPriorityPlace,placePresentation} from '../../src/sugarglider/web/static/place_presentation.js';

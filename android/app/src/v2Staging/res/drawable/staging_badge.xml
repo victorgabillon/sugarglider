@@ -2,10 +2,13 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Keep the overlay inside circular launcher masks. -->
+    <group android:translateX="-14" android:translateY="-10">
     <path android:fillColor="#173F75" android:strokeColor="#FFFFFF" android:strokeWidth="2"
         android:pathData="M44,73 L97,73 Q101,73 101,77 L101,97 Q101,101 97,101 L44,101 Q40,101 40,97 L40,77 Q40,73 44,73 Z" />
     <!-- Deterministic vector letterforms: TEST. -->
     <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFF"
         android:strokeWidth="2.5" android:strokeLineJoin="round"
         android:pathData="M46,81 L56,81 M51,81 L51,94 M69,81 L60,81 L60,94 L69,94 M60,87 L67,87 M82,81 L73,81 L73,87 L82,87 L82,94 L73,94 M86,81 L96,81 M91,81 L91,94" />
+    </group>
 </vector>

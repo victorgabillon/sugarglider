@@ -1,3 +1,8 @@
+// This existing fixture exercises explicit English output. French defaults and
+// both-language state preservation are covered by localization_harness and the
+// full bundled-app acceptance, with strict canonical and GPX comparisons.
+import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
+await setLanguage("en", { persist: false, document: null });
 import { createAdventureSpeech } from "../../src/sugarglider/web/static/adventure_speech.js";
 import { initializeAdventureDialog } from "../../src/sugarglider/web/static/adventure_dialog.js";
 import { createAdventureResults, forestAdventureLimitation } from "../../src/sugarglider/web/static/adventure_results.js";
@@ -88,7 +93,7 @@ export async function runAdventureUiHarness() {
       elevation: { clear() {} }, onResult() {}, onChooseStart() {}, onChooseEnd() {} });
     try {
       await dialog.open(); await until(() => !byId("microphone").disabled, "speech controls ready");
-      assert(byId("language").closest("details").id === "adventure-speech-settings" && byId("language").options[0].textContent.includes(navigator.language), "actual language remains available in dedicated speech settings");
+      assert(byId("language").closest("details").id === "adventure-speech-settings" && byId("language").options[0].textContent.includes("en-GB"), "interface language is suggested in dedicated speech settings");
       byId("language").value = "fr-FR"; byId("text").value = "Je veux courir.";
       byId("microphone").click(); await until(() => calls.length === 1, "first dictation");
       byId("text").value += " En forêt."; byId("finish-speech").click();

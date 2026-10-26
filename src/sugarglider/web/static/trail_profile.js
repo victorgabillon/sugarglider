@@ -1,3 +1,4 @@
+import { t, tr, setLocalizedText } from "./i18n.js";
 import { isBundledAndroidApp } from "./android_app.js";
 import {
   DEFAULT_AVATAR_KEY,
@@ -34,7 +35,7 @@ export async function initializeTrailProfile({
   syncProfileUi();
   if (isBundledAndroidApp()) {
     const privacy = document.querySelector(".profile-privacy");
-    if (privacy) privacy.textContent = "Your nickname and badge stay on this device. There is no account or live-location sharing in this release.";
+    if (privacy) setLocalizedText(privacy, () => t("Your nickname and badge stay on this device. There is no account or live-location sharing in this release."));
   }
   if (requireSetup && !currentProfile) openTrailProfileEditor({ required: true });
   return currentProfile;
@@ -56,7 +57,7 @@ export function normalizeTrailProfile(value) {
     || Object.keys(value).sort().join(",") !== "avatar_key,display_name,schema_version"
     || !validDisplayName(value.display_name)
     || !isAvatarKey(value.avatar_key)
-  ) throw new Error("Invalid local trail profile.");
+  ) throw new Error(t("Invalid local trail profile."));
   return Object.freeze({
     schema_version: TRAIL_PROFILE_SCHEMA_VERSION,
     display_name: value.display_name.trim(),
@@ -71,12 +72,12 @@ export function openTrailProfileEditor({ required = false } = {}) {
   const name = byId("trail-profile-name");
   name.value = currentProfile?.display_name ?? suggestedDisplayName();
   const avatar = currentProfile?.avatar_key ?? DEFAULT_AVATAR_KEY;
-  byId("trail-profile-title").textContent = setupRequired
-    ? "Welcome to Sugarglider"
+  setLocalizedText(byId("trail-profile-title"), () => setupRequired
+    ? t("Welcome to Sugarglider")
     : currentProfile
-      ? "My profile"
-      : "Set up your trail profile";
-  byId("save-trail-profile").textContent = setupRequired ? "Continue" : "Save";
+      ? t("My profile")
+      : t("Set up your trail profile"));
+  setLocalizedText(byId("save-trail-profile"), () => setupRequired ? t("Continue") : t("Save"));
   const radio = dialog.querySelector(
     `input[name="trail-profile-avatar"][value="${avatar}"]`,
   );
@@ -182,16 +183,16 @@ function bindProfileControls() {
       });
     } catch {
       byId("trail-profile-name").setCustomValidity(
-        "Enter a display name of 1 to 80 visible characters.",
+        t("Enter a display name of 1 to 80 visible characters."),
       );
       byId("trail-profile-name").reportValidity();
       return;
     }
     byId("trail-profile-name").setCustomValidity("");
     const persisted = await saveTrailProfile(profile);
-    byId("trail-profile-storage-status").textContent = persisted
-      ? "Profile saved on this device."
-      : "Browser storage is unavailable. This profile will last for this tab only.";
+    setLocalizedText(byId("trail-profile-storage-status"), () => persisted
+      ? t("Profile saved on this device.")
+      : t("Browser storage is unavailable. This profile will last for this tab only."));
     setupRequired = false;
     window.setTimeout(closeProfileDialog, persisted ? 0 : 1200);
   });
@@ -202,15 +203,15 @@ function syncProfileUi() {
   const joinProfileAction = byId("setup-join-profile");
   if (joinProfileAction) {
     joinProfileAction.classList.remove("hidden");
-    joinProfileAction.textContent = profile
-      ? "Change trail profile"
-      : "Set up trail profile";
+    setLocalizedText(joinProfileAction, () => profile
+      ? t("Change trail profile")
+      : t("Set up trail profile"));
   }
   byId("edit-trail-profile")?.setAttribute(
     "aria-label",
     profile
-      ? `My profile: ${profile.display_name}, ${avatarDisplayLabel(profile.avatar_key)} badge`
-      : "Set up my profile",
+      ? tr`My profile: ${profile.display_name}, ${avatarDisplayLabel(profile.avatar_key)} badge`
+      : t("Set up my profile"),
   );
   if (!profile) return;
   for (const id of ["outing-creator-name", "outing-join-name"]) {
@@ -222,7 +223,7 @@ function syncProfileUi() {
   const joinAvatar = byId("outing-join-profile-avatar");
   if (joinAvatar) {
     joinAvatar.src = avatarImageUrl(profile.avatar_key);
-    joinAvatar.alt = `${profile.display_name}'s ${avatarDisplayLabel(profile.avatar_key)} trail badge`;
+    joinAvatar.alt = tr`${profile.display_name}'s ${avatarDisplayLabel(profile.avatar_key)} trail badge`;
     joinAvatar.classList.remove("hidden");
   }
   if (byId("outing-join-profile-name")) {
@@ -235,10 +236,10 @@ function synchronizeAvatarLabels() {
     'input[name="trail-profile-avatar"]',
   )) {
     const label = avatarDisplayLabel(input.value);
-    input.setAttribute("aria-label", `${label} trail badge`);
+    input.setAttribute("aria-label", tr`${label} trail badge`);
     const card = input.closest("label");
     const image = card?.querySelector("img");
-    if (image) image.alt = `${label} Sugarglider trail badge`;
+    if (image) image.alt = tr`${label} Sugarglider trail badge`;
     const caption = card?.querySelector("span");
     if (caption) caption.textContent = label;
   }

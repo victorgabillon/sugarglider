@@ -88,15 +88,15 @@ internal class AdventureSpeechInput(private val activity: Activity, private val 
             AdventureSpeechMode.UNAVAILABLE -> finish(operation, "unavailable")
             AdventureSpeechMode.PLATFORM -> {
                 operation.phase = Phase.DISCLOSURE
-                val french = Locale.getDefault().language == "fr"
-                disclosure = AlertDialog.Builder(activity).setTitle(if (french) "Utiliser le service vocal Android ?" else "Use Android speech recognition?")
-                    .setMessage(if (french) "Le service vocal Android configuré peut envoyer l’audio à son fournisseur. Le traitement hors ligne n’est pas garanti. La transcription reste modifiable et n’est envoyée à ChatGPT que lorsque vous choisissez Générer." else "Your configured Android speech service may send audio to its provider. This choice does not require offline processing. The transcription is editable and is not sent to ChatGPT until you choose Generate.")
-                    .setPositiveButton(if (french) "Utiliser le service vocal" else "Use speech service") { _, _ -> if (active === operation && visible()) {
+                disclosure = AlertDialog.Builder(ApplicationLanguage.context(activity))
+                    .setTitle(R.string.speech_disclosure_title)
+                    .setMessage(R.string.speech_disclosure_body)
+                    .setPositiveButton(R.string.speech_disclosure_accept) { _, _ -> if (active === operation && visible()) {
                         operation.phase = Phase.PLATFORM
                         try { @Suppress("DEPRECATION") activity.startActivityForResult(intent(operation.language, segmented = false), SPEECH_BASE + operation.serial) }
                         catch (_: Exception) { finish(operation, "unavailable") }
                     } else finish(operation, "cancelled") }
-                    .setNegativeButton(if (french) "Annuler" else "Cancel") { _, _ -> finish(operation, "cancelled") }
+                    .setNegativeButton(R.string.ui_cancel) { _, _ -> finish(operation, "cancelled") }
                     .setOnCancelListener { finish(operation, "cancelled") }.show()
             }
             AdventureSpeechMode.ON_DEVICE -> {

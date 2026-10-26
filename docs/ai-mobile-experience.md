@@ -258,3 +258,57 @@ recovery, Tools Privacy, external licence links, launcher badge, retained 23.172
 route/account, ChatGPT authentication and Android speech. No model request or
 microphone test is authorized merely by this source/build preparation. No cleanup
 package may be removed until separately authorized.
+
+## Final bilingual GUI continuation, 26 October 2026
+
+The Map header now uses only the existing supplied purple artwork in a compact
+52 × 48 CSS pixel button. Its complete accessible name and tooltip are
+“Planifier une aventure avec ChatGPT” / “Plan an adventure with ChatGPT”. Plan
+retains a text entry into the same existing dialog. The original artwork and
+production launcher resource remain unchanged. The separate staging TEST overlay
+is inset so circular launcher masks do not clip its lettering.
+
+French is the default independently of Android/browser language. Tools contains
+one Langue / Language selector. A validated `fr`/`en` record uses the existing
+PWA public-runtime store, with French fallback for absent, invalid or unreadable
+preferences and an explicit session-only message when persistence fails. A
+central complete-message dictionary and parameterized translation helpers cover
+static declarations and explicitly bound dynamic UI messages. There is no
+substring replacement of rendered HTML, external framework or extra database.
+User prose, original geographical names, model stories, source URLs, licence
+notices and canonical planning/GPX values stay original.
+
+Switching updates the existing document and redraws presentation without a WebView
+reload or new planning operation. Typed `set_ui_language` accepts only `fr`/`en`
+behind the existing exact-origin, main-frame bridge and request ledger. Native
+resources use that UI preference without recreating the Activity or WebView;
+Privacy and speech-provider disclosures follow the selected language. Explicit
+speech language and recognition provider remain independent. The interface
+language supplies only the default spoken language and the language instruction
+for a newly explicitly submitted AI request.
+
+The focused full-app acceptance compares canonical requests, selected candidates,
+result portfolios, all planner form values, settled map cameras and exact GPX bytes
+across both language changes, including a displayed adventure. It counts native
+routing, terrain, inference and microphone calls. French scenarios use an English
+browser locale with no saved preference. Existing English UI fixtures now declare
+English explicitly; their routing, capability, safety and byte-level assertions
+remain strict. A separate localization harness covers default/fallback/persistence,
+serialized writes, optional storage, parameters, accessibility and unchanged
+user/place/story text. Browser screenshots and physical backups stay outside Git.
+
+The refreshed physical inventory again found 24 related packages. Eight audit
+clones were removed only after the user explicitly approved discarding each named
+package's local data: `.v2auditb1`, `.v2auditb2`, `.v2auditf1`, `.v2auditf2`,
+`.v2auditn1`, `.v2auditn2`, `.v2auditn3`, `.v2auditp1`, all under
+`io.github.victorgabillon.sugarglider`. Their exact APKs, package/version/signing
+identities and removal receipts are retained privately. Six had regional/browser
+state; the other two had separate audit WebViews and diagnostics. No claim of
+unique-data disposability was inferred from their labels or suffixes.
+
+Production and canonical V2 staging were not removed or reset. The remaining
+launcher-visible development packages `.debug`, `.v2debug` and `.placesrealdata`
+are retained because their potentially valuable data has not been reviewed or
+authorized for deletion. Eleven non-launcher instrumentation helpers remain.
+See [the temporary audit workflow](android-audit-workflow.md) for fresh-package
+ownership, non-launcher audit builds and mandatory session cleanup.

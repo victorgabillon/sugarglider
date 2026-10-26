@@ -1,3 +1,8 @@
+// This existing fixture exercises explicit English output. French defaults and
+// both-language state preservation are covered by localization_harness and the
+// full bundled-app acceptance, with strict canonical and GPX comparisons.
+import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
+await setLanguage("en", { persist: false, document: null });
 import { parseItineraryDraft, itineraryDraftToCanonical, buildItineraryPrompt, ITINERARY_MAX_BYTES } from '../../src/sugarglider/web/static/itinerary_draft.js';
 import { initializeItineraryDialog } from '../../src/sugarglider/web/static/itinerary_dialog.js';
 import { state, currentPlanRequest, WAYPOINT_PRODUCT_DEFAULTS } from '../../src/sugarglider/web/static/state.js';

@@ -1208,3 +1208,12 @@ body.outing-mode .route-dock { display: none; }
 @media (max-height: 450px) {
   .ui-shell.has-adventure-planner .map-empty-state { display: none; }
 }
+
+/* The Map entry is artwork-only; its name is localized for assistive technology. */
+.ui-shell.has-adventure-planner .topbar nav > .header-ai-action {
+  width: 52px; height: 48px; min-width: 52px; min-height: 48px;
+  flex: 0 0 52px; flex-wrap: nowrap; padding: 4px;
+}
+.header-ai-action .ai-planner-icon { width: 42px; max-height: 38px; }
+.application-language-setting { display: grid; gap: .35rem; }
+.application-language-setting select { min-height: 44px; width: 100%; }

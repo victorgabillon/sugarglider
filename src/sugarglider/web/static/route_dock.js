@@ -1,3 +1,4 @@
+import { t, tr, setLocalizedText } from "./i18n.js";
 // A view of existing editor authorities. Menus and gesture previews hold no route state.
 import { state } from "./state.js";
 import { pointUndoLabel, pointRedoLabel } from "./route_edit_history.js";
@@ -36,15 +37,15 @@ export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, on
   const canReorder = state.planningMode === "waypoint_route" && state.options.waypointOrder === "fixed";
   const undo = root.querySelector("#undo-point-edit"), redo = root.querySelector("#redo-point-edit");
   undo.disabled = disabled || !pointUndoLabel(); redo.disabled = disabled || !pointRedoLabel();
-  undo.setAttribute("aria-label", pointUndoLabel() ? `Undo: ${pointUndoLabel()}` : "Undo route edit");
-  redo.setAttribute("aria-label", pointRedoLabel() ? `Redo: ${pointRedoLabel()}` : "Redo route edit");
+  undo.setAttribute("aria-label", pointUndoLabel() ? tr`Undo: ${pointUndoLabel()}` : t("Undo route edit"));
+  redo.setAttribute("aria-label", pointRedoLabel() ? tr`Redo: ${pointRedoLabel()}` : t("Redo route edit"));
   const finish = root.querySelector("#dock-finish"), order = root.querySelector("#dock-order");
   finish.value = endpoints.routeTopology; finish.disabled = disabled;
-  root.querySelector("#dock-finish-label").textContent = endpoints.routeTopology === "loop" ? "Loop" : "Finish elsewhere";
-  root.querySelector("#dock-order-label").textContent = state.options.waypointOrder === "fixed" ? "As tapped" : "Optimize stops";
+  setLocalizedText(root.querySelector("#dock-finish-label"), () => endpoints.routeTopology === "loop" ? t("Loop") : t("Finish elsewhere"));
+  setLocalizedText(root.querySelector("#dock-order-label"), () => state.options.waypointOrder === "fixed" ? t("As tapped") : t("Optimize stops"));
   order.value = state.options.waypointOrder;
   order.disabled = disabled || state.planningMode !== "waypoint_route";
-  order.title = state.planningMode === "waypoint_route" ? "Choose As tapped for manual reorder; Start and End stay fixed" : "Add stops to choose their visit order";
+  order.title = state.planningMode === "waypoint_route" ? t("Choose As tapped for manual reorder; Start and End stay fixed") : t("Add stops to choose their visit order");
   const strip = root.querySelector("#route-point-strip");
   configurePointStripDrag({ root, strip, onReorder, onRemove, canReorder, disabled });
   const scroll = strip.scrollLeft;
@@ -57,21 +58,21 @@ export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, on
       button.dataset.stopIndex = String(stopIndex);
       if (selected && !disabled) {
         button.setAttribute("aria-describedby", "route-strip-help");
-        button.title = canReorder ? "Drag to reorder or remove; More actions has keyboard alternatives" : "Drag to remove; choose As tapped to reorder";
+        button.title = canReorder ? t("Drag to reorder or remove; More actions has keyboard alternatives") : t("Drag to remove; choose As tapped to reorder");
       }
     }
     button.addEventListener("click", selected && onClearSelection ? onClearSelection : select); strip.append(button);
   }
-  if (endpoints.start) chip("start", "S", "Start", state.selectedEndpointKind === "start", () => onSelectEndpoint("start"));
+  if (endpoints.start) chip("start", "S", t("Start"), state.selectedEndpointKind === "start", () => onSelectEndpoint("start"));
   const visitOrder = new Map(visits.map((visit, i) => [visit.original_index, i]));
   const stops = state.points.slice(offset).map((point, i) => ({ point, index: i + offset }));
   if (visits.length) stops.sort((a, b) => (visitOrder.get(a.index) ?? a.index) - (visitOrder.get(b.index) ?? b.index));
-  stops.forEach(({ point, index }, i) => chip(String(index), String(i + 1), `Stop ${i + 1}: ${point.name || "Unnamed stop"}`,
+  stops.forEach(({ point, index }, i) => chip(String(index), String(i + 1), tr`Stop ${i + 1}: ${point.name || t("Unnamed stop")}`,
     state.selectedPointIndex === index && !state.selectedEndpointKind, () => onSelectPoint(index), index));
-  if (endpoints.end) chip("end", "E", "End", state.selectedEndpointKind === "end", () => onSelectEndpoint("end"));
+  if (endpoints.end) chip("end", "E", t("End"), state.selectedEndpointKind === "end", () => onSelectEndpoint("end"));
   if (!disabled) {
     const add = document.createElement("button"); add.type = "button"; add.id = "dock-add";
-    add.textContent = "+"; add.setAttribute("aria-label", "Add route point"); strip.append(add);
+    add.textContent = "+"; add.setAttribute("aria-label", t("Add route point")); strip.append(add);
     attachPopover(add, root.querySelector("#route-add-menu"), root);
   }
   const chooseMap = root.querySelector('[data-dock-action="choose-map"]');
@@ -82,48 +83,48 @@ export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, on
   strip.scrollLeft = scroll;
   if (strip.clientWidth) strip.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
   const hint = root.querySelector("#route-dock-hint");
-  hint.textContent = !endpoints.start ? "Tap the map to choose Start" : endpoints.routeTopology !== "loop" && !endpoints.end ? "Tap the map to choose End" : "";
-  root.querySelector("#route-strip-help").textContent = canReorder
-    ? "Select a stop, then drag its gripped chip to reorder or Remove. Swipe other chips or ribbon gaps to scroll. More actions offers Move earlier, Move later, and Remove."
-    : "Select a stop, then drag its gripped chip to Remove. Choose As tapped to reorder. Swipe other chips or ribbon gaps to scroll. More actions offers Remove.";
+  setLocalizedText(hint, () => !endpoints.start ? t("Tap the map to choose Start") : endpoints.routeTopology !== "loop" && !endpoints.end ? t("Tap the map to choose End") : "");
+  setLocalizedText(root.querySelector("#route-strip-help"), () => canReorder
+    ? t("Select a stop, then drag its gripped chip to reorder or Remove. Swipe other chips or ribbon gaps to scroll. More actions offers Move earlier, Move later, and Remove.")
+    : t("Select a stop, then drag its gripped chip to Remove. Choose As tapped to reorder. Swipe other chips or ribbon gaps to scroll. More actions offers Remove."));
   const editor = root.querySelector("#route-quick-editor"); editor.replaceChildren();
   const kind = state.selectedEndpointKind, index = state.selectedPointIndex;
   const point = kind ? endpoints[kind] : index !== null && index >= offset ? state.points[index] : null;
   const placing = state.endpointSetMode || state.movingPointIndex !== null || state.addPointMode || state.settingRequestedApproachId;
   editor.hidden = !point || Boolean(placing);
   if (point && !placing) {
-    const label = kind ? kind === "start" ? "Start" : "End" : `Stop ${stops.findIndex(stop => stop.index === index) + 1}`;
+    const label = kind ? kind === "start" ? t("Start") : t("End") : tr`Stop ${stops.findIndex(stop => stop.index === index) + 1}`;
     const title = document.createElement("strong"); title.textContent = label; editor.append(title);
     if (kind && onEndpointPolicy) {
-      const label = document.createElement("label"); label.textContent = "Snap ";
-      const select = document.createElement("select"); select.dataset.dockAction = "snap-policy"; select.setAttribute("aria-label", `${kind === "start" ? "Start" : "End"} snap policy`);
-      for (const [value, text] of [["near", "Near this point"], ["exact", "Exact point"]]) {
+      const label = document.createElement("label"); setLocalizedText(label, () => t("Snap "));
+      const select = document.createElement("select"); select.dataset.dockAction = "snap-policy"; select.setAttribute("aria-label", tr`${kind === "start" ? t("Start") : t("End")} snap policy`);
+      for (const [value, text] of [["near", t("Near this point")], ["exact", t("Exact point")]]) {
         const option = document.createElement("option"); option.value = value; option.textContent = text; select.append(option);
       }
       select.value = point.snapPolicy ?? "exact"; select.disabled = disabled;
       select.addEventListener("change", () => onEndpointPolicy(kind, select.value)); label.append(select); editor.append(label);
     }
-    const move = action(editor, "move", "Move", () => {}, disabled);
+    const move = action(editor, "move", t("Move"), () => {}, disabled);
     const acquisition = document.createElement("div"); acquisition.id = "route-move-menu"; acquisition.popover = "auto";
-    acquisition.className = "route-dock-popover"; acquisition.role = "dialog"; acquisition.setAttribute("aria-label", `Move ${label}`);
-    action(acquisition, "move-search", "Search place or address", event => {
+    acquisition.className = "route-dock-popover"; acquisition.role = "dialog"; acquisition.setAttribute("aria-label", tr`Move ${label}`);
+    action(acquisition, "move-search", t("Search place or address"), event => {
       acquisition.hidePopover(); onSearch?.(kind ? { endpoint: kind } : { index }, event.currentTarget);
     }, disabled || !onSearch);
-    action(acquisition, "move-map", "Choose on map", () => {
+    action(acquisition, "move-map", t("Choose on map"), () => {
       acquisition.hidePopover(); kind ? onMoveEndpoint(kind) : onMove(index);
     }, disabled);
     editor.append(acquisition); attachPopover(move, acquisition, root);
     const more = action(editor, "more", "⋯", () => {}, disabled);
-    more.setAttribute("aria-label", `More actions for ${label}`);
+    more.setAttribute("aria-label", tr`More actions for ${label}`);
     const menu = document.createElement("div"); menu.id = "route-point-actions"; menu.popover = "auto";
-    menu.className = "route-dock-popover"; menu.role = "dialog"; menu.setAttribute("aria-label", `Actions for ${label}`);
+    menu.className = "route-dock-popover"; menu.role = "dialog"; menu.setAttribute("aria-label", tr`Actions for ${label}`);
     if (!kind) {
-      action(menu, "earlier", "Move earlier", () => onReorder(index, index - 1), disabled || !canReorder || index <= offset);
-      action(menu, "later", "Move later", () => onReorder(index, index + 1), disabled || !canReorder || index >= state.points.length - 1);
-      if (!canReorder) { const note = document.createElement("p"); note.textContent = "Choose As tapped to reorder stops."; menu.append(note); }
+      action(menu, "earlier", t("Move earlier"), () => onReorder(index, index - 1), disabled || !canReorder || index <= offset);
+      action(menu, "later", t("Move later"), () => onReorder(index, index + 1), disabled || !canReorder || index >= state.points.length - 1);
+      if (!canReorder) { const note = document.createElement("p"); setLocalizedText(note, () => t("Choose As tapped to reorder stops.")); menu.append(note); }
     }
-    action(menu, "remove", kind ? `Clear ${label}` : "Remove", () => kind ? onClearEndpoint(kind) : onRemove(index), disabled);
-    action(menu, "details", "Edit details in Plan", onDetails, disabled);
+    action(menu, "remove", kind ? tr`Clear ${label}` : t("Remove"), () => kind ? onClearEndpoint(kind) : onRemove(index), disabled);
+    action(menu, "details", t("Edit details in Plan"), onDetails, disabled);
     editor.append(menu); attachPopover(more, menu, root);
   }
   if (focus) {

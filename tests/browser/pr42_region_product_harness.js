@@ -1,3 +1,8 @@
+// This existing fixture exercises explicit English output. French defaults and
+// both-language state preservation are covered by localization_harness and the
+// full bundled-app acceptance, with strict canonical and GPX comparisons.
+import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
+await setLanguage("en", { persist: false, document: null });
 import { createRegionVersionStore } from "../../src/sugarglider/web/static/region_versions.js";
 import { createRegionProduct } from "../../src/sugarglider/web/static/region_product.js";
 import { createVersionedRegionComponents } from "../../src/sugarglider/web/static/region_components.js";

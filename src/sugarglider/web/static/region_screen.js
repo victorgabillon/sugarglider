@@ -1,3 +1,4 @@
+import { t, tr, onLanguageChange, setLocalizedText } from "./i18n.js";
 import { appendRegionSources } from "./terrain_attribution.js";
 import { loadRegionCatalog } from "./region_catalog.js";
 import { selectCommittedRegion } from "./regional_planning.js";
@@ -7,30 +8,30 @@ const PHASES = { checking: "Checking the download", map: "Downloading the map", 
 
 export function regionFailureMessage(code) {
   return {
-    regional_required: "Download a region to plan and view maps offline.",
-    regional_selection_required: "Choose one installed region for this plan.",
-    regional_checking: "Checking the selected region…",
-    regional_operation_busy: "Another region operation is still finishing. Try again shortly.",
-    regional_routing_busy: "Routing data is still in use. Try again when the current operation finishes.",
-    regional_install_cancelled: "Download cancelled. Any previously installed version is unchanged. Incomplete files can be resumed or removed below.",
-    regional_insufficient_storage: "There is not enough free space for this download. Free some space or remove an unused region.",
-    regional_storage_unavailable: "Offline storage is unavailable. Reopen the app and try again.",
-    regional_staging_limit: "Remove the unused version shown below before downloading another update.",
-    regional_catalog_unavailable: "The list of available downloads could not be opened. Installed regions remain independent.",
-    regional_catalog_changed: "The available download has changed. Refresh the list before trying again.",
-    regional_checksum_mismatch: "The regional data failed its integrity check. Remove the affected version and download it again.",
-    regional_corrupt_remove_and_reinstall: "The stored data is damaged. Remove the affected version and download it again.",
-    regional_install_incomplete: "The installation is incomplete. Resume its download or remove it below.",
-    regional_v2_install_required: "This region needs a new V2 installation. Its existing files have been kept.",
-    regional_elevation_invalid: "The region's elevation data failed verification. Install a complete V2 region.",
-    regional_metadata_recovery_required: "The stored region details are damaged. Recovery is required before this version can be removed.",
-    regional_active_record_invalid: "The stored region selection is damaged. Remove this region and download it again.",
-    regional_native_outcome_uncertain: "The app could not confirm that file work finished. Existing data has been retained. Reopen the app to check it before retrying.",
-    regional_commit_uncertain: "The app could not confirm the version change. Both versions have been retained. Reopen the app to check the installation.",
-    regional_transfer_timeout: "The download timed out. Keep the app open and try again with a working connection.",
-    regional_routing_unavailable: "Routing data for this region is unavailable. Remove and download the region again.",
-    regional_version_in_use: "This version is selected for use. Remove the whole region to stop using it first.",
-  }[code] ?? "This region could not be prepared. Check your connection and free space, then resume or remove the incomplete download.";
+    regional_required: t("Download a region to plan and view maps offline."),
+    regional_selection_required: t("Choose one installed region for this plan."),
+    regional_checking: t("Checking the selected region…"),
+    regional_operation_busy: t("Another region operation is still finishing. Try again shortly."),
+    regional_routing_busy: t("Routing data is still in use. Try again when the current operation finishes."),
+    regional_install_cancelled: t("Download cancelled. Any previously installed version is unchanged. Incomplete files can be resumed or removed below."),
+    regional_insufficient_storage: t("There is not enough free space for this download. Free some space or remove an unused region."),
+    regional_storage_unavailable: t("Offline storage is unavailable. Reopen the app and try again."),
+    regional_staging_limit: t("Remove the unused version shown below before downloading another update."),
+    regional_catalog_unavailable: t("The list of available downloads could not be opened. Installed regions remain independent."),
+    regional_catalog_changed: t("The available download has changed. Refresh the list before trying again."),
+    regional_checksum_mismatch: t("The regional data failed its integrity check. Remove the affected version and download it again."),
+    regional_corrupt_remove_and_reinstall: t("The stored data is damaged. Remove the affected version and download it again."),
+    regional_install_incomplete: t("The installation is incomplete. Resume its download or remove it below."),
+    regional_v2_install_required: t("This region needs a new V2 installation. Its existing files have been kept."),
+    regional_elevation_invalid: t("The region's elevation data failed verification. Install a complete V2 region."),
+    regional_metadata_recovery_required: t("The stored region details are damaged. Recovery is required before this version can be removed."),
+    regional_active_record_invalid: t("The stored region selection is damaged. Remove this region and download it again."),
+    regional_native_outcome_uncertain: t("The app could not confirm that file work finished. Existing data has been retained. Reopen the app to check it before retrying."),
+    regional_commit_uncertain: t("The app could not confirm the version change. Both versions have been retained. Reopen the app to check the installation."),
+    regional_transfer_timeout: t("The download timed out. Keep the app open and try again with a working connection."),
+    regional_routing_unavailable: t("Routing data for this region is unavailable. Remove and download the region again."),
+    regional_version_in_use: t("This version is selected for use. Remove the whole region to stop using it first."),
+  }[code] ?? t("This region could not be prepared. Check your connection and free space, then resume or remove the incomplete download.");
 }
 
 export function createRegionScreen({ elements, versions, product, withRegion,
@@ -72,7 +73,7 @@ export function createRegionScreen({ elements, versions, product, withRegion,
   }
   function renderRows() {
     if (closed) return;
-    selector.replaceChildren(option("", "Choose an installed region"));
+    selector.replaceChildren(option("", t("Choose an installed region")));
     for (const row of rows.filter((item) => item.status === "committed")) {
       selector.append(option(row.region_id, row.manifest.display_name));
     }
@@ -98,37 +99,37 @@ export function createRegionScreen({ elements, versions, product, withRegion,
       const same = stored?.manifest?.build_id === offering?.build_id;
       const verified = stored?.manifest?.build_id === readyBuild && id === selectedRegionId();
       const installed = stored?.status === "committed";
-      const stateLabel = installed && offering && !same ? "Update available" : verified ? "Ready" : installed ? "Installed" : stored ? "Needs attention" : offering?.manifest_url ? "Available" : "Download unavailable";
+      const stateLabel = installed && offering && !same ? t("Update available") : verified ? t("Ready") : installed ? t("Installed") : stored ? t("Needs attention") : offering?.manifest_url ? t("Available") : t("Download unavailable");
       item.dataset.regionState = stateLabel;
       const badge = document.createElement("p"); badge.className = "region-state"; badge.textContent = stateLabel; item.append(badge);
       const technical = document.createElement("details"); technical.className = "region-technical"; technical.dataset.regionId = id;
       technical.dataset.regionDisclosure = `${id}:technical`; technical.open = openDetails.has(`${id}:technical`);
-      const summary = document.createElement("summary"); summary.textContent = "Technical details"; summary.dataset.regionFocus = `${id}:technical`; technical.append(summary);
-      appendText(technical, `Region ID: ${id}`);
-      if (stored?.manifest) appendText(technical, `Installed build: ${stored.manifest.build_id}`);
-      if (offering) appendText(technical, `Available build: ${offering.build_id}`);
+      const summary = document.createElement("summary"); setLocalizedText(summary, () => t("Technical details")); summary.dataset.regionFocus = `${id}:technical`; technical.append(summary);
+      appendText(technical, tr`Region ID: ${id}`);
+      if (stored?.manifest) appendText(technical, tr`Installed build: ${stored.manifest.build_id}`);
+      if (offering) appendText(technical, tr`Available build: ${offering.build_id}`);
       if (offering) {
         appendText(item, offering.description);
-        appendText(item, `About ${bytes(offering.download_bytes)} to download, plus small region details. All six activities are included.`);
+        appendText(item, tr`About ${bytes(offering.download_bytes)} to download, plus small region details. All six activities are included.`);
       }
       appendText(item, verified ? "Map ✓ · Routing ✓ · Places ✓ · Nature ✓ · Elevation ✓"
-        : stored?.status === "committed" ? "Installed on this device. Select this region to check it is ready."
-        : stored ? regionFailureMessage(stored.code ?? "regional_install_incomplete") : "Not installed. Download once to use this region offline.");
-      if (installed && offering && !same) appendText(item, "A newer download is available. Your installed region stays available until the update is ready.");
+        : stored?.status === "committed" ? t("Installed on this device. Select this region to check it is ready.")
+        : stored ? regionFailureMessage(stored.code ?? "regional_install_incomplete") : t("Not installed. Download once to use this region offline."));
+      if (installed && offering && !same) appendText(item, t("A newer download is available. Your installed region stays available until the update is ready."));
       if (stored?.status === "committed" && id === selectedRegionId()) {
-        item.append(button("Show region on map", async () => { viewRegion(stored.manifest.bounds); }, `${id}:view`));
+        item.append(button(t("Show region on map"), async () => { viewRegion(stored.manifest.bounds); }, `${id}:view`));
       }
       if (offering?.manifest_url) {
-        item.append(button(same ? "Verify download" : stored?.manifest ? "Update region" : "Download region", async () => {
+        item.append(button(same ? t("Verify download") : stored?.manifest ? t("Update region") : t("Download region"), async () => {
           await act(async () => {
-            const action = same ? "Checking" : stored?.manifest ? "Updating" : "Downloading";
+            const action = same ? t("Checking") : stored?.manifest ? t("Updating") : t("Downloading");
             message(`${action} ${name.textContent}…`, "regional_installing");
             if (progress) progress.removeAttribute("value");
             const installed = await product.install(offering.manifest_url, { expectedRegionId: id, expectedBuildId: offering.build_id,
               expectedDownloadBytes: offering.download_bytes, onProgress: ({ component, received_bytes: received, total_bytes: total }) => {
-                message(`${action} ${name.textContent} · ${PHASES[component] ?? "Preparing region"}${total ? `: ${bytes(received)} of ${bytes(total)}` : "…"}`, "regional_installing");
+                message(`${action} ${name.textContent} · ${t(PHASES[component] ?? "Preparing region")}${total ? `: ${bytes(received)} of ${bytes(total)}` : "…"}`, "regional_installing");
                 if (progress) {
-                  progress.setAttribute("aria-label", PHASES[component] ?? "Preparing region");
+                  progress.setAttribute("aria-label", t(PHASES[component] ?? "Preparing region"));
                   if (total > 0 && Number.isFinite(received)) { progress.max = total; progress.value = Math.min(received, total); }
                   else progress.removeAttribute("value");
                 }
@@ -136,29 +137,29 @@ export function createRegionScreen({ elements, versions, product, withRegion,
               } });
             if (closed) return;
             if (selectedRegionId() === null) selectRegion(installed.region_id);
-            message(`${installed.display_name} is installed.`, "regional_installed");
+            message(tr`${installed.display_name} is installed.`, "regional_installed");
           });
         }, `${id}:install`, !same));
       } else if (offering) {
-        const unavailable = button("Download unavailable", async () => {}); unavailable.dataset.unavailable = "true"; item.append(unavailable);
-        appendText(item, "Region files are not available from a download service yet.");
+        const unavailable = button(t("Download unavailable"), async () => {}); unavailable.dataset.unavailable = "true"; item.append(unavailable);
+        appendText(item, t("Region files are not available from a download service yet."));
       }
       if (stored || offering) {
-        const remove = button(stored ? "Remove region" : "Clear regional data", async () => {
-          if (isPlanning() || !confirmRemoval(`Remove ${name.textContent} and all of its offline data from this device? Saved route snapshots are kept.`)) return;
+        const remove = button(stored ? t("Remove region") : t("Clear regional data"), async () => {
+          if (isPlanning() || !confirmRemoval(tr`Remove ${name.textContent} and all of its offline data from this device? Saved route snapshots are kept.`)) return;
           await act(async () => { await product.remove(id);
             if (selectedRegionId() === id) selectRegion(null);
-            message("Region removed from this device.", "regional_removed"); });
+            message(t("Region removed from this device."), "regional_removed"); });
         }, `${id}:remove`);
         remove.classList.add("danger");
         remove.dataset.mutation = "remove"; (stored ? item : technical).append(remove);
         for (const buildId of stored?.inactive_build_ids ?? []) {
-          appendText(technical, `Unused build: ${buildId}`);
-          const discard = button("Remove unused download", async () => {
-            if (isPlanning() || !confirmRemoval("Remove this unused download? The currently installed version is kept.")) return;
-            await act(async () => { await product.discardUpdate(id, buildId); message("Unused download removed.", "regional_removed"); });
+          appendText(technical, tr`Unused build: ${buildId}`);
+          const discard = button(t("Remove unused download"), async () => {
+            if (isPlanning() || !confirmRemoval(t("Remove this unused download? The currently installed version is kept."))) return;
+            await act(async () => { await product.discardUpdate(id, buildId); message(t("Unused download removed."), "regional_removed"); });
           }, `${id}:discard:${buildId}`);
-          discard.setAttribute("aria-label", `Remove unused download ${buildId.slice(0, 12)}`);
+          discard.setAttribute("aria-label", tr`Remove unused download ${buildId.slice(0, 12)}`);
           discard.classList.add("danger");
           discard.dataset.mutation = "remove"; technical.append(discard);
         }
@@ -188,7 +189,7 @@ export function createRegionScreen({ elements, versions, product, withRegion,
       if (closed) return;
       readyBuild = checked.reference.build_id;
       onReady(checked.capabilities, null, checked.reference);
-      message("The selected region is ready for offline planning.", "regional_ready");
+      message(t("The selected region is ready for offline planning."), "regional_ready");
     } catch (error) {
       if (closed) return;
       readyBuild = null; onReady(null, error.code ?? "regional_components_unavailable", null);
@@ -232,7 +233,7 @@ export function createRegionScreen({ elements, versions, product, withRegion,
     finally {
       if (!closed) {
         try { if (refreshAfter) await refresh(); }
-        catch { message("The region list could not be refreshed. Reopen the app to check it.", "regional_storage_unavailable"); }
+        catch { message(t("The region list could not be refreshed. Reopen the app to check it."), "regional_storage_unavailable"); }
         // Checking the retained region must not conceal a failed/cancelled update.
         if (failure) message(failure.text, failure.code);
         pending = false; render();
@@ -244,26 +245,27 @@ export function createRegionScreen({ elements, versions, product, withRegion,
     if (pending || isPlanning()) return;
     const id = selector.value || null;
     selectRegion(id);
-    void act(async () => { message("Checking the selected region…", "regional_checking"); });
+    void act(async () => { message(t("Checking the selected region…"), "regional_checking"); });
   });
   refreshButton.addEventListener("click", () => { if (!isPlanning()) void act(async () => refresh({ catalogToo: true }), { refreshAfter: false }); });
-  cancel.addEventListener("click", () => { cancelling = true; product.cancel(); message("Cancelling download and waiting for file work to finish…", "regional_cancelling"); render(); });
+  cancel.addEventListener("click", () => { cancelling = true; product.cancel(); message(t("Cancelling download and waiting for file work to finish…"), "regional_cancelling"); render(); });
   lifecycleTarget?.addEventListener?.("pagehide", () => { closed = true; product.cancel(); }, { once: true });
 
+  onLanguageChange(() => { renderRows(); render(); });
   return Object.freeze({
     initialize: async () => { container.classList.remove("hidden"); await act(async () => refresh({ catalogToo: true }), { refreshAfter: false });
       if (!rows.some((row) => row.status === "committed")) container.open = true; },
     refresh, render,
     mapState: (snapshot) => {
       if (closed || !mapStatus) return;
-      mapStatus.textContent = {
-        local_pack_active: "The selected region’s offline map is displayed.",
-        map_pack_ready: "The regional map is stored on this device.",
-        no_covering_map_pack: "The map view is outside the selected region. Use Show region on map to return to its coverage.",
-        no_map_packs_installed: "Download a region to view its offline map.",
-        map_pack_storage_unavailable: "Offline map storage is unavailable. Reopen the app and try again.",
-        map_pack_invalid: "The stored map could not be opened. Remove this region and download it again.",
-      }[snapshot?.status?.state] ?? "Offline map unavailable.";
+      setLocalizedText(mapStatus, () => ({
+        local_pack_active: t("The selected region’s offline map is displayed."),
+        map_pack_ready: t("The regional map is stored on this device."),
+        no_covering_map_pack: t("The map view is outside the selected region. Use Show region on map to return to its coverage."),
+        no_map_packs_installed: t("Download a region to view its offline map."),
+        map_pack_storage_unavailable: t("Offline map storage is unavailable. Reopen the app and try again."),
+        map_pack_invalid: t("The stored map could not be opened. Remove this region and download it again."),
+      }[snapshot?.status?.state] ?? t("Offline map unavailable.")));
     },
   });
 }

@@ -1,3 +1,4 @@
+import { t, tr, onLanguageChange, setLocalizedText } from "./i18n.js";
 import { routeColor } from "./route_results.js";
 import { createElevationMapMarker } from "./elevation_map_marker.js";
 import { keepMapCoordinateVisible } from "./map_viewport.js";
@@ -216,7 +217,7 @@ function settleCompactAttribution(instance) {
   const compact = () => control.classList.contains("maplibregl-compact");
   const expanded = () => !compact() || control.classList.contains("maplibregl-compact-show");
   const describe = () => button.setAttribute("aria-expanded", String(expanded()));
-  button.setAttribute("aria-label", /^fr(?:-|$)/i.test(navigator.language) ? "Crédits de la carte et licences" : "Map credits and licences");
+  button.setAttribute("aria-label", t("Map credits and licences"));
   function schedule() {
     stop(); describe();
     if (!compact() || touched || document.hidden || !credits.textContent.trim()) return;
@@ -252,33 +253,34 @@ export function initializeMap(config, handlers) {
       attributionControl: { customAttribution: config.tile_attribution },
     });
   } catch {
-    handlers.onError("MapLibre loaded, but this browser could not initialize WebGL. Route controls remain available.");
+    handlers.onError(t("MapLibre loaded, but this browser could not initialize WebGL. Route controls remain available."));
     return false;
   }
   elevationMapMarker.attach(map);
   settleCompactAttribution(map);
   map.addControl(new maplibregl.NavigationControl(), "top-left");
+  localizeMapControls();
   map.on("load", async () => {
     const loadedMap = map;
     try {
       await attachOfflineBasemap(loadedMap, config);
     } catch {
-      handlers.onError("Offline map packs could not be opened. The neutral or online basemap remains available.");
+      handlers.onError(t("Offline map packs could not be opened. The neutral or online basemap remains available."));
     }
     if (map !== loadedMap) return;
     try {
       await installPoiImages();
     } catch {
-      handlers.onError("Local place icons could not be prepared. Route controls remain available.");
+      handlers.onError(t("Local place icons could not be prepared. Route controls remain available."));
     }
     try {
       installDirectionArrowImage();
     } catch {
-      handlers.onError("Local direction arrows could not be prepared. Route controls remain available.");
+      handlers.onError(t("Local direction arrows could not be prepared. Route controls remain available."));
     }
     const avatarImagesAvailable = await installOutingAvatarImages();
     if (!avatarImagesAvailable) {
-      handlers.onError("One or more local outing badges could not be prepared. Participant-colored fallback markers remain available.");
+      handlers.onError(t("One or more local outing badges could not be prepared. Participant-colored fallback markers remain available."));
     }
     ready = true;
     handlers.onReady();
@@ -414,8 +416,8 @@ export function initializeMap(config, handlers) {
   });
   map.on("error", (event) => {
     const rawMessage = event?.error?.message;
-    const message = typeof rawMessage === "string" && rawMessage.length < 240 ? rawMessage : "A map tile, label, or style resource failed to load.";
-    handlers.onError(`Map resource error: ${message}`);
+    const message = typeof rawMessage === "string" && rawMessage.length < 240 ? rawMessage : t("A map tile, label, or style resource failed to load.");
+    handlers.onError(tr`Map resource error: ${message}`);
   });
   return true;
 }
@@ -652,7 +654,7 @@ function ensurePoiLayers() {
     filter: ["has", "point_count"],
     layout: {
       "text-field": ["get", "point_count_abbreviated"],
-      "text-font": ["Open Sans Semibold"],
+      "text-font": [t("Open Sans Semibold")],
       "text-size": 11,
     },
     paint: { "text-color": "#214b3b" },
@@ -696,7 +698,7 @@ function ensurePoiLayers() {
       "symbol-sort-key": ["get", "priority"],
       // Keep the compact icon and its optional name in one collision placement.
       "text-field": ["case", ["all", ["==", ["get", "category"], "ice_cream"], ["get", "show_label"]], ["get", "display_name"], ""],
-      "text-font": ["Open Sans Semibold"],
+      "text-font": [t("Open Sans Semibold")],
       "text-size": 11,
       "text-anchor": "top",
       "text-offset": [0, 1.7],
@@ -742,7 +744,7 @@ function ensurePoiLayers() {
     filter: ["==", ["get", "show_label"], true],
     layout: {
       "text-field": ["get", "display_name"],
-      "text-font": ["Open Sans Semibold"],
+      "text-font": [t("Open Sans Semibold")],
       "text-size": 11,
       "text-variable-anchor": ["top", "bottom", "left", "right"],
       "text-radial-offset": 2.3,
@@ -774,7 +776,7 @@ function ensurePoiLayers() {
       ["!=", ["get", "category"], "ice_cream"], ["==", ["get", "show_label"], true]],
     layout: {
       "text-field": ["get", "display_name"],
-      "text-font": ["Open Sans Semibold"],
+      "text-font": [t("Open Sans Semibold")],
       "text-size": 11,
       "text-variable-anchor": ["top", "bottom", "left", "right"],
       "text-radial-offset": 1.6,
@@ -790,7 +792,7 @@ function ensurePoiLayers() {
     source: POI_SELECTED_SOURCE,
     layout: {
       "text-field": ["get", "display_name"],
-      "text-font": ["Open Sans Semibold"],
+      "text-font": [t("Open Sans Semibold")],
       "text-size": 12,
       "text-variable-anchor": ["top", "bottom", "left", "right"],
       "text-radial-offset": 1.7,
@@ -869,20 +871,20 @@ function poiPopupContent(feature) {
   );
   const tags = Object.fromEntries(feature.tags ?? []);
   popupRow(content, "Operator", tags.operator);
-  popupRow(content, "Opening hours", tags.opening_hours);
-  popupRow(content, "Mapped fee", tags.fee);
+  popupRow(content, t("Opening hours"), tags.opening_hours);
+  popupRow(content, t("Mapped fee"), tags.fee);
   popupRow(content, "Seasonal", tags.seasonal);
-  popupRow(content, "Bottle filling", tags.bottle);
+  popupRow(content, t("Bottle filling"), tags.bottle);
   const explanation = document.createElement("p");
   explanation.className = "place-explanation";
   if (feature.potability === "verified") {
-    explanation.textContent = "Mapped in OpenStreetMap as drinking water. Current operation and water quality are not guaranteed.";
+    setLocalizedText(explanation, () => t("Mapped in OpenStreetMap as drinking water. Current operation and water quality are not guaranteed."));
   } else if (feature.potability === "unknown") {
-    explanation.textContent = "Potability is not specified in the mapped data.";
+    setLocalizedText(explanation, () => t("Potability is not specified in the mapped data."));
   } else if (feature.potability === "non_potable") {
-    explanation.textContent = "Mapped as non-potable.";
+    setLocalizedText(explanation, () => t("Mapped as non-potable."));
   } else {
-    explanation.textContent = "OpenStreetMap · Mapped place information may be incomplete or out of date.";
+    setLocalizedText(explanation, () => t("OpenStreetMap · Mapped place information may be incomplete or out of date."));
   }
   content.append(explanation);
   for (const warning of feature.warnings ?? []) {
@@ -896,20 +898,20 @@ function poiPopupContent(feature) {
     "Coordinates",
     `${Number(feature.coordinate.lat).toFixed(6)}, ${Number(feature.coordinate.lon).toFixed(6)}`,
   );
-  popupRow(content, "OSM object", `${feature.osm_type}/${feature.osm_id}`);
+  popupRow(content, t("OSM object"), `${feature.osm_type}/${feature.osm_id}`);
   content.append(createPassThroughAction(feature, passThrough));
   const scenic = ["viewpoint", "observation_tower", "castle", "archaeological_site", "ruins", "tourism_attraction"].includes(feature.category);
   const verifiedWater = feature.category === "drinking_water" && feature.potability === "verified";
-  const eligibleAccess = ["public", "unknown"].includes(feature.access_status);
+  const eligibleAccess = ["public", t("unknown")].includes(feature.access_status);
   if (eligibleAccess && (scenic || verifiedWater) && feature.potability !== "non_potable") {
     const prefer = document.createElement("button");
     prefer.type = "button";
     prefer.className = "button secondary popup-prefer";
-    prefer.textContent = preferredPoiIds.has(feature.id) ? "Preferred for suggested route" : "Prefer for suggested route";
+    setLocalizedText(prefer, () => preferredPoiIds.has(feature.id) ? t("Preferred for suggested route") : t("Prefer for suggested route"));
     prefer.disabled = preferredPoiIds.has(feature.id);
     prefer.addEventListener("click", () => {
       poiPreferHandler?.(feature);
-      prefer.textContent = "Preferred for suggested route";
+      setLocalizedText(prefer, () => t("Preferred for suggested route"));
       prefer.disabled = true;
     });
     content.append(prefer);
@@ -1035,7 +1037,7 @@ export function requestedPlaceFeatureCollection(places, visits = [], selectedId 
         properties: {
           requested_id: id,
           original_order: originalOrder,
-          name: place.name || `Requested place ${originalOrder}`,
+          name: place.name || tr`Requested place ${originalOrder}`,
           longitude: place.coordinate.lon,
           latitude: place.coordinate.lat,
           importance: place.importance,
@@ -1253,7 +1255,7 @@ function ensureRequestedPlaceLayers() {
       "text-field": [
         "concat", "R", ["to-string", ["get", "original_order"]],
       ],
-      "text-font": ["Open Sans Semibold"],
+      "text-font": [t("Open Sans Semibold")],
       "text-size": 10,
       "text-offset": [0, -1.75],
       "text-allow-overlap": true,
@@ -1268,7 +1270,7 @@ function ensureRequestedPlaceLayers() {
     minzoom: 12.5,
     layout: {
       "text-field": ["get", "name"],
-      "text-font": ["Open Sans Semibold"],
+      "text-font": [t("Open Sans Semibold")],
       "text-size": 11,
       "text-variable-anchor": ["top", "bottom", "left", "right"],
       "text-radial-offset": 1.4,
@@ -1286,17 +1288,17 @@ function ensureRequestedPlaceLayers() {
 }
 
 function requestedPlaceStatusLabel(status) {
-  if (status === "reached") return "Reached";
-  if (status === "approximated") return "Approximated";
-  if (status === "dropped") return "Dropped";
-  return "Pending route generation";
+  if (status === "reached") return t("Reached");
+  if (status === "approximated") return t("Approximated");
+  if (status === "dropped") return t("Dropped");
+  return t("Pending route generation");
 }
 
 function requestedVisitReason(reason) {
   const values = {
-    already_on_route: "Already on the routed path",
-    deliberately_routed_close_enough: "Deliberately routed to the approach",
-    not_reached: "The selected route did not reach this place",
+    already_on_route: t("Already on the routed path"),
+    deliberately_routed_close_enough: t("Deliberately routed to the approach"),
+    not_reached: t("The selected route did not reach this place"),
   };
   return values[reason] ?? null;
 }
@@ -1309,7 +1311,7 @@ function requestedPlacePopupContent(feature) {
   heading.textContent = properties.name;
   content.append(heading);
   const identity = document.createElement("p");
-  identity.textContent = `Requested place ${properties.original_order} · ${properties.importance === "must_visit" ? "Must visit" : "Preferred"}`;
+  setLocalizedText(identity, () => tr`Requested place ${properties.original_order} · ${properties.importance === "must_visit" ? t("Must visit") : "Preferred"}`);
   content.append(identity);
   const status = document.createElement("p");
   status.className = `popup-status requested-status-${properties.status}`;
@@ -1318,26 +1320,26 @@ function requestedPlacePopupContent(feature) {
   if (Number.isFinite(properties.measured_distance_m)) {
     popupRow(
       content,
-      "Route-to-approach distance",
+      t("Route-to-approach distance"),
       `${Number(properties.measured_distance_m).toFixed(1)} m`,
     );
   }
-  popupRow(content, "Access-search area", `${Number(properties.access_search_radius_m)} m`);
+  popupRow(content, t("Access-search area"), `${Number(properties.access_search_radius_m)} m`);
   if (properties.approach) {
-    popupRow(content, "Approach kind", properties.approach.kind);
-    popupRow(content, "Arrival tolerance", `${Number(properties.approach.arrival_tolerance_m ?? 25)} m`);
+    popupRow(content, t("Approach kind"), properties.approach.kind);
+    popupRow(content, t("Arrival tolerance"), `${Number(properties.approach.arrival_tolerance_m ?? 25)} m`);
   }
-  popupRow(content, "Deliberately considered", properties.deliberately_considered ? "Yes" : "No");
-  popupRow(content, "Deliberately routed", properties.deliberately_routed ? "Yes" : "No");
-  popupRow(content, "Routed in another candidate", properties.deliberately_routed_elsewhere ? "Yes" : "No");
+  popupRow(content, t("Deliberately considered"), properties.deliberately_considered ? "Yes" : "No");
+  popupRow(content, t("Deliberately routed"), properties.deliberately_routed ? "Yes" : "No");
+  popupRow(content, t("Routed in another candidate"), properties.deliberately_routed_elsewhere ? "Yes" : "No");
   if (Number.isFinite(properties.graph_snap_distance_m)) {
-    popupRow(content, "Graph snap distance", `${Number(properties.graph_snap_distance_m).toFixed(1)} m`);
+    popupRow(content, t("Graph snap distance"), `${Number(properties.graph_snap_distance_m).toFixed(1)} m`);
   }
-  popupRow(content, "Selection reason", requestedVisitReason(properties.visit_reason));
-  popupRow(content, "Drop reason", properties.failure_reason);
+  popupRow(content, t("Selection reason"), requestedVisitReason(properties.visit_reason));
+  popupRow(content, t("Drop reason"), properties.failure_reason);
   const caution = document.createElement("p");
   caution.className = "context-note";
-  caution.textContent = "Verify current access and opening conditions.";
+  setLocalizedText(caution, () => t("Verify current access and opening conditions."));
   content.append(caution);
   return content;
 }
@@ -1576,6 +1578,8 @@ export function mapPresentationDiagnostics() {
     && layer.id.startsWith("sugarglider-local-map-pack-")) ?? [];
   return {
     zoom: map?.getZoom(),
+    moving: Boolean(map?.isMoving()),
+    camera: map ? { center: map.getCenter().toArray(), zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() } : null,
     glyphs: style?.glyphs,
     sources: style?.sources,
     layers: style?.layers,
@@ -2026,7 +2030,7 @@ function ensureOutingLiveLayers() {
     source: OUTING_LIVE_POSITION_SOURCE,
     layout: {
       "text-field": ["get", "live_label"],
-      "text-font": ["Open Sans Semibold"],
+      "text-font": [t("Open Sans Semibold")],
       "text-size": 11,
       "text-offset": [0, 2.1],
       "text-anchor": "top",
@@ -2220,16 +2224,16 @@ function showSpurPopup(spur, markerKind, coordinate) {
   const content = document.createElement("div");
   content.className = "point-popup spur-popup";
   const heading = document.createElement("strong");
-  heading.textContent = markerKind === "turnaround"
-    ? "Excursion turnaround"
-    : "Excursion branch and rejoin";
+  setLocalizedText(heading, () => markerKind === "turnaround"
+    ? t("Excursion turnaround")
+    : t("Excursion branch and rejoin"));
   const description = document.createElement("p");
-  description.textContent = markerKind === "turnaround"
-    ? "The route turns back toward the repeated corridor near this point."
-    : "The out-and-back excursion leaves and later rejoins the route here.";
+  setLocalizedText(description, () => markerKind === "turnaround"
+    ? t("The route turns back toward the repeated corridor near this point.")
+    : t("The out-and-back excursion leaves and later rejoins the route here."));
   const caution = document.createElement("p");
   caution.className = "context-note";
-  caution.textContent = "Candidate for route refinement. No alternative exit has been tested yet.";
+  setLocalizedText(caution, () => t("Candidate for route refinement. No alternative exit has been tested yet."));
   content.append(heading, description, caution);
   spurPopup = new maplibregl.Popup({ offset: 14, closeButton: true })
     .setLngLat(coordinate)
@@ -2409,7 +2413,7 @@ export function renderAdventurePlaces(round, candidateId, onPlace = null) {
     paint: { "circle-radius": ["case", ["get", "reached"], 7, 5], "circle-color": ["case", ["get", "reached"], "#376b43", "#787b73"],
       "circle-stroke-color": "#fcfdf9", "circle-stroke-width": 2 } });
   if (!map.getLayer(ADVENTURE_LABELS)) map.addLayer({ id: ADVENTURE_LABELS, type: "symbol", source: ADVENTURE_SOURCE,
-    layout: { "text-field": ["get", "name"], "text-font": ["Open Sans Semibold"], "text-size": 12,
+    layout: { "text-field": ["get", "name"], "text-font": [t("Open Sans Semibold")], "text-size": 12,
       "text-offset": [0, 1], "text-anchor": "top", "text-allow-overlap": false },
     paint: { "text-color": "#263d2e", "text-halo-color": "#fcfdf9", "text-halo-width": 1.5 } });
   moveRequiredLabelsToTop(); positionDirectionLayer();
@@ -2532,7 +2536,7 @@ function endpointMarkerElement(kind, point) {
   const element = document.createElement("button");
   element.type = "button";
   element.className = `required-marker endpoint-marker ${kind}`;
-  element.setAttribute("aria-label", `${label}: ${point.name || `Hard ${kind}`}`);
+  element.setAttribute("aria-label", `${label}: ${point.name || tr`Hard ${kind}`}`);
   const visual = document.createElement("span");
   visual.className = "required-marker-visual";
   const image = document.createElement("img");
@@ -2572,7 +2576,7 @@ export function renderHardEndpoints(start, end, handlers = {}) {
     })
       .setLngLat([point.lon, point.lat])
       .addTo(map);
-    element.setAttribute("aria-label", `${kind === "start" ? "Start" : "End"}: ${point.name || kind}`);
+    element.setAttribute("aria-label", `${kind === "start" ? t("Start") : t("End")}: ${point.name || kind}`);
     if (focusedKind === kind && !element.disabled) element.focus({ preventScroll: true });
     endpointMarkers.push(marker);
   }
@@ -2580,7 +2584,7 @@ export function renderHardEndpoints(start, end, handlers = {}) {
 
 function displayName(point, orderIndex) {
   const name = typeof point?.name === "string" ? point.name.trim() : "";
-  return name || `Point ${orderIndex + 1}`;
+  return name || tr`Point ${orderIndex + 1}`;
 }
 
 function validCoordinate(point) {
@@ -2611,7 +2615,7 @@ function popupContent(point, sourceIndex, visitOrder, start) {
   if (start) {
     const status = document.createElement("p");
     status.className = "popup-status";
-    status.textContent = "Start and end of the loop";
+    setLocalizedText(status, () => t("Start and end of the loop"));
     content.append(status);
   }
   const coordinate = document.createElement("p");
@@ -2619,10 +2623,10 @@ function popupContent(point, sourceIndex, visitOrder, start) {
   content.append(coordinate);
   const original = document.createElement("p");
   const originalIndex = Number.isInteger(point.originalIndex) ? point.originalIndex : sourceIndex;
-  original.textContent = `Original request point ${originalIndex + 1}`;
+  setLocalizedText(original, () => tr`Original request point ${originalIndex + 1}`);
   const details = document.createElement("details");
   const summary = document.createElement("summary");
-  summary.textContent = "Request details";
+  setLocalizedText(summary, () => t("Request details"));
   details.append(summary, original);
   content.append(details);
   return content;
@@ -2636,7 +2640,7 @@ function requiredMarkerElement(point, sourceIndex, visitOrder, selected, start, 
   element.dataset.pointIndex = String(sourceIndex);
   element.disabled = disabled;
   element.setAttribute("aria-pressed", String(selected));
-  element.dataset.accessibleLabel = `Required point ${visitOrder}, ${name}${start ? ", start and end" : ""}`;
+  element.dataset.accessibleLabel = tr`Required point ${visitOrder}, ${name}${start ? t(", start and end") : ""}`;
   element.setAttribute("aria-label", element.dataset.accessibleLabel);
   element.title = `${visitOrder}. ${name}${start ? " · start/end" : ""}`;
 
@@ -2696,7 +2700,7 @@ function renderRequiredLabels(entries, selectedIndex) {
     "symbol-placement": "point",
     "symbol-sort-key": ["get", "sort_priority"],
     "text-field": ["concat", ["to-string", ["get", "visit_order"]], ". ", ["get", "display_name"]],
-    "text-font": ["Open Sans Semibold"],
+    "text-font": [t("Open Sans Semibold")],
     "text-size": ["interpolate", ["linear"], ["zoom"], 8, 10, 12, 11, 15, 13],
     "text-variable-anchor": ["top", "bottom", "left", "right", "top-left", "top-right"],
     "text-radial-offset": 3.1,
@@ -2816,10 +2820,10 @@ export function renderOptionalMarkers(points) {
   clearMarkers(optionalMarkers);
   points.forEach((point) => {
     const marker = new maplibregl.Marker({
-      element: simpleMarkerElement("optional", "Generated routing point"),
+      element: simpleMarkerElement("optional", t("Generated routing point")),
     })
       .setLngLat([point.lon, point.lat])
-      .setPopup(new maplibregl.Popup({ offset: 12 }).setText("Generated routing point"))
+      .setPopup(new maplibregl.Popup({ offset: 12 }).setText(t("Generated routing point")))
       .addTo(map);
     optionalMarkers.push(marker);
   });
@@ -2849,7 +2853,7 @@ export function renderImportedGpx(imported) {
   });
   imported.waypoints.forEach((waypoint) => {
     const marker = new maplibregl.Marker({
-      element: simpleMarkerElement("waypoint", `Imported GPX waypoint: ${waypoint.name}`),
+      element: simpleMarkerElement("waypoint", tr`Imported GPX waypoint: ${waypoint.name}`),
     })
       .setLngLat(waypoint.coordinate)
       .setPopup(new maplibregl.Popup({ offset: 12 }).setText(waypoint.name))
@@ -2918,16 +2922,27 @@ export function renderEndpointAdjustmentMap(adjustments) {
   map.addLayer({ id: "endpoint-adjustment-line", type: "line", source: "endpoint-adjustment-source",
     paint: { "line-color": "#825719", "line-width": 2, "line-dasharray": [2, 3], "line-opacity": 0.8 } });
   map.addLayer({ id: "endpoint-adjustment-label", type: "symbol", source: "endpoint-adjustment-source",
-    layout: { "symbol-placement": "line-center", "text-field": ["get", "label"], "text-font": ["Open Sans Semibold"], "text-size": 12 },
+    layout: { "symbol-placement": "line-center", "text-field": ["get", "label"], "text-font": [t("Open Sans Semibold")], "text-size": 12 },
     paint: { "text-color": "#593a12", "text-halo-color": "#fffdf7", "text-halo-width": 2 } });
   for (const item of adjustments) for (const [kind, point] of [["requested", item.requested_coordinate], ["routed", item.routed_coordinate]]) {
     const element = document.createElement("button"); element.type = "button";
     element.className = `endpoint-adjustment-marker ${kind}`;
-    const label = item.role === "start" ? "Start" : item.endpoint === "start" ? "Return" : "End";
+    const label = item.role === "start" ? t("Start") : item.endpoint === "start" ? "Return" : t("End");
     element.textContent = `${kind === "requested" ? "○" : "■"} ${label}`;
-    element.setAttribute("aria-label", `${kind === "requested" ? "Selected" : "Actual routed"} ${label}, ${Math.round(item.distance_m)} m displacement`);
+    element.setAttribute("aria-label", `${kind === "requested" ? t("Selected") : t("Actual routed")} ${label}, ${Math.round(item.distance_m)} m displacement`);
     element.addEventListener("click", event => { event.stopPropagation(); focusCoordinate([point.lon, point.lat]); });
     element.addEventListener("keydown", event => event.stopPropagation());
     endpointAdjustmentMarkers.push(new maplibregl.Marker({ element, anchor: "center" }).setLngLat([point.lon, point.lat]).addTo(map));
   }
 }
+
+// Presentation-only updates for MapLibre controls; no map recreation or style load.
+function localizeMapControls() {
+  const labels = { ".maplibregl-ctrl-zoom-in": "Zoom in", ".maplibregl-ctrl-zoom-out": "Zoom out",
+    ".maplibregl-ctrl-compass": "Reset bearing to north", ".maplibregl-ctrl-attrib-button": "Map credits and licences" };
+  for (const [selector, key] of Object.entries(labels)) for (const control of globalThis.document?.querySelectorAll(selector) ?? []) {
+    control.setAttribute("aria-label", t(key)); control.setAttribute("title", t(key));
+  }
+  for (const canvas of globalThis.document?.querySelectorAll(".maplibregl-canvas") ?? []) canvas.setAttribute("aria-label", t("Interactive route map"));
+}
+onLanguageChange(localizeMapControls);

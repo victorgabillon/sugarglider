@@ -1,3 +1,4 @@
+import { t, tr, getLanguage, initializeLocalization, onLanguageChange, setLocalizedText } from "./i18n.js";
 import { createSelectedRouteElevation } from "./route_elevation.js";
 import { initializeAdventureDialog } from "./adventure_dialog.js";
 import { nativeBridgeTransport } from "./native_bridge_transport.js";
@@ -200,7 +201,7 @@ async function adventureContext({ includePlaces = false, useStart = true, useEnd
     hardWaypoints: request.waypoints.filter(point => point.constraint_strength === "exact"),
     suggested_profile: request.routing_profile, seed: request.seed, endpointSnapPolicy: request.endpoint_snap_policy }
     : currentAdventureContext();
-  if (context.hardWaypoints.length > 14) throw new Error("This adventure can preserve up to 14 exact intermediate points. Review your required points first.");
+  if (context.hardWaypoints.length > 14) throw new Error(t("This adventure can preserve up to 14 exact intermediate points. Review your required points first."));
   return regionVersions.withCommittedRegions(async rows => {
     signal?.throwIfAborted();
     const row = selectCommittedRegion(rows, selectedRegionId), reference = await regionalRoutingReference(row.manifest);
@@ -232,12 +233,12 @@ async function displayExactAdventure(output, selectedId, requestId) {
 async function persistAdventureSelection() {
   const output = state.adventureDisplay && state.adventureResult, selected = state.selectedSignature;
   if (!output || output === forgottenAdventureOutput) return;
-  byId("adventure-storage-status").textContent = "Saving this exact adventure on this device…";
+  setLocalizedText(byId("adventure-storage-status"), () => t("Saving this exact adventure on this device…"));
   const saved = adventureSnapshots && await adventureSnapshots.save(output, selected);
   if (state.adventureResult !== output || state.selectedSignature !== selected || forgottenAdventureOutput === output) return;
-  byId("adventure-storage-status").textContent = saved
-    ? "Saved on this device. Reopen the exact adventure from Plan after restarting. Only the latest adventure is kept."
-    : "This adventure is open, but local recovery could not be saved. Export GPX before closing.";
+  setLocalizedText(byId("adventure-storage-status"), () => saved
+    ? t("Saved on this device. Reopen the exact adventure from Plan after restarting. Only the latest adventure is kept.")
+    : t("This adventure is open, but local recovery could not be saved. Export GPX before closing."));
   if (saved) byId("restore-adventure").hidden = false;
 }
 async function reopenSavedAdventure() {
@@ -249,30 +250,30 @@ async function reopenSavedAdventure() {
     && state.generationResult === generation && state.selectedSignature === selection
     && selectedRegionId === regionId;
   if (!allowed()) return;
-  byId("adventure-recovery-status").textContent = "Checking the saved adventure…";
+  setLocalizedText(byId("adventure-recovery-status"), () => t("Checking the saved adventure…"));
   const record = adventureSnapshots && await adventureSnapshots.read();
   if (!allowed()) {
-    byId("adventure-recovery-status").textContent = "Your plan changed while the saved adventure was checked. Reopen it when you are ready."; return;
+    setLocalizedText(byId("adventure-recovery-status"), () => t("Your plan changed while the saved adventure was checked. Reopen it when you are ready.")); return;
   }
   if (!record) {
     byId("restore-adventure").hidden = true;
-    byId("adventure-recovery-status").textContent = "No valid saved adventure is available. Your current plan is unchanged."; return;
+    setLocalizedText(byId("adventure-recovery-status"), () => t("No valid saved adventure is available. Your current plan is unchanged.")); return;
   }
   manualAdventureSnapshot = { generationResult: state.generationResult, generationSourceRequest: state.generationSourceRequest,
     selectedSignature: state.selectedSignature, forkedSavedCandidate: state.forkedSavedCandidate,
     resultsInvalidated: state.resultsInvalidated, request: state.request };
   forgottenAdventureOutput = null;
   await displayExactAdventure(record.output, record.selected_id, requestId + 1);
-  byId("request-status").textContent = "Saved adventure reopened exactly. New planning still requires a ready offline region.";
+  setLocalizedText(byId("request-status"), () => t("Saved adventure reopened exactly. New planning still requires a ready offline region."));
   byId("adventure-recovery-status").textContent = "";
 }
 async function forgetSavedAdventure() {
   adventureRestoreEpoch++; forgottenAdventureOutput = state.adventureResult;
   const cleared = adventureSnapshots && await adventureSnapshots.clear();
   byId("restore-adventure").hidden = true;
-  byId("adventure-storage-status").textContent = cleared
-    ? "Saved adventure forgotten. The displayed route remains open."
-    : "The local saved adventure could not be removed. Try clearing saved offline data.";
+  setLocalizedText(byId("adventure-storage-status"), () => cleared
+    ? t("Saved adventure forgotten. The displayed route remains open.")
+    : t("The local saved adventure could not be removed. Try clearing saved offline data."));
 }
 async function checkAdventureRecovery() {
   const owned = adventureRestoreEpoch;
@@ -281,10 +282,18 @@ async function checkAdventureRecovery() {
   byId("restore-adventure").hidden = !record;
 }
 function initializeNativeAppTools() {
-  const french = /^fr(?:-|$)/i.test(navigator.language);
+  let languageSync = Promise.resolve();
+  const syncLanguage = language => {
+    languageSync = languageSync.then(() => nativeBridgeTransport.request("set_ui_language", { language }, {
+      owner: "app-language", timeoutMs: 2000,
+      parseReply: payload => { const value = JSON.parse(payload); return value.type === "set_ui_language_result" && value.selected === true && value.language === language; },
+    }));
+  };
+  syncLanguage(getLanguage());
+  onLanguageChange(syncLanguage);
   const privacy = byId("native-privacy"), identity = byId("app-build-identity");
   privacy.hidden = false;
-  privacy.textContent = french ? "Confidentialité" : "Privacy";
+  setLocalizedText(privacy, () => t("Privacy"));
   privacy.addEventListener("click", async () => {
     const shown = await nativeBridgeTransport.request("show_privacy", {}, {
       owner: "app-tools", timeoutMs: 2000, parseReply: payload => {
@@ -292,13 +301,13 @@ function initializeNativeAppTools() {
         return value.type === "show_privacy_result" && value.shown === true;
       },
     });
-    if (!shown) showError(french ? "La fenêtre de confidentialité est indisponible. Réessayez depuis l’application." : "The privacy dialog is unavailable. Try again from the app.");
+    if (!shown) showError(t("The privacy dialog is unavailable. Try again from the app."));
   });
   let identityPending = false;
   identity.closest("details").addEventListener("toggle", async event => {
     if (!event.currentTarget.open || identityPending || identity.dataset.loaded) return;
     identityPending = true; identity.hidden = false;
-    identity.textContent = french ? "Identification de l’application…" : "Reading packaged build…";
+    setLocalizedText(identity, () => t("Reading packaged build…"));
     const value = await nativeBridgeTransport.request("get_app_identity", {}, {
       owner: "app-tools", timeoutMs: 2000, parseReply: payload => {
         const data = JSON.parse(payload);
@@ -313,17 +322,9 @@ function initializeNativeAppTools() {
       const variant = { v2Staging: "V2 Staging", v2Debug: "V2 Research", debug: "Debug", release: "Production" }[value.variant];
       identity.textContent = `${value.label} · ${value.revision} · ${variant} · ${value.version}`;
       identity.dataset.loaded = "true";
-    } else identity.textContent = french ? "Identité du paquet indisponible." : "Packaged build identity unavailable.";
+    } else setLocalizedText(identity, () => t("Packaged build identity unavailable."));
   });
-  if (french) {
-    document.documentElement.lang = "fr";
-    document.querySelector(".header-tools > summary").textContent = "Outils";
-    document.querySelector(".app-status-details > summary").textContent = "État de l’application";
-    for (const [view, label] of Object.entries({ map: "Carte", plan: "Plan", routes: "Tracés" })) {
-      document.querySelector(`[data-shell-view="${view}"]`).textContent = label;
-    }
-    byId("adventure-launch-help").textContent = "Décrivez une course, une randonnée ou une sortie à vélo. ChatGPT propose des lieux ; Sugarglider vérifie de vrais parcours hors ligne.";
-  }
+
 }
 
 function initializeAdventure() {
@@ -357,11 +358,11 @@ function initializeAdventure() {
       render();
     },
     onResult: async output => {
-      if (!adventurePlanning || state.request.id !== requestId) throw new DOMException("Adventure cancelled.", "AbortError");
+      if (!adventurePlanning || state.request.id !== requestId) throw new DOMException(t("Adventure cancelled."), "AbortError");
       if (!manualAdventureSnapshot) manualAdventureSnapshot = pendingAdventureSnapshot;
       forgottenAdventureOutput = null;
       await displayExactAdventure(output, output.chosen.result.candidates[0].id, requestId);
-      byId("request-status").textContent = "Your AI adventure is ready. Route calculations used the selected offline region.";
+      setLocalizedText(byId("request-status"), () => t("Your AI adventure is ready. Route calculations used the selected offline region."));
     },
     onChooseStart: () => { returnToManualPlan(); clearPointPlacement(); byId("set-hard-start").click(); adventureMapEndpoint = "start"; appShell?.show("map"); },
     onChooseEnd: () => { returnToManualPlan(); clearPointPlacement(); changeMapTopology("point_to_point", "near"); updateControlsFromOptions(); byId("set-hard-end").click(); adventureMapEndpoint = "end"; appShell?.show("map"); },
@@ -396,9 +397,9 @@ function showError(message, details = "", code = "", context = "", suggestion = 
   const codeElement = byId("error-code");
   const contextElement = byId("error-context");
   const suggestionElement = byId("error-suggestion");
-  codeElement.textContent = code ? `Error code: ${code}` : "";
+  setLocalizedText(codeElement, () => code ? tr`Error code: ${code}` : "");
   codeElement.classList.toggle("hidden", !code);
-  byId("error-message").textContent = message;
+  setLocalizedText(byId("error-message"), () => t(message));
   contextElement.textContent = context;
   contextElement.classList.toggle("hidden", !context);
   suggestionElement.textContent = suggestion;
@@ -452,7 +453,7 @@ function poiCategoriesAndPotability() {
   }
   if (state.poiFilters.unknownWater) {
     categories.push("fountain", "water_tap");
-    potability.push("unknown");
+    potability.push(t("unknown"));
   }
   if (state.poiFilters.nonPotable) {
     categories.push(...HYDRATION_CATEGORIES);
@@ -497,7 +498,7 @@ function poiRequestBody(bounds) {
   if (filters.categories.some((category) => HYDRATION_CATEGORIES.includes(category))) {
     groups.push("hydration");
   }
-  const access = ["public", "unknown"];
+  const access = ["public", t("unknown")];
   if (state.poiFilters.restrictedAccess) access.push("restricted");
   if (state.poiFilters.includePrivate) access.push("private");
   return {
@@ -571,20 +572,20 @@ function poiRenderOptions() {
 
 function preferPoi(feature) {
   if (isSavedRouteSnapshotDisplay()) return;
-  const eligibleAccess = ["public", "unknown"].includes(feature.access_status);
+  const eligibleAccess = ["public", t("unknown")].includes(feature.access_status);
   const scenic = PRIMARY_SCENIC_CATEGORIES.includes(feature.category) || feature.category === "tourism_attraction";
   const verifiedWater = feature.category === "drinking_water" && feature.potability === "verified";
   if (!eligibleAccess || (!scenic && !verifiedWater) || feature.potability === "non_potable") return;
   if (state.autoTour.preferredPoiIds.includes(feature.id)) return;
   if (state.autoTour.preferredPoiIds.length >= 8) {
-    showError("Suggested routes support at most eight preferred places.");
+    showError(t("Suggested routes support at most eight preferred places."));
     return;
   }
-  rememberPointEdit("Place preference added");
+  rememberPointEdit(t("Place preference added"));
   state.autoTour.preferredPoiIds.push(feature.id);
   invalidateAndRender();
   setEditableRequestStatus(
-    `${feature.display_name} added as a suggested-route preference.`,
+    tr`${feature.display_name} added as a suggested-route preference.`,
   );
 }
 
@@ -595,13 +596,13 @@ async function fetchViewportPois(id, bounds) {
   const request = normalized ? poiRequestBody(normalized) : null;
   if (!request) {
     state.poiRequest = { status: "idle", id };
-    clearPoiFeatures(normalized ? "Place filters are off." : "This viewport cannot be searched.");
+    clearPoiFeatures(normalized ? t("Place filters are off.") : t("This viewport cannot be searched."));
     return;
   }
   const controller = new AbortController();
   state.poiAbortController = controller;
   state.poiRequest = { status: "loading", id };
-  byId("places-status").textContent = "Loading mapped places for this viewport…";
+  setLocalizedText(byId("places-status"), () => t("Loading mapped places for this viewport…"));
   try {
     const response = await (localPlanner ? searchLocalPlaces : searchPois)(request, controller.signal);
     if (state.poiRequest.id !== id) return;
@@ -613,13 +614,13 @@ async function fetchViewportPois(id, bounds) {
     renderPois(visibleFeatures, state.selectedPoiId, selectPoi, poiRenderOptions());
     byId("places-count").textContent = String(response.returned_count);
     if (!response.available) {
-      byId("places-status").textContent = "POI index unavailable. Routing still works.";
+      setLocalizedText(byId("places-status"), () => t("POI index unavailable. Routing still works."));
     } else if (!response.returned_count) {
-      byId("places-status").textContent = "No matching mapped places in this viewport.";
+      setLocalizedText(byId("places-status"), () => t("No matching mapped places in this viewport."));
     } else if (response.truncated) {
-      byId("places-status").textContent = `Showing ${response.returned_count} of ${response.total_matching} matches — zoom in to narrow the viewport.`;
+      setLocalizedText(byId("places-status"), () => tr`Showing ${response.returned_count} of ${response.total_matching} matches — zoom in to narrow the viewport.`);
     } else {
-      byId("places-status").textContent = `${response.returned_count} mapped place${response.returned_count === 1 ? "" : "s"} in this viewport.`;
+      setLocalizedText(byId("places-status"), () => tr`${response.returned_count} mapped place${response.returned_count === 1 ? "" : "s"} in this viewport.`);
     }
     const compatibility = placeCompatibilityMessage(poiCategoriesAndPotability().categories,
       response.identity?.poi_classifier_version ?? state.poiIndexStatus?.classifier_version);
@@ -627,7 +628,7 @@ async function fetchViewportPois(id, bounds) {
   } catch (error) {
     if (state.poiRequest.id !== id || error.name === "AbortError") return;
     state.poiRequest = { status: "error", id };
-    byId("places-status").textContent = "Places could not be loaded; routing still works.";
+    setLocalizedText(byId("places-status"), () => t("Places could not be loaded; routing still works."));
   } finally {
     if (state.poiRequest.id === id) state.poiAbortController = null;
   }
@@ -710,9 +711,9 @@ function renderRoutingProfiles({ preserveUnavailableSelection = false } = {}) {
     statuses.forEach((status) => {
       const option = document.createElement("option");
       option.value = status.profile.id;
-      option.textContent = status.available
-        ? status.profile.display_name
-        : `${status.profile.display_name} — unavailable`;
+      setLocalizedText(option, () => status.available
+        ? t(status.profile.display_name)
+        : `${t(status.profile.display_name)} — unavailable`);
       option.disabled = !status.available;
       group.append(option);
     });
@@ -734,10 +735,10 @@ function renderSnapshotProfileIdentity(profileId) {
   select.replaceChildren();
   const option = document.createElement("option");
   option.value = profileId;
-  option.textContent = `${friendlyLabel(profileId)} — saved snapshot`;
+  setLocalizedText(option, () => tr`${friendlyLabel(profileId)} — saved snapshot`);
   select.append(option);
   select.value = profileId;
-  byId("profile-description").textContent = "Showing the activity saved with this route.";
+  setLocalizedText(byId("profile-description"), () => t("Showing the activity saved with this route."));
 }
 
 function selectedProfileStatus(profileId = state.routingProfile) {
@@ -747,33 +748,33 @@ function selectedProfileStatus(profileId = state.routingProfile) {
 }
 
 function profileDisplayName(profileId) {
-  return selectedProfileStatus(profileId)?.profile.display_name
+  return t(selectedProfileStatus(profileId)?.profile.display_name ?? profileId)
     ?? friendlyLabel(profileId);
 }
 
 function updateProfileDescription() {
   if (isSavedRouteSnapshotDisplay()) {
-    byId("profile-description").textContent = "Showing the activity saved with this route.";
+    setLocalizedText(byId("profile-description"), () => t("Showing the activity saved with this route."));
     return;
   }
   const status = selectedProfileStatus(byId("profile").value);
   if (localPlanner) {
-    byId("profile-description").textContent = regionPlanningError === "regional_checking"
-      ? "Checking the installed region’s activity profiles…"
-      : !status ? "Choose an available activity after the region is ready."
+    setLocalizedText(byId("profile-description"), () => regionPlanningError === "regional_checking"
+      ? t("Checking the installed region’s activity profiles…")
+      : !status ? t("Choose an available activity after the region is ready.")
       : status.available
-      ? "Uses this device’s installed region. Activity preferences depend on mapped OpenStreetMap data."
-      : "Install a compatible offline region to use this activity on your device.";
+      ? t("Uses this device’s installed region. Activity preferences depend on mapped OpenStreetMap data.")
+      : t("Install a compatible offline region to use this activity on your device."));
     return;
   }
   if (!status?.available && localRouteCapabilities?.enabled
       && localRouteCapabilities.supported_profile_ids.includes(byId("profile").value)) {
-    byId("profile-description").textContent = "Experimental local Valhalla profile only. Server Generate remains unavailable; no GraphHopper profile parity is claimed.";
+    setLocalizedText(byId("profile-description"), () => t("Experimental local Valhalla profile only. Server Generate remains unavailable; no GraphHopper profile parity is claimed."));
     return;
   }
-  byId("profile-description").textContent = status
-    ? `${status.profile.short_description} Elevation-aware routing: ${status.profile.capabilities.elevation_aware ? "yes" : "no"}.${status.available ? "" : " This profile is unavailable in the routing backend."}`
-    : "Select a routing profile.";
+  setLocalizedText(byId("profile-description"), () => status
+    ? tr`${t(status.profile.short_description)} Elevation-aware routing: ${t(status.profile.capabilities.elevation_aware ? t("yes") : t("no"))}.${status.available ? "" : t(" This profile is unavailable in the routing backend.")}`
+    : t("Select a routing profile."));
 }
 
 function activeEndpoints() {
@@ -820,7 +821,7 @@ function endpointFromControls(kind) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   return {
     ...activeEndpoints()[kind],
-    name: byId(`hard-${kind}-name`).value.trim() || `Hard ${kind}`,
+    name: byId(`hard-${kind}-name`).value.trim() || tr`Hard ${kind}`,
     lat,
     lon,
   };
@@ -842,9 +843,9 @@ function updateEndpointControls() {
     byId(`hard-${kind}-name`).value = point?.name ?? "";
     byId(`hard-${kind}-lat`).value = point?.lat ?? "";
     byId(`hard-${kind}-lon`).value = point?.lon ?? "";
-    byId(`set-hard-${kind}`).textContent = state.endpointSetMode === kind
-      ? `Click map for ${kind}`
-      : kind === "start" ? (point ? "Move Start" : "Choose on map") : point ? "Move End" : "Set on map";
+    setLocalizedText(byId(`set-hard-${kind}`), () => state.endpointSetMode === kind
+      ? tr`Click map for ${kind}`
+      : kind === "start" ? (point ? t("Move Start") : t("Choose on map")) : point ? t("Move End") : t("Set on map"));
   }
   const topology = endpoints.routeTopology;
   renderEndpointTopologyControls(
@@ -855,7 +856,7 @@ function updateEndpointControls() {
   const orderSelect = byId("point-order-mode");
   if (state.planningMode === "waypoint_route") {
     const optimized = orderSelect.querySelector('option[data-optimized="true"]');
-    optimized.textContent = "Optimize stops";
+    setLocalizedText(optimized, () => t("Optimize stops"));
     orderSelect.value = state.options.waypointOrder;
   }
 }
@@ -873,8 +874,8 @@ function renderPreferredPois() {
     label.textContent = feature?.display_name ?? id;
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.textContent = "Remove";
-    remove.setAttribute("aria-label", `Remove preferred place ${label.textContent}`);
+    setLocalizedText(remove, () => t("Remove"));
+    remove.setAttribute("aria-label", tr`Remove preferred place ${label.textContent}`);
     remove.addEventListener("click", () => {
       state.autoTour.preferredPoiIds = ids.filter((value) => value !== id);
       invalidateAndRender();
@@ -941,19 +942,19 @@ function renderRequestedPlacesList() {
     item.dataset.requestedPlaceId = id;
     item.tabIndex = 0;
     item.setAttribute("role", "button");
-    item.setAttribute("aria-label", `Show requested place ${index + 1}, ${place.name}, ${status}`);
+    item.setAttribute("aria-label", tr`Show requested place ${index + 1}, ${place.name}, ${status}`);
     if (id === state.selectedRequestedPlaceId) item.setAttribute("aria-current", "true");
     const label = document.createElement("span");
-    label.textContent = `${index + 1}. ${place.name} · access search ${place.accessSearchRadiusM ?? place.visitRadiusM ?? 500} m · ${friendlyLabel(place.importance)}`;
+    setLocalizedText(label, () => tr`${index + 1}. ${place.name} · access search ${place.accessSearchRadiusM ?? place.visitRadiusM ?? 500} m · ${friendlyLabel(place.importance)}`);
     const statusLabel = document.createElement("span");
     statusLabel.className = "requested-place-status";
     statusLabel.textContent = friendlyLabel(status);
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.textContent = "Remove";
-    remove.setAttribute("aria-label", `Remove requested place ${place.name}`);
+    setLocalizedText(remove, () => t("Remove"));
+    remove.setAttribute("aria-label", tr`Remove requested place ${place.name}`);
     remove.addEventListener("click", () => {
-      rememberPointEdit("Requested place removed");
+      rememberPointEdit(t("Requested place removed"));
       state.autoTour.requestedPlaces = places.filter((_value, placeIndex) => placeIndex !== index);
       if (state.selectedRequestedPlaceId === id) {
         state.selectedRequestedPlaceId = null;
@@ -976,20 +977,20 @@ function renderRequestedPlacesList() {
     const approach = document.createElement("button");
     approach.type = "button";
     approach.className = "text-button";
-    approach.textContent = "Set approach on map";
+    setLocalizedText(approach, () => t("Set approach on map"));
     approach.addEventListener("click", () => {
       state.settingRequestedApproachId = id;
       state.selectedRequestedPlaceId = id;
-      approach.textContent = "Click map once…";
+      setLocalizedText(approach, () => t("Click map once…"));
       renderStatus();
     });
     const clearApproach = document.createElement("button");
     clearApproach.type = "button";
     clearApproach.className = "text-button";
-    clearApproach.textContent = "Clear approach";
+    setLocalizedText(clearApproach, () => t("Clear approach"));
     clearApproach.disabled = !place.approachOverride;
     clearApproach.addEventListener("click", () => {
-      rememberPointEdit("Place approach cleared");
+      rememberPointEdit(t("Place approach cleared"));
       place.approachOverride = null;
       invalidateAndRender();
     });
@@ -1007,7 +1008,7 @@ function renderModeControls() {
   byId("waypoint-order-field").classList.toggle("hidden", auto);
   byId("preferred-pois").classList.toggle("hidden", !auto);
   byId("requested-places").classList.toggle("hidden", !auto);
-  byId("point-editor-title").textContent = auto ? "Places and advanced anchors" : "Points to connect";
+  setLocalizedText(byId("point-editor-title"), () => auto ? t("Places and advanced anchors") : t("Points to connect"));
   const pointsEditor = byId("planning-points");
   if (pointsEditor.dataset.mode !== state.planningMode) {
     pointsEditor.open = !auto;
@@ -1026,27 +1027,27 @@ function renderModeControls() {
   }
   byId("connect-shape").classList.toggle("hidden", auto);
   byId("connect-end").classList.toggle("hidden", auto);
-  byId("clear-points").textContent = auto ? "Clear all" : "Clear route points";
-  const generateLabel = localPlanner && /^fr(?:-|$)/i.test(navigator.language) ? "Générer" : "Generate";
+  setLocalizedText(byId("clear-points"), () => auto ? t("Clear all") : t("Clear route points"));
+  const generateLabel = t("Generate");
   for (const id of ["generate", "generate-top", "generate-map"]) byId(id).textContent = generateLabel;
-  byId("places-explanation").textContent = auto
-    ? "Browse mapped places and optionally prefer eligible places in your suggested route. Simply selecting a place never changes the route."
-    : "Explore places on the map. Selecting one does not change your route points or exported route.";
+  setLocalizedText(byId("places-explanation"), () => auto
+    ? t("Browse mapped places and optionally prefer eligible places in your suggested route. Simply selecting a place never changes the route.")
+    : t("Explore places on the map. Selecting one does not change your route points or exported route."));
   updateEndpointControls();
   const start = activeEndpoints().start;
   const end = activeEndpoints().end;
-  byId("plan-end-summary").textContent = end ? end.name || "End selected" : "Choose End on the map";
+  setLocalizedText(byId("plan-end-summary"), () => end ? end.name || t("End selected") : t("Choose End on the map"));
   byId("clear-hard-end").hidden = !end;
-  byId("plan-start-summary").textContent = start
-    ? `${start.name === "Hard start" ? "Start set ✓" : start.name || "Start set ✓"}`
-    : "Choose Start on the map";
+  setLocalizedText(byId("plan-start-summary"), () => start
+    ? `${start.name === "Hard start" ? t("Start set ✓") : start.name || t("Start set ✓")}`
+    : t("Choose Start on the map"));
   byId("clear-hard-start").hidden = !start;
   const intent = routeIntentPresentation();
   byId("route-intent-summary").textContent = intent.title;
   byId("route-intent-help").textContent = intent.detail;
   byId("map-route-summary").textContent = intent.compactTitle ?? intent.title;
   byId("map-route-help").textContent = intent.detail;
-  byId("planning-strategy-note").textContent = state.planningStrategy === "automatic" ? "Uses your map points to choose how to plan." : "Explicit strategy retained. Imported plans keep their original routing intent.";
+  setLocalizedText(byId("planning-strategy-note"), () => state.planningStrategy === "automatic" ? t("Uses your map points to choose how to plan.") : t("Explicit strategy retained. Imported plans keep their original routing intent."));
   renderPreferredPois();
   byId("show-dropped-requested-radii-control").classList.toggle("hidden", !auto);
   renderRequestedPlacesList();
@@ -1063,23 +1064,23 @@ function pointValidation() {
   const maximum = state.planningMode === "auto_tour"
     ? 6 + Number(Boolean(state.autoTour.start))
     : (state.config?.max_required_points ?? 30);
-  if (state.points.length > maximum) return `This mode supports at most ${maximum} points.`;
+  if (state.points.length > maximum) return tr`This mode supports at most ${maximum} points.`;
   for (let index = 1; index < state.points.length; index += 1) {
     const previous = state.points[index - 1];
     const current = state.points[index];
     if (previous.lat === current.lat && previous.lon === current.lon) {
-      return `Points ${index} and ${index + 1} have identical adjacent coordinates.`;
+      return tr`Points ${index} and ${index + 1} have identical adjacent coordinates.`;
     }
   }
   if (state.points.some((point) => !validPoint(point))) {
-    return "Every point needs valid latitude and longitude coordinates.";
+    return t("Every point needs valid latitude and longitude coordinates.");
   }
   const endpoints = activeEndpoints();
   if (endpoints.routeTopology === "loop" && endpoints.end) {
-    return "Loop plans must not contain an end.";
+    return t("Loop plans must not contain an end.");
   }
-  for (const [label, point] of [["Hard start", endpoints.start], ["Hard end", endpoints.end]]) {
-    if (point && !validPoint(point)) return `${label} needs valid coordinates.`;
+  for (const [label, point] of [[t("Hard start"), endpoints.start], [t("Hard end"), endpoints.end]]) {
+    if (point && !validPoint(point)) return tr`${label} needs valid coordinates.`;
   }
   if (
     endpoints.routeTopology === "point_to_point"
@@ -1087,17 +1088,17 @@ function pointValidation() {
     && endpoints.end
     && endpoints.start.lat === endpoints.end.lat
     && endpoints.start.lon === endpoints.end.lon
-  ) return "Point-to-point start and end must have distinct coordinates.";
+  ) return t("Point-to-point start and end must have distinct coordinates.");
   return "";
 }
 
 function currentGenerationAvailability() {
   if (localPlanner && regionPlanningError) return { enabled: false, reason: regionFailureMessage(regionPlanningError) };
   if (localPlanner && !localRouteCapabilities?.enabled) return {
-    enabled: false, reason: "On-device routing is unavailable in this app build.",
+    enabled: false, reason: t("On-device routing is unavailable in this app build."),
   };
   if (localPlanner && !localRouteCapabilities.installed_pack_count) return {
-    enabled: false, reason: "Download a supported offline region before planning a route.",
+    enabled: false, reason: t("Download a supported offline region before planning a route."),
   };
   const endpoints = activeEndpoints();
   return generationAvailability({
@@ -1122,13 +1123,13 @@ function setEditableRequestStatus(message) {
 
 function activeMapPlacementGuidance() {
   if (state.settingRequestedApproachId) {
-    return "Click the map to set the requested-place approach.";
+    return t("Click the map to set the requested-place approach.");
   }
   if (state.endpointSetMode) {
-    return `Click the map to set your ${state.endpointSetMode} point.`;
+    return tr`Click the map to set your ${state.endpointSetMode} point.`;
   }
-  if (state.movingPointIndex !== null) return `Choose a new position for ${pointDisplayName(state.points[state.movingPointIndex], state.movingPointIndex)}. Other points stay unchanged.`;
-  if (state.addPointMode) return state.planningStrategy === "automatic" ? "Tap an empty map position to extend the route." : "Tap an empty map position to add one stop.";
+  if (state.movingPointIndex !== null) return tr`Choose a new position for ${pointDisplayName(state.points[state.movingPointIndex], state.movingPointIndex)}. Other points stay unchanged.`;
+  if (state.addPointMode) return state.planningStrategy === "automatic" ? t("Tap an empty map position to extend the route.") : t("Tap an empty map position to add one stop.");
   return "";
 }
 
@@ -1146,7 +1147,7 @@ function invalidateAndRender() {
     };
     state.abortController = null;
     window.clearInterval(elapsedTimer);
-    byId("request-status").textContent = "Generation cancelled because the route changed.";
+    setLocalizedText(byId("request-status"), () => t("Generation cancelled because the route changed."));
   }
   invalidateCandidates();
   clearRoutes();
@@ -1261,14 +1262,14 @@ function renderPoiEditor() {
     visitOrders: candidateVisitOrders(), reorderDisabled: state.options.waypointOrder !== "fixed",
     onSelect: (index) => selectPoint(index),
     onChange: (index, field, value) => {
-      rememberPointEdit("Stop updated");
+      rememberPointEdit(t("Stop updated"));
       clearPointPlacement();
       state.points[index] = { ...state.points[index], [field]: value };
       invalidateAndRender();
     },
     onMove: movePoint, onRemove: removePoint, onPlace: beginPointMove,
   });
-  byId("poi-count").textContent = `${state.points.length} stop${state.points.length === 1 ? "" : "s"}`;
+  setLocalizedText(byId("poi-count"), () => t(state.points.length === 1 ? "{count} stop" : "{count} stops", { count: state.points.length }));
   byId("poi-validation").textContent = pointValidation();
 }
 
@@ -1307,7 +1308,7 @@ function renderLegacyPoiEditor() {
     const fields = document.createElement("div");
     fields.className = "poi-fields";
     const fieldDefinitions = [
-      ["name", "Edit point name", "text", point.name ?? ""],
+      ["name", t("Edit point name"), "text", point.name ?? ""],
       ["lat", "Latitude", "number", point.lat],
       ["lon", "Longitude", "number", point.lon],
     ];
@@ -1324,7 +1325,7 @@ function renderLegacyPoiEditor() {
       if (field === "lon") { input.min = "-180"; input.max = "180"; input.step = "0.000001"; }
       input.addEventListener("focus", () => selectPoint(index));
       input.addEventListener("change", () => {
-        rememberPointEdit("Point updated");
+        rememberPointEdit(t("Point updated"));
         state.points[index] = {
           ...state.points[index],
           [field]: field === "name" ? input.value : Number(input.value),
@@ -1338,17 +1339,17 @@ function renderLegacyPoiEditor() {
     const metadata = document.createElement("div");
     metadata.className = "poi-meta";
     const originalIndex = Number.isInteger(point.originalIndex) ? point.originalIndex : index;
-    metadata.textContent = visitOrder === index + 1
-      ? `Original request point ${originalIndex + 1}`
-      : `Request position ${index + 1} · optimized visit ${visitOrder} · original ${originalIndex + 1}`;
+    setLocalizedText(metadata, () => visitOrder === index + 1
+      ? tr`Original request point ${originalIndex + 1}`
+      : tr`Request position ${index + 1} · optimized visit ${visitOrder} · original ${originalIndex + 1}`);
     main.append(metadata);
 
     const actions = document.createElement("div");
     actions.className = "poi-actions";
     const auto = state.planningMode === "auto_tour";
-    const up = iconButton("up", "up", `Move ${pointDisplayName(point, index)} up`, auto || index === 0);
-    const down = iconButton("down", "down", `Move ${pointDisplayName(point, index)} down`, auto || index === state.points.length - 1);
-    const remove = iconButton("remove", "delete", `Remove ${pointDisplayName(point, index)}`);
+    const up = iconButton("up", "up", tr`Move ${pointDisplayName(point, index)} up`, auto || index === 0);
+    const down = iconButton("down", "down", tr`Move ${pointDisplayName(point, index)} down`, auto || index === state.points.length - 1);
+    const remove = iconButton("remove", "delete", tr`Remove ${pointDisplayName(point, index)}`);
     up.addEventListener("click", () => movePoint(index, index - 1));
     down.addEventListener("click", () => movePoint(index, index + 1));
     remove.addEventListener("click", () => removePoint(index));
@@ -1389,7 +1390,7 @@ function movePoint(from, to) {
   if (state.planningMode === "waypoint_route" && state.options.waypointOrder !== "fixed") return;
   if (to < 0 || to >= state.points.length || from === to || !state.points[from]) return;
   const focusPlan = byId("poi-list").contains(document.activeElement);
-  rememberPointEdit("Stop reordered");
+  rememberPointEdit(t("Stop reordered"));
   clearPointPlacement();
   const selectedPoint = state.selectedPointIndex === null ? null : state.points[state.selectedPointIndex];
   const [point] = state.points.splice(from, 1);
@@ -1403,7 +1404,7 @@ function removePoint(index) {
   if (isImmutableSnapshotDisplay() || ["running", "reversing"].includes(state.request.status)) return;
   if (!state.points[index]) return;
   const focusPlan = byId("poi-list").contains(document.activeElement);
-  rememberPointEdit("Point removed");
+  rememberPointEdit(t("Point removed"));
   clearPointPlacement();
   if (state.planningMode === "auto_tour" && state.autoTour.start && index === 0) {
     saveActivePoints();
@@ -1534,18 +1535,18 @@ function directionLabel(traversal) {
     start_to_end: "Start → End",
     clockwise: "Clockwise",
     counterclockwise: "Counterclockwise",
-    complex_loop: "Complex loop",
-  }[traversal?.direction] ?? "Direction unavailable";
+    complex_loop: t("Complex loop"),
+  }[traversal?.direction] ?? t("Direction unavailable");
 }
 
 function traversalSummary(candidate, result) {
   const anchors = candidate.traversal?.anchors ?? [];
-  const start = anchors.find((anchor) => anchor.kind === "start")?.name ?? "Start";
-  const end = anchors.find((anchor) => anchor.kind === "end")?.name ?? "End";
+  const start = anchors.find((anchor) => anchor.kind === "start")?.name ?? t("Start");
+  const end = anchors.find((anchor) => anchor.kind === "end")?.name ?? t("End");
   const label = result.topology === "point_to_point"
     ? `${start} → ${end}`
     : directionLabel(candidate.traversal);
-  return `<section class="direction-summary" role="status" aria-label="Route traversal direction"><h3>Traversal direction</h3><p><strong>${escapeHtml(label)}</strong></p><p class="context-note">Direction arrows follow the returned routed geometry. They are planning context, not turn-by-turn instructions.</p></section>`;
+  return `<section class="direction-summary" role="status" aria-label="${t("Route traversal direction")}"><h3>${t("Traversal direction")}</h3><p><strong>${escapeHtml(label)}</strong></p><p class="context-note">${t("Direction arrows follow the returned routed geometry. They are planning context, not turn-by-turn instructions.")}</p></section>`;
 }
 
 // Display only availability/coverage supplied by the canonical analysis.
@@ -1567,43 +1568,43 @@ function activityQualitySection(analysis) {
       label,
       coverage > 0
         ? `${formatDistance(value.distance_m)} · ${formatPercent(value.share)}`
-        : "not evaluated",
+        : t("not evaluated"),
     ];
   };
   if (quality.activity_kind === "walking") {
-    return section("Hiking quality", [
+    return section(t("Hiking quality"), [
       metric("Trail-like", quality.trail_like, "road_class"),
-      metric("Hiking network", quality.official_hiking_network, "foot_network"),
-      metric("Technical hiking", quality.technical_hiking, "hike_rating"),
-      metric("Steps", quality.steps, "road_class"),
-      metric("Poor smoothness", quality.poor_smoothness, "smoothness"),
+      metric(t("Hiking network"), quality.official_hiking_network, "foot_network"),
+      metric(t("Technical hiking"), quality.technical_hiking, "hike_rating"),
+      metric(t("Steps"), quality.steps, "road_class"),
+      metric(t("Poor smoothness"), quality.poor_smoothness, "smoothness"),
     ]);
   }
   if (quality.activity_kind === "running") {
-    return section("Trail-running quality", [
-      metric("Runnable surface", quality.runnable_surface, "surface"),
+    return section(t("Trail-running quality"), [
+      metric(t("Runnable surface"), quality.runnable_surface, "surface"),
       metric("Trail-like", quality.trail_like, "road_class"),
-      metric("Technical trail", quality.technical_trail, "hike_rating"),
-      metric("Steps", quality.steps, "road_class"),
-      metric("Poor smoothness", quality.poor_smoothness, "smoothness"),
-      metric("Major roads", quality.major_road, "road_class"),
+      metric(t("Technical trail"), quality.technical_trail, "hike_rating"),
+      metric(t("Steps"), quality.steps, "road_class"),
+      metric(t("Poor smoothness"), quality.poor_smoothness, "smoothness"),
+      metric(t("Major roads"), quality.major_road, "road_class"),
     ]);
   }
   if (quality.activity_kind === "cycling") {
-    return section("Cycling quality", [
-      metric("Cycling network", quality.cycling_network, "bike_network"),
+    return section(t("Cycling quality"), [
+      metric(t("Cycling network"), quality.cycling_network, "bike_network"),
       metric("Cycleway-like", quality.cycleway_like, "road_class"),
       metric("Paved", quality.paved, "surface"),
-      metric("Suitable unpaved", quality.suitable_unpaved, "surface"),
+      metric(t("Suitable unpaved"), quality.suitable_unpaved, "surface"),
       metric("Tracks", quality.track, "road_class"),
-      metric("Rough surface", quality.rough_surface, "surface"),
-      metric("Steps", quality.steps, "road_class"),
-      metric("Major roads", quality.major_road, "road_class"),
+      metric(t("Rough surface"), quality.rough_surface, "surface"),
+      metric(t("Steps"), quality.steps, "road_class"),
+      metric(t("Major roads"), quality.major_road, "road_class"),
       [
-        "MTB-rating coverage",
+        t("MTB-rating coverage"),
         Number(quality.detail_coverage?.mtb_rating ?? 0) > 0
           ? formatPercent(quality.mtb_rating.coverage_share)
-          : "not evaluated",
+          : t("not evaluated"),
       ],
     ]);
   }
@@ -1622,33 +1623,33 @@ function structuralAlternativeSummary(candidate) {
   const repetitionImprovement = Number(details.total_repetition_improvement_m);
   const shapeStatements = [];
   if (Number.isFinite(oppositeImprovement) && oppositeImprovement > 0) {
-    shapeStatements.push(`${escapeHtml(formatDistance(oppositeImprovement))} less opposite-direction travel.`);
+    shapeStatements.push(tr`${escapeHtml(formatDistance(oppositeImprovement))} less opposite-direction travel.`);
   }
   if (Number.isFinite(repetitionImprovement) && repetitionImprovement > 0) {
-    shapeStatements.push(`${escapeHtml(formatDistance(repetitionImprovement))} less repeated travel.`);
+    shapeStatements.push(tr`${escapeHtml(formatDistance(repetitionImprovement))} less repeated travel.`);
   } else if (Number.isFinite(spurImprovement) && spurImprovement > 0) {
-    shapeStatements.push(`${escapeHtml(formatDistance(spurImprovement))} less repeated excursion travel.`);
+    shapeStatements.push(tr`${escapeHtml(formatDistance(spurImprovement))} less repeated excursion travel.`);
   } else if (Number.isFinite(backtrackingImprovement) && backtrackingImprovement > 0) {
-    shapeStatements.push(`${escapeHtml(formatDistance(backtrackingImprovement))} less immediate backtracking.`);
+    shapeStatements.push(tr`${escapeHtml(formatDistance(backtrackingImprovement))} less immediate backtracking.`);
   }
   if (!shapeStatements.length) return "";
   const distanceChange = Number(details.distance_change_m);
   const distanceStatement = Number.isFinite(distanceChange)
     ? distanceChange > 0
-      ? ` Total route is ${escapeHtml(formatDistance(distanceChange))} longer.`
+      ? tr` Total route is ${escapeHtml(formatDistance(distanceChange))} longer.`
       : distanceChange < 0
-        ? ` Total route is ${escapeHtml(formatDistance(Math.abs(distanceChange)))} shorter.`
-        : " Total route distance is unchanged."
+        ? tr` Total route is ${escapeHtml(formatDistance(Math.abs(distanceChange)))} shorter.`
+        : t(" Total route distance is unchanged.")
     : "";
   const coverageUnchanged = Number(details.reached_change) === 0
     && Number(details.approximated_change) === 0
     && Number(details.dropped_change) === 0;
   const coverageStatement = coverageUnchanged
-    ? " Requested-place coverage is unchanged."
-    : " Requested-place coverage remains valid.";
+    ? t(" Requested-place coverage is unchanged.")
+    : t(" Requested-place coverage remains valid.");
   const heading = candidate.roles?.includes("distinct_structural_refinement")
-    ? "Distinct major-spur alternative"
-    : "Best route-shape alternative";
+    ? t("Distinct major-spur alternative")
+    : t("Best route-shape alternative");
   return `<section class="repair-summary structural-alternative-summary"><h3>${heading}</h3><p>${shapeStatements.join(" ")}${distanceStatement}${coverageStatement}</p></section>`;
 }
 
@@ -1668,15 +1669,15 @@ function bestExcludedRefinementSummary(diagnostics) {
   const distanceChange = Number(details.distance_change_m);
   const distanceStatement = Number.isFinite(distanceChange)
     ? distanceChange > 0
-      ? `Added ${escapeHtml(formatDistance(distanceChange))}.`
+      ? tr`Added ${escapeHtml(formatDistance(distanceChange))}.`
       : distanceChange < 0
-        ? `Shortened by ${escapeHtml(formatDistance(Math.abs(distanceChange)))}.`
-        : "Route distance unchanged."
+        ? tr`Shortened by ${escapeHtml(formatDistance(Math.abs(distanceChange)))}.`
+        : t("Route distance unchanged.")
     : "";
   const coverageUnchanged = Number(details.reached_change) === 0
     && Number(details.approximated_change) === 0
     && Number(details.dropped_change) === 0;
-  return `<section class="repair-summary excluded-refinement-summary"><h3>Best excluded route refinement</h3><p>Removed ${escapeHtml(formatDistance(removed))} of repeated travel. ${distanceStatement} ${coverageUnchanged ? "Requested-place coverage unchanged. " : ""}Not included in the displayed portfolio.</p></section>`;
+  return `<section class="repair-summary excluded-refinement-summary"><h3>${t("Best excluded route refinement")}</h3><p>Removed ${escapeHtml(formatDistance(removed))} of repeated travel. ${distanceStatement} ${coverageUnchanged ? t("Requested-place coverage unchanged. ") : ""}Not included in the displayed portfolio.</p></section>`;
 }
 
 function currentEndpointAdjustments() {
@@ -1692,7 +1693,7 @@ function renderEndpointAdjustmentViews() {
   const disabled = isImmutableSnapshotDisplay() || ["running", "reversing"].includes(state.request.status);
   const profile = currentDisplayContext()?.routing_profile ?? state.routingProfile;
   for (const id of ["endpoint-adjustments-map", "endpoint-adjustments-routes"]) renderEndpointAdjustments(byId(id), adjustments, {
-    profileLabel: profile ? profileDisplayName(profile) : "the selected activity", disabled,
+    profileLabel: profile ? profileDisplayName(profile) : t("the selected activity"), disabled,
     onShow: item => {
       if (!currentEndpointAdjustments().includes(item)) return;
       appShell?.show("map");
@@ -1717,7 +1718,7 @@ function renderEndpointAdjustmentViews() {
       if (disabled || !currentEndpointAdjustments().includes(item)) return;
       replaceResolvedRouteLocation({ endpoint: item.endpoint }, item.routed_coordinate, { assignEndpoint: assignActiveEndpoint });
       clearPointPlacement(); hideError(); invalidateAndRender();
-      byId("request-status").textContent = "Routed point adopted. Generate again to use the updated request.";
+      setLocalizedText(byId("request-status"), () => t("Routed point adopted. Generate again to use the updated request."));
       appShell?.show("map");
     },
   });
@@ -1727,7 +1728,7 @@ function changeEndpointSnapPolicy(kind, policy) {
   const point = activeEndpoints()[kind];
   if (!point || isImmutableSnapshotDisplay() || ["running", "reversing"].includes(state.request.status)) return;
   endpointSnapPolicy({ start: policy, end: policy });
-  rememberPointEdit(`${kind === "start" ? "Start" : "End"} snap policy changed`);
+  rememberPointEdit(tr`${kind === "start" ? t("Start") : t("End")} snap policy changed`);
   assignActiveEndpoint(kind, { ...point, snapPolicy: policy });
   invalidateAndRender();
 }
@@ -1736,10 +1737,10 @@ function renderCandidatesPanel() {
   const container = byId("candidate-list");
   const candidates = currentDisplayedCandidates();
   const result = currentDisplayContext();
-  byId("candidates-title").textContent = candidates.length === 1 ? "Your route" : candidates.length ? `${candidates.length} routes to explore` : "Routes";
-  byId("search-summary").textContent = candidates.length
-    ? `${result?.kind === "waypoint_route" ? "Connect my points" : "Suggest a route"} · ${profileDisplayName(result?.routing_profile)}`
-    : "";
+  setLocalizedText(byId("candidates-title"), () => candidates.length === 1 ? t("Your route") : candidates.length ? tr`${candidates.length} routes to explore` : t("Routes"));
+  setLocalizedText(byId("search-summary"), () => candidates.length
+    ? `${result?.kind === "waypoint_route" ? t("Connect my points") : t("Suggest a route")} · ${profileDisplayName(result?.routing_profile)}`
+    : "");
   byId("results-back-to-plan").classList.toggle("hidden", Boolean(candidates.length));
   if (!candidates.length) {
     container.innerHTML = emptyResultsMarkup(state);
@@ -1768,124 +1769,124 @@ function routeShapeIssuesSection(analysis, candidate) {
     const stopNames = spur.deliberate_stop_names ?? [];
     const turnaround = stopNames.length
       ? `near ${stopNames[0]}`
-      : "on the routed corridor";
+      : t("on the routed corridor");
     const construction = candidate?.diagnostics?.details?.construction;
     const refinementStatus = construction === "edge_aware_global_optimization"
-      ? "The edge-aware optimizer tested route-wide alternatives; this excursion remains in the final route."
-      : "No published edge-aware alternative removed this excursion.";
-    return `<button type="button" class="spur-card" data-spur-id="${escapeHtml(spur.id)}" aria-label="Focus map on out-and-back excursion ${index + 1}"><strong>Out-and-back excursion</strong><span>Repeated corridor: ${formatDistance(spur.repeated_distance_m)}</span><span>Complete excursion: ${formatDistance(spur.total_excursion_distance_m)}</span><span>Turnaround: ${escapeHtml(turnaround)}</span><span>Deliberate stops inside this excursion: ${stopNames.length ? escapeHtml(stopNames.join(", ")) : "None"}</span><em>Candidate for route refinement</em><small>${escapeHtml(refinementStatus)}</small></button>`;
+      ? t("The edge-aware optimizer tested route-wide alternatives; this excursion remains in the final route.")
+      : t("No published edge-aware alternative removed this excursion.");
+    return `<button type="button" class="spur-card" data-spur-id="${escapeHtml(spur.id)}" aria-label="Focus map on out-and-back excursion ${index + 1}"><strong>${t("Out-and-back excursion")}</strong><span>Repeated corridor: ${formatDistance(spur.repeated_distance_m)}</span><span>Complete excursion: ${formatDistance(spur.total_excursion_distance_m)}</span><span>Turnaround: ${escapeHtml(turnaround)}</span><span>Deliberate stops inside this excursion: ${stopNames.length ? escapeHtml(stopNames.join(", ")) : t("None")}</span><em>${t("Candidate for route refinement")}</em><small>${escapeHtml(refinementStatus)}</small></button>`;
   }).join("");
-  return `<section class="route-shape-issues"><h3>Route shape issues</h3><p><strong>${formatCount(spurAnalysis.spur_count)} out-and-back excursion${spurAnalysis.spur_count === 1 ? "" : "s"}</strong><br>${formatDistance(spurAnalysis.total_repeated_distance_m)} repeated inside excursions</p><div class="spur-list">${cards}</div></section>`;
+  return `<section class="route-shape-issues"><h3>${t("Route shape issues")}</h3><p><strong>${formatCount(spurAnalysis.spur_count)} out-and-back excursion${spurAnalysis.spur_count === 1 ? "" : "s"}</strong><br>${formatDistance(spurAnalysis.total_repeated_distance_m)} repeated inside excursions</p><div class="spur-list">${cards}</div></section>`;
 }
 
 function natureSection(nature, search) {
   if (!nature) {
-    return section("Mapped nature context", [
-      ["Index available", search.nature_index_available ? "Yes" : "No"],
-      ["Nature analysis", "not evaluated"],
+    return section(t("Mapped nature context"), [
+      [t("Index available"), search.nature_index_available ? "Yes" : "No"],
+      [t("Nature analysis"), t("not evaluated")],
     ]) + '<p class="context-note">Nature metrics are not zero: they were not evaluated because the local OSM nature index or analysis was unavailable.</p>';
   }
   const breakdown = nature.score_breakdown;
   const component = (value) => `${value.points >= 0 ? "+" : ""}${value.points.toFixed(1)} points · weight ${value.weight.toFixed(2)} × ${formatPercent(value.share)}`;
   const waterBuffer = state.config?.nature_water_buffer_m ?? 100;
-  const warnings = nature.warnings.map((warning) => friendlyLabel(warning)).join("; ") || "None";
-  return section("Mapped nature context", [
-    ["Nature score", `${nature.nature_score.toFixed(1)} / 100`],
-    ["Base score", breakdown.base_score.toFixed(1)],
-    ["Woodland reward", component(breakdown.woodland_reward)],
-    ["Open-natural reward", component(breakdown.open_natural_reward)],
-    ["Agriculture reward", component(breakdown.agriculture_reward)],
-    ["Park/protected reward", component(breakdown.park_or_protected_reward)],
-    ["Near-water reward", component(breakdown.near_water_reward)],
-    ["Urban penalty", component(breakdown.urban_penalty)],
-    ["Unknown penalty", component(breakdown.unknown_penalty)],
+  const warnings = nature.warnings.map((warning) => friendlyLabel(warning)).join("; ") || t("None");
+  return section(t("Mapped nature context"), [
+    [t("Nature score"), `${nature.nature_score.toFixed(1)} / 100`],
+    [t("Base score"), breakdown.base_score.toFixed(1)],
+    [t("Woodland reward"), component(breakdown.woodland_reward)],
+    [t("Open-natural reward"), component(breakdown.open_natural_reward)],
+    [t("Agriculture reward"), component(breakdown.agriculture_reward)],
+    [t("Park/protected reward"), component(breakdown.park_or_protected_reward)],
+    [t("Near-water reward"), component(breakdown.near_water_reward)],
+    [t("Urban penalty"), component(breakdown.urban_penalty)],
+    [t("Unknown penalty"), component(breakdown.unknown_penalty)],
     ["Woodland", `${formatDistance(nature.woodland.distance_m)} · ${formatPercent(nature.woodland.share)}`],
-    ["Open natural", `${formatDistance(nature.open_natural.distance_m)} · ${formatPercent(nature.open_natural.share)}`],
+    [t("Open natural"), `${formatDistance(nature.open_natural.distance_m)} · ${formatPercent(nature.open_natural.share)}`],
     ["Agriculture", `${formatDistance(nature.agriculture.distance_m)} · ${formatPercent(nature.agriculture.share)}`],
-    ["Water crossing", `${formatDistance(nature.water_crossing.distance_m)} · ${formatPercent(nature.water_crossing.share)}`],
+    [t("Water crossing"), `${formatDistance(nature.water_crossing.distance_m)} · ${formatPercent(nature.water_crossing.share)}`],
     ["Urban/developed", `${formatDistance(nature.urban.distance_m)} · ${formatPercent(nature.urban.share)}`],
-    ["Unknown land cover", `${formatDistance(nature.unknown_landcover.distance_m)} · ${formatPercent(nature.unknown_landcover.share)}`],
-    ["Park or protected", `${formatDistance(nature.park_or_protected.distance_m)} · ${formatPercent(nature.park_or_protected.share)}`],
-    [`Within ${waterBuffer} m of mapped water`, `${formatDistance(nature.near_water.distance_m)} · ${formatPercent(nature.near_water.share)}`],
-    ["Nature warnings", warnings],
-    ["Index features", formatCount(nature.index_feature_count)],
+    [t("Unknown land cover"), `${formatDistance(nature.unknown_landcover.distance_m)} · ${formatPercent(nature.unknown_landcover.share)}`],
+    [t("Park or protected"), `${formatDistance(nature.park_or_protected.distance_m)} · ${formatPercent(nature.park_or_protected.share)}`],
+    [tr`Within ${waterBuffer} m of mapped water`, `${formatDistance(nature.near_water.distance_m)} · ${formatPercent(nature.near_water.share)}`],
+    [t("Nature warnings"), warnings],
+    [t("Index features"), formatCount(nature.index_feature_count)],
   ]) + '<p class="context-note">Derived from local OpenStreetMap polygons. Unknown means unmapped or outside the index. Near water describes proximity to mapped water, not a water view. Protected-area tags do not guarantee public access. The score describes mapped environmental context—not beauty, biodiversity, accessibility, or safety.</p>';
 }
 
 function loopGeometrySection(geometry) {
-  const sectorGrid = (shares) => `<ol class="loop-sector-grid">${Array.from({ length: 8 }, (_, index) => `<li><span>Sector ${index + 1}</span><strong>${shares ? shares[index].toFixed(6) : "not evaluated"}</strong></li>`).join("")}</ol>`;
+  const sectorGrid = (shares) => `<ol class="loop-sector-grid">${Array.from({ length: 8 }, (_, index) => `<li><span>Sector ${index + 1}</span><strong>${shares ? shares[index].toFixed(6) : t("not evaluated")}</strong></li>`).join("")}</ol>`;
   if (!geometry) {
-    return `<section class="loop-geometry-panel"><h3>Loop geometry</h3>${metricRows([
-      ["Shape penalty (lower is better)", "not evaluated"],
-      ["Compactness", "not evaluated"],
-      ["Sector balance", "not evaluated"],
-      ["Near-parallel corridor", "not evaluated"],
-      ["Outbound/return proximity", "not evaluated"],
-      ["Self-crossings", "not evaluated"],
-    ])}<details class="loop-geometry-exact"><summary>Exact geometry details</summary>${sectorGrid(null)}${metricRows([
-      ["Elongation", "not evaluated"],
-      ["Angular monotonicity", "not evaluated"],
-      ["Maximum sector share", "not evaluated"],
-      ["Occupied sectors", "not evaluated"],
-      ["Enclosed area", "not evaluated"],
-      ["Convex-hull area", "not evaluated"],
-      ["Mean radius", "not evaluated"],
-      ["Maximum radius", "not evaluated"],
-      ["Start/end gap", "not evaluated"],
-      ["Closed within 25 m", "not evaluated"],
-      ["Crossing component", "not evaluated"],
-      ["Near-parallel component", "not evaluated"],
-      ["Compactness component", "not evaluated"],
-      ["Sector-imbalance component", "not evaluated"],
-      ["Elongation component", "not evaluated"],
-    ])}</details><p class="context-note">Loop-geometry metrics are unknown, not numeric zero.</p></section>`;
+    return `<section class="loop-geometry-panel"><h3>${t("Loop geometry")}</h3>${metricRows([
+      [t("Shape penalty (lower is better)"), t("not evaluated")],
+      [t("Compactness"), t("not evaluated")],
+      [t("Sector balance"), t("not evaluated")],
+      [t("Near-parallel corridor"), t("not evaluated")],
+      [t("Outbound/return proximity"), t("not evaluated")],
+      ["Self-crossings", t("not evaluated")],
+    ])}<details class="loop-geometry-exact"><summary>${t("Exact geometry details")}</summary>${sectorGrid(null)}${metricRows([
+      [t("Elongation"), t("not evaluated")],
+      [t("Angular monotonicity"), t("not evaluated")],
+      [t("Maximum sector share"), t("not evaluated")],
+      [t("Occupied sectors"), t("not evaluated")],
+      [t("Enclosed area"), t("not evaluated")],
+      [t("Convex-hull area"), t("not evaluated")],
+      [t("Mean radius"), t("not evaluated")],
+      [t("Maximum radius"), t("not evaluated")],
+      [t("Start/end gap"), t("not evaluated")],
+      [t("Closed within 25 m"), t("not evaluated")],
+      [t("Crossing component"), t("not evaluated")],
+      [t("Near-parallel component"), t("not evaluated")],
+      [t("Compactness component"), t("not evaluated")],
+      [t("Sector-imbalance component"), t("not evaluated")],
+      [t("Elongation component"), t("not evaluated")],
+    ])}</details><p class="context-note">${t("Loop-geometry metrics are unknown, not numeric zero.")}</p></section>`;
   }
   const penalty = geometry.penalty_breakdown;
-  return `<section class="loop-geometry-panel"><h3>Loop geometry</h3>${metricRows([
-    ["Shape penalty (lower is better)", penalty.total.toFixed(6)],
-    ["Compactness", geometry.compactness.toFixed(6)],
-    ["Sector balance", geometry.sector_balance.toFixed(6)],
-    ["Near-parallel corridor", `${geometry.near_parallel.distance_m.toFixed(2)} m · ${formatPercent(geometry.near_parallel.share)}`],
-    ["Outbound/return proximity", `${geometry.outbound_return_proximity.distance_m.toFixed(2)} m · ${formatPercent(geometry.outbound_return_proximity.share)}`],
+  return `<section class="loop-geometry-panel"><h3>${t("Loop geometry")}</h3>${metricRows([
+    [t("Shape penalty (lower is better)"), penalty.total.toFixed(6)],
+    [t("Compactness"), geometry.compactness.toFixed(6)],
+    [t("Sector balance"), geometry.sector_balance.toFixed(6)],
+    [t("Near-parallel corridor"), `${geometry.near_parallel.distance_m.toFixed(2)} m · ${formatPercent(geometry.near_parallel.share)}`],
+    [t("Outbound/return proximity"), `${geometry.outbound_return_proximity.distance_m.toFixed(2)} m · ${formatPercent(geometry.outbound_return_proximity.share)}`],
     ["Self-crossings", formatCount(geometry.self_crossing_count)],
-  ])}<details class="loop-geometry-exact"><summary>Exact geometry details</summary>${sectorGrid(geometry.sector_distance_shares)}${metricRows([
-    ["Elongation", geometry.elongation.toFixed(6)],
-    ["Angular monotonicity", geometry.angular_monotonicity.toFixed(6)],
-    ["Maximum sector share", formatPercent(geometry.maximum_sector_distance_share)],
-    ["Occupied sectors", `${geometry.occupied_sector_count} / ${geometry.sector_count}`],
-    ["Enclosed area", `${geometry.enclosed_area_m2.toFixed(2)} m²`],
-    ["Convex-hull area", `${geometry.convex_hull_area_m2.toFixed(2)} m²`],
-    ["Mean radius", `${geometry.mean_radius_m.toFixed(2)} m`],
-    ["Maximum radius", `${geometry.max_radius_m.toFixed(2)} m`],
-    ["Start/end gap", `${geometry.start_end_gap_m.toFixed(2)} m`],
-    ["Closed within 25 m", geometry.closed ? "Yes" : "No"],
-    ["Crossing component", `${penalty.crossing_penalty.toFixed(6)} = ${penalty.crossing_penalty_per_crossing.toFixed(2)} × ${penalty.crossing_count_input}`],
-    ["Near-parallel component", `${penalty.near_parallel_penalty.toFixed(6)} = ${penalty.near_parallel_penalty_weight.toFixed(2)} × ${penalty.near_parallel_share_input.toFixed(6)}`],
-    ["Compactness component", `${penalty.compactness_penalty.toFixed(6)} = ${penalty.compactness_penalty_weight.toFixed(2)} × (1 − ${penalty.compactness_input.toFixed(6)})`],
-    ["Sector-imbalance component", `${penalty.sector_imbalance_penalty.toFixed(6)} = ${penalty.sector_imbalance_penalty_weight.toFixed(2)} × (1 − ${penalty.sector_balance_input.toFixed(6)})`],
-    ["Elongation component", `${penalty.elongation_penalty.toFixed(6)} = ${penalty.elongation_penalty_weight.toFixed(2)} × (1 − ${penalty.elongation_input.toFixed(6)})`],
-  ])}</details><p class="context-note">These projected shape diagnostics do not measure scenic beauty, safety or accessibility. Dense networks and routed geometry resolution can affect corridor detection.</p></section>`;
+  ])}<details class="loop-geometry-exact"><summary>${t("Exact geometry details")}</summary>${sectorGrid(geometry.sector_distance_shares)}${metricRows([
+    [t("Elongation"), geometry.elongation.toFixed(6)],
+    [t("Angular monotonicity"), geometry.angular_monotonicity.toFixed(6)],
+    [t("Maximum sector share"), formatPercent(geometry.maximum_sector_distance_share)],
+    [t("Occupied sectors"), `${geometry.occupied_sector_count} / ${geometry.sector_count}`],
+    [t("Enclosed area"), `${geometry.enclosed_area_m2.toFixed(2)} m²`],
+    [t("Convex-hull area"), `${geometry.convex_hull_area_m2.toFixed(2)} m²`],
+    [t("Mean radius"), `${geometry.mean_radius_m.toFixed(2)} m`],
+    [t("Maximum radius"), `${geometry.max_radius_m.toFixed(2)} m`],
+    [t("Start/end gap"), `${geometry.start_end_gap_m.toFixed(2)} m`],
+    [t("Closed within 25 m"), geometry.closed ? "Yes" : "No"],
+    [t("Crossing component"), `${penalty.crossing_penalty.toFixed(6)} = ${penalty.crossing_penalty_per_crossing.toFixed(2)} × ${penalty.crossing_count_input}`],
+    [t("Near-parallel component"), `${penalty.near_parallel_penalty.toFixed(6)} = ${penalty.near_parallel_penalty_weight.toFixed(2)} × ${penalty.near_parallel_share_input.toFixed(6)}`],
+    [t("Compactness component"), `${penalty.compactness_penalty.toFixed(6)} = ${penalty.compactness_penalty_weight.toFixed(2)} × (1 − ${penalty.compactness_input.toFixed(6)})`],
+    [t("Sector-imbalance component"), `${penalty.sector_imbalance_penalty.toFixed(6)} = ${penalty.sector_imbalance_penalty_weight.toFixed(2)} × (1 − ${penalty.sector_balance_input.toFixed(6)})`],
+    [t("Elongation component"), `${penalty.elongation_penalty.toFixed(6)} = ${penalty.elongation_penalty_weight.toFixed(2)} × (1 − ${penalty.elongation_input.toFixed(6)})`],
+  ])}</details><p class="context-note">${t("These projected shape diagnostics do not measure scenic beauty, safety or accessibility. Dense networks and routed geometry resolution can affect corridor detection.")}</p></section>`;
 }
 
 function constraintItinerary(candidate) {
   const reached = (candidate.reached_stops ?? []).map((stop, index) => {
     return `<li class="itinerary-stop" role="button" tabindex="0" data-itinerary-stop-id="${escapeHtml(stop.id)}" data-itinerary-origin="${escapeHtml(stop.selection_origin)}"><strong>${index + 1}. ${escapeHtml(stop.name)}</strong><span>${escapeHtml(friendlyLabel(stop.category))} · ${escapeHtml(friendlyLabel(stop.resolved_approach.kind))} · arrival ${Number(stop.route_to_approach_m).toFixed(1)} m / ${Number(stop.resolved_approach.arrival_tolerance_m).toFixed(0)} m · ${escapeHtml(friendlyLabel(stop.selection_method))}</span></li>`;
   }).join("");
-  const approximated = (candidate.approximated_stops ?? []).map((stop) => `<li class="itinerary-stop approximated" role="button" tabindex="0" data-itinerary-stop-id="${escapeHtml(stop.id)}" data-itinerary-origin="${escapeHtml(stop.selection_origin)}"><strong>${escapeHtml(stop.name)} — approximated</strong><span>${formatDistance(stop.distance_m)} from the semantic place · normal tolerance ${formatDistance(stop.normal_tolerance_m)} · ${escapeHtml(friendlyLabel(stop.reason))} · access ${escapeHtml(friendlyLabel(stop.resolved_approach.access))}</span><div class="button-row"><button type="button" data-compromise-action="exact" data-constraint-id="${escapeHtml(stop.id)}">Make exact</button><button type="button" data-compromise-action="accept" data-constraint-id="${escapeHtml(stop.id)}">Accept approximation</button><button type="button" data-compromise-action="remove" data-constraint-id="${escapeHtml(stop.id)}">Remove stop</button></div></li>`).join("");
+  const approximated = (candidate.approximated_stops ?? []).map((stop) => `<li class="itinerary-stop approximated" role="button" tabindex="0" data-itinerary-stop-id="${escapeHtml(stop.id)}" data-itinerary-origin="${escapeHtml(stop.selection_origin)}"><strong>${escapeHtml(stop.name)} — approximated</strong><span>${formatDistance(stop.distance_m)} from the semantic place · normal tolerance ${formatDistance(stop.normal_tolerance_m)} · ${escapeHtml(friendlyLabel(stop.reason))} · access ${escapeHtml(friendlyLabel(stop.resolved_approach.access))}</span><div class="button-row"><button type="button" data-compromise-action="exact" data-constraint-id="${escapeHtml(stop.id)}">${t("Make exact")}</button><button type="button" data-compromise-action="accept" data-constraint-id="${escapeHtml(stop.id)}">${t("Accept approximation")}</button><button type="button" data-compromise-action="remove" data-constraint-id="${escapeHtml(stop.id)}">${t("Remove stop")}</button></div></li>`).join("");
   const dropped = (candidate.dropped_stops ?? []).map((stop) => `<li><strong>${escapeHtml(stop.name)}</strong><span>Drop reason: ${escapeHtml(friendlyLabel(stop.reason))}</span></li>`).join("");
   if (!reached && !approximated && !dropped) {
     return "";
   }
-  return `<section><h3>Route itinerary</h3><ol class="tour-itinerary">${reached}${approximated}</ol>${dropped ? `<details><summary>Dropped stops (${candidate.dropped_stops.length})</summary><ul class="tour-itinerary dropped">${dropped}</ul></details>` : ""}</section>`;
+  return `<section><h3>${t("Route itinerary")}</h3><ol class="tour-itinerary">${reached}${approximated}</ol>${dropped ? `<details><summary>Dropped stops (${candidate.dropped_stops.length})</summary><ul class="tour-itinerary dropped">${dropped}</ul></details>` : ""}</section>`;
 }
 
 function compromiseSummary(candidate) {
   const target = candidate.compromises.find((item) => item.code === "target_distance_missed");
-  return `<section class="compromise-summary" role="status" aria-live="polite"><h3>Route generated</h3>${metricRows([
-    ["Reached", formatCount(candidate.reached_stops.length)],
-    ["Approximated", formatCount(candidate.approximated_stops.length)],
-    ["Dropped", formatCount(candidate.dropped_stops.length)],
-    ["Target", target ? `Missed by ${formatDistance(target.distance_m)}` : "Within requested tolerance"],
+  return `<section class="compromise-summary" role="status" aria-live="polite"><h3>${t("Route generated")}</h3>${metricRows([
+    [t("Reached"), formatCount(candidate.reached_stops.length)],
+    [t("Approximated"), formatCount(candidate.approximated_stops.length)],
+    [t("Dropped"), formatCount(candidate.dropped_stops.length)],
+    ["Target", target ? tr`Missed by ${formatDistance(target.distance_m)}` : t("Within requested tolerance")],
   ])}</section>`;
 }
 
@@ -1895,20 +1896,20 @@ function endpointSection(result) {
   const endVisit = visits[1];
   const coordinate = (point) => point
     ? `${point.name ? `${point.name} · ` : ""}${Number(point.lat).toFixed(6)}, ${Number(point.lon).toFixed(6)}`
-    : "Not available";
-  return section("Route endpoints", [
-    ["Route topology", friendlyLabel(result.topology ?? "loop")],
-    ["Effective start", coordinate(result.effective_start)],
-    ["Start source", friendlyLabel(startVisit?.source ?? "explicit")],
-    ["Start snap distance", startVisit?.snap_distance_m == null ? "Unknown" : formatDistance(startVisit.snap_distance_m)],
-    ["Effective end", coordinate(result.effective_end)],
+    : t("Not available");
+  return section(t("Route endpoints"), [
+    [t("Route topology"), friendlyLabel(result.topology ?? "loop")],
+    [t("Effective start"), coordinate(result.effective_start)],
+    [t("Start source"), friendlyLabel(startVisit?.source ?? "explicit")],
+    [t("Start snap distance"), startVisit?.snap_distance_m == null ? t("Unknown") : formatDistance(startVisit.snap_distance_m)],
+    [t("Effective end"), coordinate(result.effective_end)],
     [
-      "End source",
+      t("End source"),
       friendlyLabel(
         endVisit?.source ?? (result.topology === "point_to_point" ? "explicit" : "loop_closure"),
       ),
     ],
-    ["End snap distance", endVisit?.snap_distance_m == null ? "Unknown" : formatDistance(endVisit.snap_distance_m)],
+    [t("End snap distance"), endVisit?.snap_distance_m == null ? t("Unknown") : formatDistance(endVisit.snap_distance_m)],
   ]);
 }
 
@@ -1921,21 +1922,21 @@ function renderMetrics() {
   const readOnly = isImmutableSnapshotDisplay();
   const savingUnavailable = !state.config?.saved_routes_available;
   byId("selected-route-panel").classList.toggle("hidden", !candidate);
-  byId("metrics-title").textContent = candidate ? `Route ${candidate.rank} · selected` : "Selected route";
-  byId("selected-route-context").textContent = candidate
-    ? `${profileDisplayName(candidate.routing_profile)} · ${candidate.topology === "loop" ? "Loop" : "Point to point"}` : "";
-  byId("download-gpx").setAttribute("aria-label", candidate ? `Export Route ${candidate.rank} as GPX` : "Export GPX");
+  setLocalizedText(byId("metrics-title"), () => candidate ? tr`Route ${candidate.rank} · selected` : t("Selected route"));
+  setLocalizedText(byId("selected-route-context"), () => candidate
+    ? `${profileDisplayName(candidate.routing_profile)} · ${candidate.topology === "loop" ? t("Loop") : t("Point to point")}` : "");
+  byId("download-gpx").setAttribute("aria-label", candidate ? tr`Export Route ${candidate.rank} as GPX` : t("Export GPX"));
   byId("save-route-selected").classList.toggle("hidden", savingUnavailable || readOnly || !candidate);
   byId("download-gpx").disabled = !candidate || busy || pendingGpxExport !== null;
   byId("download-gpx").setAttribute("aria-busy", String(pendingGpxExport !== null));
   byId("reverse-route").disabled = readOnly || !candidate || busy || Boolean(localPlanner) || Boolean(state.importedGpx && !state.generationResult);
-  byId("reverse-route").title = localPlanner ? "On-device route reversal is not available yet. Edit the ordered points and generate a new route." : "";
+  byId("reverse-route").title = localPlanner ? t("On-device route reversal is not available yet. Edit the ordered points and generate a new route.") : "";
   byId("save-route").disabled = savingUnavailable || readOnly || !candidate || busy;
   byId("save-route").classList.toggle("hidden", savingUnavailable || readOnly || !candidate);
   byId("save-route-selected").disabled = savingUnavailable || readOnly || !candidate || busy;
-  byId("reverse-route").textContent = result?.topology === "loop"
-    ? "Reverse loop direction"
-    : "Reverse direction";
+  setLocalizedText(byId("reverse-route"), () => result?.topology === "loop"
+    ? t("Reverse loop direction")
+    : t("Reverse direction"));
   if (candidate && result) renderCanonicalMetrics(candidate, result);
 }
 function renderCanonicalMetrics(candidate, result) {
@@ -1959,46 +1960,46 @@ function renderCanonicalMetrics(candidate, result) {
   byId("metrics-content").innerHTML = compromiseSummary(candidate)
     + traversalSummary(candidate, result)
     + constraintItinerary(candidate)
-    + section("Route quality", [
-      ["Total repetition", repetitionShare(analysis) === null ? "Unknown" : `${formatDistance(analysis.repetition.repeated_distance.distance_m)} · ${formatPercent(analysis.repetition.repeated_distance.share)}`],
-      ["Immediate backtracking", backtrackShare(analysis) === null ? "Unknown" : `${formatDistance(analysis.immediate_backtrack.distance_m)} · ${formatPercent(analysis.immediate_backtrack.share)}`],
-      ["Paved", detailShare(analysis, "paved", "surface") === null ? "Unknown" : formatPercent(analysis.paved.share)],
-      ["Major roads", detailShare(analysis, "major_road", "road_class") === null ? "Unknown" : formatPercent(analysis.major_road.share)],
+    + section(t("Route quality"), [
+      [t("Total repetition"), repetitionShare(analysis) === null ? t("Unknown") : `${formatDistance(analysis.repetition.repeated_distance.distance_m)} · ${formatPercent(analysis.repetition.repeated_distance.share)}`],
+      [t("Immediate backtracking"), backtrackShare(analysis) === null ? t("Unknown") : `${formatDistance(analysis.immediate_backtrack.distance_m)} · ${formatPercent(analysis.immediate_backtrack.share)}`],
+      ["Paved", detailShare(analysis, "paved", "surface") === null ? t("Unknown") : formatPercent(analysis.paved.share)],
+      [t("Major roads"), detailShare(analysis, "major_road", "road_class") === null ? t("Unknown") : formatPercent(analysis.major_road.share)],
     ])
     + routeShapeIssuesSection(analysis, candidate)
     + activityQualitySection(analysis)
-    + section("Mapped environment", analysis.nature ? [
+    + section(t("Mapped environment"), analysis.nature ? [
       ["Woodland", formatPercent(analysis.nature.woodland.share)],
-      ["Open natural land", formatPercent(analysis.nature.open_natural.share)],
-      ["Unknown land cover", formatPercent(analysis.nature.unknown_landcover.share)],
-    ] : [["Nature", "Unknown — mapped nature analysis is unavailable"]])
+      [t("Open natural land"), formatPercent(analysis.nature.open_natural.share)],
+      [t("Unknown land cover"), formatPercent(analysis.nature.unknown_landcover.share)],
+    ] : [[t("Nature"), t("Unknown — mapped nature analysis is unavailable")]])
     + '<p class="context-note">Mapped measurements may have incomplete coverage. They do not guarantee current conditions or access.</p>'
     + '<details class="route-diagnostics"><summary>Technical diagnostics</summary>'
     + endpointSection(result)
     + structuralAlternativeSummary(candidate)
     + natureSection(analysis.nature, { nature_index_available: Boolean(analysis.nature) })
-    + section("Canonical candidate", [
-      ["Candidate ID", candidate.id],
-      ["Routing profile", profileDisplayName(candidate.routing_profile)],
+    + section(t("Canonical candidate"), [
+      [t("Candidate ID"), candidate.id],
+      [t("Routing profile"), profileDisplayName(candidate.routing_profile)],
       ["Traversal", directionLabel(candidate.traversal)],
-      ["Roles", candidate.roles.map(friendlyLabel).join(", ") || "None"],
-      ["Distance", formatDistance(candidate.route.summary.distance_m)],
-      ["Target error", formatDistance(candidate.diagnostics.target_error_m)],
-      ["Within tolerance", candidate.diagnostics.within_tolerance ? "Yes" : "No"],
-      ["Planning constraints met", candidate.diagnostics.safety_eligible ? "Yes" : "No"],
+      ["Roles", candidate.roles.map(friendlyLabel).join(", ") || t("None")],
+      [t("Distance"), formatDistance(candidate.route.summary.distance_m)],
+      [t("Target error"), formatDistance(candidate.diagnostics.target_error_m)],
+      [t("Within tolerance"), candidate.diagnostics.within_tolerance ? "Yes" : "No"],
+      [t("Planning constraints met"), candidate.diagnostics.safety_eligible ? "Yes" : "No"],
       ["Reached / approximated / dropped", `${candidate.reached_stops.length} / ${candidate.approximated_stops.length} / ${candidate.dropped_stops.length}`],
     ])
     + section("Score", [["Total", Number(candidate.score.total).toFixed(6)], ...scoreRows])
     + (result.topology === "loop" ? loopGeometrySection(analysis.loop_geometry) : "")
     + (diagnostics ? bestExcludedRefinementSummary(diagnostics) : "")
     + (diagnostics
-      ? section("Search budget", [
-        ["Total used", `${diagnostics.budget.total_used} / ${diagnostics.budget.total_limit}`],
-        ["Cache hits / misses", `${diagnostics.cache.hit_count} / ${diagnostics.cache.miss_count}`],
+      ? section(t("Search budget"), [
+        [t("Total used"), `${diagnostics.budget.total_used} / ${diagnostics.budget.total_limit}`],
+        [t("Cache hits / misses"), `${diagnostics.cache.hit_count} / ${diagnostics.cache.miss_count}`],
         ...phaseRows,
       ])
-      : `<section><h3>Search diagnostics</h3><p>Not applicable — loaded immutable ${state.outingDisplay ? "outing" : "saved-route"} snapshot.</p></section>`)
-    + `<section><h3>Warnings</h3><ul class="warning-list">${warnings.length ? warnings.map((warning) => `<li>${escapeHtml(friendlyLabel(warning))}</li>`).join("") : `<li>${diagnostics ? "No route or search warnings." : "No route warnings. Search diagnostics are not applicable."}</li>`}</ul></section>` + '</details>';
+      : `<section><h3>${t("Search diagnostics")}</h3><p>Not applicable — loaded immutable ${state.outingDisplay ? "outing" : "saved-route"} snapshot.</p></section>`)
+    + `<section><h3>Warnings</h3><ul class="warning-list">${warnings.length ? warnings.map((warning) => `<li>${escapeHtml(friendlyLabel(warning))}</li>`).join("") : `<li>${diagnostics ? t("No route or search warnings.") : t("No route warnings. Search diagnostics are not applicable.")}</li>`}</ul></section>` + '</details>';
   wireCompromiseActions(candidate);
 }
 
@@ -2026,7 +2027,7 @@ function wireCompromiseActions(candidate) {
       );
       if (!spur) return;
       focusSpur(spur);
-      byId("request-status").textContent = "Focused map on the complete out-and-back excursion.";
+      setLocalizedText(byId("request-status"), () => t("Focused map on the complete out-and-back excursion."));
     });
   });
   byId("metrics-content").querySelectorAll(".itinerary-stop[data-itinerary-stop-id]").forEach((item) => {
@@ -2060,7 +2061,7 @@ function wireCompromiseActions(candidate) {
       if (!target) return;
       const stop = candidate.approximated_stops.find((value) => value.id === id);
       if (!stop) return;
-      rememberPointEdit("Stop constraint updated");
+      rememberPointEdit(t("Stop constraint updated"));
       const item = target.collection[target.index];
       if (button.dataset.compromiseAction === "remove") {
         target.collection.splice(target.index, 1);
@@ -2083,7 +2084,7 @@ function wireCompromiseActions(candidate) {
         item.approachOverride = { ...stop.resolved_approach.coordinate };
       }
       invalidateAndRender();
-      setEditableRequestStatus("Constraint updated. Generate again to apply it.");
+      setEditableRequestStatus(t("Constraint updated. Generate again to apply it."));
     });
   });
 }
@@ -2093,7 +2094,7 @@ function renderStatus() {
   const running = ["running", "reversing"].includes(state.request.status);
   const readOnly = isImmutableSnapshotDisplay();
   const open = isOpenPlan();
-  byId("controls-title").textContent = "Plan";
+  setLocalizedText(byId("controls-title"), () => t("Plan"));
   byId("map-route-intent").classList.toggle("hidden", running || readOnly || !activeEndpoints().start || Boolean(activeMapPlacementGuidance()));
   const undoLabel = pointUndoLabel();
   for (const id of ["undo-point-edit-plan"]) {
@@ -2101,31 +2102,31 @@ function renderStatus() {
     byId(id).textContent = `${undoLabel} · Undo`;
     byId(id).setAttribute("aria-label", `${undoLabel} · Undo`);
   }
-  byId("generation-title").textContent = state.request.status === "reversing"
-    ? "Reversing route…"
-    : open ? "Planning your route…" : "Planning your loop…";
+  setLocalizedText(byId("generation-title"), () => state.request.status === "reversing"
+    ? t("Reversing route…")
+    : open ? t("Planning your route…") : t("Planning your loop…"));
   const availability = currentGenerationAvailability();
   const guidance = activeMapPlacementGuidance();
   byId("map-edit-notice").classList.toggle("hidden", !guidance || running || readOnly);
   byId("map-edit-guidance").textContent = guidance;
   byId("add-point-mode").setAttribute("aria-pressed", String(state.addPointMode));
-  byId("add-point-mode").lastChild.textContent = state.addPointMode ? " Cancel adding" : state.planningMode === "waypoint_route" ? " Add stop on map" : " Add on map";
+  setLocalizedText(byId("add-point-mode").lastChild, () => state.addPointMode ? t(" Cancel adding") : state.planningMode === "waypoint_route" ? t(" Add stop on map") : t(" Add on map"));
   for (const kind of ["start", "end"]) byId(`hard-${kind}-control`).classList.toggle("selected-endpoint", state.selectedEndpointKind === kind);
   // Derive copy from the same authorities as Generate, never a second readiness store.
   const profile = selectedProfileStatus();
-  byId("planning-readiness").textContent = localPlanner
+  setLocalizedText(byId("planning-readiness"), () => localPlanner
     ? regionPlanningError ? regionFailureMessage(regionPlanningError)
-      : !localRouteCapabilities?.enabled ? "On-device routing is unavailable in this app build."
-      : !localRouteCapabilities.installed_pack_count ? "Download a supported region to plan."
-      : !profile?.available ? "This activity is unavailable in the installed region."
-      : `Ready on device · ${byId("planning-region").selectedOptions[0]?.textContent || "Installed region"}`
-    : profile?.available ? "Routing service ready" : "Selected activity unavailable in the routing service";
+      : !localRouteCapabilities?.enabled ? t("On-device routing is unavailable in this app build.")
+      : !localRouteCapabilities.installed_pack_count ? t("Download a supported region to plan.")
+      : !profile?.available ? t("This activity is unavailable in the installed region.")
+      : tr`Ready on device · ${byId("planning-region").selectedOptions[0]?.textContent || t("Installed region")}`
+    : profile?.available ? t("Routing service ready") : t("Selected activity unavailable in the routing service"));
   byId("plan-regions").classList.toggle("hidden", !localPlanner);
-  byId("plan-capabilities").textContent = localPlanner
+  setLocalizedText(byId("plan-capabilities"), () => localPlanner
     ? state.planningMode === "auto_tour"
-      ? "On-device suggestions support loops from Start, without required interior points or imported stops. Other settings are kept and unsupported requests report an error."
-      : "On-device connections support exact points and shortest paths, with nature and loop preferences off. Unsupported choices report an error; your points are not weakened."
-    : "Choose a loop back to Start, or a point-to-point route with a destination. Available activities use the routing service.";
+      ? t("On-device suggestions support loops from Start, without required interior points or imported stops. Other settings are kept and unsupported requests report an error.")
+      : t("On-device connections support exact points and shortest paths, with nature and loop preferences off. Unsupported choices report an error; your points are not weakened.")
+    : t("Choose a loop back to Start, or a point-to-point route with a destination. Available activities use the routing service."));
   byId("import-itinerary").disabled = readOnly || running;
   for (const id of ["ask-chatgpt", "plan-with-ai"]) byId(id).disabled = running || readOnly && !state.adventureDisplay;
   byId("restore-adventure").disabled = running || readOnly;
@@ -2149,7 +2150,7 @@ function renderStatus() {
   byId("route-form").hidden = Boolean(state.adventureDisplay);
   byId("planning-points").hidden = Boolean(state.adventureDisplay);
   byId("route-dock").classList.toggle("hidden", Boolean(state.adventureDisplay));
-  if (state.adventureDisplay) byId("planning-readiness").textContent = `Viewing ${state.adventureResult.chosen.proposal.name}. Your manual plan is kept; return to it from Routes.`;
+  if (state.adventureDisplay) setLocalizedText(byId("planning-readiness"), () => tr`Viewing ${state.adventureResult.chosen.proposal.name}. Your manual plan is kept; return to it from Routes.`);
   byId("clear-results").disabled = readOnly;
   byId("request-status").classList.toggle("running", running);
   if (!running && !readOnly) {
@@ -2159,9 +2160,9 @@ function renderStatus() {
     if (placementGuidance) {
       byId("request-status").textContent = placementGuidance;
     } else if (!availability.enabled) {
-      byId("request-status").textContent = availability.reason;
+      setLocalizedText(byId("request-status"), () => t(availability.reason));
     } else if (localPlanner && byId("request-status").textContent === localAvailabilityStatusText) {
-      byId("request-status").textContent = "Ready to generate.";
+      setLocalizedText(byId("request-status"), () => t("Ready to generate."));
     }
     if (localPlanner) localAvailabilityStatusText = placementGuidance || (!availability.enabled ? availability.reason : null);
   }
@@ -2187,9 +2188,8 @@ function renderEmptyState() {
     || state.importedGpx
     || currentDisplayedCandidates().length > 0;
   byId("planner-empty").classList.toggle("hidden", Boolean(hasWork || activeEndpoints().start || activeMapPlacementGuidance()));
-  const frenchPlanner = localPlanner && /^fr(?:-|$)/i.test(navigator.language);
-  byId("empty-title").textContent = frenchPlanner ? "Ou touchez la carte" : localPlanner ? "Or start on the map" : "Start on the map";
-  byId("planner-empty").querySelector("p").textContent = frenchPlanner ? "Choisissez votre départ." : localPlanner ? "Choose your Start." : "Tap the map to choose Start, then keep tapping to add stops.";
+  setLocalizedText(byId("empty-title"), () => localPlanner ? t("Or start on the map") : t("Start on the map"));
+  setLocalizedText(byId("planner-empty").querySelector("p"), () => localPlanner ? t("Choose your Start.") : t("Tap the map to choose Start, then keep tapping to add stops."));
 }
 
 function renderElevation(value) {
@@ -2220,7 +2220,7 @@ function render() {
   const imported = state.importedGpx;
   byId("gpx-summary").classList.toggle("hidden", !imported);
   if (imported) {
-    byId("gpx-details").textContent = `${imported.filename} · ${formatCount(imported.pointCount)} trackpoints · ${formatDistance(imported.distanceM)} locally calculated`;
+    setLocalizedText(byId("gpx-details"), () => tr`${imported.filename} · ${formatCount(imported.pointCount)} trackpoints · ${formatDistance(imported.distanceM)} locally calculated`);
   }
 }
 
@@ -2260,7 +2260,7 @@ async function selectCandidate(candidateId) {
       renderVisualization(visualization, state.showNatureContext);
     }
   } catch (error) {
-    handleError(error, "Route highlighting failed.");
+    handleError(error, t("Route highlighting failed."));
   }
 }
 
@@ -2271,10 +2271,10 @@ function validateRequestControls() {
   if (!availability.enabled) throw new Error(availability.reason);
   const request = currentPlanRequest();
   if (request.distance_objective.target_m < 1000 || request.distance_objective.target_m > 200000) {
-    throw new Error("Target distance must be between 1 and 200 km.");
+    throw new Error(t("Target distance must be between 1 and 200 km."));
   }
   if (request.distance_objective.tolerance_m < 100 || request.distance_objective.tolerance_m > 10000) {
-    throw new Error("Tolerance must be between 0.1 and 10 km.");
+    throw new Error(t("Tolerance must be between 0.1 and 10 km."));
   }
   if (
     request.distance_objective.maximum_m !== null
@@ -2282,7 +2282,7 @@ function validateRequestControls() {
       || request.distance_objective.maximum_m <= 0
       || request.distance_objective.maximum_m > 200000)
   ) {
-    throw new Error("Maximum distance must be blank or between 0.1 and 200 km.");
+    throw new Error(t("Maximum distance must be blank or between 0.1 and 200 km."));
   }
   return request;
 }
@@ -2302,7 +2302,7 @@ async function generate() {
   const id = state.request.id + 1;
   state.request = { status: "running", id, startedAt: Date.now() };
   state.abortController = new AbortController();
-  const planningLabel = isOpenPlan() ? "Planning your route" : "Planning your loop";
+  const planningLabel = isOpenPlan() ? t("Planning your route") : t("Planning your loop");
   byId("request-status").textContent = `${planningLabel}… 0 s elapsed`;
   elapsedTimer = window.setInterval(() => {
     if (state.request.status !== "running" || state.request.startedAt === null) return;
@@ -2322,9 +2322,9 @@ async function generate() {
     state.selectedSignature = result.candidates[0]?.id ?? null;
     state.visualizationCache.clear();
     state.request = { status: "success", id, startedAt: null };
-    byId("request-status").textContent = result.candidates.length
+    setLocalizedText(byId("request-status"), () => result.candidates.length
       ? `${result.candidates.length} route${result.candidates.length === 1 ? "" : "s"} generated.`
-      : "No route matches the required points and settings.";
+      : t("No route matches the required points and settings."));
     render();
     if (result.candidates.length) {
       fitCoordinates(result.candidates[0].route.geometry);
@@ -2338,7 +2338,7 @@ async function generate() {
     if (state.request.id !== id) return;
     const cancelled = error.name === "AbortError";
     state.request = { status: cancelled ? "cancelled" : "error", id, startedAt: null };
-    byId("request-status").textContent = cancelled ? "Generation cancelled." : "Generation failed.";
+    setLocalizedText(byId("request-status"), () => cancelled ? t("Generation cancelled.") : t("Generation failed."));
     if (!cancelled) handleGenerationError(error);
   } finally {
     window.clearInterval(elapsedTimer);
@@ -2351,7 +2351,7 @@ async function generate() {
 
 async function reverseSelectedRoute() {
   if (localPlanner) {
-    showError("On-device route reversal is not available yet. Edit the ordered points and generate a new route.");
+    showError(t("On-device route reversal is not available yet. Edit the ordered points and generate a new route."));
     return;
   }
   const sourceCandidate = selectedCandidate();
@@ -2366,11 +2366,11 @@ async function reverseSelectedRoute() {
   const id = state.request.id + 1;
   state.request = { status: "reversing", id, startedAt: Date.now() };
   state.abortController = new AbortController();
-  byId("request-status").textContent = "Reversing route… 0 s elapsed";
+  setLocalizedText(byId("request-status"), () => t("Reversing route… 0 s elapsed"));
   elapsedTimer = window.setInterval(() => {
     if (state.request.status !== "reversing" || state.request.startedAt === null) return;
     const seconds = Math.floor((Date.now() - state.request.startedAt) / 1000);
-    byId("request-status").textContent = `Reversing route… ${seconds} s elapsed`;
+    setLocalizedText(byId("request-status"), () => tr`Reversing route… ${seconds} s elapsed`);
   }, 1000);
   render();
   try {
@@ -2403,21 +2403,21 @@ async function reverseSelectedRoute() {
         const count = Math.abs(difference);
         const noun = `stop${count === 1 ? "" : "s"}`;
         if (difference < 0) return `${formatCount(count)} fewer ${outcome} ${noun}`;
-        if (outcome === "approximated") return `${formatCount(count)} ${noun} became approximated`;
+        if (outcome === "approximated") return tr`${formatCount(count)} ${noun} became approximated`;
         if (outcome === "dropped") return `${formatCount(count)} ${noun} ${count === 1 ? "was" : "were"} dropped`;
-        return `${formatCount(count)} more reached ${noun}`;
+        return tr`${formatCount(count)} more reached ${noun}`;
       }).join(", ") + "."
-      : "Stop outcome counts are unchanged.";
+      : t("Stop outcome counts are unchanged.");
     const distanceSummary = Math.abs(distanceChange) < 50
-      ? "Distance is essentially unchanged."
-      : `${distanceChange >= 0 ? "Distance increased" : "Distance decreased"} by ${formatDistance(Math.abs(distanceChange))}.`;
+      ? t("Distance is essentially unchanged.")
+      : `${distanceChange >= 0 ? t("Distance increased") : t("Distance decreased")} by ${formatDistance(Math.abs(distanceChange))}.`;
     const directionalWarning = response.result.search_diagnostics.warnings.includes(
       "opposite_direction_uses_different_roads",
     )
-      ? "The opposite direction uses different roads."
+      ? t("The opposite direction uses different roads.")
       : "";
     const changes = [outcomeSummary, distanceSummary, directionalWarning].filter(Boolean);
-    byId("request-status").textContent = `Route reversed and rerouted for ${profileDisplayName(response.result.routing_profile)}. ${changes.join(" ")}`;
+    setLocalizedText(byId("request-status"), () => tr`Route reversed and rerouted for ${profileDisplayName(response.result.routing_profile)}. ${changes.join(" ")}`);
     render();
     if (reversed) {
       fitCoordinates(reversed.route.geometry);
@@ -2429,7 +2429,7 @@ async function reverseSelectedRoute() {
     state.request = { status: cancelled ? "cancelled" : "error", id, startedAt: null };
     state.generationResult = sourceResult;
     state.selectedSignature = sourceCandidate.id;
-    byId("request-status").textContent = cancelled ? "Reversal cancelled." : "Route reversal failed.";
+    setLocalizedText(byId("request-status"), () => cancelled ? t("Reversal cancelled.") : t("Route reversal failed."));
     if (!cancelled) {
       if (error instanceof ApiError) {
         showError(
@@ -2438,16 +2438,16 @@ async function reverseSelectedRoute() {
           error.code,
           error.code === "exact_waypoint_not_reached"
             ? exactWaypointContext(error.metadata)
-            : "The selected source route remains displayed.",
-          error.metadata?.suggestion ?? "Review exact constraints or keep the current direction.",
+            : t("The selected source route remains displayed."),
+          error.metadata?.suggestion ?? t("Review exact constraints or keep the current direction."),
         );
       } else {
         showError(
-          "Route reversal failed.",
-          "A browser error interrupted reversal; no raw traceback is displayed.",
+          t("Route reversal failed."),
+          t("A browser error interrupted reversal; no raw traceback is displayed."),
           "browser_reverse_error",
-          "The selected source route remains displayed.",
-          "Keep the current direction or generate another candidate.",
+          t("The selected source route remains displayed."),
+          t("Keep the current direction or generate another candidate."),
         );
       }
     }
@@ -2465,16 +2465,16 @@ function exactWaypointContext(metadata) {
   const name = metadata?.point_name;
   const index = metadata?.point_index;
   const label = name
-    ? `Exact mandatory waypoint “${name}”`
+    ? tr`Exact mandatory waypoint “${name}”`
     : Number.isInteger(index)
-      ? `Exact mandatory point ${index + 1}`
-      : "An exact mandatory waypoint";
-  const indexText = Number.isInteger(index) ? ` (required-point index ${index})` : "";
+      ? tr`Exact mandatory point ${index + 1}`
+      : t("An exact mandatory waypoint");
+  const indexText = Number.isInteger(index) ? tr` (required-point index ${index})` : "";
   const snap = metadata?.snap_distance_m;
   const maximum = metadata?.maximum_snap_distance_m;
   const distanceText = typeof snap === "number" && typeof maximum === "number"
-    ? ` snapped ${snap.toFixed(1)} m away; the permitted threshold is ${maximum.toFixed(1)} m.`
-    : " could not be reached within the permitted snap threshold.";
+    ? tr` snapped ${snap.toFixed(1)} m away; the permitted threshold is ${maximum.toFixed(1)} m.`
+    : t(" could not be reached within the permitted snap threshold.");
   return `${label}${indexText}${distanceText}`;
 }
 
@@ -2506,63 +2506,63 @@ function showNoCandidateError(result) {
     const details = attempt?.details;
     const source = state.generationSourceRequest;
     const pointName = details?.waypoint_id
-      ? (source?.waypoints ?? source?.hard_waypoints ?? []).find((point) => point.id === details.waypoint_id)?.name ?? "Exact waypoint"
-      : details?.position === 0 ? source?.start?.name || "Start" : source?.end?.name || "End";
+      ? (source?.waypoints ?? source?.hard_waypoints ?? []).find((point) => point.id === details.waypoint_id)?.name ?? t("Exact waypoint")
+      : details?.position === 0 ? source?.start?.name || t("Start") : source?.end?.name || t("End");
     const measured = Number.isFinite(details?.snap_distance_m) && Number.isFinite(details?.maximum_snap_distance_m)
-      ? `${pointName} snapped ${details.snap_distance_m.toFixed(1)} m away; the permitted limit is ${details.maximum_snap_distance_m.toFixed(0)} m. `
+      ? tr`${pointName} snapped ${details.snap_distance_m.toFixed(1)} m away; the permitted limit is ${details.maximum_snap_distance_m.toFixed(0)} m. `
       : "";
     if (localFailure === "endpoint_review_required") { hideError(); appShell?.show("map"); return; }
     showError(error.message, safeGenerationDiagnostics(result), error.code,
-      `${measured}Your requested points and settings are unchanged.`, "Review the points, activity and installed region before trying again.");
+      tr`${measured}Your requested points and settings are unchanged.`, t("Review the points, activity and installed region before trying again."));
     return;
   }
   showError(
-    "No matching route found.",
+    t("No matching route found."),
     safeGenerationDiagnostics(result),
     "no_route_candidate",
-    "Your points and constraints have been kept.",
-    "Try changing the distance or your points in Plan.",
+    t("Your points and constraints have been kept."),
+    t("Try changing the distance or your points in Plan."),
   );
 }
 
 function handleGenerationError(error) {
   if (error instanceof LocalPlannerError) {
-    showError(error.message, "", error.code, "Your requested points and settings are unchanged.",
-      "Review the request and installed regional data before trying again.");
+    showError(error.message, "", error.code, t("Your requested points and settings are unchanged."),
+      t("Review the request and installed regional data before trying again."));
     return;
   }
   if (error instanceof ApiError) {
     const context = error.code === "exact_waypoint_not_reached"
       ? exactWaypointContext(error.metadata)
-      : "The planning request was not completed.";
+      : t("The planning request was not completed.");
     lastExactFailure = error.code === "exact_waypoint_not_reached" ? error.metadata : null;
     showError(
-      error.code === "exact_waypoint_not_reached" ? error.message : "Route planning couldn’t finish.",
+      error.code === "exact_waypoint_not_reached" ? error.message : t("Route planning couldn’t finish."),
       `${error.message}\n${error.details}`,
       error.code,
       context,
       error.metadata?.suggestion ?? (error.code === "exact_waypoint_not_reached"
-        ? GENERATION_SUGGESTION : "Check your points and routing availability in Plan, then try again."),
+        ? GENERATION_SUGGESTION : t("Check your points and routing availability in Plan, then try again.")),
     );
     return;
   }
   showError(
-    "Route generation failed.",
-    "A browser error interrupted generation; no raw traceback is displayed.",
+    t("Route generation failed."),
+    t("A browser error interrupted generation; no raw traceback is displayed."),
     "browser_generation_error",
-    "Your points and preferences are kept.",
-    "Return to Plan and try again.",
+    t("Your points and preferences are kept."),
+    t("Return to Plan and try again."),
   );
 }
 
 function handleError(error, fallback) {
   if (error instanceof ApiError) showError(error.message, `${error.code}\n${error.details}`);
-  else showError(fallback, "A browser error interrupted this action; no raw traceback is displayed.");
+  else showError(fallback, t("A browser error interrupted this action; no raw traceback is displayed."));
 }
 
 function normalizeImportedRequest(value, { requireKnownProfile = true } = {}) {
   if (!value || typeof value !== "object") {
-    throw new Error("Request JSON must contain an object.");
+    throw new Error(t("Request JSON must contain an object."));
   }
   if (
     value.schema_version !== 1
@@ -2584,50 +2584,50 @@ function normalizeImportedRequest(value, { requireKnownProfile = true } = {}) {
     (key) => !commonKeys.has(key) && !modeKeys.includes(key),
   );
   if (unknownKeys.length) {
-    throw new Error(`Canonical request contains unknown fields: ${unknownKeys.join(", ")}.`);
+    throw new Error(tr`Canonical request contains unknown fields: ${unknownKeys.join(", ")}.`);
   }
   if (!["loop", "point_to_point"].includes(value.topology)) {
-    throw new Error("Canonical request topology must be loop or point_to_point.");
+    throw new Error(t("Canonical request topology must be loop or point_to_point."));
   }
   const profileStatus = state.routingProfileCatalog?.profiles.find(
     (status) => status.profile.id === value.routing_profile,
   );
   if (requireKnownProfile && !profileStatus) {
-    throw new Error("Canonical request contains an unknown routing profile.");
+    throw new Error(t("Canonical request contains an unknown routing profile."));
   }
   if (!value.start || (value.topology === "point_to_point" && !value.end)) {
-    throw new Error("Canonical request endpoints are incomplete.");
+    throw new Error(t("Canonical request endpoints are incomplete."));
   }
   if (value.topology === "loop" && value.end != null) {
-    throw new Error("A loop request must not contain an end.");
+    throw new Error(t("A loop request must not contain an end."));
   }
   const objective = value.distance_objective;
   const preferences = value.preferences;
   if (!objective || !preferences) {
-    throw new Error("Canonical distance_objective and preferences are required.");
+    throw new Error(t("Canonical distance_objective and preferences are required."));
   }
   const normalize = (point, label) => {
     const lat = Number(point?.lat);
     const lon = Number(point?.lon);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-      throw new Error(`${label} has invalid coordinates.`);
+      throw new Error(tr`${label} has invalid coordinates.`);
     }
     return { ...point, name: point.name || label, lat, lon };
   };
-  const start = normalize(value.start, "Start");
-  const end = value.end == null ? null : normalize(value.end, "End");
+  const start = normalize(value.start, t("Start"));
+  const end = value.end == null ? null : normalize(value.end, t("End"));
   restoreEndpointSnapIntent(value, start, end);
   const autoTour = value.kind === "auto_tour";
   const strength = (raw, fallback) => {
     const resolved = raw ?? fallback;
     if (!["exact", "approach", "best_effort"].includes(resolved)) {
-      throw new Error(`Unknown constraint strength: ${resolved}.`);
+      throw new Error(tr`Unknown constraint strength: ${resolved}.`);
     }
     return resolved;
   };
   const hardPoints = autoTour
     ? (value.hard_waypoints ?? []).map((point, index) => ({
-      ...normalize(point.coordinate, point.name || `Hard waypoint ${index + 1}`),
+      ...normalize(point.coordinate, point.name || tr`Hard waypoint ${index + 1}`),
       id: point.id,
       constraintStrength: "exact",
     }))
@@ -2635,20 +2635,20 @@ function normalizeImportedRequest(value, { requireKnownProfile = true } = {}) {
   const points = autoTour
     ? [start, ...hardPoints]
     : (value.waypoints ?? []).map((point, index) => ({
-      ...normalize(point.coordinate, point.name || `Waypoint ${index + 1}`),
+      ...normalize(point.coordinate, point.name || tr`Waypoint ${index + 1}`),
       id: point.id,
       constraintStrength: strength(point.constraint_strength, "exact"),
       accessSearchRadiusM: point.access_search_radius_m ?? 500,
       maximumBestEffortDistanceM: point.maximum_best_effort_distance_m,
       approachOverride: point.approach_override == null
         ? null
-        : normalize(point.approach_override, `Approach override ${index + 1}`),
+        : normalize(point.approach_override, tr`Approach override ${index + 1}`),
     }));
   const requestedPlaces = autoTour
     ? (value.requested_stops ?? []).map((stop, index) => ({
       id: stop.id,
       name: stop.name,
-      coordinate: normalize(stop.semantic_coordinate, `Requested stop ${index + 1}`),
+      coordinate: normalize(stop.semantic_coordinate, tr`Requested stop ${index + 1}`),
       accessSearchRadiusM: stop.access_search_radius_m,
       constraintStrength: strength(stop.constraint_strength, "approach"),
       maximumBestEffortDistanceM: stop.maximum_best_effort_distance_m,
@@ -2656,7 +2656,7 @@ function normalizeImportedRequest(value, { requireKnownProfile = true } = {}) {
       osmReference: stop.osm_reference,
       approachOverride: stop.approach_override == null
         ? null
-        : normalize(stop.approach_override, `Approach override ${index + 1}`),
+        : normalize(stop.approach_override, tr`Approach override ${index + 1}`),
     }))
     : [];
   return {
@@ -2749,8 +2749,8 @@ async function importRequest(file) {
     const imported = applyCanonicalRequestState(JSON.parse(await file.text()));
     invalidateAndRender();
     setEditableRequestStatus(state.planningMode === "auto_tour"
-      ? `${file.name} loaded. ${state.importDiagnostics.supplied_location_count} supplied locations: ${state.importDiagnostics.consumed_as_start_count} START, ${state.importDiagnostics.consumed_as_end_count} END, ${state.autoTour.requestedPlaces.length} requested places; ${state.importDiagnostics.discarded_count} discarded.`
-      : `${file.name} loaded. All ${state.points.length} named waypoint constraints and strengths are ready for review.`);
+      ? tr`${file.name} loaded. ${state.importDiagnostics.supplied_location_count} supplied locations: ${state.importDiagnostics.consumed_as_start_count} START, ${state.importDiagnostics.consumed_as_end_count} END, ${state.autoTour.requestedPlaces.length} requested places; ${state.importDiagnostics.discarded_count} discarded.`
+      : tr`${file.name} loaded. All ${state.points.length} named waypoint constraints and strengths are ready for review.`);
     appShell?.show("plan");
     fitCoordinates([
       ...imported.points,
@@ -2760,7 +2760,7 @@ async function importRequest(file) {
       ...imported.requestedPlaces.map((place) => place.coordinate),
     ].filter(Boolean).map((point) => [point.lon, point.lat]));
   } catch (error) {
-    showError("Could not import request JSON.", error.message);
+    showError(t("Could not import request JSON."), error.message);
   }
 }
 
@@ -2772,7 +2772,7 @@ async function importGpx(file) {
     appShell?.show("map");
     fitCoordinates(state.importedGpx.segments.flat());
   } catch (error) {
-    showError("Could not import GPX.", error.message);
+    showError(t("Could not import GPX."), error.message);
   }
 }
 
@@ -2782,17 +2782,17 @@ async function downloadSelected() {
   const operation = {};
   pendingGpxExport = operation;
   renderMetrics();
-  byId("export-status").textContent = `Preparing Route ${candidate.rank} as GPX…`;
+  setLocalizedText(byId("export-status"), () => tr`Preparing Route ${candidate.rank} as GPX…`);
   try {
     const prepared = await localGpxExporter.exportCandidate(candidate);
-    byId("export-status").textContent = "Choose where to save the GPX file…";
+    setLocalizedText(byId("export-status"), () => t("Choose where to save the GPX file…"));
     const result = await gpxFileSaver.save(prepared);
     if (result.status === "cancelled") {
-      byId("export-status").textContent = "GPX save cancelled. Your route is unchanged.";
+      setLocalizedText(byId("export-status"), () => t("GPX save cancelled. Your route is unchanged."));
       return;
     }
     if (result.status === "saved") {
-      byId("export-status").textContent = `Route ${candidate.rank} GPX saved.`;
+      setLocalizedText(byId("export-status"), () => tr`Route ${candidate.rank} GPX saved.`);
       return;
     }
     const { blob, filename } = result;
@@ -2802,11 +2802,11 @@ async function downloadSelected() {
     link.download = filename;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
-    byId("export-status").textContent = `${filename} prepared from the selected route.`;
+    setLocalizedText(byId("export-status"), () => tr`${filename} prepared from the selected route.`);
   } catch (error) {
     if (error.name !== "AbortError") {
-      byId("export-status").textContent = "Could not export GPX. Try again.";
-      handleError(error, "GPX export failed.");
+      setLocalizedText(byId("export-status"), () => t("Could not export GPX. Try again."));
+      handleError(error, t("GPX export failed."));
     }
   } finally {
     if (pendingGpxExport === operation) pendingGpxExport = null;
@@ -2822,13 +2822,13 @@ function renderSavedRoutePanel() {
   if (!saved) return;
   const url = savedRouteShareUrl(saved);
   byId("saved-route-link").value = url;
-  byId("saved-route-message").textContent = isSavedRouteSnapshotDisplay()
+  setLocalizedText(byId("saved-route-message"), () => isSavedRouteSnapshotDisplay()
     ? state.offlineSnapshotKind === "saved_route"
-      ? "Showing your saved offline route. Reconnect to use online actions."
-      : "This read-only route opens exactly as saved, without planning it again."
+      ? t("Showing your saved offline route. Reconnect to use online actions.")
+      : t("This read-only route opens exactly as saved, without planning it again.")
     : state.savedRouteReceipt
-      ? "Your selected route is stored at this unlisted link."
-      : "Your saved route remains available at this unlisted link.";
+      ? t("Your selected route is stored at this unlisted link.")
+      : t("Your saved route remains available at this unlisted link."));
   byId("share-saved-route").classList.toggle(
     "hidden",
     typeof navigator.share !== "function",
@@ -2868,9 +2868,9 @@ async function saveSelectedRoute() {
       route_name: candidate.route.name,
     };
     render();
-    byId("request-status").textContent = "Route saved. Copy or share its unlisted link when ready.";
+    setLocalizedText(byId("request-status"), () => t("Route saved. Copy or share its unlisted link when ready."));
   } catch (error) {
-    handleError(error, "The selected route could not be saved.");
+    handleError(error, t("The selected route could not be saved."));
   }
 }
 
@@ -2879,9 +2879,9 @@ async function copySavedRouteLink() {
   if (!saved) return;
   try {
     await navigator.clipboard.writeText(savedRouteShareUrl(saved));
-    byId("request-status").textContent = "Saved-route link copied.";
+    setLocalizedText(byId("request-status"), () => t("Saved-route link copied."));
   } catch (error) {
-    handleError(error, "The saved-route link could not be copied.");
+    handleError(error, t("The saved-route link could not be copied."));
   }
 }
 
@@ -2890,27 +2890,27 @@ async function shareCurrentSavedRoute() {
   if (!saved) return;
   try {
     await shareSavedRoute(saved);
-    byId("request-status").textContent = "Saved-route link shared.";
+    setLocalizedText(byId("request-status"), () => t("Saved-route link shared."));
   } catch (error) {
     if (error.name === "AbortError") {
-      byId("request-status").textContent = "Sharing cancelled.";
+      setLocalizedText(byId("request-status"), () => t("Sharing cancelled."));
       return;
     }
-    handleError(error, "The saved-route link could not be shared.");
+    handleError(error, t("The saved-route link could not be shared."));
   }
 }
 
 async function removeSavedRoute() {
   const saved = state.savedRouteReceipt;
   if (!saved) return;
-  if (!window.confirm("Permanently delete this saved route and invalidate its unlisted link?")) return;
+  if (!window.confirm(t("Permanently delete this saved route and invalidate its unlisted link?"))) return;
   try {
     await deleteSavedRoute(saved.slug, saved.owner_token);
     state.savedRouteReceipt = null;
     render();
-    byId("request-status").textContent = "Saved route deleted.";
+    setLocalizedText(byId("request-status"), () => t("Saved route deleted."));
   } catch (error) {
-    handleError(error, "The saved route could not be deleted.");
+    handleError(error, t("The saved route could not be deleted."));
   }
 }
 
@@ -2956,15 +2956,15 @@ async function useSavedRouteAsNewPlan() {
     byId("places-filters").querySelectorAll("input").forEach((input) => {
       input.disabled = !poiAvailable;
     });
-    byId("places-status").textContent = poiAvailable
-      ? `Local OSM places index ready · ${formatCount(state.poiIndexStatus.feature_count)} regional features.`
-      : "POI index unavailable. Place discovery is disabled; routing still works.";
+    setLocalizedText(byId("places-status"), () => poiAvailable
+      ? tr`Local OSM places index ready · ${formatCount(state.poiIndexStatus.feature_count)} regional features.`
+      : t("POI index unavailable. Place discovery is disabled; routing still works."));
     render();
     setEditableRequestStatus(
-      "Saved request copied into a new editable plan. Generate when ready.",
+      t("Saved request copied into a new editable plan. Generate when ready."),
     );
   } catch (error) {
-    handleError(error, "The saved route could not be prepared as a new plan.");
+    handleError(error, t("The saved route could not be prepared as a new plan."));
   }
 }
 
@@ -2986,7 +2986,7 @@ function failedExactPoint() {
 function updateFailedExactPoint(action) {
   const target = failedExactPoint();
   if (!target) return;
-  if (action !== "move") rememberPointEdit("Stop constraint updated");
+  if (action !== "move") rememberPointEdit(t("Stop constraint updated"));
   clearPointPlacement();
   state.selectedEndpointKind = null;
   const point = target.collection[target.index];
@@ -3030,8 +3030,8 @@ function updateFailedExactPoint(action) {
   hideError();
   invalidateAndRender();
   setEditableRequestStatus(action === "move"
-    ? "Drag the selected waypoint or place it on the map, then generate again."
-    : "Constraint updated. Generate again to apply it.");
+    ? t("Drag the selected waypoint or place it on the map, then generate again.")
+    : t("Constraint updated. Generate again to apply it."));
   if (action === "move") appShell?.show("map", { focus: true });
 }
 
@@ -3046,7 +3046,7 @@ function bindEvents() {
     catch (error) { render(); showError(error.message); }
   });
   byId("dock-order").addEventListener("change", () => {
-    rememberPointEdit("Visit order changed");
+    rememberPointEdit(t("Visit order changed"));
     state.options.waypointOrder = byId("dock-order").value;
     updateControlsFromOptions(); invalidateAndRender();
   });
@@ -3079,7 +3079,7 @@ function bindEvents() {
   }
   byId("route-form").addEventListener("change", (event) => {
     if (event.target.name === "planning-mode" || event.target.id.startsWith("hard-") || (event.target.closest("#planning-points") && event.target.id !== "point-order-mode")) return;
-    rememberPointEdit("Route settings changed");
+    rememberPointEdit(t("Route settings changed"));
     try { updateOptionsFromControls(); } catch (error) { updateControlsFromOptions(); render(); showError(error.message); return; }
     if (event.target.id === "profile" && plannerProfilePreference) {
       void plannerProfilePreference.remember(state.routingProfile).then((persisted) => {
@@ -3092,10 +3092,10 @@ function bindEvents() {
     input.addEventListener("change", () => {
       if (!input.checked) return;
       if (input.value === "automatic" && hasDiscoveryIntent()) {
-        showError("This plan has discovery-specific places.", "Keep Suggest a route to preserve them, or remove those choices before using Automatic.");
+        showError(t("This plan has discovery-specific places."), t("Keep Suggest a route to preserve them, or remove those choices before using Automatic."));
         renderModeControls(); return;
       }
-      rememberPointEdit("Planning choice changed");
+      rememberPointEdit(t("Planning choice changed"));
       clearPointPlacement();
       updateOptionsFromControls();
       if (input.value === "automatic") {
@@ -3115,7 +3115,7 @@ function bindEvents() {
       byId(`hard-${kind}-${suffix}`).addEventListener("change", () => {
         const point = endpointFromControls(kind);
         if (byId(`hard-${kind}-enabled`).checked && !point) return;
-        rememberPointEdit(`${kind === "start" ? "Start" : "End"} updated`);
+        rememberPointEdit(`${kind === "start" ? t("Start") : t("End")} updated`);
         clearPointPlacement();
         assignActiveEndpoint(kind, point);
         state.selectedEndpointKind = point ? kind : null;
@@ -3129,14 +3129,14 @@ function bindEvents() {
       state.endpointSetMode = active ? null : kind;
       state.selectedEndpointKind = kind;
       state.selectedPointIndex = null;
-      byId(`set-hard-${kind}`).textContent = state.endpointSetMode === kind
-        ? `Click map for ${kind}`
-        : "Set on map";
+      setLocalizedText(byId(`set-hard-${kind}`), () => state.endpointSetMode === kind
+        ? tr`Click map for ${kind}`
+        : t("Set on map"));
       renderStatus();
       if (state.endpointSetMode) appShell?.show("map", { focus: true });
     });
     byId(`clear-hard-${kind}`).addEventListener("click", () => {
-      rememberPointEdit(`${kind === "start" ? "Start" : "End"} removed`);
+      rememberPointEdit(`${kind === "start" ? t("Start") : t("End")} removed`);
       assignActiveEndpoint(kind, null);
       if (state.selectedEndpointKind === kind) state.selectedEndpointKind = null;
       if (state.endpointSetMode === kind) state.endpointSetMode = null;
@@ -3149,16 +3149,16 @@ function bindEvents() {
     capability: (request) => {
       const profile = state.routingProfileCatalog?.profiles.find(status => status.profile.id === request.routing_profile);
       if (!localPlanner) return profile?.available
-        ? "Uses the routing service when you explicitly Generate."
-        : "This activity is currently unavailable. The itinerary can be imported; generation will report the limitation.";
+        ? t("Uses the routing service when you explicitly Generate.")
+        : t("This activity is currently unavailable. The itinerary can be imported; generation will report the limitation.");
       const limitations = [];
       try { validateLocalWaypointRouteRequest(request); }
-      catch (error) { limitations.push(`This itinerary cannot generate on device: ${friendlyLabel(error.code)}.`); }
+      catch (error) { limitations.push(tr`This itinerary cannot generate on device: ${friendlyLabel(error.code)}.`); }
       if (regionPlanningError) limitations.push(regionFailureMessage(regionPlanningError));
-      else if (!localRouteCapabilities?.enabled) limitations.push("On-device routing is unavailable in this app build.");
-      else if (!localRouteCapabilities.installed_pack_count) limitations.push("Download a supported offline region before generating.");
-      else if (!profile?.available) limitations.push("This activity is unavailable in the installed region.");
-      return `On-device connections accept up to ${LOCAL_WAYPOINT_MAX_WAYPOINTS} interior stops. Local paths are experimental and differ from server routing. ${limitations.join(" ")} All stops and exact constraints will be preserved.`;
+      else if (!localRouteCapabilities?.enabled) limitations.push(t("On-device routing is unavailable in this app build."));
+      else if (!localRouteCapabilities.installed_pack_count) limitations.push(t("Download a supported offline region before generating."));
+      else if (!profile?.available) limitations.push(t("This activity is unavailable in the installed region."));
+      return tr`On-device connections accept up to ${LOCAL_WAYPOINT_MAX_WAYPOINTS} interior stops. Local paths are experimental and differ from server routing. ${limitations.join(" ")} All stops and exact constraints will be preserved.`;
     },
     promptSettings: () => ({ start: activeEndpoints().start, end: activeEndpoints().end,
       topology: activeEndpoints().routeTopology, activity: state.routingProfile,
@@ -3170,7 +3170,7 @@ function bindEvents() {
         if (draft.stops[index].reason) point.itineraryReason = draft.stops[index].reason;
       });
       invalidateAndRender();
-      setEditableRequestStatus("Itinerary imported. Review the locations on the map, then Generate when ready.");
+      setEditableRequestStatus(t("Itinerary imported. Review the locations on the map, then Generate when ready."));
       appShell?.show("plan");
       fitCoordinates([imported.start, ...state.points, imported.end].filter(Boolean).map(point => [point.lon, point.lat]));
     },
@@ -3195,7 +3195,7 @@ function bindEvents() {
     clearPointPlacement();
     state.addPointMode = !active;
     byId("add-point-mode").setAttribute("aria-pressed", String(state.addPointMode));
-    byId("add-point-mode").lastChild.textContent = state.addPointMode ? " Click map once…" : " Add on map";
+    setLocalizedText(byId("add-point-mode").lastChild, () => state.addPointMode ? t(" Click map once…") : t(" Add on map"));
     if (state.addPointMode) appShell?.show("map", { focus: true });
     renderStatus();
   });
@@ -3210,8 +3210,8 @@ function bindEvents() {
     fitCoordinates([...state.points.map((point) => [point.lon, point.lat]), ...endpointCoordinates, ...requested]);
   });
   byId("clear-points").addEventListener("click", () => {
-    if (state.points.length > 1 && !window.confirm("Remove all mandatory points and generated results?")) return;
-    rememberPointEdit("Route points cleared");
+    if (state.points.length > 1 && !window.confirm(t("Remove all mandatory points and generated results?"))) return;
+    rememberPointEdit(t("Route points cleared"));
     clearPointPlacement();
     state.points = [];
     if (state.planningMode === "auto_tour") {
@@ -3281,9 +3281,9 @@ function bindEvents() {
       link.download = "sugarglider-plan.json";
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 0);
-      byId("request-status").textContent = "Canonical plan JSON exported.";
+      setLocalizedText(byId("request-status"), () => t("Canonical plan JSON exported."));
     } catch (error) {
-      showError("Could not export plan JSON.", error.message);
+      showError(t("Could not export plan JSON."), error.message);
     }
   });
   byId("copy-request").addEventListener("click", async () => {
@@ -3291,11 +3291,11 @@ function bindEvents() {
       if (!state.adventureDisplay) { updateOptionsFromControls(); saveActivePoints(); }
       const request = state.adventureDisplay ? state.generationSourceRequest : currentPlanRequest();
       await navigator.clipboard.writeText(JSON.stringify(request, null, 2));
-      byId("request-status").textContent = state.planningMode === "auto_tour"
-        ? "Suggested-route plan copied with places, distance settings and preferences."
-        : "Request JSON copied with every required-point name.";
+      setLocalizedText(byId("request-status"), () => state.planningMode === "auto_tour"
+        ? t("Suggested-route plan copied with places, distance settings and preferences.")
+        : t("Request JSON copied with every required-point name."));
     } catch (error) {
-      showError("Could not copy request JSON.", error.message);
+      showError(t("Could not copy request JSON."), error.message);
     }
   });
   window.addEventListener("resize", resizeMap);
@@ -3392,9 +3392,7 @@ async function retrySavedRouteConnection() {
         () => currentSavedRouteReconnect(operation),
       );
       if (!currentSavedRouteReconnect(operation)) return false;
-      byId("request-status").textContent = (
-        "Saved route reconnected from its fresh immutable server snapshot."
-      );
+      setLocalizedText(byId("request-status"), () => t("Saved route reconnected from its fresh immutable server snapshot."));
       return true;
     } catch (error) {
       if (!currentSavedRouteReconnect(operation)) return false;
@@ -3407,12 +3405,12 @@ async function retrySavedRouteConnection() {
         clearRoutes();
         render();
         if (cleanup.failed) reportOptionalStorageFailure();
-        handleError(error, "The saved route no longer exists.");
+        handleError(error, t("The saved route no longer exists."));
       } else if (transportFailure(error)) {
         setPwaNetworkStatus("offline");
       } else {
         setPwaNetworkStatus("online");
-        handleError(error, "The saved route could not be refreshed.");
+        handleError(error, t("The saved route could not be refreshed."));
       }
       return false;
     } finally {
@@ -3471,7 +3469,7 @@ async function retryCurrentConnection() {
     if (transportFailure(error)) setPwaNetworkStatus("offline");
     else {
       setPwaNetworkStatus("online");
-      handleError(error, "The application could not be refreshed.");
+      handleError(error, t("The application could not be refreshed."));
     }
     return false;
   }
@@ -3494,7 +3492,7 @@ async function initializeRegionScreen() {
       selectedRegionId = id;
       state.poiAbortController?.abort();
       state.poiRequest = { status: "idle", id: state.poiRequest.id + 1 };
-      clearPoiFeatures("Checking places in the selected region…");
+      clearPoiFeatures(t("Checking places in the selected region…"));
       if (mapReady && !isImmutableSnapshotDisplay()) invalidateAndRender();
     },
     isPlanning: () => state.request.status === "running",
@@ -3512,7 +3510,7 @@ async function initializeRegionScreen() {
         if (!available) {
           state.poiAbortController?.abort();
           state.poiRequest = { status: "idle", id: state.poiRequest.id + 1 };
-          clearPoiFeatures("Choose a ready installed region to browse places.");
+          clearPoiFeatures(t("Choose a ready installed region to browse places."));
         }
       }
       if (mapReady && !isImmutableSnapshotDisplay()) { renderRoutingProfiles({ preserveUnavailableSelection: true }); render(); }
@@ -3526,6 +3524,10 @@ async function initializeRegionScreen() {
 }
 
 async function start() {
+  await initializeLocalization(document);
+  onLanguageChange(() => {
+    if (state.config) render();
+  });
   initializeSourceInformation(document);
   appShell = initializeAppShell({ resizeMap: ({ layoutChanged, view }) => {
     resizeMap();
@@ -3549,7 +3551,7 @@ async function start() {
       onStorageCleared: () => {
         adventureRestoreEpoch++; forgottenAdventureOutput = state.adventureResult;
         byId("restore-adventure").hidden = true;
-        byId("adventure-storage-status").textContent = "Saved offline data cleared. The displayed route remains open.";
+        setLocalizedText(byId("adventure-storage-status"), () => t("Saved offline data cleared. The displayed route remains open."));
       },
       retry: retryCurrentConnection,
       rememberParticipant: rememberCurrentOutingParticipant,
@@ -3562,7 +3564,7 @@ async function start() {
     const prepareRegion = async () => {
       if (!localPlanner || currentSharedRouteSlug || regionScreen) return;
       try { await initializeRegionScreen(); }
-      catch (error) { handleError(error, "The selected region could not be prepared."); }
+      catch (error) { handleError(error, t("The selected region could not be prepared.")); }
     };
 
     if (localPlanner) {
@@ -3602,12 +3604,10 @@ async function start() {
         },
       });
     } catch {
-      byId("offline-map-storage-support").textContent = (
-        "OPFS random-access storage unavailable."
-      );
+      setLocalizedText(byId("offline-map-storage-support"), () => t("OPFS random-access storage unavailable."));
       const mapPackStatus = byId("offline-map-pack-status");
       mapPackStatus.dataset.state = "map_pack_storage_unavailable";
-      mapPackStatus.textContent = "Offline map storage is unavailable in this browser.";
+      setLocalizedText(mapPackStatus, () => t("Offline map storage is unavailable in this browser."));
     }
     if (currentOutingSlug) {
       await startOutingPage(currentOutingSlug, {
@@ -3680,13 +3680,13 @@ async function start() {
     preferOption.disabled = !natureAvailable;
     if (!natureAvailable && !sharedSnapshot) state.options.naturePreference = "off";
     updateControlsFromOptions();
-    byId("nature-availability").textContent = localPlanner
-      ? "Suggested routes use installed regional nature data. Missing data and uncovered sections remain unknown."
+    setLocalizedText(byId("nature-availability"), () => localPlanner
+      ? t("Suggested routes use installed regional nature data. Missing data and uncovered sections remain unknown.")
       : natureAvailable
-      ? `Local OSM nature index available. Water proximity uses ${state.config.nature_water_buffer_m} m.`
-      : "Local OSM nature index unavailable. Prefer mapped nature is disabled; routing still works.";
+      ? tr`Local OSM nature index available. Water proximity uses ${state.config.nature_water_buffer_m} m.`
+      : t("Local OSM nature index unavailable. Prefer mapped nature is disabled; routing still works."));
     byId("show-nature").disabled = !natureAvailable || Boolean(localPlanner);
-    byId("show-nature").title = localPlanner ? "Local nature totals appear in route details; map coloring is unavailable." : "";
+    byId("show-nature").title = localPlanner ? t("Local nature totals appear in route details; map coloring is unavailable.") : "";
     state.showNatureContext = natureAvailable && !localPlanner;
     byId("show-nature").checked = state.showNatureContext;
     const poiAvailable = Boolean(
@@ -3696,9 +3696,9 @@ async function start() {
     byId("places-filters").querySelectorAll("input").forEach((input) => {
       input.disabled = !poiAvailable;
     });
-    byId("places-status").textContent = poiAvailable
-      ? `Local OSM places index ready · ${formatCount(state.poiIndexStatus.feature_count)} regional features.`
-      : "POI index unavailable. Place discovery is disabled; routing still works.";
+    setLocalizedText(byId("places-status"), () => poiAvailable
+      ? tr`Local OSM places index ready · ${formatCount(state.poiIndexStatus.feature_count)} regional features.`
+      : t("POI index unavailable. Place discovery is disabled; routing still works."));
     if (!sharedSlug) {
       plannerLocation = createPlannerLocationController({
         renderFix: renderPlannerCurrentLocation,
@@ -3727,10 +3727,10 @@ async function start() {
             (value.id ?? requestedPlaceIdentifier(value, index))
             === state.settingRequestedApproachId
           ));
-          if (place) { rememberPointEdit("Place approach updated"); place.approachOverride = coordinate; }
+          if (place) { rememberPointEdit(t("Place approach updated")); place.approachOverride = coordinate; }
           state.settingRequestedApproachId = null;
           invalidateAndRender();
-          setEditableRequestStatus("Requested-place approach set from map.");
+          setEditableRequestStatus(t("Requested-place approach set from map."));
           return;
         }
         if (state.endpointSetMode) {
@@ -3739,10 +3739,10 @@ async function start() {
             assignEndpoint: assignActiveEndpoint, name: byId(`hard-${kind}-name`).value.trim(),
           });
           state.endpointSetMode = null;
-          byId(`set-hard-${kind}`).textContent = "Set on map";
+          setLocalizedText(byId(`set-hard-${kind}`), () => t("Set on map"));
           invalidateAndRender();
           setEditableRequestStatus(
-            `${kind === "start" ? "Start" : "End"} point set from map.`,
+            tr`${kind === "start" ? t("Start") : t("End")} point set from map.`,
           );
           const reopenAdventure = adventureMapEndpoint === kind;
           adventureMapEndpoint = null;
@@ -3756,7 +3756,7 @@ async function start() {
           clearPointPlacement();
           invalidateAndRender();
 
-          setEditableRequestStatus("Stop moved. Generate again to use the new position.");
+          setEditableRequestStatus(t("Stop moved. Generate again to use the new position."));
           return;
         }
         if (state.addPointMode) {
@@ -3765,7 +3765,7 @@ async function start() {
               explicitStop: state.planningStrategy !== "automatic" });
             clearPointPlacement(); updateControlsFromOptions(); invalidateAndRender();
             keepCoordinateVisible([coordinate.lon, coordinate.lat]);
-            setEditableRequestStatus("Route point set from map.");
+            setEditableRequestStatus(t("Route point set from map."));
           } catch (error) { showError(error.message); }
           return;
         }
@@ -3775,7 +3775,7 @@ async function start() {
           updateControlsFromOptions();
           invalidateAndRender();
           keepCoordinateVisible([coordinate.lon, coordinate.lat]);
-          setEditableRequestStatus("Ready to generate.");
+          setEditableRequestStatus(t("Ready to generate."));
         } catch (error) { showError(error.message); }
       },
     });
@@ -3788,21 +3788,17 @@ async function start() {
       fitCoordinates(sharedSnapshot.candidate.route.geometry);
       if (state.networkStatus !== "offline") {
         await selectCandidate(sharedSnapshot.candidate.id);
-        byId("request-status").textContent = "Saved route opened. Its route and settings are unchanged.";
+        setLocalizedText(byId("request-status"), () => t("Saved route opened. Its route and settings are unchanged."));
       } else {
-        byId("request-status").textContent = (
-          "Showing the saved offline copy. Its route and settings are unchanged."
-        );
+        setLocalizedText(byId("request-status"), () => t("Showing the saved offline copy. Its route and settings are unchanged."));
       }
     } else if (state.networkStatus === "offline") {
-      byId("request-status").textContent = (
-        localPlanner ? "Planning uses installed data on this device."
-          : "Sugarglider is offline. The application shell is ready; reconnect to plan a route."
-      );
+      setLocalizedText(byId("request-status"), () => localPlanner ? t("Planning uses installed data on this device.")
+          : t("Sugarglider is offline. The application shell is ready; reconnect to plan a route."));
     }
   } catch (error) {
-    handleError(error, "The Sugarglider API is unavailable.");
-    showMapError("Map configuration could not be loaded.");
+    handleError(error, t("The Sugarglider API is unavailable."));
+    showMapError(t("Map configuration could not be loaded."));
   }
 }
 
