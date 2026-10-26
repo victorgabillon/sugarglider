@@ -191,9 +191,23 @@ Local final validation passes:
   errors or skips; all three lints and assemblies, plus debug instrumentation APK
   packaging. No device instrumentation was run.
 
-APK audit, exact source commit and GitHub CI receipts follow in the final
-validation update. Routine merging is authorized by the task once those checks
-are green; installation and live account operations remain separate.
+The audited runtime source is `14f3cae9118b7a1bb360e9dd7f9092c24add15b2`.
+All 153 declared assets exactly match each Debug, unsigned Release and staging
+APK (staging uses its explicit private catalog). Production debugging is off;
+there is no staging CA in normal variants or private regional database in any
+APK. The native library hash is unchanged. ZIP and native ELF 16 KiB alignment,
+staging certificate continuity, exact CA/catalog and ZIP integrity pass.
+
+Prepared staging APK SHA-256:
+`63bd8597b13d8c882ca9eda80cdb849c499974cabcc5e65bb3e42262a5908e05`.
+The APK is retained privately and **not installed**. Documentation-only follow-up
+commits do not change the audited runtime bytes.
+
+Source review, local checks and actual route-quality acceptance are satisfactory.
+The task authorizes routine merging after all four GitHub workflows pass at the
+final PR head. The [PR checks and merge status](https://github.com/victorgabillon/sugarglider/pull/110)
+are authoritative for that final remote gate. Physical installation and live
+account operations remain separately pending.
 
 ## Remaining physical acceptance
 
