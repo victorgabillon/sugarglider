@@ -2,7 +2,6 @@
 // both-language state preservation are covered by localization_harness and the
 // full bundled-app acceptance, with strict canonical and GPX comparisons.
 import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
-await setLanguage("en", { persist: false, document: null });
 import { state, saveActivePoints, assignRouteEndpoint, currentPlanRequest, invalidateCandidates, isImmutableSnapshotDisplay } from '../../src/sugarglider/web/static/state.js';
 import { addResolvedRouteLocation } from '../../src/sugarglider/web/static/route_point_acquisition.js';
 import { changeMapTopology } from '../../src/sugarglider/web/static/automatic_intent.js';
@@ -18,6 +17,7 @@ const feature=(id,category='ice_cream',potability='not_applicable')=>({id,catego
 const P=feature('ice'), A={name:'Start',lat:.009,lon:.01}, B={name:'Old End',lat:.01,lon:.009};
 
 export async function run(){
+  await setLanguage("en", { persist: false, document: null });
  const initial=structuredClone(state), cases=[], roots=[];
  const reset=()=>{Object.assign(state,structuredClone(initial));state.config={max_required_points:30};state.routingProfile='trail_run';clearPointUndo()};
  const endpoints=()=>state.planningMode==='auto_tour'?state.autoTour:state.waypointEndpoints;

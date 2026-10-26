@@ -2,7 +2,6 @@
 // both-language state preservation are covered by localization_harness and the
 // full bundled-app acceptance, with strict canonical and GPX comparisons.
 import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
-await setLanguage("en", { persist: false, document: null });
 import { state, saveActivePoints, assignRouteEndpoint, currentPlanRequest, invalidateCandidates } from '../../src/sugarglider/web/static/state.js';
 import { appendMapIntent, changeMapTopology, reconcileAutomaticIntent } from '../../src/sugarglider/web/static/automatic_intent.js';
 import { rememberPointEdit, commitPointEdit, undoPointEdit, redoPointEdit, clearPointUndo, pointRedoLabel, ROUTE_HISTORY_LIMIT } from '../../src/sugarglider/web/static/route_edit_history.js';
@@ -23,7 +22,8 @@ function manual(kind,start,stops=[],end=null,order='fixed',topology='loop'){
  Object.assign(endpoints(),{start,end,routeTopology:topology});state.points=kind==='auto_tour'?[start,...stops].filter(Boolean):stops;
  const result=currentPlanRequest();Object.assign(state,saved);return result;
 }
-export async function runRouteDockHarness(){const cases=[];try{
+export async function runRouteDockHarness(){
+  await setLanguage("en", { persist: false, document: null });const cases=[];try{
  reset();tap(A);same(currentPlanRequest(),manual('auto_tour',{name:'Hard start',...A}),'1 Start loop canonical');cases.push('equivalence_start_only_loop');
  for(const p of[B,C,D])tap(p);let loop=currentPlanRequest();same(loop,manual('waypoint_route',loop.start,state.points),'2 fixed loop canonical');cases.push('equivalence_three_fixed_loop');
  rememberPointEdit('Order');state.options.waypointOrder='optimize';commitPointEdit();loop=currentPlanRequest();same(loop,manual('waypoint_route',loop.start,state.points,null,'optimize'),'3 optimized canonical');cases.push('equivalence_three_optimized_loop');

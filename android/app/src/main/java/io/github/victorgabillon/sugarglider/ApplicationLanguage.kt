@@ -11,14 +11,17 @@ internal object ApplicationLanguage {
     private const val KEY = "language"
 
     fun valid(value: String): Boolean = value == "fr" || value == "en"
-    fun current(context: Context): String =
-        context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).getString(KEY, "fr")
-            ?.takeIf(::valid) ?: "fr"
+    fun normalized(value: Any?): String = if (value == "en") "en" else "fr"
+    fun current(context: Context): String = try {
+        normalized(context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).all[KEY])
+    } catch (_: Exception) { "fr" }
 
     fun select(context: Context, language: String): Boolean {
         if (!valid(language)) return false
-        context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).edit().putString(KEY, language).apply()
-        return true
+        return try {
+            context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).edit().putString(KEY, language).apply()
+            true
+        } catch (_: Exception) { false }
     }
 
     fun context(context: Context): Context {

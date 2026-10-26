@@ -2,7 +2,6 @@
 // both-language state preservation are covered by localization_harness and the
 // full bundled-app acceptance, with strict canonical and GPX comparisons.
 import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
-await setLanguage("en", { persist: false, document: null });
 import { createRegionVersionStore } from "../../src/sugarglider/web/static/region_versions.js";
 import { createRegionProduct } from "../../src/sugarglider/web/static/region_product.js";
 import { createVersionedRegionComponents } from "../../src/sugarglider/web/static/region_components.js";
@@ -26,6 +25,7 @@ async function rejects(action, code) {
 }
 
 export async function runPr42RegionProductHarness() {
+  await setLanguage("en", { persist: false, document: null });
   const cases = [];
   for (const url of ["http://localhost/manifest.json", "https://x/a/../manifest.json", "https://x/%2e/manifest.json",
     "https://x//manifest.json", "https://user@x/manifest.json", "https://x/manifest.json?key=private", "https://x/other.json"]) {

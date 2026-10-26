@@ -335,7 +335,7 @@ def test_shared_shell_generation_tracks_v118_cached_assets() -> None:
         ),
         "i18n.js": ("708543feff434012bfa950a16ac6156619f5475cc54d97f2f693db73e810e7b2"),
         "translations.js": (
-            "90121a8e1c17b1d328180b819f04458ebffcdfd49f14de886133541702db3ef1"
+            "a027ed2cb57b817f13613f3e7f826ae78cca6e2025d4b1936d05e7fd52e15098"
         ),
         "index.html": (
             "102398d82fd0557a0adfb70234c6fd16734b91686e2f7218be88f55c3f028ebe"
@@ -350,7 +350,7 @@ def test_shared_shell_generation_tracks_v118_cached_assets() -> None:
             "801dfb85e8531421b96417020e5356614a5d1ef4bcd91c0dc4ad53743a7d83f7"
         ),
         "endpoint_adjustment_view.js": (
-            "9f662300c228d0b3d81d1c2a2d756dd62162d3bd826da49d7f795732b352eb1c"
+            "8bd472674af25c55ed1ae8819ec128a61f14299f67bfdb3a8ee0a54d01e4a85b"
         ),
         "adventure_model.js": (
             "e327d50459f1d19704af3ec0cf2a9c06a0f35f2378b8dd7db50d9f5edf10df23"
@@ -394,7 +394,7 @@ def test_shared_shell_generation_tracks_v118_cached_assets() -> None:
         "local_adventure_search.js": (
             "faae64c661a211505d82bad9b78f1c7d8533904182db967b6ff0b603ef08086b"
         ),
-        "app.js": ("f3255398b0fc1040f81805af8a5c96aedb81756e487ddd1d3ea4ba85fe4d2ed8"),
+        "app.js": ("31e0d906372fa7700f066aab9b98ca565cae3aea47168aa7e5cb11fe7ad7cdc9"),
         "region_screen.js": (
             "ac0aad40280167eca27482eb4256512b48453a2883a6a588ab5b2e3a98fa1301"
         ),
@@ -417,7 +417,7 @@ def test_shared_shell_generation_tracks_v118_cached_assets() -> None:
             "5c2b4d2a92114944f933e84622458c320729b31633be636cbab4dffb4c6cac0a"
         ),
         "route_results.js": (
-            "ceade5c3a0cc885716b0d13660bf3107232c4057f3686bc25f46b6c160a68b7c"
+            "b7612e9b9c15ba8050019110480bcde2d0f11f058910f5b5c5a1552ae10f4b01"
         ),
         "map_viewport.js": (
             "afad92cd8b766c284fda15bd29cc73b1d9b66b43516450447646093d6005e86c"
@@ -428,7 +428,7 @@ def test_shared_shell_generation_tracks_v118_cached_assets() -> None:
         "state.js": (
             "ae7c5e7acc9d5e91957c275b227957a95855aee7853f15178858a0c52c0cc1c3"
         ),
-        "map.js": ("720b2aba5039166940a5c5b28e91ce8317e9c2cd9dc87aa733dd2cbfb023d391"),
+        "map.js": ("df819473077645469eff4acaa7dbca6e1a2899caba4b75b9509b6b866e86fbe6"),
         "styles.css": (
             "988e726fb8f74a46c7ef6ce370beb1bdb8880f25fd812e8116e3a287ca56d539"
         ),

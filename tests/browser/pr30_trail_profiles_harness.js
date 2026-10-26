@@ -2,7 +2,6 @@
 // both-language state preservation are covered by localization_harness and the
 // full bundled-app acceptance, with strict canonical and GPX comparisons.
 import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
-await setLanguage("en", { persist: false, document: null });
 import {
   AVATAR_KEYS,
   DEFAULT_AVATAR_KEY,
@@ -31,6 +30,7 @@ import {
 } from "../../src/sugarglider/web/static/map.js";
 
 export async function runPr30TrailProfilesHarness() {
+  await setLanguage("en", { persist: false, document: null });
   const scenarios = [];
   profileValidationScenario();
   scenarios.push("profile_validation");

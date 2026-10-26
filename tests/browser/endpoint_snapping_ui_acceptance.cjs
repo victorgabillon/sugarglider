@@ -6,14 +6,15 @@ const root=path.resolve(__dirname,'../..'),origin='https://appassets.androidplat
 const profiles=['trail_run','hike','city_bike','gravel_bike','mountain_bike','road_bike'];
 async function run(browser,touch){
  const context=await browser.newContext({viewport:touch?{width:372,height:709}:{width:1360,height:940},hasTouch:touch,isMobile:touch});
- const errors=[],requests=[];const cases=[];
+ const errors=[],requests=[];const cases=[];const french=touch;
  try{
   await context.addInitScript(({profiles})=>{
    globalThis.snapNativeCalls=[];globalThis.snapDistance=89.2;globalThis.snapHold=false;
    globalThis.sugargliderNative={onmessage:null,postMessage(payload){
     const input=JSON.parse(payload);snapNativeCalls.push(input);
     const deliver=reply=>queueMicrotask(()=>this.onmessage?.({data:JSON.stringify({schema_version:1,request_id:input.request_id,...reply})}));
-    if(input.type==='hello')deliver({type:'hello_result',outing_slug:null,participant_id:null,active:false,state:'stopped',last_published_at:null,pending_sample:false,stop_warning:null});
+    if(input.type==='set_ui_language')deliver({type:'set_ui_language_result',language:input.language,selected:true});
+    else if(input.type==='hello')deliver({type:'hello_result',outing_slug:null,participant_id:null,active:false,state:'stopped',last_published_at:null,pending_sample:false,stop_warning:null});
     else if(input.type==='get_local_route_capabilities')deliver({type:'local_route_capabilities_result',enabled:true,engine:'valhalla-mobile',engine_version:'synthetic',installed_pack_count:1,installed_pack_ids:[input.regional_reference.pack_id],supported_profile_ids:profiles,pack_capabilities:[{pack_id:input.regional_reference.pack_id,access_modes:['foot','bicycle']}]});
     else if(input.type==='local_route'){
      const reply=()=>import('/tests/browser/endpoint_snapping_harness.js').then(m=>deliver({...m.snappedReply(input,{start:snapDistance+(globalThis.snapVary&&input.points[1]?.lon>.01?10:0),pack:input.regional_reference.pack_id}),request_id:input.request_id}));
@@ -36,6 +37,7 @@ async function run(browser,touch){
   });
   const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));page.on('console',m=>{if(m.type()==='error') console.error(m.text());});
   await page.goto(origin+'/seed.html');
+  await page.evaluate(async french => {const {writeLanguagePreference}=await import('/static/pwa_store.js');await writeLanguagePreference(french?'fr':'en');},french);
   await page.evaluate(async()=>{
    const {seedRegion}=await import('/tests/browser/region_preference_harness.js');
    const {createRegionVersionStore}=await import('/static/region_versions.js');
@@ -61,7 +63,7 @@ async function run(browser,touch){
   const request=await page.evaluate(async()=>{const {state,currentPlanRequest}=await import('/static/state.js');return {request:currentPlanRequest(),points:state.points.length};});
   assert.equal(request.request.endpoint_snap_policy.start,'near');assert.equal(request.request.endpoint_snap_policy.end,'near');
   if(await mapTab.isVisible())await mapTab.click();await page.click('#generate-map');
-  await page.waitForFunction(()=>document.querySelector('#endpoint-adjustments-routes')?.textContent.includes('Start adjusted by 89 m'));
+  await page.waitForFunction(french=>document.querySelector('#endpoint-adjustments-routes')?.textContent.includes(french?'Départ ajusté de 89 m':'Start adjusted by 89 m'),french);
   const snapshot=await page.evaluate(async()=>{const {state,selectedCandidate}=await import('/static/state.js');return {request:state.generationSourceRequest,candidate:selectedCandidate()};});
   assert(snapshot.candidate);assert.equal(snapshot.candidate.routing_profile,snapshot.request.routing_profile);
   await page.locator('#endpoint-adjustments-routes summary').click();
@@ -70,7 +72,7 @@ async function run(browser,touch){
   await page.waitForSelector('.endpoint-adjustment-marker.routed');
   assert.equal(await page.locator('.endpoint-adjustment-marker.requested').count(),1);
   assert.equal(await page.locator('.endpoint-adjustment-marker.routed').count(),1);
-  assert.equal(await page.locator('.endpoint-adjustment-marker.routed').getAttribute('aria-label'),'Actual routed Start, 89 m displacement');
+  assert.equal(await page.locator('.endpoint-adjustment-marker.routed').getAttribute('aria-label'),french?'Point calculé Départ, déplacement de 89 m':'Actual routed Start, 89 m displacement');
   const gpx=await page.evaluate(async()=>{const {selectedCandidate}=await import('/static/state.js');const {exportCanonicalCandidate}=await import('/static/local_gpx_export.js');return exportCanonicalCandidate(selectedCandidate()).blob.text();});
   assert(gpx.includes(`lat="${snapshot.candidate.route.geometry[0][1].toFixed(8)}"`));
   await page.waitForTimeout(600); // Finish the 500 ms Show adjustment camera transition.
@@ -85,14 +87,14 @@ async function run(browser,touch){
   assert(!gpx.includes('endpoint-adjustment'));cases.push('normal-map-intent-native-warning-keyboard-markers-gpx');
   // Actual policy control keeps strict choice and restores it through Undo.
   await page.click('[data-route-chip="start"]');
-  await page.selectOption('[aria-label="Start snap policy"]','exact');
+  await page.selectOption('[data-dock-action="snap-policy"]','exact');
   assert.equal(await page.locator('.endpoint-adjustment-marker').count(),0);
-  if(await mapTab.isVisible())await mapTab.click();await page.click('#generate-map');await page.waitForFunction(()=>document.querySelector('#error-banner')?.textContent.includes('strict snap limit'));
+  if(await mapTab.isVisible())await mapTab.click();await page.click('#generate-map');await page.waitForFunction(french=>document.querySelector('#error-banner')?.textContent.includes(french?'limite stricte de rapprochement':'strict snap limit'),french);
   assert.equal(await page.evaluate(async()=>{const{state}=await import('/static/state.js');return state.generationResult.candidates.length;}),0);
   if(await mapTab.isVisible())await mapTab.click();
   await page.click('#undo-point-edit');
   await page.evaluate(()=>{snapDistance=240;});if(await mapTab.isVisible())await mapTab.click();await page.click('#generate-map');
-  await page.waitForFunction(()=>document.querySelector('#endpoint-adjustments-map')?.textContent.includes('review 240 m'));
+  await page.waitForFunction(french=>document.querySelector('#endpoint-adjustments-map')?.textContent.includes(french?'vérifier le rapprochement de 240 m':'review 240 m'),french);
   const before=await page.evaluate(async()=>{const{state}=await import('/static/state.js');return {lat:state.waypointEndpoints.start.lat,count:snapNativeCalls.filter(c=>c.type==='local_route').length};});
   await page.locator('#endpoint-adjustments-map [data-adjustment-action="start-show"]').click();
   await page.waitForTimeout(600); // Declared map transition must finish before testing occlusion.
@@ -120,7 +122,7 @@ async function run(browser,touch){
   // JSON restoration preserves exact intent, and each candidate owns its adjustment.
   const imported=structuredClone(snapshot.request);delete imported.endpoint_snap_policy;
   let importNumber=0;
-  async function importRequest(value){const name=`synthetic-plan-${++importNumber}.json`;await page.setInputFiles('#request-file',{name,mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});await page.waitForFunction(name=>document.querySelector('#request-status').textContent.includes(name+' loaded.'),name);}
+  async function importRequest(value){const name=`synthetic-plan-${++importNumber}.json`;await page.setInputFiles('#request-file',{name,mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});await page.waitForFunction(({name,french})=>document.querySelector('#request-status').textContent.includes(name+(french?' chargé.':' loaded.')),{name,french});}
   await importRequest(imported);
   assert.equal(await page.evaluate(async()=>{const {currentPlanRequest}=await import('/static/state.js');return currentPlanRequest().endpoint_snap_policy.start;}),'exact');
   imported.endpoint_snap_policy={start:'near',end:'near'};imported.candidate_count=3;imported.waypoint_order='optimize';

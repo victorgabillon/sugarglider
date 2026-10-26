@@ -19,10 +19,10 @@ export function routeChoiceMarkup(candidate, index, selected, count) {
   const repeated = candidate.route.analysis.repetition;
   const repetitions = repeated.available ? formatPercent(repeated.repeated_distance.share) : t("Unknown");
   const changedStops = candidate.approximated_stops.length + candidate.dropped_stops.length;
-  return `<span class="candidate-choice-heading"><strong><i class="route-swatch${selected ? " solid" : ""}" style="--route-color:${routeColor(index, selected)}" aria-hidden="true"></i>Route ${candidate.rank}</strong><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></span>
-    <span class="route-comparison">${candidate.diagnostics.within_tolerance ? t("Within distance range") : t("Outside distance range")} · Repeated travel ${repetitions}</span>
-    ${changedStops ? `<span class="route-stop-notice">${candidate.approximated_stops.length} nearby · ${candidate.dropped_stops.length} unvisited stops — see details</span>` : ""}
-    <span class="candidate-choice-action">${selected ? "✓ Selected" : t("Choose route")}${count > 1 && candidate.rank === 1 ? " · Recommended" : ""}</span>`;
+  return `<span class="candidate-choice-heading"><strong><i class="route-swatch${selected ? " solid" : ""}" style="--route-color:${routeColor(index, selected)}" aria-hidden="true"></i>${tr`Route ${candidate.rank}`}</strong><strong>${formatDistance(candidate.route.summary.distance_m)}</strong></span>
+    <span class="route-comparison">${tr`${candidate.diagnostics.within_tolerance ? t("Within distance range") : t("Outside distance range")} · Repeated travel ${repetitions}`}</span>
+    ${changedStops ? `<span class="route-stop-notice">${tr`${candidate.approximated_stops.length} nearby · ${candidate.dropped_stops.length} unvisited stops — see details`}</span>` : ""}
+    <span class="candidate-choice-action">${selected ? t("✓ Selected") : t("Choose route")}${count > 1 && candidate.rank === 1 ? t(" · Recommended") : ""}</span>`;
 }
 
 export function renderRouteChoices(container, candidates, selectedId, onSelect) {
@@ -39,7 +39,7 @@ export function renderRouteChoices(container, candidates, selectedId, onSelect) 
     button.className = "candidate-select";
     button.dataset.candidateId = candidate.id;
     button.setAttribute("aria-pressed", String(selected));
-    button.setAttribute("aria-label", tr`Route ${candidate.rank}, ${formatDistance(candidate.route.summary.distance_m)}${selected ? ", selected" : t(", choose route")}`);
+    button.setAttribute("aria-label", tr`Route ${candidate.rank}, ${formatDistance(candidate.route.summary.distance_m)}${selected ? t(", selected") : t(", choose route")}`);
     button.innerHTML = routeChoiceMarkup(candidate, index, selected, candidates.length);
     button.addEventListener("click", () => onSelect(candidate.id));
     card.append(button);

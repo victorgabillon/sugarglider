@@ -2,13 +2,13 @@
 // both-language state preservation are covered by localization_harness and the
 // full bundled-app acceptance, with strict canonical and GPX comparisons.
 import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
-await setLanguage("en", { persist: false, document: null });
 import { initializeAppShell } from '../../src/sugarglider/web/static/app_shell.js';
 import { createPolishRegionFixture } from './ui2_polish_fixture.js';
 import { renderPwaStatus } from '../../src/sugarglider/web/static/pwa_view.js';
 const assert=(ok,message)=>{if(!ok)throw Error(message)};
 const until=async fn=>{for(let i=0;i<100;i++){if(fn())return;await new Promise(r=>setTimeout(r,10))}throw Error('operation did not settle')};
 export async function runPolishHarness(){
+  await setLanguage("en", { persist: false, document: null });
  const cases=[], root=document.createElement('details');document.body.append(root);const f=await createPolishRegionFixture(root),e=f.elements;
  const check=(name,fn)=>{fn();cases.push(name)}, click=text=>{const b=[...e.list.querySelectorAll('button')].find(b=>b.textContent===text);assert(b&&!b.disabled,text);b.focus();b.click();return b}, settled=()=>until(()=>!e.refresh.disabled);
  try {

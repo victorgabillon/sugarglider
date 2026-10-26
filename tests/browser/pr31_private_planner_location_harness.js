@@ -2,7 +2,6 @@
 // both-language state preservation are covered by localization_harness and the
 // full bundled-app acceptance, with strict canonical and GPX comparisons.
 import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
-await setLanguage("en", { persist: false, document: null });
 import {
   PLANNER_LOCATION_WATCH_OPTIONS,
   PLANNER_PERMISSION_QUERY_TIMEOUT_MS,
@@ -20,6 +19,7 @@ const VIEWPORTS = Object.freeze([
 ]);
 
 export async function runPr31PrivatePlannerLocationHarness() {
+  await setLanguage("en", { persist: false, document: null });
   const scenarios = [];
   await grantedPermissionScenario();
   scenarios.push("granted_permission_auto_watch_private_render_follow");

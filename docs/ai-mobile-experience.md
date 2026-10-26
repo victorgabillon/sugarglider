@@ -312,3 +312,40 @@ are retained because their potentially valuable data has not been reviewed or
 authorized for deletion. Eleven non-launcher instrumentation helpers remain.
 See [the temporary audit workflow](android-audit-workflow.md) for fresh-package
 ownership, non-launcher audit builds and mandatory session cleanup.
+
+The final integrated validation includes 1,612 Python tests, strict mypy and Ruff;
+16 external-service integration tests remain excluded and the nine pre-existing
+NumPy warnings remain. All 62 browser harnesses pass. Full bundled-app acceptance
+covers 372, 412 and 320 px portrait, 800 px landscape, desktop and 200% text. It
+checks French with an English browser locale, explicit English, restart
+persistence, localized accessible names, exact canonical state/GPX, unchanged
+camera, unchanged editable form values and no new location, native routing,
+terrain, recording or inference calls on language changes. Existing completed
+feedback updates too; original story content stays exact.
+
+The additional self-contained browser drivers cover snapping with English
+keyboard and French touch controls, explicit waypoint adoption and undo, real
+form input in both languages, local profile/language restart, region restoration,
+exact adventure recovery and external itinerary import. The six older separate
+server/map-fixture visual drivers listed above remain unrun. The form module is a
+helper executed by the release acceptance driver, not a separate standalone test.
+Android Debug/Release/Staging JVM counts are 291/286/286 with no failures, errors
+or skips; all three lints pass. The two new localization assets are in the strict
+Android/PWA allowlists and cache fingerprint checks. A clean-source final APK is
+audited for its actual source revision, staging identity, signature continuity,
+all bundled bytes, artwork identity and 16 KiB alignment before installation.
+
+PR #110 has merged at `18b7dd726615b97293de00983c43985f268dfa64` from
+`26c6dbe325333c48e2b7d5f126c165314f9a19ea`. The GUI branch incorporates that
+merge. The seven woodland-search runtime files changed in `14f3cae` match merged
+main byte for byte. Shared display conflicts retain the new forest trade-off
+labels, shape gate and explanations with translations. New model submissions add
+only the selected response-language instruction; descriptions, schemas, budgets,
+old adventures and all local routing behavior remain unchanged. The forest
+worktree and its processes were not modified.
+
+Current APK, GitHub CI, physical phone evidence and exact protected-state receipts
+are retained outside Git with the delivery report. A new installation requires
+applicable explicit approval for that exact APK; the earlier approval naming
+`d4f6c73` must not be reused for a different build. Production, Google Play and
+regional datasets are not deployment targets of this work.

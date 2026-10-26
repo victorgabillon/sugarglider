@@ -2,7 +2,6 @@
 // both-language state preservation are covered by localization_harness and the
 // full bundled-app acceptance, with strict canonical and GPX comparisons.
 import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
-await setLanguage("en", { persist: false, document: null });
 import { createAdventureSpeech } from "../../src/sugarglider/web/static/adventure_speech.js";
 import { initializeAdventureDialog } from "../../src/sugarglider/web/static/adventure_dialog.js";
 import { createAdventureResults, forestAdventureLimitation, adventureTradeoffLabels } from "../../src/sugarglider/web/static/adventure_results.js";
@@ -39,6 +38,7 @@ function accounts(model, initiallyConnected = true) {
 }
 
 export async function runAdventureUiHarness() {
+  await setLanguage("en", { persist: false, document: null });
   const cases = [];
   {
     const place = id => ({ canonical_id: id, status: "reached", local_category: "ruins" });

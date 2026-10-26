@@ -301,7 +301,7 @@ function initializeNativeAppTools() {
         return value.type === "show_privacy_result" && value.shown === true;
       },
     });
-    if (!shown) showError(t("The privacy dialog is unavailable. Try again from the app."));
+    if (!shown) showError(() => (t("The privacy dialog is unavailable. Try again from the app.")));
   });
   let identityPending = false;
   identity.closest("details").addEventListener("toggle", async event => {
@@ -399,7 +399,7 @@ function showError(message, details = "", code = "", context = "", suggestion = 
   const suggestionElement = byId("error-suggestion");
   setLocalizedText(codeElement, () => code ? tr`Error code: ${code}` : "");
   codeElement.classList.toggle("hidden", !code);
-  setLocalizedText(byId("error-message"), () => t(message));
+  setLocalizedText(byId("error-message"), () => t(typeof message === "function" ? message() : message));
   contextElement.textContent = context;
   contextElement.classList.toggle("hidden", !context);
   suggestionElement.textContent = suggestion;
@@ -554,7 +554,7 @@ function passThroughPoi(feature) {
     (document.querySelector('#route-dock [aria-pressed="true"]') ?? byId("dock-add"))?.focus({ preventScroll: true });
     return true;
   } catch (error) {
-    showError(error.message);
+    showError(() => (error.message));
     return false;
   }
 }
@@ -578,14 +578,14 @@ function preferPoi(feature) {
   if (!eligibleAccess || (!scenic && !verifiedWater) || feature.potability === "non_potable") return;
   if (state.autoTour.preferredPoiIds.includes(feature.id)) return;
   if (state.autoTour.preferredPoiIds.length >= 8) {
-    showError(t("Suggested routes support at most eight preferred places."));
+    showError(() => (t("Suggested routes support at most eight preferred places.")));
     return;
   }
   rememberPointEdit("Place preference added");
   state.autoTour.preferredPoiIds.push(feature.id);
   invalidateAndRender();
   setEditableRequestStatus(
-    tr`${feature.display_name} added as a suggested-route preference.`,
+    () => (tr`${feature.display_name} added as a suggested-route preference.`),
   );
 }
 
@@ -1117,8 +1117,8 @@ function setEditableRequestStatus(message) {
   const placementGuidance = pointValidation()
     ? ""
     : activeMapPlacementGuidance();
-  byId("request-status").textContent = placementGuidance
-    || (availability.enabled ? message : availability.reason);
+  setLocalizedText(byId("request-status"), () => placementGuidance
+    || (availability.enabled ? (typeof message === "function" ? message() : t(message)) : t(availability.reason)));
 }
 
 function activeMapPlacementGuidance() {
@@ -1677,7 +1677,7 @@ function bestExcludedRefinementSummary(diagnostics) {
   const coverageUnchanged = Number(details.reached_change) === 0
     && Number(details.approximated_change) === 0
     && Number(details.dropped_change) === 0;
-  return `<section class="repair-summary excluded-refinement-summary"><h3>${t("Best excluded route refinement")}</h3><p>Removed ${escapeHtml(formatDistance(removed))} of repeated travel. ${distanceStatement} ${coverageUnchanged ? t("Requested-place coverage unchanged. ") : ""}Not included in the displayed portfolio.</p></section>`;
+  return `<section class="repair-summary excluded-refinement-summary"><h3>${t("Best excluded route refinement")}</h3><p>${tr`Removed ${escapeHtml(formatDistance(removed))} of repeated travel. ${distanceStatement} ${coverageUnchanged ? t("Requested-place coverage unchanged. ") : ""}Not included in the displayed portfolio.`}</p></section>`;
 }
 
 function currentEndpointAdjustments() {
@@ -1774,9 +1774,9 @@ function routeShapeIssuesSection(analysis, candidate) {
     const refinementStatus = construction === "edge_aware_global_optimization"
       ? t("The edge-aware optimizer tested route-wide alternatives; this excursion remains in the final route.")
       : t("No published edge-aware alternative removed this excursion.");
-    return `<button type="button" class="spur-card" data-spur-id="${escapeHtml(spur.id)}" aria-label="Focus map on out-and-back excursion ${index + 1}"><strong>${t("Out-and-back excursion")}</strong><span>Repeated corridor: ${formatDistance(spur.repeated_distance_m)}</span><span>Complete excursion: ${formatDistance(spur.total_excursion_distance_m)}</span><span>Turnaround: ${escapeHtml(turnaround)}</span><span>Deliberate stops inside this excursion: ${stopNames.length ? escapeHtml(stopNames.join(", ")) : t("None")}</span><em>${t("Candidate for route refinement")}</em><small>${escapeHtml(refinementStatus)}</small></button>`;
+    return `<button type="button" class="spur-card" data-spur-id="${escapeHtml(spur.id)}" aria-label="Focus map on out-and-back excursion ${index + 1}"><strong>${t("Out-and-back excursion")}</strong><span>${tr`Repeated corridor: ${formatDistance(spur.repeated_distance_m)}`}</span><span>${tr`Complete excursion: ${formatDistance(spur.total_excursion_distance_m)}`}</span><span>${tr`Turnaround: ${escapeHtml(turnaround)}`}</span><span>${tr`Deliberate stops inside this excursion: ${stopNames.length ? escapeHtml(stopNames.join(", ")) : t("None")}`}</span><em>${t("Candidate for route refinement")}</em><small>${escapeHtml(refinementStatus)}</small></button>`;
   }).join("");
-  return `<section class="route-shape-issues"><h3>${t("Route shape issues")}</h3><p><strong>${formatCount(spurAnalysis.spur_count)} out-and-back excursion${spurAnalysis.spur_count === 1 ? "" : "s"}</strong><br>${formatDistance(spurAnalysis.total_repeated_distance_m)} repeated inside excursions</p><div class="spur-list">${cards}</div></section>`;
+  return `<section class="route-shape-issues"><h3>${t("Route shape issues")}</h3><p><strong>${tr`${formatCount(spurAnalysis.spur_count)} out-and-back excursion${spurAnalysis.spur_count === 1 ? "" : "s"}`}</strong><br>${tr`${formatDistance(spurAnalysis.total_repeated_distance_m)} repeated inside excursions`}</p><div class="spur-list">${cards}</div></section>`;
 }
 
 function natureSection(nature, search) {
@@ -1814,7 +1814,7 @@ function natureSection(nature, search) {
 }
 
 function loopGeometrySection(geometry) {
-  const sectorGrid = (shares) => `<ol class="loop-sector-grid">${Array.from({ length: 8 }, (_, index) => `<li><span>Sector ${index + 1}</span><strong>${shares ? shares[index].toFixed(6) : t("not evaluated")}</strong></li>`).join("")}</ol>`;
+  const sectorGrid = (shares) => `<ol class="loop-sector-grid">${Array.from({ length: 8 }, (_, index) => `<li><span>${tr`Sector ${index + 1}`}</span><strong>${shares ? shares[index].toFixed(6) : t("not evaluated")}</strong></li>`).join("")}</ol>`;
   if (!geometry) {
     return `<section class="loop-geometry-panel"><h3>${t("Loop geometry")}</h3>${metricRows([
       [t("Shape penalty (lower is better)"), t("not evaluated")],
@@ -1870,14 +1870,14 @@ function loopGeometrySection(geometry) {
 
 function constraintItinerary(candidate) {
   const reached = (candidate.reached_stops ?? []).map((stop, index) => {
-    return `<li class="itinerary-stop" role="button" tabindex="0" data-itinerary-stop-id="${escapeHtml(stop.id)}" data-itinerary-origin="${escapeHtml(stop.selection_origin)}"><strong>${index + 1}. ${escapeHtml(stop.name)}</strong><span>${escapeHtml(friendlyLabel(stop.category))} · ${escapeHtml(friendlyLabel(stop.resolved_approach.kind))} · arrival ${Number(stop.route_to_approach_m).toFixed(1)} m / ${Number(stop.resolved_approach.arrival_tolerance_m).toFixed(0)} m · ${escapeHtml(friendlyLabel(stop.selection_method))}</span></li>`;
+    return `<li class="itinerary-stop" role="button" tabindex="0" data-itinerary-stop-id="${escapeHtml(stop.id)}" data-itinerary-origin="${escapeHtml(stop.selection_origin)}"><strong>${index + 1}. ${escapeHtml(stop.name)}</strong><span>${tr`${escapeHtml(friendlyLabel(stop.category))} · ${escapeHtml(friendlyLabel(stop.resolved_approach.kind))} · arrival ${Number(stop.route_to_approach_m).toFixed(1)} m / ${Number(stop.resolved_approach.arrival_tolerance_m).toFixed(0)} m · ${escapeHtml(friendlyLabel(stop.selection_method))}`}</span></li>`;
   }).join("");
-  const approximated = (candidate.approximated_stops ?? []).map((stop) => `<li class="itinerary-stop approximated" role="button" tabindex="0" data-itinerary-stop-id="${escapeHtml(stop.id)}" data-itinerary-origin="${escapeHtml(stop.selection_origin)}"><strong>${escapeHtml(stop.name)} — approximated</strong><span>${formatDistance(stop.distance_m)} from the semantic place · normal tolerance ${formatDistance(stop.normal_tolerance_m)} · ${escapeHtml(friendlyLabel(stop.reason))} · access ${escapeHtml(friendlyLabel(stop.resolved_approach.access))}</span><div class="button-row"><button type="button" data-compromise-action="exact" data-constraint-id="${escapeHtml(stop.id)}">${t("Make exact")}</button><button type="button" data-compromise-action="accept" data-constraint-id="${escapeHtml(stop.id)}">${t("Accept approximation")}</button><button type="button" data-compromise-action="remove" data-constraint-id="${escapeHtml(stop.id)}">${t("Remove stop")}</button></div></li>`).join("");
-  const dropped = (candidate.dropped_stops ?? []).map((stop) => `<li><strong>${escapeHtml(stop.name)}</strong><span>Drop reason: ${escapeHtml(friendlyLabel(stop.reason))}</span></li>`).join("");
+  const approximated = (candidate.approximated_stops ?? []).map((stop) => `<li class="itinerary-stop approximated" role="button" tabindex="0" data-itinerary-stop-id="${escapeHtml(stop.id)}" data-itinerary-origin="${escapeHtml(stop.selection_origin)}"><strong>${tr`${escapeHtml(stop.name)} — approximated`}</strong><span>${tr`${formatDistance(stop.distance_m)} from the semantic place · normal tolerance ${formatDistance(stop.normal_tolerance_m)} · ${escapeHtml(friendlyLabel(stop.reason))} · access ${escapeHtml(friendlyLabel(stop.resolved_approach.access))}`}</span><div class="button-row"><button type="button" data-compromise-action="exact" data-constraint-id="${escapeHtml(stop.id)}">${t("Make exact")}</button><button type="button" data-compromise-action="accept" data-constraint-id="${escapeHtml(stop.id)}">${t("Accept approximation")}</button><button type="button" data-compromise-action="remove" data-constraint-id="${escapeHtml(stop.id)}">${t("Remove stop")}</button></div></li>`).join("");
+  const dropped = (candidate.dropped_stops ?? []).map((stop) => `<li><strong>${escapeHtml(stop.name)}</strong><span>${tr`Drop reason: ${escapeHtml(friendlyLabel(stop.reason))}`}</span></li>`).join("");
   if (!reached && !approximated && !dropped) {
     return "";
   }
-  return `<section><h3>${t("Route itinerary")}</h3><ol class="tour-itinerary">${reached}${approximated}</ol>${dropped ? `<details><summary>Dropped stops (${candidate.dropped_stops.length})</summary><ul class="tour-itinerary dropped">${dropped}</ul></details>` : ""}</section>`;
+  return `<section><h3>${t("Route itinerary")}</h3><ol class="tour-itinerary">${reached}${approximated}</ol>${dropped ? `<details><summary>${tr`Dropped stops (${candidate.dropped_stops.length})`}</summary><ul class="tour-itinerary dropped">${dropped}</ul></details>` : ""}</section>`;
 }
 
 function compromiseSummary(candidate) {
@@ -1998,8 +1998,8 @@ function renderCanonicalMetrics(candidate, result) {
         [t("Cache hits / misses"), `${diagnostics.cache.hit_count} / ${diagnostics.cache.miss_count}`],
         ...phaseRows,
       ])
-      : `<section><h3>${t("Search diagnostics")}</h3><p>Not applicable — loaded immutable ${state.outingDisplay ? "outing" : "saved-route"} snapshot.</p></section>`)
-    + `<section><h3>Warnings</h3><ul class="warning-list">${warnings.length ? warnings.map((warning) => `<li>${escapeHtml(friendlyLabel(warning))}</li>`).join("") : `<li>${diagnostics ? t("No route or search warnings.") : t("No route warnings. Search diagnostics are not applicable.")}</li>`}</ul></section>` + '</details>';
+      : `<section><h3>${t("Search diagnostics")}</h3><p>${tr`Not applicable — loaded immutable ${state.outingDisplay ? "outing" : "saved-route"} snapshot.`}</p></section>`)
+    + `<section><h3>${t("Warnings")}</h3><ul class="warning-list">${warnings.length ? warnings.map((warning) => `<li>${escapeHtml(friendlyLabel(warning))}</li>`).join("") : `<li>${diagnostics ? t("No route or search warnings.") : t("No route warnings. Search diagnostics are not applicable.")}</li>`}</ul></section>` + '</details>';
   wireCompromiseActions(candidate);
 }
 
@@ -2084,7 +2084,7 @@ function wireCompromiseActions(candidate) {
         item.approachOverride = { ...stop.resolved_approach.coordinate };
       }
       invalidateAndRender();
-      setEditableRequestStatus(t("Constraint updated. Generate again to apply it."));
+      setEditableRequestStatus(() => (t("Constraint updated. Generate again to apply it.")));
     });
   });
 }
@@ -2294,7 +2294,7 @@ async function generate() {
   try {
     request = validateRequestControls();
   } catch (error) {
-    showError(error.message);
+    showError(() => (error.message));
     return;
   }
   invalidateCandidates();
@@ -2323,7 +2323,7 @@ async function generate() {
     state.visualizationCache.clear();
     state.request = { status: "success", id, startedAt: null };
     setLocalizedText(byId("request-status"), () => result.candidates.length
-      ? `${result.candidates.length} route${result.candidates.length === 1 ? "" : "s"} generated.`
+      ? t(result.candidates.length === 1 ? "{count} route generated." : "{count} routes generated.", { count: result.candidates.length })
       : t("No route matches the required points and settings."));
     render();
     if (result.candidates.length) {
@@ -2351,7 +2351,7 @@ async function generate() {
 
 async function reverseSelectedRoute() {
   if (localPlanner) {
-    showError(t("On-device route reversal is not available yet. Edit the ordered points and generate a new route."));
+    showError(() => (t("On-device route reversal is not available yet. Edit the ordered points and generate a new route.")));
     return;
   }
   const sourceCandidate = selectedCandidate();
@@ -2433,7 +2433,7 @@ async function reverseSelectedRoute() {
     if (!cancelled) {
       if (error instanceof ApiError) {
         showError(
-          error.message,
+          () => (error.message),
           error.details,
           error.code,
           error.code === "exact_waypoint_not_reached"
@@ -2443,7 +2443,7 @@ async function reverseSelectedRoute() {
         );
       } else {
         showError(
-          t("Route reversal failed."),
+          () => (t("Route reversal failed.")),
           t("A browser error interrupted reversal; no raw traceback is displayed."),
           "browser_reverse_error",
           t("The selected source route remains displayed."),
@@ -2512,12 +2512,12 @@ function showNoCandidateError(result) {
       ? tr`${pointName} snapped ${details.snap_distance_m.toFixed(1)} m away; the permitted limit is ${details.maximum_snap_distance_m.toFixed(0)} m. `
       : "";
     if (localFailure === "endpoint_review_required") { hideError(); appShell?.show("map"); return; }
-    showError(error.message, safeGenerationDiagnostics(result), error.code,
+    showError(() => (error.message), safeGenerationDiagnostics(result), error.code,
       tr`${measured}Your requested points and settings are unchanged.`, t("Review the points, activity and installed region before trying again."));
     return;
   }
   showError(
-    t("No matching route found."),
+    () => (t("No matching route found.")),
     safeGenerationDiagnostics(result),
     "no_route_candidate",
     t("Your points and constraints have been kept."),
@@ -2527,7 +2527,7 @@ function showNoCandidateError(result) {
 
 function handleGenerationError(error) {
   if (error instanceof LocalPlannerError) {
-    showError(error.message, "", error.code, t("Your requested points and settings are unchanged."),
+    showError(() => (error.message), "", error.code, t("Your requested points and settings are unchanged."),
       t("Review the request and installed regional data before trying again."));
     return;
   }
@@ -2537,7 +2537,7 @@ function handleGenerationError(error) {
       : t("The planning request was not completed.");
     lastExactFailure = error.code === "exact_waypoint_not_reached" ? error.metadata : null;
     showError(
-      error.code === "exact_waypoint_not_reached" ? error.message : t("Route planning couldn’t finish."),
+      () => (error.code === "exact_waypoint_not_reached" ? error.message : t("Route planning couldn’t finish.")),
       `${error.message}\n${error.details}`,
       error.code,
       context,
@@ -2547,7 +2547,7 @@ function handleGenerationError(error) {
     return;
   }
   showError(
-    t("Route generation failed."),
+    () => (t("Route generation failed.")),
     t("A browser error interrupted generation; no raw traceback is displayed."),
     "browser_generation_error",
     t("Your points and preferences are kept."),
@@ -2556,8 +2556,8 @@ function handleGenerationError(error) {
 }
 
 function handleError(error, fallback) {
-  if (error instanceof ApiError) showError(error.message, `${error.code}\n${error.details}`);
-  else showError(fallback, t("A browser error interrupted this action; no raw traceback is displayed."));
+  if (error instanceof ApiError) showError(() => (error.message), `${error.code}\n${error.details}`);
+  else showError(() => (fallback), t("A browser error interrupted this action; no raw traceback is displayed."));
 }
 
 function normalizeImportedRequest(value, { requireKnownProfile = true } = {}) {
@@ -2748,9 +2748,9 @@ async function importRequest(file) {
   try {
     const imported = applyCanonicalRequestState(JSON.parse(await file.text()));
     invalidateAndRender();
-    setEditableRequestStatus(state.planningMode === "auto_tour"
+    setEditableRequestStatus(() => (state.planningMode === "auto_tour"
       ? tr`${file.name} loaded. ${state.importDiagnostics.supplied_location_count} supplied locations: ${state.importDiagnostics.consumed_as_start_count} START, ${state.importDiagnostics.consumed_as_end_count} END, ${state.autoTour.requestedPlaces.length} requested places; ${state.importDiagnostics.discarded_count} discarded.`
-      : tr`${file.name} loaded. All ${state.points.length} named waypoint constraints and strengths are ready for review.`);
+      : tr`${file.name} loaded. All ${state.points.length} named waypoint constraints and strengths are ready for review.`));
     appShell?.show("plan");
     fitCoordinates([
       ...imported.points,
@@ -2760,7 +2760,7 @@ async function importRequest(file) {
       ...imported.requestedPlaces.map((place) => place.coordinate),
     ].filter(Boolean).map((point) => [point.lon, point.lat]));
   } catch (error) {
-    showError(t("Could not import request JSON."), error.message);
+    showError(() => (t("Could not import request JSON.")), error.message);
   }
 }
 
@@ -2772,7 +2772,7 @@ async function importGpx(file) {
     appShell?.show("map");
     fitCoordinates(state.importedGpx.segments.flat());
   } catch (error) {
-    showError(t("Could not import GPX."), error.message);
+    showError(() => (t("Could not import GPX.")), error.message);
   }
 }
 
@@ -2961,7 +2961,7 @@ async function useSavedRouteAsNewPlan() {
       : t("POI index unavailable. Place discovery is disabled; routing still works."));
     render();
     setEditableRequestStatus(
-      t("Saved request copied into a new editable plan. Generate when ready."),
+      () => (t("Saved request copied into a new editable plan. Generate when ready.")),
     );
   } catch (error) {
     handleError(error, t("The saved route could not be prepared as a new plan."));
@@ -3029,9 +3029,9 @@ function updateFailedExactPoint(action) {
   }
   hideError();
   invalidateAndRender();
-  setEditableRequestStatus(action === "move"
+  setEditableRequestStatus(() => (action === "move"
     ? t("Drag the selected waypoint or place it on the map, then generate again.")
-    : t("Constraint updated. Generate again to apply it."));
+    : t("Constraint updated. Generate again to apply it.")));
   if (action === "move") appShell?.show("map", { focus: true });
 }
 
@@ -3043,7 +3043,7 @@ function bindEvents() {
   });
   byId("dock-finish").addEventListener("change", () => {
     try { changeMapTopology(byId("dock-finish").value, localPlanner ? "near" : undefined); updateControlsFromOptions(); invalidateAndRender(); }
-    catch (error) { render(); showError(error.message); }
+    catch (error) { render(); showError(() => (error.message)); }
   });
   byId("dock-order").addEventListener("change", () => {
     rememberPointEdit("Visit order changed");
@@ -3080,7 +3080,7 @@ function bindEvents() {
   byId("route-form").addEventListener("change", (event) => {
     if (event.target.name === "planning-mode" || event.target.id.startsWith("hard-") || (event.target.closest("#planning-points") && event.target.id !== "point-order-mode")) return;
     rememberPointEdit("Route settings changed");
-    try { updateOptionsFromControls(); } catch (error) { updateControlsFromOptions(); render(); showError(error.message); return; }
+    try { updateOptionsFromControls(); } catch (error) { updateControlsFromOptions(); render(); showError(() => (error.message)); return; }
     if (event.target.id === "profile" && plannerProfilePreference) {
       void plannerProfilePreference.remember(state.routingProfile).then((persisted) => {
         if (!persisted) reportOptionalStorageFailure();
@@ -3092,7 +3092,7 @@ function bindEvents() {
     input.addEventListener("change", () => {
       if (!input.checked) return;
       if (input.value === "automatic" && hasDiscoveryIntent()) {
-        showError(t("This plan has discovery-specific places."), t("Keep Suggest a route to preserve them, or remove those choices before using Automatic."));
+        showError(() => (t("This plan has discovery-specific places.")), t("Keep Suggest a route to preserve them, or remove those choices before using Automatic."));
         renderModeControls(); return;
       }
       rememberPointEdit("Planning choice changed");
@@ -3170,7 +3170,7 @@ function bindEvents() {
         if (draft.stops[index].reason) point.itineraryReason = draft.stops[index].reason;
       });
       invalidateAndRender();
-      setEditableRequestStatus(t("Itinerary imported. Review the locations on the map, then Generate when ready."));
+      setEditableRequestStatus(() => (t("Itinerary imported. Review the locations on the map, then Generate when ready.")));
       appShell?.show("plan");
       fitCoordinates([imported.start, ...state.points, imported.end].filter(Boolean).map(point => [point.lon, point.lat]));
     },
@@ -3283,7 +3283,7 @@ function bindEvents() {
       window.setTimeout(() => URL.revokeObjectURL(url), 0);
       setLocalizedText(byId("request-status"), () => t("Canonical plan JSON exported."));
     } catch (error) {
-      showError(t("Could not export plan JSON."), error.message);
+      showError(() => (t("Could not export plan JSON.")), error.message);
     }
   });
   byId("copy-request").addEventListener("click", async () => {
@@ -3295,7 +3295,7 @@ function bindEvents() {
         ? t("Suggested-route plan copied with places, distance settings and preferences.")
         : t("Request JSON copied with every required-point name."));
     } catch (error) {
-      showError(t("Could not copy request JSON."), error.message);
+      showError(() => (t("Could not copy request JSON.")), error.message);
     }
   });
   window.addEventListener("resize", resizeMap);
@@ -3730,7 +3730,7 @@ async function start() {
           if (place) { rememberPointEdit("Place approach updated"); place.approachOverride = coordinate; }
           state.settingRequestedApproachId = null;
           invalidateAndRender();
-          setEditableRequestStatus(t("Requested-place approach set from map."));
+          setEditableRequestStatus(() => (t("Requested-place approach set from map.")));
           return;
         }
         if (state.endpointSetMode) {
@@ -3742,7 +3742,7 @@ async function start() {
           setLocalizedText(byId(`set-hard-${kind}`), () => t("Set on map"));
           invalidateAndRender();
           setEditableRequestStatus(
-            tr`${kind === "start" ? t("Start") : t("End")} point set from map.`,
+            () => (tr`${kind === "start" ? t("Start") : t("End")} point set from map.`),
           );
           const reopenAdventure = adventureMapEndpoint === kind;
           adventureMapEndpoint = null;
@@ -3756,7 +3756,7 @@ async function start() {
           clearPointPlacement();
           invalidateAndRender();
 
-          setEditableRequestStatus(t("Stop moved. Generate again to use the new position."));
+          setEditableRequestStatus(() => (t("Stop moved. Generate again to use the new position.")));
           return;
         }
         if (state.addPointMode) {
@@ -3765,8 +3765,8 @@ async function start() {
               explicitStop: state.planningStrategy !== "automatic" });
             clearPointPlacement(); updateControlsFromOptions(); invalidateAndRender();
             keepCoordinateVisible([coordinate.lon, coordinate.lat]);
-            setEditableRequestStatus(t("Route point set from map."));
-          } catch (error) { showError(error.message); }
+            setEditableRequestStatus(() => (t("Route point set from map.")));
+          } catch (error) { showError(() => (error.message)); }
           return;
         }
 
@@ -3775,8 +3775,8 @@ async function start() {
           updateControlsFromOptions();
           invalidateAndRender();
           keepCoordinateVisible([coordinate.lon, coordinate.lat]);
-          setEditableRequestStatus(t("Ready to generate."));
-        } catch (error) { showError(error.message); }
+          setEditableRequestStatus(() => (t("Ready to generate.")));
+        } catch (error) { showError(() => (error.message)); }
       },
     });
     if (mapInitialized) void plannerLocation?.initialize();

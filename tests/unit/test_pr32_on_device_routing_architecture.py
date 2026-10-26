@@ -19,8 +19,14 @@ def test_debug_packaging_installs_beside_unchanged_release_app() -> None:
     assert f'namespace = "{release_id}"' in build
     assert 'applicationIdSuffix = ".debug"' in build
     assert 'versionNameSuffix = "-debug"' in build
-    assert '<string name="app_name">Sugarglider</string>' in release_strings
-    assert '<string name="app_name">SG Debug</string>' in debug_strings
+    assert (
+        '<string name="app_name" translatable="false">Sugarglider</string>'
+        in release_strings
+    )
+    assert (
+        '<string name="app_name" translatable="false">SG Debug</string>'
+        in debug_strings
+    )
     assert f"run-as {debug_id}" in docs
     assert f"am force-stop {debug_id}" in docs
     assert f"run-as {release_id} " not in docs

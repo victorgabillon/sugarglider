@@ -1329,9 +1329,9 @@ function requestedPlacePopupContent(feature) {
     popupRow(content, t("Approach kind"), properties.approach.kind);
     popupRow(content, t("Arrival tolerance"), `${Number(properties.approach.arrival_tolerance_m ?? 25)} m`);
   }
-  popupRow(content, t("Deliberately considered"), properties.deliberately_considered ? "Yes" : "No");
-  popupRow(content, t("Deliberately routed"), properties.deliberately_routed ? "Yes" : "No");
-  popupRow(content, t("Routed in another candidate"), properties.deliberately_routed_elsewhere ? "Yes" : "No");
+  popupRow(content, t("Deliberately considered"), properties.deliberately_considered ? t("Yes") : t("No"));
+  popupRow(content, t("Deliberately routed"), properties.deliberately_routed ? t("Yes") : t("No"));
+  popupRow(content, t("Routed in another candidate"), properties.deliberately_routed_elsewhere ? t("Yes") : t("No"));
   if (Number.isFinite(properties.graph_snap_distance_m)) {
     popupRow(content, t("Graph snap distance"), `${Number(properties.graph_snap_distance_m).toFixed(1)} m`);
   }
@@ -2929,7 +2929,7 @@ export function renderEndpointAdjustmentMap(adjustments) {
     element.className = `endpoint-adjustment-marker ${kind}`;
     const label = item.role === "start" ? t("Start") : item.endpoint === "start" ? "Return" : t("End");
     element.textContent = `${kind === "requested" ? "○" : "■"} ${label}`;
-    element.setAttribute("aria-label", `${kind === "requested" ? t("Selected") : t("Actual routed")} ${label}, ${Math.round(item.distance_m)} m displacement`);
+    element.setAttribute("aria-label", tr`${kind === "requested" ? t("Selected") : t("Actual routed")} ${t(label)}, ${Math.round(item.distance_m)} m displacement`);
     element.addEventListener("click", event => { event.stopPropagation(); focusCoordinate([point.lon, point.lat]); });
     element.addEventListener("keydown", event => event.stopPropagation());
     endpointAdjustmentMarkers.push(new maplibregl.Marker({ element, anchor: "center" }).setLngLat([point.lon, point.lat]).addTo(map));

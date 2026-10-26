@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const origin = 'https://appassets.androidplatform.net';
 
 async function runFormAcceptance(browser, root, width) {
+  const language = width === 390 ? "en" : "fr";
   const context = await browser.newContext({ viewport: { width, height: 844 },
     isMobile: width < 500, hasTouch: width < 500 });
   const external = [], errors = [];
@@ -13,6 +14,7 @@ async function runFormAcceptance(browser, root, width) {
       globalThis.formNativeRequests = [];
       globalThis.sugargliderNative = { onmessage: null, postMessage(payload) {
         const request = JSON.parse(payload); formNativeRequests.push(request.type);
+        if (request.type === 'set_ui_language') { queueMicrotask(() => this.onmessage?.({data:JSON.stringify({schema_version:1,request_id:request.request_id,type:'set_ui_language_result',language:request.language,selected:true})})); return; }
         if (request.type !== 'hello') throw Error('Input editing must not invoke native routing');
         queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ schema_version: 1,
           request_id: request.request_id, type: 'hello_result', outing_slug: null,
@@ -35,18 +37,21 @@ async function runFormAcceptance(browser, root, width) {
     });
     const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     await page.goto(origin + '/');
-    const name = page.getByRole('textbox', { name: 'What should we call you?' });
+    await page.waitForFunction(() => document.querySelector('#trail-profile-dialog').open);
+    if (language === 'en') await page.evaluate(async () => { const {setLanguage}=await import('/static/i18n.js'); await setLanguage('en'); });
+    const name = page.getByRole('textbox', { name: language === 'fr' ? 'Comment vous appeler ?' : 'What should we call you?' });
     await name.waitFor(); await name.fill('PR97 keyboard QA');
     await name.press('End'); await name.press('Backspace'); await name.press('A');
     assert.equal(await name.inputValue(), 'PR97 keyboard QA');
-    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await page.getByRole('button', { name: language === 'fr' ? 'Continuer' : 'Continue', exact: true }).click();
     await page.waitForFunction(() => !document.querySelector('#trail-profile-dialog').open);
     await page.reload();
-    await page.waitForFunction(() => document.querySelector('#regional-status').textContent.includes('Download a region'));
+    await page.waitForFunction(language => document.querySelector('#regional-status').textContent.includes(language === 'fr' ? 'Téléchargez une région' : 'Download a region'), language);
+    assert.equal(await page.locator('html').getAttribute('lang'), language, 'Language survives restart with the local profile');
     assert.equal(await page.locator('#trail-profile-dialog').evaluate(node => node.open), false);
     await page.locator('[data-shell-view="plan"]').click();
     await page.locator('#planning-preferences > summary').click();
-    const routeName = page.getByRole('textbox', { name: 'Route name', exact: true });
+    const routeName = page.getByRole('textbox', { name: language === 'fr' ? 'Nom du parcours' : 'Route name', exact: true });
     await routeName.fill('PR97 route input'); await routeName.press('Tab');
     assert.equal(await routeName.inputValue(), 'PR97 route input');
     const distance = page.getByRole('spinbutton', { name: 'Distance (km)', exact: true });
@@ -59,7 +64,7 @@ async function runFormAcceptance(browser, root, width) {
     if (width < 500) { await routeName.tap(); assert.equal(await routeName.evaluate(node => document.activeElement === node), true); }
     assert.deepEqual(await page.evaluate(() => formNativeRequests.filter(type => ['local_route', 'route_elevation'].includes(type))), []);
     assert.deepEqual(external, []); assert.deepEqual(errors, []);
-    return { width, profile_persisted: true, labels_keyboard_touch: true,
+    return { width, language, profile_persisted: true, labels_keyboard_touch: true,
       numeric_constraints_preserved: true, no_route_or_height_calls: true };
   } finally { await context.close(); }
 }

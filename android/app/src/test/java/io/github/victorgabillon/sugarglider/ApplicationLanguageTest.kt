@@ -27,5 +27,9 @@ class ApplicationLanguageTest {
         assertTrue(ApplicationLanguage.valid("fr"))
         assertTrue(ApplicationLanguage.valid("en"))
         for (language in listOf("", "FR", "fr-FR", "de", " en")) assertFalse(ApplicationLanguage.valid(language))
+        assertEquals("en", ApplicationLanguage.normalized("en"))
+        for (value in listOf(null, "fr", "EN", "en-US", "de", true, 3, emptyMap<String, String>())) {
+            assertEquals("fr", ApplicationLanguage.normalized(value))
+        }
     }
 }

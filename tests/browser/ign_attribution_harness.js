@@ -2,7 +2,6 @@
 // both-language state preservation are covered by localization_harness and the
 // full bundled-app acceptance, with strict canonical and GPX comparisons.
 import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
-await setLanguage("en", { persist: false, document: null });
 import {appendRegionSources, appendTerrainAttribution} from '../../src/sugarglider/web/static/terrain_attribution.js';
 import {createRegionScreen} from '../../src/sugarglider/web/static/region_screen.js';
 import {createRegionVersionStore} from '../../src/sugarglider/web/static/region_versions.js';
@@ -31,6 +30,7 @@ function regionElements(host) {
 }
 
 export async function run() {
+  await setLanguage("en", { persist: false, document: null });
   const cases = [];
   const fixture = await (await fetch('../fixtures/ign_terrain_attribution.json')).json();
   const copernicus = await (await fetch('../fixtures/pr94_terrain_attribution.json')).json();

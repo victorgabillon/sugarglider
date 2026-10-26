@@ -63,6 +63,11 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           return { manifest, initial, revised, flat };
         });
         await context.addInitScript(({ profiles, fixture }) => {
+          globalThis.localizationLocationStarts = 0;
+          for (const method of ['getCurrentPosition', 'watchPosition']) {
+            const original = navigator.geolocation[method].bind(navigator.geolocation);
+            navigator.geolocation[method] = (...args) => { localizationLocationStarts++; return original(...args); };
+          }
           globalThis.adventureNativeCalls = []; globalThis.adventureSavedGpx = null; globalThis.adventureModelCount = 0; globalThis.failAdventureModel = false;
           let connected = false;
           const account = () => ({ accounts: connected ? [{ id: 'oaiapp_synthetic', label: 'Synthetic account', connected: true, plan_usage: true }] : [],
@@ -302,7 +307,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           const { currentViewportBounds, mapPresentationDiagnostics } = await import('/static/map.js');
           return { canonical: JSON.stringify({ request: currentPlanRequest(), result: state.generationResult,
             source: state.generationSourceRequest, selected: state.selectedSignature, editorPoints: state.points }),
-            gpx: await exportCanonicalCandidate(selectedCandidate()).blob.text(), bounds: currentViewportBounds(), camera: mapPresentationDiagnostics().camera,
+            locationStarts: localizationLocationStarts, gpx: await exportCanonicalCandidate(selectedCandidate()).blob.text(), bounds: currentViewportBounds(), camera: mapPresentationDiagnostics().camera,
             routeCalls: adventureNativeCalls.filter(call => ['local_route','route_elevation','chatgpt_infer','adventure_speech_start'].includes(call.type)).length,
             form: [...document.querySelectorAll('#route-form input, #route-form select, #route-form textarea')].map(node => [node.id,node.value,node.checked]) };
         });
@@ -322,6 +327,9 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           const afterLanguage = await languageFingerprint();
           assert.equal(afterLanguage.canonical, beforeLanguage.canonical, 'Language never changes canonical route state');
           assert.equal(afterLanguage.gpx, beforeLanguage.gpx, 'Language never changes GPX bytes');
+          assert.equal(afterLanguage.locationStarts, beforeLanguage.locationStarts, 'Language never acquires location');
+          assert.equal(await page.evaluate(async () => (await import('/static/i18n.js')).getLanguage()), language);
+          assert((await page.locator('#request-status').textContent()).includes(language === 'fr' ? 'généré' : 'generated'), 'Existing generation feedback updates with the interface language');
           assert.equal(afterLanguage.routeCalls, beforeLanguage.routeCalls, 'Language never routes, measures terrain, infers or records');
           assert.deepEqual(afterLanguage.form, beforeLanguage.form, 'Language preserves every planner form value');
           assert.deepEqual(afterLanguage.camera, beforeLanguage.camera, 'Language preserves camera: '+JSON.stringify({before:beforeLanguage.camera,after:afterLanguage.camera}));
@@ -455,7 +463,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await screenshot('dialog-region-unavailable');
         await page.locator('#adventure-close').click();
         assert.deepEqual(errors, []); assert.deepEqual(external, []);
-        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, height, locale, status: 'passed', cases: ['supplied_ai_artwork_map_plan_dialog_loaded_accessible_and_clickable','startup_map_ai_cta_shared_lifecycle_privacy_build_identity','initial_settled_keyboard_credits_and_active_region_switch','french_portrait_landscape_large_text','region_unavailable_visible_without_automatic_request','bounded_local_landmark_context_before_research','name_grounding_without_prior_location_picker','optional_endpoints_and_cancelled_map_roundtrip','no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
+        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, height, locale, status: 'passed', cases: ['french_default_on_english_device', 'icon_only_localized_accessible_map_action', 'remembered_english_survives_restart', 'language_preserves_canonical_request_result_selection_form_camera_and_gpx', 'language_does_not_acquire_location_route_infer_or_record', 'supplied_ai_artwork_map_plan_dialog_loaded_accessible_and_clickable','startup_map_ai_cta_shared_lifecycle_privacy_build_identity','initial_settled_keyboard_credits_and_active_region_switch','french_portrait_landscape_large_text','region_unavailable_visible_without_automatic_request','bounded_local_landmark_context_before_research','name_grounding_without_prior_location_picker','optional_endpoints_and_cancelled_map_roundtrip','no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
       } finally { await context.close(); }
     }
   } finally { await browser.close(); }

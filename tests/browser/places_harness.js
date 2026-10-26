@@ -2,7 +2,6 @@
 // both-language state preservation are covered by localization_harness and the
 // full bundled-app acceptance, with strict canonical and GPX comparisons.
 import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
-await setLanguage("en", { persist: false, document: null });
 import { createLocalRegionData, eligibleLocalPoi } from '../../src/sugarglider/web/static/local_region_data.js';
 import { createLocalPlaceSearch } from '../../src/sugarglider/web/static/local_places.js';
 import { createLocalRegionClient } from '../../src/sugarglider/web/static/local_region_client.js';
@@ -32,6 +31,7 @@ function recount(document) {
 }
 
 export async function runPlacesHarness() {
+  await setLanguage("en", { persist: false, document: null });
   const cases = [], fixture = await (await fetch('../fixtures/pr40_regional_data.json')).json();
   const legacy = createLocalRegionData(fixture.manifest, structuredClone(fixture));
   const query = { bbox: { west:0, south:0, east:.02, north:.02 }, groups:['refreshment'], categories:['ice_cream'], limit:200 };

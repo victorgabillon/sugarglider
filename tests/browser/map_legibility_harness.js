@@ -2,7 +2,6 @@
 // both-language state preservation are covered by localization_harness and the
 // full bundled-app acceptance, with strict canonical and GPX comparisons.
 import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
-await setLanguage("en", { persist: false, document: null });
 import {layers,namedFlavor} from '../../src/sugarglider/web/static/vendor/protomaps-basemaps-5.7.2/basemaps.js';
 import {offlineBasemapPresentationLayer} from '../../src/sugarglider/web/static/offline_label_policy.js';
 import {isPriorityPlace,placePresentation} from '../../src/sugarglider/web/static/place_presentation.js';
@@ -11,6 +10,7 @@ const assert=(v,m)=>{if(!v)throw Error(m)};
 const equal=(a,b,m)=>assert(JSON.stringify(a)===JSON.stringify(b),m);
 const until=async p=>{for(let i=0;i<300;i++){if(p())return;await new Promise(r=>setTimeout(r,25))}throw Error('Timed out')};
 export async function run(){
+  await setLanguage("en", { persist: false, document: null });
  const cases=[];const generated=layers('local',namedFlavor('light'),{lang:'fr'});
  const labels=generated.map(offlineBasemapPresentationLayer).filter(l=>l?.type==='symbol');
  equal(labels.map(l=>l.id).sort(),['earth_label_islands','places_locality','places_subplace','roads_labels_major','roads_labels_minor','water_label_lakes','water_label_ocean','water_waterway_label'].sort(),'Useful families only');
