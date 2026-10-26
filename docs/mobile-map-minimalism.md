@@ -15,6 +15,8 @@ landscape too, retaining the five-second acknowledgement and full credits.
 
 The route bar normally shows the existing visit order/topology and Generate.
 Opening it or activating a route marker reveals the existing editing controls.
+Selected-point actions precede general route settings so Move and More remain
+visible in the short landscape editor.
 Done/Escape closes editing without clearing selection or changing a route.
 Explicit map acquisition folds secondary controls while keeping its instruction
 and Cancel available, then returns to an editor the user had opened. Required

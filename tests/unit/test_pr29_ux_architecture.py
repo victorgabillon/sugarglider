@@ -48,8 +48,11 @@ def test_pr29_shell_keeps_primary_actions_outside_secondary_disclosures() -> Non
         '<summary><span data-i18n="Advanced route preferences">'
         "Advanced route preferences</span></summary>" in html
     )
-    assert '<details class="map-tools"' in html
-    assert '<summary><span data-i18n="Map options">Map options</span></summary>' in html
+    assert '<details class="map-tools"' in tools
+    assert (
+        '<summary><span data-i18n="Map display">Map display</span></summary>' in tools
+    )
+    assert html.count('<details class="map-tools"') == 1
     assert '<details class="metrics-disclosure">' in html
     assert (
         '<summary><span data-i18n="Route details">Route details</span></summary>'

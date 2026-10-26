@@ -338,7 +338,7 @@ def test_shared_shell_generation_tracks_v119_cached_assets() -> None:
             "6829df6ee1f2d63482c941a190e9dc14a3e388c757f337b0069cccf46b123578"
         ),
         "index.html": (
-            "cf32f587a68ea1736520a03bf077979cd9397f44207ec68f92935eac7b485df5"
+            "a003b4210c02901fac13408a9ce00bf970c23e07745dea07ae8e37aee1b0fef4"
         ),
         "location_search.js": (
             "635f5aaf5603cadbc3b77f035055251e54358b16a831d927e51fe6c44c031c36"

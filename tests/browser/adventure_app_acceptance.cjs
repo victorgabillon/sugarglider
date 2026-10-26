@@ -371,6 +371,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         assert(adventure.result.candidates.some(c => c.reached_stops.length === 2));
         await view('routes'); await page.locator('.candidate-select').last().click();
         await page.waitForFunction(french => document.querySelector('#adventure-storage-status').textContent.startsWith(french ? 'Enregistrée sur cet appareil' : 'Saved on this device'),locale==='fr-FR');
+        assert.equal(await page.locator('#candidate-list .candidate-card').count(),3,'The adventure screenshot contains three actual alternatives');
         await view('map'); await screenshot('minimal-ai-three-alternatives-map'); await view('routes'); await screenshot('minimal-ai-three-alternatives-routes');
         const exactAdventure = await page.evaluate(() => JSON.stringify(adventureAppState.state.adventureResult));
         const adventureBeforeLanguage = await languageFingerprint();
