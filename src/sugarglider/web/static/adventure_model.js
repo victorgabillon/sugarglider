@@ -2,13 +2,23 @@ import { nativeBridgeTransport } from "./native_bridge_transport.js";
 
 const messages = { unavailable: "ChatGPT connection is available in the Android app.", cancelled: "Adventure planning cancelled.",
   browser_unavailable: "Android could not open a system browser for ChatGPT sign-in. Enable a browser, then try again.",
+  deadline: "ChatGPT reached the 120-second request deadline. Try a shorter request; your existing route is unchanged.",
+  network_timeout: "The network stopped responding while waiting for ChatGPT. Your existing route is unchanged.",
   network: "ChatGPT could not be reached. Your existing route is unchanged.", auth_expired: "Reconnect your ChatGPT account to continue.",
   auth_timeout: "Sign-in timed out. Try again and return to Sugarglider after the browser confirmation.",
   usage_limit: "Your ChatGPT usage limit was reached. Manage usage in your ChatGPT settings.",
   unsupported: "This account or model does not support the requested operation. Choose another available model or disable online research.",
   invalid_response: "ChatGPT did not return a usable complete answer. Your existing route is unchanged.", storage: "The protected ChatGPT account store is unavailable." };
+const frenchMessages = {
+  cancelled: "Planification annulée à votre demande.", deadline: "ChatGPT a atteint le délai maximal de 120 secondes. Essayez une demande plus courte ; votre parcours actuel est conservé.",
+  network_timeout: "Le réseau a cessé de répondre pendant l’attente de ChatGPT. Votre parcours actuel est conservé.",
+  network: "ChatGPT est injoignable. Votre parcours actuel est conservé.", auth_expired: "Reconnectez votre compte ChatGPT pour continuer.",
+  usage_limit: "La limite d’utilisation de votre compte ChatGPT est atteinte. Consultez vos paramètres ChatGPT.",
+  invalid_response: "ChatGPT n’a pas renvoyé de réponse complète utilisable. Votre parcours actuel est conservé.",
+  unsupported: "Ce compte ou ce modèle ne prend pas en charge cette opération. Choisissez un autre modèle disponible ou désactivez la recherche en ligne.",
+};
 export class AdventureModelError extends Error {
-  constructor(code) { super(messages[code] ?? messages.invalid_response); this.code = Object.hasOwn(messages, code) ? code : "invalid_response"; }
+  constructor(code) { super((/^fr(?:-|$)/i.test(globalThis.navigator?.language ?? "") ? frenchMessages[code] : null) ?? messages[code] ?? messages.invalid_response); this.code = Object.hasOwn(messages, code) ? code : "invalid_response"; }
 }
 export function createAdventureModel({ transport = nativeBridgeTransport, origin = globalThis.location?.origin } = {}) {
   const owner = {};

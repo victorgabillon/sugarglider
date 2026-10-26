@@ -13,7 +13,7 @@ internal object ChatGptResponseStream {
 
     fun read(reader: Reader, cancelled: () -> Boolean = { false }): String = completed(reader,cancelled).text
 
-    fun completed(reader: Reader, cancelled: () -> Boolean = { false }): ChatGptCompletion {
+    fun completed(reader: Reader, cancelled: () -> Boolean = { false }, onEvent: (String) -> Unit = {}): ChatGptCompletion {
         val line = StringBuilder()
         val data = StringBuilder()
         var total = 0
@@ -30,7 +30,9 @@ internal object ChatGptResponseStream {
             if (payload == "[DONE]") return
             boundDepth(payload)
             val json = try { JSONObject(payload) } catch (_: Exception) { throw IllegalArgumentException("Invalid model stream.") }
-            when (json.optString("type")) {
+            val type = json.optString("type")
+            onEvent(type)
+            when (type) {
                 "response.output_item.done" -> {
                     val item = json.getJSONObject("item")
                     if (item.optString("type") in setOf("message","web_search_call")) {
@@ -141,7 +143,7 @@ internal object ChatGptResponseStream {
     }
 }
 
-internal class ChatGptCompletion(val text: String, val usage: JSONObject, val citations: org.json.JSONArray, val researched: Boolean) {
+internal class ChatGptCompletion(val text: String, val usage: JSONObject, val citations: org.json.JSONArray, val researched: Boolean, val timings: JSONObject = JSONObject()) {
     companion object {
         fun from(response: JSONObject, text: String): ChatGptCompletion {
             val usage = JSONObject()

@@ -9,7 +9,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ChatGptHttpTest {
-    private class Response(url: URL, val status: Int = 200, val body: String = "{}", val mime: String? = "application/json") : HttpURLConnection(url) {
+    private open class Response(url: URL, val status: Int = 200, val body: String = "{}", val mime: String? = "application/json") : HttpURLConnection(url) {
         val written = ByteArrayOutputStream()
         var closed = false
         override fun connect() = Unit
@@ -17,7 +17,7 @@ class ChatGptHttpTest {
         override fun usingProxy() = false
         override fun getResponseCode() = status
         override fun getContentType() = mime
-        override fun getInputStream() = ByteArrayInputStream(body.toByteArray())
+        override fun getInputStream(): java.io.InputStream = ByteArrayInputStream(body.toByteArray())
         override fun getErrorStream() = ByteArrayInputStream(body.toByteArray())
         override fun getOutputStream() = written
     }
@@ -98,7 +98,7 @@ class ChatGptHttpTest {
         call.beginNetwork() // Subsequent requests cannot reset the shared budget.
         elapsed += 1_000_000_000L
         assertTrue(call.cancelled())
-        assertThrows(ChatGptException::class.java) { call.beginNetwork() }
+        assertEquals(ChatGptFailureKind.DEADLINE,assertThrows(ChatGptException::class.java) { call.beginNetwork() }.kind)
         val cancelled = ChatGptCall { elapsed }; cancelled.close()
         assertTrue(cancelled.cancelled())
         assertThrows(ChatGptException::class.java) { cancelled.beginNetwork() }
@@ -119,6 +119,50 @@ class ChatGptHttpTest {
             assertFalse(failure.diagnostic().toString().contains("secret"))
             assertNull(failure.cause)
         }
+    }
+    @Test fun distinguishesReadTimeoutDeadlineAndExplicitCancellationAndClosesConnections() {
+        for (outcome in listOf("read_timeout","deadline","cancelled")) {
+            var elapsed = 0L
+            val call = ChatGptCall { elapsed }
+            val response = object : Response(URL(ChatGptHttp.RESPONSES),mime="text/event-stream") {
+                override fun getInputStream(): java.io.InputStream = object : java.io.InputStream() {
+                    override fun read(): Int {
+                        when (outcome) {
+                            "deadline" -> elapsed = 120_000_000_000L
+                            "cancelled" -> call.close()
+                        }
+                        throw java.net.SocketTimeoutException("private provider details")
+                    }
+                }
+            }
+            val failure = assertThrows(ChatGptException::class.java) {
+                ChatGptHttp(ConnectionFactory { response }).infer(call,"synthetic-token",adventureChatGptPayload("visible-model","instructions","synthetic",false,null))
+            }
+            assertEquals(when (outcome) {
+                "deadline" -> ChatGptFailureKind.DEADLINE
+                "cancelled" -> ChatGptFailureKind.CANCELLED
+                else -> ChatGptFailureKind.NETWORK_TIMEOUT
+            },failure.kind)
+            assertTrue(response.closed)
+            assertFalse(failure.diagnostic().toString().contains("private"))
+            assertNull(failure.cause)
+        }
+    }
+    @Test fun deadlineBoundsSocketWaitAndCancellationKeepsOwnership() {
+        var elapsed = 0L
+        val call = ChatGptCall { elapsed }; call.beginNetwork()
+        elapsed = 119_500_000_000L
+        val response = object : Response(URL(ChatGptHttp.MODELS)) {
+            override fun getInputStream(): java.io.InputStream {
+                elapsed = 120_000_000_000L
+                return ByteArrayInputStream("{}".toByteArray())
+            }
+        }
+        val failure = assertThrows(ChatGptException::class.java) { ChatGptHttp(ConnectionFactory { response }).models(call,"synthetic-token") }
+        assertEquals(ChatGptFailureKind.DEADLINE,failure.kind)
+        assertTrue(response.closed)
+        assertTrue(response.readTimeout <= 500)
+        call.close(); assertEquals(ChatGptFailureKind.CANCELLED,call.failureKind())
     }
     @Test fun rejectionDiagnosticsRetainOnlyKnownCodesAndParameters() {
         for ((code,parameter,expectedCode,expectedParameter) in listOf(

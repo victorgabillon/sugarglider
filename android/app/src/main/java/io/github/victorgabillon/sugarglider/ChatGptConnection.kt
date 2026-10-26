@@ -127,7 +127,7 @@ internal class ChatGptConnection(
         val answer = http.infer(call,account.tokens!!.access!!,payload)
         synchronized(lock) { requireCurrent(owned) }
         JSONObject().put("text",answer.text).put("usage",answer.usage).put("citations",answer.citations)
-            .put("researched",research && answer.researched).put("elapsed_ms",(System.nanoTime()-started)/1_000_000)
+            .put("timings",answer.timings).put("researched",research && answer.researched).put("elapsed_ms",(System.nanoTime()-started)/1_000_000)
     }
 
     fun signOut(): JSONObject {
