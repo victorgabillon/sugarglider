@@ -26,7 +26,7 @@
         </span>
       </a>
       <nav aria-label="File and generation actions">
-        <button class="button primary header-ai-action" id="ask-chatgpt" type="button" hidden>✨ Ask ChatGPT</button>
+        <button class="button primary header-ai-action ai-planner-action" id="ask-chatgpt" type="button" hidden><img class="ai-planner-icon" src="/static/brand/sugarglider-ai-planner.png" width="256" height="194" alt="" aria-hidden="true"><span class="ai-action-label">Ask ChatGPT</span></button>
         <button class="button primary header-action-primary" id="generate-top" type="button" data-icon="generate" aria-describedby="request-status" disabled>Generate</button>
         <details class="header-tools header-action-utility">
           <summary>Tools</summary>
@@ -122,7 +122,7 @@
     </dialog>
 
     <dialog id="adventure-dialog" class="adventure-dialog" aria-labelledby="adventure-title" aria-describedby="adventure-privacy">
-      <header><h2 id="adventure-title">✨ Ask ChatGPT</h2><button id="adventure-close" class="button secondary" type="button">Close</button></header>
+      <header><h2 id="adventure-title"><img class="ai-planner-icon" src="/static/brand/sugarglider-ai-planner.png" width="256" height="194" alt="" aria-hidden="true"><span class="ai-action-label">Ask ChatGPT</span></h2><button id="adventure-close" class="button secondary" type="button">Close</button></header>
       <div class="adventure-body">
         <p id="adventure-privacy" class="field-help">Generate sends your text and selected geographic context to ChatGPT online. Route calculations and GPX stay on this device. Nothing is sent until you ask.</p>
         <section class="adventure-account-section" aria-label="ChatGPT account">
@@ -309,7 +309,7 @@
         </div>
 
         <div class="plan-readiness"><p id="planning-readiness" class="field-help" role="status">Checking routing availability…</p><button id="plan-regions" class="text-button hidden" type="button">Regions</button></div>
-        <div id="adventure-launch" class="adventure-launch" hidden><button id="plan-with-ai" class="button primary wide" type="button">✨ Ask ChatGPT</button><p class="field-help" id="adventure-launch-help">Describe a run, hike or ride. ChatGPT suggests places; Sugarglider checks real offline routes.</p><button id="restore-adventure" class="button secondary wide" type="button" hidden>Reopen saved adventure</button><p id="adventure-recovery-status" class="field-help" role="status"></p></div>
+        <div id="adventure-launch" class="adventure-launch" hidden><button id="plan-with-ai" class="button primary wide ai-planner-action" type="button"><img class="ai-planner-icon" src="/static/brand/sugarglider-ai-planner.png" width="256" height="194" alt="" aria-hidden="true"><span class="ai-action-label">Ask ChatGPT</span></button><p class="field-help" id="adventure-launch-help">Describe a run, hike or ride. ChatGPT suggests places; Sugarglider checks real offline routes.</p><button id="restore-adventure" class="button secondary wide" type="button" hidden>Reopen saved adventure</button><p id="adventure-recovery-status" class="field-help" role="status"></p></div>
         <div class="itinerary-launch"><button id="import-itinerary" class="button secondary" type="button">Import itinerary</button><p class="field-help">Paste named places from an external assistant or a JSON file.</p></div>
         <form id="route-form" novalidate>
           <label class="plan-activity">Activity<select id="profile" aria-describedby="profile-description"></select></label>

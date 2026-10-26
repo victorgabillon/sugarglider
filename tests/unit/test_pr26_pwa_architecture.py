@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v116_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v117_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v116"
+    assert generation.group(1) == "v117"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -332,7 +332,7 @@ def test_shared_shell_generation_tracks_v116_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "8f4e4a60d7c404e5d913d88aa9f9a97d09d0f1403675faecf3668f34237d8154"
+            "b2bf898df36fde40658529caf0e0f589c3fd7e52345de8046b964ec4a6b9a20b"
         ),
         "location_search.js": (
             "635f5aaf5603cadbc3b77f035055251e54358b16a831d927e51fe6c44c031c36"
@@ -371,7 +371,7 @@ def test_shared_shell_generation_tracks_v116_cached_assets() -> None:
             "886d1a7348fee81b78d8b8ee16cb2cc90655d8f49d720c1f6b8f5a89a8f516a2"
         ),
         "adventure_dialog.js": (
-            "31eb70b6d7a138631e9f9a5261eb9717cd52fc58081179d8710461362ff4a818"
+            "0134f4a4c8743ac36552e812de73e2eceeab697b9336d99d767c3fe7040e7d87"
         ),
         "adventure_results.js": (
             "cac75ceed60897dc109629d4245e15253b5db3ddd1cc1febabcf76f892f17220"
@@ -424,7 +424,7 @@ def test_shared_shell_generation_tracks_v116_cached_assets() -> None:
         ),
         "map.js": ("913adacbe95dd60dc9a34d35b14ca5466ac24c0dc6f5dd651054eb45dbfa5653"),
         "styles.css": (
-            "0abacfc9056b3d0e976df67ad0ac4551c773eb33dbc54bbce15c1d429ea6589b"
+            "d2da0a23d8988ee6c2c6fa795dd75abd6ef4dbe571e22a6f926243b96bc8d674"
         ),
         "planner_profile.js": (
             "4183a1318f3aa49df52ca0a46329caaa4f6eee1bec1b49612c446562b1b0030a"

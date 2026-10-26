@@ -13,6 +13,31 @@
   Ordinary ice-cream places use the compact code-native cone icon in
   `place_presentation.js`; the illustration is reserved for selection.
 
+## Supplied AI planning artwork
+
+- `sources/sugarglider-ai-planner-original.png` preserves the user's supplied
+  transparent 1536×1024 PNG byte-for-byte. SHA-256:
+  `3af185b15de9cd2b8112a3f4e717720e1b805972d34be141fcae28088045e0a5`.
+- `sugarglider-ai-planner.png` is the canonical UI derivative: transparent RGBA,
+  256×194, 78,621 bytes. SHA-256:
+  `5a0202fe8e016dadb15aada780b4fb6b6ae1514ac26d9ffba6640046528613b2`.
+  The user explicitly requested trimming this illustration's transparent margins.
+  Its route, red pin, stars, bubble outline, colours and proportions are preserved.
+  It represents AI-assisted adventure planning; it never replaces the mascot,
+  production launcher artwork or required-POI marker.
+
+Preparation used Pillow 12.2.0: measure the alpha > 8 bounds to ignore nearly
+transparent background residue, retain 12 source pixels of padding, crop to
+`(324, 167, 1269, 883)`, resize proportionally with LANCZOS to fit 256×256, and save
+RGBA PNG with `optimize=True, compress_level=9`. Pixels inside the crop were not
+repainted, recoloured, thresholded or regenerated. The high-resolution source is
+retained for future derivation; it is not copied to the runtime or APK.
+
+Run `make brand-assets` to copy the optimized canonical file byte-for-byte into
+`src/sugarglider/web/static/brand/`. The same bundled image appears in the opening
+Map action, Plan action and shared adventure-dialog heading. Its empty alt text
+avoids repeating the adjacent accessible text label.
+
 ## Usage
 
 Preserve the original aspect ratio. Do not stretch, rotate, recolor, or crop

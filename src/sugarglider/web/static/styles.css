@@ -1159,6 +1159,15 @@ body.outing-mode .route-dock { display: none; }
 .ui-shell.has-adventure-planner .topbar nav { min-width: 0; margin-left: auto; flex-wrap: nowrap; }
 .ui-shell.has-adventure-planner .topbar nav > .header-ai-action { flex-shrink: 1; min-width: min(5.5rem, 48vw); white-space: normal; line-height: 1.2; }
 .ui-shell.has-adventure-planner .header-tools > summary { padding-inline: .35rem; }
+.ai-planner-icon { display: block; width: 48px; height: auto; flex: 0 0 auto; object-fit: contain; }
+.ai-planner-action { gap: 6px; }
+.ai-action-label { min-width: 0; }
+.ui-shell.has-adventure-planner .topbar nav > .header-ai-action { flex-wrap: wrap; padding-block: 4px; }
+.header-ai-action .ai-planner-icon { width: 40px; }
+.header-ai-action .ai-action-label { flex: 1 1 7em; }
+#adventure-title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+#adventure-title .ai-planner-icon { width: 52px; }
+#adventure-title .ai-action-label { flex: 1 1 7em; }
 .ui-shell.has-adventure-planner .brand { min-width: 28px; flex-shrink: 1; }
 .ui-shell.has-adventure-planner .brand-copy { min-width: 0; }
 .ui-shell.has-adventure-planner .brand-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

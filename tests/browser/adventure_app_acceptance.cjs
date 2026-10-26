@@ -156,6 +156,20 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           return layout;
         };
         assert(await page.locator('#ask-chatgpt').isVisible(), 'Ask ChatGPT is visible on startup without opening Plan');
+        const suppliedIcons = page.locator('#ask-chatgpt .ai-planner-icon, #plan-with-ai .ai-planner-icon, #adventure-title .ai-planner-icon');
+        assert.equal(await suppliedIcons.count(), 3, 'Map, Plan and the shared dialog use the supplied artwork');
+        for (const icon of await suppliedIcons.all()) {
+          await icon.evaluate(image => image.decode());
+          assert(await icon.evaluate(image => image.naturalWidth === 256 && image.naturalHeight === 194
+            && image.getAttribute('src') === '/static/brand/sugarglider-ai-planner.png' && image.alt === ''), 'Bundled optimized artwork loads without duplicating its text label');
+        }
+        const imageBounds = await page.locator('#ask-chatgpt').evaluate(button => {
+          const image = button.querySelector('img').getBoundingClientRect(), bounds = button.getBoundingClientRect();
+          return image.width >= 32 && image.left >= bounds.left && image.right <= bounds.right && image.top >= bounds.top && image.bottom <= bounds.bottom;
+        });
+        assert(imageBounds, 'The supplied Map icon remains recognizable and contained within the touch target');
+        assert.equal((await page.locator('#ask-chatgpt .ai-action-label').textContent()).trim(), locale === 'fr-FR' ? 'Demander à ChatGPT' : 'Ask ChatGPT');
+
         await page.waitForFunction(() => document.querySelector('.maplibregl-ctrl-attrib-inner').textContent.includes('Synthetic pack A'));
         const creditText = await page.locator('.maplibregl-ctrl-attrib-inner').textContent();
         for (const name of ['OpenStreetMap', 'ODbL', 'ESA WorldCover', 'Natural Earth', 'Protomaps', 'Synthetic pack A']) assert(creditText.includes(name), JSON.stringify({ name, creditText, width }));
@@ -204,8 +218,9 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await tools.evaluate(node => { node.open = false; });
         await page.evaluate(async () => { const { createRegionVersionStore } = await import('/static/region_versions.js'); await createRegionVersionStore().removeRegion('second-fixture'); });
         const original = await unchanged(), count = await page.evaluate(() => adventureNativeCalls.length);
-        await page.locator('#ask-chatgpt').click();
+        await page.locator('#ask-chatgpt .ai-planner-icon').click();
         await page.waitForFunction(() => document.querySelector('#adventure-dialog').open && document.querySelector('#adventure-dialog').getAttribute('aria-busy') === 'false');
+        assert(await page.locator('#adventure-title .ai-planner-icon').isVisible(), 'The same illustration appears in the opened dialog heading');
         await screenshot('dialog-disconnected');
         await page.locator('#adventure-text').fill('My editable adventure');
         await page.locator('#adventure-close').click();
@@ -385,7 +400,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await screenshot('dialog-region-unavailable');
         await page.locator('#adventure-close').click();
         assert.deepEqual(errors, []); assert.deepEqual(external, []);
-        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, height, locale, status: 'passed', cases: ['startup_map_ai_cta_shared_lifecycle_privacy_build_identity','initial_settled_keyboard_credits_and_active_region_switch','french_portrait_landscape_large_text','region_unavailable_visible_without_automatic_request','bounded_local_landmark_context_before_research','name_grounding_without_prior_location_picker','optional_endpoints_and_cancelled_map_roundtrip','no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
+        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, height, locale, status: 'passed', cases: ['supplied_ai_artwork_map_plan_dialog_loaded_accessible_and_clickable','startup_map_ai_cta_shared_lifecycle_privacy_build_identity','initial_settled_keyboard_credits_and_active_region_switch','french_portrait_landscape_large_text','region_unavailable_visible_without_automatic_request','bounded_local_landmark_context_before_research','name_grounding_without_prior_location_picker','optional_endpoints_and_cancelled_map_roundtrip','no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
       } finally { await context.close(); }
     }
   } finally { await browser.close(); }

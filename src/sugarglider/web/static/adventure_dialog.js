@@ -25,10 +25,11 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
     partial: "Transcription provisoire ajoutée : vérifiez ce brouillon avant de générer.", cancelled: "Microphone annulé.",
     unavailable: "Reconnaissance vocale indisponible. Vous pouvez écrire votre demande.", no_match: "Aucune parole reconnue. Réessayez ou écrivez votre demande." } : speechText;
   if (french) {
-    const labels = { title: "✨ ChatGPT", close: "Fermer", microphone: "🎤 Dicter mon aventure", "finish-speech": "J’ai terminé",
+    const labels = { close: "Fermer", microphone: "🎤 Dicter mon aventure", "finish-speech": "J’ai terminé",
       "stop-speech": "Annuler le micro", generate: "Générer l’aventure", cancel: "Annuler le calcul", "refresh-models": "Actualiser les modèles disponibles" };
     for (const [id, label] of Object.entries(labels)) element(id).textContent = label;
-    for (const action of launchers) action.textContent = "✨ Demander à ChatGPT";
+    element("title").querySelector(".ai-action-label").textContent = "ChatGPT";
+    for (const action of launchers) action.querySelector(".ai-action-label").textContent = "Demander à ChatGPT";
     element("privacy").textContent = "Générer envoie votre texte et le contexte géographique choisi à ChatGPT, en ligne. Le calcul des parcours et le GPX restent sur cet appareil. Aucun envoi sans votre demande.";
     element("privacy-full").textContent = "Lorsque vous générez, votre description, les départ/arrivée conservés, les points obligatoires et jusqu’à 24 lieux cartographiés proches (noms, identifiants, coordonnées) sont envoyés à OpenAI avec votre compte ChatGPT. Si la demande supplémentaire est autorisée, un résumé des mesures et les noms/identifiants OSM des lieux atteints peuvent être envoyés pour rechercher leurs anecdotes ou améliorer les suggestions. La recherche est en ligne ; les calculs de parcours, les données régionales complètes et le GPX restent sur cet appareil. Les limites de votre compte s’appliquent. La dernière aventure complète est conservée localement pour la rouvrir après redémarrage ; vous pouvez l’oublier ou effacer les données hors ligne.";
     const summaries = { "account-settings": "Compte ChatGPT", "speech-settings": "Langue et service vocal", advanced: "Réglages avancés", endpoints: "Départ et arrivée", "privacy-details": "Données envoyées et conservées" };

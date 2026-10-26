@@ -27,6 +27,7 @@ brand/profile-badges/mask.png
 brand/profile-badges/olivier.png
 brand/profile-badges/orange.png
 brand/profile-badges/tomato.png
+brand/sugarglider-ai-planner.png
 brand/sugarglider-banner.png
 brand/sugarglider-compact-icon.png
 brand/sugarglider-flying-map.png

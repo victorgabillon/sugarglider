@@ -37,6 +37,7 @@ CANONICAL_BRAND_DIRECTORY = REPOSITORY_ROOT / "assets" / "brand"
 RUNTIME_BRAND_DIRECTORY = STATIC_DIRECTORY / "brand"
 FONT_DIRECTORY = STATIC_DIRECTORY / "fonts" / "Open Sans Semibold"
 BRAND_ASSET_FILENAMES = (
+    "sugarglider-ai-planner.png",
     "sugarglider-app-icon.png",
     "sugarglider-banner.png",
     "sugarglider-compact-icon.png",

@@ -107,8 +107,8 @@ Certificate **D** (all development and helper packages):
 
 ## Delivered behavior
 
-- The bundled planner's opening header has one obvious **✨ Ask ChatGPT** action
-  (**✨ Demander à ChatGPT** in French). Plan keeps the same entry. Both open the
+- The bundled planner's opening header has one obvious **Ask ChatGPT** action with the supplied purple route-bubble illustration
+  (**Demander à ChatGPT** in French). Plan keeps the same entry. Both open the
   existing adventure dialog with one state lifecycle, preserved draft/Start/End,
   cancellation and focus return. Opening performs no inference, routing or recording.
 - Empty-plan header Generate is removed from the packaged UI hierarchy. Manual
@@ -143,6 +143,32 @@ Certificate **D** (all development and helper packages):
   the original mascot resource. The canonical and production artwork is unchanged,
   and no bitmap copy or remote image is added. The staging package/signing identity
   remains compatible with an in-place update.
+
+## Supplied AI icon supplement
+
+The supplied `Downloads/image(10).png` is preserved byte-for-byte in
+`assets/brand/sources/sugarglider-ai-planner-original.png`. Its transparent-margin
+crop and proportional reduction are documented with source/output hashes in
+`assets/brand/README.md`. The 256×194, 78,621-byte transparent canonical UI copy is
+`assets/brand/sugarglider-ai-planner.png`; the web runtime is byte-identical.
+Only the optimized copy enters the PWA shell and Android's 154-asset allowlist.
+The original full-resolution image is not packaged.
+
+Map and Plan show the illustration beside readable text; the shared dialog uses
+the same illustration in its heading. French localization updates the label span
+without replacing the image. Empty image alt text leaves the adjacent label as
+the accessible name; the full button retains its touch target. There is no
+replacement artwork, recolouring, mascot change, launcher change, new AI dialog,
+authentication change, recording or inference on open.
+
+The full-app browser acceptance verifies all three images decode from the local
+bundled asset, remain contained in the Map button, and open the same dialog when
+the image itself is tapped. French portrait/landscape, English mobile/desktop,
+200% text, editable speech, route preservation and canonical GPX checks remain
+in the same acceptance flow. Updated screenshots are outside Git under
+`artifacts/ai-icon/`, including opening Map and connected/disconnected dialog.
+Physical Fairphone screenshots and acceptance still require separately
+authorized installation after the forest integration; no device state was changed.
 
 ## Attribution behavior and evidence
 

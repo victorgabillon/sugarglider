@@ -4,6 +4,7 @@ from pathlib import Path
 from shutil import copyfile
 
 BRAND_ASSET_FILENAMES: tuple[str, ...] = (
+    "sugarglider-ai-planner.png",
     "sugarglider-app-icon.png",
     "sugarglider-banner.png",
     "sugarglider-compact-icon.png",
