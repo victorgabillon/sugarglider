@@ -581,7 +581,7 @@ function preferPoi(feature) {
     showError(t("Suggested routes support at most eight preferred places."));
     return;
   }
-  rememberPointEdit(t("Place preference added"));
+  rememberPointEdit("Place preference added");
   state.autoTour.preferredPoiIds.push(feature.id);
   invalidateAndRender();
   setEditableRequestStatus(
@@ -954,7 +954,7 @@ function renderRequestedPlacesList() {
     setLocalizedText(remove, () => t("Remove"));
     remove.setAttribute("aria-label", tr`Remove requested place ${place.name}`);
     remove.addEventListener("click", () => {
-      rememberPointEdit(t("Requested place removed"));
+      rememberPointEdit("Requested place removed");
       state.autoTour.requestedPlaces = places.filter((_value, placeIndex) => placeIndex !== index);
       if (state.selectedRequestedPlaceId === id) {
         state.selectedRequestedPlaceId = null;
@@ -990,7 +990,7 @@ function renderRequestedPlacesList() {
     setLocalizedText(clearApproach, () => t("Clear approach"));
     clearApproach.disabled = !place.approachOverride;
     clearApproach.addEventListener("click", () => {
-      rememberPointEdit(t("Place approach cleared"));
+      rememberPointEdit("Place approach cleared");
       place.approachOverride = null;
       invalidateAndRender();
     });
@@ -1262,7 +1262,7 @@ function renderPoiEditor() {
     visitOrders: candidateVisitOrders(), reorderDisabled: state.options.waypointOrder !== "fixed",
     onSelect: (index) => selectPoint(index),
     onChange: (index, field, value) => {
-      rememberPointEdit(t("Stop updated"));
+      rememberPointEdit("Stop updated");
       clearPointPlacement();
       state.points[index] = { ...state.points[index], [field]: value };
       invalidateAndRender();
@@ -1325,7 +1325,7 @@ function renderLegacyPoiEditor() {
       if (field === "lon") { input.min = "-180"; input.max = "180"; input.step = "0.000001"; }
       input.addEventListener("focus", () => selectPoint(index));
       input.addEventListener("change", () => {
-        rememberPointEdit(t("Point updated"));
+        rememberPointEdit("Point updated");
         state.points[index] = {
           ...state.points[index],
           [field]: field === "name" ? input.value : Number(input.value),
@@ -1390,7 +1390,7 @@ function movePoint(from, to) {
   if (state.planningMode === "waypoint_route" && state.options.waypointOrder !== "fixed") return;
   if (to < 0 || to >= state.points.length || from === to || !state.points[from]) return;
   const focusPlan = byId("poi-list").contains(document.activeElement);
-  rememberPointEdit(t("Stop reordered"));
+  rememberPointEdit("Stop reordered");
   clearPointPlacement();
   const selectedPoint = state.selectedPointIndex === null ? null : state.points[state.selectedPointIndex];
   const [point] = state.points.splice(from, 1);
@@ -1404,7 +1404,7 @@ function removePoint(index) {
   if (isImmutableSnapshotDisplay() || ["running", "reversing"].includes(state.request.status)) return;
   if (!state.points[index]) return;
   const focusPlan = byId("poi-list").contains(document.activeElement);
-  rememberPointEdit(t("Point removed"));
+  rememberPointEdit("Point removed");
   clearPointPlacement();
   if (state.planningMode === "auto_tour" && state.autoTour.start && index === 0) {
     saveActivePoints();
@@ -1728,7 +1728,7 @@ function changeEndpointSnapPolicy(kind, policy) {
   const point = activeEndpoints()[kind];
   if (!point || isImmutableSnapshotDisplay() || ["running", "reversing"].includes(state.request.status)) return;
   endpointSnapPolicy({ start: policy, end: policy });
-  rememberPointEdit(tr`${kind === "start" ? t("Start") : t("End")} snap policy changed`);
+  rememberPointEdit(`${kind === "start" ? "Start" : "End"} snap policy changed`);
   assignActiveEndpoint(kind, { ...point, snapPolicy: policy });
   invalidateAndRender();
 }
@@ -2061,7 +2061,7 @@ function wireCompromiseActions(candidate) {
       if (!target) return;
       const stop = candidate.approximated_stops.find((value) => value.id === id);
       if (!stop) return;
-      rememberPointEdit(t("Stop constraint updated"));
+      rememberPointEdit("Stop constraint updated");
       const item = target.collection[target.index];
       if (button.dataset.compromiseAction === "remove") {
         target.collection.splice(target.index, 1);
@@ -2099,8 +2099,8 @@ function renderStatus() {
   const undoLabel = pointUndoLabel();
   for (const id of ["undo-point-edit-plan"]) {
     byId(id).hidden = !undoLabel || running || readOnly;
-    byId(id).textContent = `${undoLabel} · Undo`;
-    byId(id).setAttribute("aria-label", `${undoLabel} · Undo`);
+    setLocalizedText(byId(id), () => tr`${t(undoLabel)} · Undo`);
+    byId(id).setAttribute("aria-label", tr`${t(undoLabel)} · Undo`);
   }
   setLocalizedText(byId("generation-title"), () => state.request.status === "reversing"
     ? t("Reversing route…")
@@ -2986,7 +2986,7 @@ function failedExactPoint() {
 function updateFailedExactPoint(action) {
   const target = failedExactPoint();
   if (!target) return;
-  if (action !== "move") rememberPointEdit(t("Stop constraint updated"));
+  if (action !== "move") rememberPointEdit("Stop constraint updated");
   clearPointPlacement();
   state.selectedEndpointKind = null;
   const point = target.collection[target.index];
@@ -3046,7 +3046,7 @@ function bindEvents() {
     catch (error) { render(); showError(error.message); }
   });
   byId("dock-order").addEventListener("change", () => {
-    rememberPointEdit(t("Visit order changed"));
+    rememberPointEdit("Visit order changed");
     state.options.waypointOrder = byId("dock-order").value;
     updateControlsFromOptions(); invalidateAndRender();
   });
@@ -3079,7 +3079,7 @@ function bindEvents() {
   }
   byId("route-form").addEventListener("change", (event) => {
     if (event.target.name === "planning-mode" || event.target.id.startsWith("hard-") || (event.target.closest("#planning-points") && event.target.id !== "point-order-mode")) return;
-    rememberPointEdit(t("Route settings changed"));
+    rememberPointEdit("Route settings changed");
     try { updateOptionsFromControls(); } catch (error) { updateControlsFromOptions(); render(); showError(error.message); return; }
     if (event.target.id === "profile" && plannerProfilePreference) {
       void plannerProfilePreference.remember(state.routingProfile).then((persisted) => {
@@ -3095,7 +3095,7 @@ function bindEvents() {
         showError(t("This plan has discovery-specific places."), t("Keep Suggest a route to preserve them, or remove those choices before using Automatic."));
         renderModeControls(); return;
       }
-      rememberPointEdit(t("Planning choice changed"));
+      rememberPointEdit("Planning choice changed");
       clearPointPlacement();
       updateOptionsFromControls();
       if (input.value === "automatic") {
@@ -3115,7 +3115,7 @@ function bindEvents() {
       byId(`hard-${kind}-${suffix}`).addEventListener("change", () => {
         const point = endpointFromControls(kind);
         if (byId(`hard-${kind}-enabled`).checked && !point) return;
-        rememberPointEdit(`${kind === "start" ? t("Start") : t("End")} updated`);
+        rememberPointEdit(`${kind === "start" ? "Start" : "End"} updated`);
         clearPointPlacement();
         assignActiveEndpoint(kind, point);
         state.selectedEndpointKind = point ? kind : null;
@@ -3136,7 +3136,7 @@ function bindEvents() {
       if (state.endpointSetMode) appShell?.show("map", { focus: true });
     });
     byId(`clear-hard-${kind}`).addEventListener("click", () => {
-      rememberPointEdit(`${kind === "start" ? t("Start") : t("End")} removed`);
+      rememberPointEdit(`${kind === "start" ? "Start" : "End"} removed`);
       assignActiveEndpoint(kind, null);
       if (state.selectedEndpointKind === kind) state.selectedEndpointKind = null;
       if (state.endpointSetMode === kind) state.endpointSetMode = null;
@@ -3211,7 +3211,7 @@ function bindEvents() {
   });
   byId("clear-points").addEventListener("click", () => {
     if (state.points.length > 1 && !window.confirm(t("Remove all mandatory points and generated results?"))) return;
-    rememberPointEdit(t("Route points cleared"));
+    rememberPointEdit("Route points cleared");
     clearPointPlacement();
     state.points = [];
     if (state.planningMode === "auto_tour") {
@@ -3727,7 +3727,7 @@ async function start() {
             (value.id ?? requestedPlaceIdentifier(value, index))
             === state.settingRequestedApproachId
           ));
-          if (place) { rememberPointEdit(t("Place approach updated")); place.approachOverride = coordinate; }
+          if (place) { rememberPointEdit("Place approach updated"); place.approachOverride = coordinate; }
           state.settingRequestedApproachId = null;
           invalidateAndRender();
           setEditableRequestStatus(t("Requested-place approach set from map."));

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Sugarglider</string>
+    <string name="app_name" translatable="false">Sugarglider</string>
     <string name="notification_channel_name">Sugarglider live location</string>
     <string name="notification_channel_description">Visible while Sugarglider shares your current location</string>
     <string name="notification_title">Sugarglider is sharing location</string>

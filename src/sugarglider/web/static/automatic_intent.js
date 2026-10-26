@@ -1,3 +1,4 @@
+import { t, tr } from "./i18n.js";
 // Presentation policy over the existing planner authorities, not another plan.
 import { state, saveActivePoints, isImmutableSnapshotDisplay } from "./state.js";
 import { rememberPointEdit, commitPointEdit } from "./route_edit_history.js";
@@ -112,13 +113,13 @@ export function appendMapIntent(coordinate, assignEndpoint) {
 export function routeIntentPresentation() {
   const endpoints = state.planningMode === "auto_tour" ? state.autoTour : state.waypointEndpoints;
   const count = state.planningMode === "auto_tour" ? Math.max(0, state.points.length - Number(Boolean(endpoints.start))) : state.points.length;
-  if (!endpoints.start) return { title: "Tap the map to choose Start", detail: "Then generate a route, or keep tapping to add stops." };
-  if (endpoints.routeTopology === "point_to_point" && !endpoints.end) return { title: "Start set · Choose End", detail: "Tap the map to choose End. Each further tap extends the route." };
+  if (!endpoints.start) return { title: t("Tap the map to choose Start"), detail: t("Then generate a route, or keep tapping to add stops.") };
+  if (endpoints.routeTopology === "point_to_point" && !endpoints.end) return { title: t("Start set · Choose End"), detail: t("Tap the map to choose End. Each further tap extends the route.") };
   if (state.planningMode === "auto_tour") return {
-    compactTitle: `${state.options.targetDistanceKm} km ${endpoints.routeTopology === "loop" ? "loop" : "route to End"}`,
-    title: `${state.options.targetDistanceKm} km ${endpoints.routeTopology === "loop" ? "loop from Start" : "route to End"}`,
-    detail: count || state.autoTour.requestedPlaces.length ? "Sugarglider will design a route with your chosen places." : "Start set. Generate now, or tap the map to add places to pass through.",
+    compactTitle: `${state.options.targetDistanceKm} km ${t(endpoints.routeTopology === "loop" ? "loop" : "route to End")}`,
+    title: `${state.options.targetDistanceKm} km ${t(endpoints.routeTopology === "loop" ? "loop from Start" : "route to End")}`,
+    detail: count || state.autoTour.requestedPlaces.length ? t("Sugarglider will design a route with your chosen places.") : t("Start set. Generate now, or tap the map to add places to pass through."),
   };
-  return { title: ["Start", ...Array.from({ length: count }, (_, i) => String(i + 1)), endpoints.routeTopology === "loop" ? "Start" : "End"].join(" → "),
-    detail: `Sugarglider will connect your points. ${endpoints.routeTopology === "loop" ? "Tap the map to add stops" : "Tap the map to extend End"}; select a point to edit it.` };
+  return { title: [t("Start"), ...Array.from({ length: count }, (_, i) => String(i + 1)), t(endpoints.routeTopology === "loop" ? "Start" : "End")].join(" → "),
+    detail: tr`Sugarglider will connect your points. ${t(endpoints.routeTopology === "loop" ? "Tap the map to add stops" : "Tap the map to extend End")}; select a point to edit it.` };
 }

@@ -386,7 +386,12 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await view('plan'); await page.locator('#plan-with-ai').click();
         await page.evaluate(() => { failAdventureModel = true; });
         await page.waitForFunction(() => !document.querySelector('#adventure-generate').disabled);
-        await page.locator('#adventure-generate').click(); await page.waitForFunction(() => document.querySelector('#adventure-error').textContent.match(/usage limit|limite d’utilisation/u));
+        await page.locator('#adventure-generate').click();
+        try { await page.waitForFunction(() => document.querySelector('#adventure-error').textContent.match(/usage limit|limite d’utilisation/u), null, { timeout: 30000 }); }
+        catch (failure) {
+          console.error('Failed-model UI state', await page.evaluate(() => ({language:document.documentElement.lang,error:document.querySelector('#adventure-error').textContent,progress:document.querySelector('#adventure-progress').textContent,busy:document.querySelector('#adventure-dialog').getAttribute('aria-busy'),calls:adventureNativeCalls.slice(-4).map(call=>call.type)})));
+          throw failure;
+        }
         assert.equal(await page.evaluate(async () => (await import('/static/state.js')).selectedCandidate().id), selected.id, 'Failed AI request must keep selected route');
         await page.locator('#adventure-close').click(); await view('routes'); await page.locator('#adventure-return-manual').click();
         const restored = await page.evaluate(async () => { const { state, currentPlanRequest } = await import('/static/state.js'); return JSON.stringify({ request: currentPlanRequest(), result: state.generationResult, source: state.generationSourceRequest, selected: state.selectedSignature }); });

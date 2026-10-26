@@ -60,7 +60,12 @@ def test_profile_shell_is_local_versioned_and_never_starts_tracking() -> None:
         assert f"/static/brand/profile-badges/{key}.png" in html
         assert f'aria-label="{label} trail badge"' in html
         assert f'alt="{label} Sugarglider trail badge"' in html
-        assert f'<span aria-hidden="true">{label}</span>' in html
+        visible_label = (
+            f'<span data-i18n="{label}">{label}</span>'
+            if key in {"blue", "forest"}
+            else label
+        )
+        assert f'<span aria-hidden="true">{visible_label}</span>' in html
     assert "TRAIL_PROFILE_SCHEMA_VERSION = 1" in profile
     assert "display_name: value.display_name.trim()" in profile
     assert "avatar_key: value.avatar_key" in profile

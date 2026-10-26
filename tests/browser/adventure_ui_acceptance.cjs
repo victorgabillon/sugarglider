@@ -28,7 +28,7 @@ const server = http.createServer((request, response) => {
       if (new URL(route.request().url()).origin === base) return route.continue();
       forbidden.push(new URL(route.request().url()).origin); return route.abort();
     });
-    for (const name of ['pr91_route_elevation', 'adventure_ui']) {
+    for (const name of ['pr91_route_elevation', 'localization', 'adventure_ui']) {
       const page = await context.newPage();
       await page.goto(`${base}/tests/browser/${name}_harness.html`);
       await page.waitForFunction(() => ['passed', 'failed'].includes(document.querySelector('pre')?.dataset.status), { timeout: 60_000 });

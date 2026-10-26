@@ -44,11 +44,17 @@ def test_pr29_shell_keeps_primary_actions_outside_secondary_disclosures() -> Non
     assert 'id="save-route"' in tools
     assert 'id="request-file"' in tools
     assert 'id="export-plan"' in tools
-    assert "<summary>Advanced route preferences</summary>" in html
+    assert (
+        '<summary><span data-i18n="Advanced route preferences">'
+        "Advanced route preferences</span></summary>" in html
+    )
     assert '<details class="map-tools"' in html
-    assert "<summary>Map options</summary>" in html
+    assert '<summary><span data-i18n="Map options">Map options</span></summary>' in html
     assert '<details class="metrics-disclosure">' in html
-    assert "<summary>Route details</summary>" in html
+    assert (
+        '<summary><span data-i18n="Route details">Route details</span></summary>'
+        in html
+    )
     application = (STATIC / "app.js").read_text()
     assert 'byId("save-route").classList.toggle("hidden"' in application
     results = (STATIC / "route_results.js").read_text()

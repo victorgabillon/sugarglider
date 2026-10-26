@@ -37,8 +37,8 @@ export function renderRouteDock({ root, disabled, visits = [], onSelectPoint, on
   const canReorder = state.planningMode === "waypoint_route" && state.options.waypointOrder === "fixed";
   const undo = root.querySelector("#undo-point-edit"), redo = root.querySelector("#redo-point-edit");
   undo.disabled = disabled || !pointUndoLabel(); redo.disabled = disabled || !pointRedoLabel();
-  undo.setAttribute("aria-label", pointUndoLabel() ? tr`Undo: ${pointUndoLabel()}` : t("Undo route edit"));
-  redo.setAttribute("aria-label", pointRedoLabel() ? tr`Redo: ${pointRedoLabel()}` : t("Redo route edit"));
+  undo.setAttribute("aria-label", pointUndoLabel() ? tr`Undo: ${t(pointUndoLabel())}` : t("Undo route edit"));
+  redo.setAttribute("aria-label", pointRedoLabel() ? tr`Redo: ${t(pointRedoLabel())}` : t("Redo route edit"));
   const finish = root.querySelector("#dock-finish"), order = root.querySelector("#dock-order");
   finish.value = endpoints.routeTopology; finish.disabled = disabled;
   setLocalizedText(root.querySelector("#dock-finish-label"), () => endpoints.routeTopology === "loop" ? t("Loop") : t("Finish elsewhere"));
