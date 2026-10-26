@@ -13,7 +13,7 @@ const speechText = { completed: "Transcription added. Check it before Generate; 
   language_unavailable: "This language is unavailable for on-device recognition. Try another speech language or type your request.",
   no_match: "No speech was recognized. Try again or type your request.", timeout: "Speech recognition timed out. You can try again.", busy: "The previous speech request is still finishing." };
 
-export function initializeAdventureDialog({ root, launcher, planner, getContext, canOpen = () => true,
+export function initializeAdventureDialog({ root, launcher, launchers = [launcher], planner, getContext, canOpen = () => true,
   onBusy = () => {}, onResult, onChooseStart, onChooseEnd,
   model = createAdventureModel(), speech = createAdventureSpeech(), elevation = createAdventureElevationSampler() }) {
   const element = id => root.querySelector(`#adventure-${id}`);
@@ -25,11 +25,14 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
     partial: "Transcription provisoire ajoutée : vérifiez ce brouillon avant de générer.", cancelled: "Microphone annulé.",
     unavailable: "Reconnaissance vocale indisponible. Vous pouvez écrire votre demande.", no_match: "Aucune parole reconnue. Réessayez ou écrivez votre demande." } : speechText;
   if (french) {
-    const labels = { title: "✨ Décrivez votre aventure", close: "Fermer", microphone: "🎤 Parler", "finish-speech": "J’ai terminé",
+    const labels = { title: "✨ ChatGPT", close: "Fermer", microphone: "🎤 Dicter mon aventure", "finish-speech": "J’ai terminé",
       "stop-speech": "Annuler le micro", generate: "Générer l’aventure", cancel: "Annuler le calcul", "refresh-models": "Actualiser les modèles disponibles" };
     for (const [id, label] of Object.entries(labels)) element(id).textContent = label;
-    launcher.textContent = "✨ Planifier avec l’IA";
-    element("privacy").textContent = "Lorsque vous générez, votre description, les départ/arrivée conservés, les points obligatoires et jusqu’à 24 lieux cartographiés proches (noms, identifiants, coordonnées) sont envoyés à OpenAI avec votre compte ChatGPT. Si la demande supplémentaire est autorisée, un résumé des mesures et les noms/identifiants OSM des lieux atteints peuvent être envoyés pour rechercher leurs anecdotes ou améliorer les suggestions. La recherche est en ligne ; les calculs de parcours, les données régionales complètes et le GPX restent sur cet appareil. Les limites de votre compte s’appliquent. La dernière aventure complète est conservée localement pour la rouvrir après redémarrage ; vous pouvez l’oublier ou effacer les données hors ligne.";
+    for (const action of launchers) action.textContent = "✨ Demander à ChatGPT";
+    element("privacy").textContent = "Générer envoie votre texte et le contexte géographique choisi à ChatGPT, en ligne. Le calcul des parcours et le GPX restent sur cet appareil. Aucun envoi sans votre demande.";
+    element("privacy-full").textContent = "Lorsque vous générez, votre description, les départ/arrivée conservés, les points obligatoires et jusqu’à 24 lieux cartographiés proches (noms, identifiants, coordonnées) sont envoyés à OpenAI avec votre compte ChatGPT. Si la demande supplémentaire est autorisée, un résumé des mesures et les noms/identifiants OSM des lieux atteints peuvent être envoyés pour rechercher leurs anecdotes ou améliorer les suggestions. La recherche est en ligne ; les calculs de parcours, les données régionales complètes et le GPX restent sur cet appareil. Les limites de votre compte s’appliquent. La dernière aventure complète est conservée localement pour la rouvrir après redémarrage ; vous pouvez l’oublier ou effacer les données hors ligne.";
+    const summaries = { "account-settings": "Compte ChatGPT", "speech-settings": "Langue et service vocal", advanced: "Réglages avancés", endpoints: "Départ et arrivée", "privacy-details": "Données envoyées et conservées" };
+    for (const [id, label] of Object.entries(summaries)) element(id).querySelector("summary").textContent = label;
     element("refine").parentElement.lastChild.textContent = " Autoriser une demande supplémentaire pour les anecdotes des lieux atteints ou les suggestions de parcours";
     element("text").previousElementSibling.textContent = "Quelle aventure souhaitez-vous ?";
     element("text").placeholder = "Environ 35 km de course dans les bois de Marly, trois parcours différents et des anecdotes sur les lieux visités…";
@@ -37,7 +40,7 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
     element("speech-service").parentElement.firstChild.textContent = "Reconnaissance vocale";
     element("speech-service").options[0].textContent = "Sur cet appareil si disponible";
     element("speech-service").options[1].textContent = "Service vocal Android (audio potentiellement envoyé)";
-    element("speech-status").textContent = "Choisissez la langue et le service. Parler ajoute du texte modifiable, sans envoi à ChatGPT. Enregistrement limité à une minute.";
+    element("speech-status").textContent = "La dictée ajoute du texte modifiable. Vérifiez-le avant de générer. Enregistrement limité à une minute.";
   }
   // Only an explicit choice is persisted. Restoring it never records audio;
   // the native provider disclosure still asks for consent on every use.
@@ -78,10 +81,16 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
     element("add-account").hidden = !accountState.accounts.length;
     element("add-account").disabled ||= accountState.accounts.length >= 4;
     element("connect").textContent = french ? account ? "Reconnecter ce compte" : "Se connecter avec ChatGPT" : account ? "Reconnect this account" : "Sign in with ChatGPT";
-    element("account-status").textContent = accountBusy ? "Connecting to ChatGPT…"
-      : eligible ? "ChatGPT connected. Routing stays on this device."
-      : account?.connected ? "This account has not granted ChatGPT plan usage. Reconnect with an eligible account."
-      : "Connect your ChatGPT account to begin.";
+    // Reconnection remains available without making account management the
+    // first task for an already connected user.
+    const settings = element("account-settings");
+    if (eligible) settings.append(element("connect"));
+    else settings.before(element("connect"));
+    element("account-status").textContent = french
+      ? accountBusy ? "Connexion à ChatGPT…" : eligible ? "ChatGPT connecté · parcours calculés sur cet appareil."
+        : account?.connected ? "Reconnectez un compte autorisé à utiliser ChatGPT." : "Connectez votre compte ChatGPT pour commencer."
+      : accountBusy ? "Connecting to ChatGPT…" : eligible ? "ChatGPT connected. Routing stays on this device."
+        : account?.connected ? "This account has not granted ChatGPT plan usage. Reconnect with an eligible account." : "Connect your ChatGPT account to begin.";
     root.setAttribute("aria-busy", String(aiBusy || accountBusy));
   }
   function endpointContext(context) {
@@ -126,13 +135,18 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
     } catch (error) { if (owned === epoch && root.open && !abort.signal.aborted) message(error.message); }
     finally { if (accountAbort === abort) { accountBusy = false; accountAbort = null; render(); } }
   }
-  async function open() {
+  let returnFocus = launcher;
+  async function open(source = returnFocus) {
     if (!canOpen() || aiBusy || accountBusy) return false;
+    returnFocus = source;
     epoch++; successfulClose = false; contextReady = false; displayedContext = null; message(""); element("progress").textContent = "";
-    element("start").textContent = "Describe where to start and finish, or choose on the map. Loops return to Start.";
+    element("region-status").hidden = true;
+    element("start").textContent = french ? "Décrivez le départ et l’arrivée, ou choisissez-les sur la carte. Une boucle revient au départ." : "Describe where to start and finish, or choose on the map. Loops return to Start.";
     for (const kind of ["start", "end"]) { element(`keep-${kind}`).checked = true; element(`keep-${kind}`).parentElement.hidden = true; }
     element("review").hidden = true; element("input").hidden = false;
-    root.showModal(); element("text").focus(); render();
+    // Leave the keyboard closed until the user chooses typing. Speech remains
+    // visible on a phone, and opening never activates the microphone.
+    root.showModal(); element("close").focus({ preventScroll: true }); root.querySelector(".adventure-body").scrollTop = 0; render();
     const owned = epoch;
     try {
       const context = await getContext();
@@ -141,7 +155,11 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
         for (const kind of ["start", "end"]) element(`keep-${kind}`).parentElement.hidden = !context[kind];
         renderEndpoints(); render();
       }
-    } catch (error) { if (owned === epoch && root.open) { element("start").textContent = "Choose an available installed region before generating. Your current route is kept."; message(error.message); } }
+    } catch { if (owned === epoch && root.open) {
+      element("start").textContent = french ? "Choisissez une région installée avant de générer. Votre parcours actuel est conservé." : "Choose an available installed region before generating. Your current route is kept.";
+      element("region-status").textContent = element("start").textContent;
+      element("region-status").hidden = false;
+    } }
     void accountOperation(() => model.status());
     return true;
   }
@@ -154,10 +172,13 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
     review?.resolve(null); review = null;
   }
   function close() { cancel(); if (root.open) root.close(); }
-  launcher.addEventListener("click", () => { void open(); });
+  for (const action of launchers) action.addEventListener("click", () => { void open(action); });
   element("close").addEventListener("click", close);
   root.addEventListener("cancel", cancel);
-  root.addEventListener("close", () => { epoch++; cancel(); if (!successfulClose) launcher.focus({ preventScroll: true }); });
+  root.addEventListener("close", () => {
+    epoch++; cancel();
+    if (!successfulClose) (returnFocus.getClientRects().length ? returnFocus : launchers.find(action => action.getClientRects().length))?.focus({ preventScroll: true });
+  });
   element("cancel").addEventListener("click", cancel);
   element("text").addEventListener("input", render);
   element("connect").addEventListener("click", () => { void accountOperation(signal => model.signIn(connected()?.id ?? null, signal)); });

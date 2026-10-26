@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A separate overlay: the canonical mascot bitmap is unchanged. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/sugarglider_app_icon" />
+    <item android:drawable="@drawable/staging_badge" />
+</layer-list>

@@ -83,12 +83,17 @@ def test_pr29_android_server_chrome_is_compact_and_keeps_change_guard() -> None:
         in open_server
     )
     assert "remove(PREFERENCE_SERVER_ORIGIN)" in open_server
-    assert "ViewCompat.setOnApplyWindowInsetsListener(serverChrome)" in open_server
+    assert "ViewCompat.setOnApplyWindowInsetsListener(root)" in open_server
     assert "WindowInsetsCompat.Type.systemBars()" in open_server
     assert "WindowInsetsCompat.Type.displayCutout()" in open_server
     assert "val chromeTopPadding = dp(8)" in open_server
     assert "val chromeEndPadding = dp(12)" in open_server
     assert "systemBars.top + chromeTopPadding" in open_server
+    assert "if (showServerChrome) 0 else systemBars.top" in open_server
+    assert (
+        "if (showServerChrome) root.addView(serverChrome, fullWidthWrap())"
+        in open_server
+    )
     # The entire page now owns lateral and bottom insets, so both the chrome
     # and map avoid cutouts without applying the right inset twice.
     assert "root.setPadding(\n                systemBars.left," in open_server
@@ -96,4 +101,4 @@ def test_pr29_android_server_chrome_is_compact_and_keeps_change_guard() -> None:
     assert "maxOf(systemBars.bottom," in open_server
     assert "WindowInsetsCompat.Type.ime()" in open_server
     assert "                chromeEndPadding," in open_server
-    assert "ViewCompat.requestApplyInsets(serverChrome)" in open_server
+    assert "ViewCompat.requestApplyInsets(root)" in open_server

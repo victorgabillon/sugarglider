@@ -1150,3 +1150,52 @@ body.outing-mode .route-dock { display: none; }
 .adventure-story p { margin: .4rem 0; }
 .adventure-story ul { padding-left: 1.25rem; }
 .adventure-card-summary { display: block; padding-top: .5rem; font-size: .9rem; line-height: 1.4; color: #314e40; }
+
+/* One primary AI entry on the packaged planner; manual Generate stays in Plan
+   and the map route dock. The brand artwork is unchanged. */
+.has-adventure-planner #generate-top { display: none; }
+.header-ai-action[hidden], #native-privacy[hidden] { display: none; }
+.ui-shell.has-adventure-planner .topbar { flex-wrap: nowrap; padding: 8px; gap: 6px; }
+.ui-shell.has-adventure-planner .topbar nav { min-width: 0; margin-left: auto; flex-wrap: nowrap; }
+.ui-shell.has-adventure-planner .topbar nav > .header-ai-action { flex-shrink: 1; min-width: min(5.5rem, 48vw); white-space: normal; line-height: 1.2; }
+.ui-shell.has-adventure-planner .header-tools > summary { padding-inline: .35rem; }
+.ui-shell.has-adventure-planner .brand { min-width: 28px; flex-shrink: 1; }
+.ui-shell.has-adventure-planner .brand-copy { min-width: 0; }
+.ui-shell.has-adventure-planner .brand-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-shell.has-adventure-planner .workspace-navigation button { white-space: normal; overflow-wrap: anywhere; line-height: 1.2; }
+.map-edit-notice { pointer-events: none; }
+.map-edit-notice button { pointer-events: auto; }
+.ui-shell.has-adventure-planner .map-empty-state { top: 64px; width: min(330px, calc(100% - 16px)); }
+.route-dock-actions { display: flex; align-items: center; gap: 6px; }
+.route-dock-actions .route-point-strip { flex: 1; min-width: 0; }
+.route-dock #generate-map { min-width: 88px; padding: .5rem; color: #fff; background: var(--primary-action); font-size: .875rem; }
+.adventure-dialog > header { flex-wrap: wrap; padding: .65rem 1rem; }
+.adventure-dialog > header h2 { flex: 1 1 10rem; min-width: 0; font-size: 1.2rem; overflow-wrap: normal; }
+.adventure-dialog > header button { flex-shrink: 0; margin-left: auto; }
+.adventure-dialog > footer { padding: .65rem 1rem; }
+.adventure-dialog > footer .button.primary { flex: 1; min-height: 48px; font-size: 1rem; }
+.adventure-body .button, .adventure-body summary { min-height: 44px; }
+.adventure-body summary { cursor: pointer; align-content: center; }
+.adventure-body { padding: .65rem 1rem; }
+.adventure-body > #adventure-privacy { margin: 0 0 .6rem; line-height: 1.4; }
+.adventure-body > .adventure-account-section { margin: .4rem 0 .65rem; }
+.adventure-account-section > p { margin: .35rem 0; font-size: .875rem; }
+.adventure-account-section details { margin-top: .25rem; padding-top: 0; border-top: 0; }
+.adventure-body textarea { min-height: 6rem; }
+.adventure-speech-actions > #adventure-microphone { flex: 1; min-height: 48px; font-size: 1rem; }
+.maplibregl-ctrl-attrib.maplibregl-compact { min-height: 44px; padding: 6px 44px 6px 8px; border-radius: 12px; }
+.maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) { width: 44px; height: 44px; padding: 0; }
+.maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-button { width: 44px; height: 44px; background-position: center; background-size: 24px; background-repeat: no-repeat; }
+.maplibregl-ctrl-attrib { max-width: calc(100% - 16px); font: .75rem/1.5 system-ui, sans-serif; }
+.ui-shell:not(.outing-mode) .maplibregl-ctrl-attrib { max-height: none; overflow: visible; }
+.maplibregl-ctrl-attrib-inner { max-height: min(25dvh, 10rem); overflow-y: auto; overflow-wrap: anywhere; }
+.maplibregl-ctrl-attrib a { text-decoration: underline; }
+.maplibregl-ctrl-attrib summary:focus-visible { outline: 3px solid #245d90; outline-offset: 2px; }
+@media (max-width: 440px) {
+  .ui-shell.has-adventure-planner .brand { gap: 4px; }
+  .ui-shell.has-adventure-planner .brand-copy strong { font-size: .9375rem; }
+  .ui-shell.has-adventure-planner .brand img { width: 24px; height: 24px; }
+}
+@media (max-height: 450px) {
+  .ui-shell.has-adventure-planner .map-empty-state { display: none; }
+}

@@ -60,7 +60,7 @@ async function run(browser,touch){
   await canvas.click({position:{x:box.width*.7,y:box.height*.45}});
   const request=await page.evaluate(async()=>{const {state,currentPlanRequest}=await import('/static/state.js');return {request:currentPlanRequest(),points:state.points.length};});
   assert.equal(request.request.endpoint_snap_policy.start,'near');assert.equal(request.request.endpoint_snap_policy.end,'near');
-  await page.click('#generate-top');
+  if(await mapTab.isVisible())await mapTab.click();await page.click('#generate-map');
   await page.waitForFunction(()=>document.querySelector('#endpoint-adjustments-routes')?.textContent.includes('Start adjusted by 89 m'));
   const snapshot=await page.evaluate(async()=>{const {state,selectedCandidate}=await import('/static/state.js');return {request:state.generationSourceRequest,candidate:selectedCandidate()};});
   assert(snapshot.candidate);assert.equal(snapshot.candidate.routing_profile,snapshot.request.routing_profile);
@@ -87,11 +87,11 @@ async function run(browser,touch){
   await page.click('[data-route-chip="start"]');
   await page.selectOption('[aria-label="Start snap policy"]','exact');
   assert.equal(await page.locator('.endpoint-adjustment-marker').count(),0);
-  await page.click('#generate-top');await page.waitForFunction(()=>document.querySelector('#error-banner')?.textContent.includes('strict snap limit'));
+  if(await mapTab.isVisible())await mapTab.click();await page.click('#generate-map');await page.waitForFunction(()=>document.querySelector('#error-banner')?.textContent.includes('strict snap limit'));
   assert.equal(await page.evaluate(async()=>{const{state}=await import('/static/state.js');return state.generationResult.candidates.length;}),0);
   if(await mapTab.isVisible())await mapTab.click();
   await page.click('#undo-point-edit');
-  await page.evaluate(()=>{snapDistance=240;});await page.click('#generate-top');
+  await page.evaluate(()=>{snapDistance=240;});if(await mapTab.isVisible())await mapTab.click();await page.click('#generate-map');
   await page.waitForFunction(()=>document.querySelector('#endpoint-adjustments-map')?.textContent.includes('review 240 m'));
   const before=await page.evaluate(async()=>{const{state}=await import('/static/state.js');return {lat:state.waypointEndpoints.start.lat,count:snapNativeCalls.filter(c=>c.type==='local_route').length};});
   await page.locator('#endpoint-adjustments-map [data-adjustment-action="start-show"]').click();
@@ -125,7 +125,7 @@ async function run(browser,touch){
   assert.equal(await page.evaluate(async()=>{const {currentPlanRequest}=await import('/static/state.js');return currentPlanRequest().endpoint_snap_policy.start;}),'exact');
   imported.endpoint_snap_policy={start:'near',end:'near'};imported.candidate_count=3;imported.waypoint_order='optimize';
   imported.waypoints=[{id:'one',name:'One',coordinate:{lat:.009,lon:.006,name:'One'},constraint_strength:'exact',access_search_radius_m:500,maximum_best_effort_distance_m:null,approach_override:null},{id:'two',name:'Two',coordinate:{lat:.011,lon:.013,name:'Two'},constraint_strength:'exact',access_search_radius_m:500,maximum_best_effort_distance_m:null,approach_override:null}];
-  await importRequest(imported);await page.evaluate(()=>{snapDistance=89.2;snapVary=true;});await page.click('#generate-top');
+  await importRequest(imported);await page.evaluate(()=>{snapDistance=89.2;snapVary=true;});if(await mapTab.isVisible())await mapTab.click();await page.click('#generate-map');
   await page.waitForFunction(()=>document.querySelectorAll('.candidate-select').length===2);
   await page.locator('.candidate-select').nth(1).click();
   const chosen=await page.evaluate(async()=>{const{selectedCandidate}=await import('/static/state.js');return selectedCandidate().diagnostics.details.local_routing.endpoint_adjustments[0];});

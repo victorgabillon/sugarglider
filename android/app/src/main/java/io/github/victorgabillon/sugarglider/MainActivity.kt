@@ -405,8 +405,9 @@ class MainActivity : Activity() {
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(getColor(R.color.brand_cream))
+            setBackgroundColor(getColor(R.color.brand_green))
         }
+        val showServerChrome = origin != BundledShellPolicy.ORIGIN || V1ReleasePolicy.sharingEnabled
         val chromeStartPadding = dp(4)
         val chromeTopPadding = dp(8)
         val chromeEndPadding = dp(12)
@@ -422,18 +423,18 @@ class MainActivity : Activity() {
             )
             setBackgroundColor(getColor(R.color.brand_green))
         }
-        ViewCompat.setOnApplyWindowInsetsListener(serverChrome) { view, insets ->
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val systemBars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or
                     WindowInsetsCompat.Type.displayCutout(),
             )
             root.setPadding(
                 systemBars.left,
-                0,
+                if (showServerChrome) 0 else systemBars.top,
                 systemBars.right,
                 maxOf(systemBars.bottom, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom),
             )
-            view.setPadding(
+            serverChrome.setPadding(
                 chromeStartPadding,
                 systemBars.top + chromeTopPadding,
                 chromeEndPadding,
@@ -464,7 +465,9 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener { showPrivacyDetails() }
         })
-        root.addView(serverChrome, fullWidthWrap())
+        // The bundled planner owns its Tools menu. Remote/sharing pages retain
+        // native navigation; both modes still apply system, cutout and IME insets.
+        if (showServerChrome) root.addView(serverChrome, fullWidthWrap())
         val created = WebView(this)
         webView = created
         created.settings.apply {
@@ -490,7 +493,7 @@ class MainActivity : Activity() {
             ),
         )
         setContentView(root)
-        ViewCompat.requestApplyInsets(serverChrome)
+        ViewCompat.requestApplyInsets(root)
         loadConfiguredPage()
     }
 
@@ -806,6 +809,17 @@ class MainActivity : Activity() {
                 return@addWebMessageListener
             }
             when (request) {
+                is BridgeRequest.ShowPrivacy -> {
+                    if (activityVisible) showPrivacyDetails()
+                    completeBridgePayload(request, payload, channel, org.json.JSONObject()
+                        .put("schema_version", 1).put("request_id", request.requestId)
+                        .put("type", "show_privacy_result").put("shown", activityVisible).toString())
+                }
+                is BridgeRequest.GetAppIdentity -> completeBridgePayload(request, payload, channel,
+                    org.json.JSONObject().put("schema_version", 1).put("request_id", request.requestId)
+                        .put("type", "app_identity_result").put("label", getString(R.string.app_name))
+                        .put("revision", BuildConfig.SOURCE_REVISION).put("variant", BuildConfig.BUILD_TYPE)
+                        .put("version", BuildConfig.VERSION_NAME).toString())
                 is BridgeRequest.AdventureSpeech -> {
                     val finish: (String, AdventureSpeechMode, String?) -> Unit = { status, mode, text ->
                         completeBridgePayload(request, payload, channel, AdventureSpeechPolicy.reply(request.requestId, status, mode, text))

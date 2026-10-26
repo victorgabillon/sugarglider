@@ -26,6 +26,7 @@
         </span>
       </a>
       <nav aria-label="File and generation actions">
+        <button class="button primary header-ai-action" id="ask-chatgpt" type="button" hidden>✨ Ask ChatGPT</button>
         <button class="button primary header-action-primary" id="generate-top" type="button" data-icon="generate" aria-describedby="request-status" disabled>Generate</button>
         <details class="header-tools header-action-utility">
           <summary>Tools</summary>
@@ -42,7 +43,8 @@
               <button id="clear-offline-data" class="text-button" type="button">Clear saved offline data</button>
             </details>
             <button class="button secondary" id="edit-trail-profile" type="button">My profile</button>
-            <details class="app-status-details"><summary>App status</summary><p id="app-status-summary">Checking app status…</p></details>
+            <button class="button secondary" id="native-privacy" type="button" hidden>Privacy</button>
+            <details class="app-status-details"><summary>App status</summary><p id="app-build-identity" class="field-help" hidden></p><p id="app-status-summary">Checking app status…</p></details>
             <details id="offline-regions" class="offline-regions hidden">
               <summary><strong>Regions</strong><span>Maps, routing, places, nature and elevation on this device</span></summary>
               <div class="offline-regions-body">
@@ -120,22 +122,28 @@
     </dialog>
 
     <dialog id="adventure-dialog" class="adventure-dialog" aria-labelledby="adventure-title" aria-describedby="adventure-privacy">
-      <header><div><p class="eyebrow">Your next adventure</p><h2 id="adventure-title">✨ Describe your adventure</h2></div><button id="adventure-close" class="button secondary" type="button">Close</button></header>
+      <header><h2 id="adventure-title">✨ Ask ChatGPT</h2><button id="adventure-close" class="button secondary" type="button">Close</button></header>
       <div class="adventure-body">
-        <p id="adventure-privacy" class="field-help">When you Generate, your description, chosen Start/End, required points and up to 24 nearby mapped places (names, IDs and coordinates) are sent to OpenAI using your connected ChatGPT account. Research is online. Route calculations, complete regional packs and GPX stay on this device. Your ChatGPT plan limits apply. If the extra request is enabled, measured route summaries and reached mapped place names/OSM IDs may be sent to research stories or improve suggestions. The latest completed adventure, including selected places and stories, is kept locally for restart recovery; you can forget it or clear saved offline data.</p>
-        <section aria-label="ChatGPT account">
+        <p id="adventure-privacy" class="field-help">Generate sends your text and selected geographic context to ChatGPT online. Route calculations and GPX stay on this device. Nothing is sent until you ask.</p>
+        <section class="adventure-account-section" aria-label="ChatGPT account">
           <p id="adventure-account-status" role="status" aria-live="polite">Connect your ChatGPT account to begin.</p>
-          <label>ChatGPT account<select id="adventure-account"><option value="">No account connected</option></select></label>
-          <div class="button-row"><button id="adventure-connect" class="button secondary" type="button">Sign in with ChatGPT</button><button id="adventure-add-account" class="text-button" type="button" hidden>Add account</button><button id="adventure-sign-out" class="text-button" type="button" hidden>Sign out</button></div>
+          <button id="adventure-connect" class="button secondary" type="button">Sign in with ChatGPT</button>
+          <details id="adventure-account-settings"><summary>ChatGPT account</summary>
+            <label>ChatGPT account<select id="adventure-account"><option value="">No account connected</option></select></label>
+            <div class="button-row"><button id="adventure-add-account" class="text-button" type="button" hidden>Add account</button><button id="adventure-sign-out" class="text-button" type="button" hidden>Sign out</button></div>
+          </details>
         </section>
+        <p id="adventure-region-status" class="validation" role="status" hidden></p>
         <section id="adventure-input">
           <label for="adventure-text">What would you like to do?</label>
-          <textarea id="adventure-text" rows="5" maxlength="8000" placeholder="A 35 km trail run in the woods around Marly, with historical places and viewpoints…"></textarea>
+          <textarea id="adventure-text" rows="4" maxlength="8000" placeholder="A 35 km trail run in the woods around Marly, with historical places and viewpoints…"></textarea>
+          <div class="button-row adventure-speech-actions"><button id="adventure-microphone" class="button secondary" type="button" aria-pressed="false">🎤 Speak my adventure</button><button id="adventure-finish-speech" class="button secondary" type="button" hidden>Done speaking</button><button id="adventure-stop-speech" class="text-button" type="button" hidden>Cancel microphone</button></div>
+          <p id="adventure-speech-status" class="field-help" role="status" aria-live="polite">Speak adds editable text. Check it before Generate. Recording lasts at most one minute.</p>
+          <details id="adventure-speech-settings"><summary>Speech language and service</summary>
           <label>Speech language<select id="adventure-language"><option value="">Device language</option><option value="fr-FR">Français</option><option value="en-GB">English (UK)</option><option value="en-US">English (US)</option></select></label>
           <label>Speech recognition<select id="adventure-speech-service"><option value="">On this device if available</option><option value="platform">Android speech service (may send audio)</option></select></label>
-          <div class="button-row"><button id="adventure-microphone" class="button secondary" type="button" aria-pressed="false">🎤 Speak</button><button id="adventure-finish-speech" class="button secondary" type="button" hidden>Done speaking</button><button id="adventure-stop-speech" class="text-button" type="button" hidden>Cancel microphone</button></div>
-          <p id="adventure-speech-status" class="field-help" role="status" aria-live="polite">Choose the language you will speak. Speak adds to your text; check it before Generate. Recording lasts at most one minute. If Android finishes early, tap Speak to continue.</p>
-          <details><summary>Advanced settings</summary>
+          </details>
+          <details id="adventure-advanced"><summary>Advanced settings</summary>
             <label>Model<select id="adventure-model"><option value="">Connect an eligible account to load models</option></select></label>
             <button id="adventure-refresh-models" class="text-button" type="button">Refresh available models</button>
             <label class="adventure-check"><input id="adventure-research" type="checkbox" checked> Research places and sources online</label>
@@ -144,13 +152,14 @@
             <p class="field-help">Asphalt, exact retracing, technical difficulty and current access cannot yet be verified. Elevation is measured after routing; a climbing target is not guaranteed.</p>
           </details>
         </section>
-        <section aria-label="Start and End">
+        <details id="adventure-endpoints"><summary>Start and End</summary>
           <p id="adventure-start" class="field-help"></p>
           <label class="adventure-check"><input id="adventure-keep-start" type="checkbox" checked> Keep my chosen Start</label>
           <label class="adventure-check"><input id="adventure-keep-end" type="checkbox" checked> Keep my chosen End</label>
           <p class="field-help">Start and End are optional here: describe them by text or speech, or choose them on the map. Suggested locations are reviewed before routing. A loop returns to its Start.</p>
           <div class="button-row"><button id="adventure-choose-start" class="text-button" type="button">Choose Start on map</button><button id="adventure-choose-end" class="text-button" type="button">Choose End on map</button></div>
-        </section>
+        </details>
+        <details id="adventure-privacy-details"><summary>What is sent and saved?</summary><p id="adventure-privacy-full" class="field-help">When you Generate, your description, chosen Start/End, required points and up to 24 nearby mapped places (names, IDs and coordinates) are sent to OpenAI using your connected ChatGPT account. Research is online. Route calculations, complete regional packs and GPX stay on this device. Your ChatGPT plan limits apply. If the extra request is enabled, measured route summaries and reached mapped place names/OSM IDs may be sent to research stories or improve suggestions. The latest completed adventure, including selected places and stories, is kept locally for restart recovery; you can forget it or clear saved offline data.</p></details>
         <section id="adventure-review" hidden aria-labelledby="adventure-review-title"><h3 id="adventure-review-title">Confirm required places</h3><p id="adventure-interpretation"></p><div id="adventure-required"></div><div id="adventure-limitations"></div><button id="adventure-confirm" class="button primary" type="button">Keep these requirements and calculate</button></section>
         <p id="adventure-progress" role="status" aria-live="polite"></p>
         <p id="adventure-error" class="validation" role="alert" aria-live="assertive"></p>
@@ -300,7 +309,7 @@
         </div>
 
         <div class="plan-readiness"><p id="planning-readiness" class="field-help" role="status">Checking routing availability…</p><button id="plan-regions" class="text-button hidden" type="button">Regions</button></div>
-        <div id="adventure-launch" class="adventure-launch" hidden><button id="plan-with-ai" class="button primary wide" type="button">✨ Plan with AI</button><p class="field-help">Describe a run, hike or ride. ChatGPT suggests places; Sugarglider checks real offline routes.</p><button id="restore-adventure" class="button secondary wide" type="button" hidden>Reopen saved adventure</button><p id="adventure-recovery-status" class="field-help" role="status"></p></div>
+        <div id="adventure-launch" class="adventure-launch" hidden><button id="plan-with-ai" class="button primary wide" type="button">✨ Ask ChatGPT</button><p class="field-help" id="adventure-launch-help">Describe a run, hike or ride. ChatGPT suggests places; Sugarglider checks real offline routes.</p><button id="restore-adventure" class="button secondary wide" type="button" hidden>Reopen saved adventure</button><p id="adventure-recovery-status" class="field-help" role="status"></p></div>
         <div class="itinerary-launch"><button id="import-itinerary" class="button secondary" type="button">Import itinerary</button><p class="field-help">Paste named places from an external assistant or a JSON file.</p></div>
         <form id="route-form" novalidate>
           <label class="plan-activity">Activity<select id="profile" aria-describedby="profile-description"></select></label>
@@ -463,7 +472,7 @@
             <label><span class="visually-hidden">Order</span><span class="dock-choice"><span id="dock-order-label" aria-hidden="true">As tapped</span><select id="dock-order" aria-label="Order"><option value="fixed">As tapped</option><option value="optimize">Optimize stops</option></select></span></label>
           </div>
           <section id="endpoint-adjustments-map" class="endpoint-adjustments" aria-label="Endpoint adjustments" hidden></section>
-          <div id="route-point-strip" class="route-point-strip" role="group" aria-label="Route points"></div>
+          <div class="route-dock-actions"><div id="route-point-strip" class="route-point-strip" role="group" aria-label="Route points"></div><button id="generate-map" class="button primary" type="button" aria-describedby="request-status" hidden>Generate</button></div>
           <p id="route-dock-hint" class="visually-hidden" aria-live="polite">Tap the map to choose Start</p>
           <p id="route-strip-help" class="visually-hidden"></p>
           <div id="route-add-menu" class="route-dock-popover" popover="auto" role="dialog" aria-label="Add point"><button type="button" data-dock-action="search-location">Search place or address</button><button type="button" data-dock-action="choose-map">Choose on map</button></div>

@@ -1,5 +1,6 @@
 import { createSelectedRouteElevation } from "./route_elevation.js";
 import { initializeAdventureDialog } from "./adventure_dialog.js";
+import { nativeBridgeTransport } from "./native_bridge_transport.js";
 import { nearbyAdventurePlaceContext } from "./adventure_grounding.js";
 import { createAdventureResults } from "./adventure_results.js";
 import { renderAdventurePlaces } from "./map.js";
@@ -279,15 +280,65 @@ async function checkAdventureRecovery() {
   if (owned !== adventureRestoreEpoch) return;
   byId("restore-adventure").hidden = !record;
 }
+function initializeNativeAppTools() {
+  const french = /^fr(?:-|$)/i.test(navigator.language);
+  const privacy = byId("native-privacy"), identity = byId("app-build-identity");
+  privacy.hidden = false;
+  privacy.textContent = french ? "Confidentialité" : "Privacy";
+  privacy.addEventListener("click", async () => {
+    const shown = await nativeBridgeTransport.request("show_privacy", {}, {
+      owner: "app-tools", timeoutMs: 2000, parseReply: payload => {
+        const value = JSON.parse(payload);
+        return value.type === "show_privacy_result" && value.shown === true;
+      },
+    });
+    if (!shown) showError(french ? "La fenêtre de confidentialité est indisponible. Réessayez depuis l’application." : "The privacy dialog is unavailable. Try again from the app.");
+  });
+  let identityPending = false;
+  identity.closest("details").addEventListener("toggle", async event => {
+    if (!event.currentTarget.open || identityPending || identity.dataset.loaded) return;
+    identityPending = true; identity.hidden = false;
+    identity.textContent = french ? "Identification de l’application…" : "Reading packaged build…";
+    const value = await nativeBridgeTransport.request("get_app_identity", {}, {
+      owner: "app-tools", timeoutMs: 2000, parseReply: payload => {
+        const data = JSON.parse(payload);
+        if (data.type !== "app_identity_result" || !/^[a-f0-9]{7,40}(?:-dirty)?$/.test(data.revision)
+          || !["debug", "release", "v2Debug", "v2Staging"].includes(data.variant)
+          || typeof data.label !== "string" || data.label.length > 80 || typeof data.version !== "string" || data.version.length > 80) return null;
+        return data;
+      },
+    });
+    identityPending = false;
+    if (value) {
+      const variant = { v2Staging: "V2 Staging", v2Debug: "V2 Research", debug: "Debug", release: "Production" }[value.variant];
+      identity.textContent = `${value.label} · ${value.revision} · ${variant} · ${value.version}`;
+      identity.dataset.loaded = "true";
+    } else identity.textContent = french ? "Identité du paquet indisponible." : "Packaged build identity unavailable.";
+  });
+  if (french) {
+    document.documentElement.lang = "fr";
+    document.querySelector(".header-tools > summary").textContent = "Outils";
+    document.querySelector(".app-status-details > summary").textContent = "État de l’application";
+    for (const [view, label] of Object.entries({ map: "Carte", plan: "Plan", routes: "Tracés" })) {
+      document.querySelector(`[data-shell-view="${view}"]`).textContent = label;
+    }
+    byId("adventure-launch-help").textContent = "Décrivez une course, une randonnée ou une sortie à vélo. ChatGPT propose des lieux ; Sugarglider vérifie de vrais parcours hors ligne.";
+  }
+}
+
 function initializeAdventure() {
   byId("adventure-launch").hidden = !localPlanner;
+  byId("ask-chatgpt").hidden = !localPlanner;
+  document.body.classList.toggle("has-adventure-planner", Boolean(localPlanner));
   if (!localPlanner) return;
-  byId("plan-with-ai").addEventListener("click", () => { adventureRestoreEpoch++; adventureMapEndpoint = null; }, { capture: true });
+  const launchers = [byId("ask-chatgpt"), byId("plan-with-ai")];
+  for (const action of launchers) action.addEventListener("click", () => { adventureRestoreEpoch++; adventureMapEndpoint = null; }, { capture: true });
+  initializeNativeAppTools();
   byId("route-form").addEventListener("input", () => { adventureRestoreEpoch++; });
   byId("restore-adventure").addEventListener("click", () => void reopenSavedAdventure());
   byId("forget-adventure").addEventListener("click", () => void forgetSavedAdventure());
   let priorRequest = null, requestId = null;
-  adventureDialog = initializeAdventureDialog({ root: byId("adventure-dialog"), launcher: byId("plan-with-ai"), planner: localPlanner,
+  adventureDialog = initializeAdventureDialog({ root: byId("adventure-dialog"), launcher: byId("plan-with-ai"), launchers, planner: localPlanner,
     canOpen: () => !state.outingDisplay && !isSavedRouteSnapshotDisplay() && !["running", "reversing"].includes(state.request.status),
     getContext: adventureContext,
     onBusy: busy => {
@@ -976,8 +1027,8 @@ function renderModeControls() {
   byId("connect-shape").classList.toggle("hidden", auto);
   byId("connect-end").classList.toggle("hidden", auto);
   byId("clear-points").textContent = auto ? "Clear all" : "Clear route points";
-  byId("generate").textContent = "Generate";
-  byId("generate-top").textContent = "Generate";
+  const generateLabel = localPlanner && /^fr(?:-|$)/i.test(navigator.language) ? "Générer" : "Generate";
+  for (const id of ["generate", "generate-top", "generate-map"]) byId(id).textContent = generateLabel;
   byId("places-explanation").textContent = auto
     ? "Browse mapped places and optionally prefer eligible places in your suggested route. Simply selecting a place never changes the route."
     : "Explore places on the map. Selecting one does not change your route points or exported route.";
@@ -2076,10 +2127,12 @@ function renderStatus() {
       : "On-device connections support exact points and shortest paths, with nature and loop preferences off. Unsupported choices report an error; your points are not weakened."
     : "Choose a loop back to Start, or a point-to-point route with a destination. Available activities use the routing service.";
   byId("import-itinerary").disabled = readOnly || running;
-  byId("plan-with-ai").disabled = running || readOnly && !state.adventureDisplay;
+  for (const id of ["ask-chatgpt", "plan-with-ai"]) byId(id).disabled = running || readOnly && !state.adventureDisplay;
   byId("restore-adventure").disabled = running || readOnly;
   byId("generate").disabled = readOnly || running || !availability.enabled;
   byId("generate-top").disabled = byId("generate").disabled;
+  byId("generate-map").disabled = byId("generate").disabled;
+  byId("generate-map").hidden = !localPlanner || readOnly || !availability.enabled;
   byId("cancel").classList.toggle("hidden", !running);
   byId("hard-start-control").disabled = running || readOnly;
   byId("generation-state").classList.toggle("hidden", !running);
@@ -2134,7 +2187,9 @@ function renderEmptyState() {
     || state.importedGpx
     || currentDisplayedCandidates().length > 0;
   byId("planner-empty").classList.toggle("hidden", Boolean(hasWork || activeEndpoints().start || activeMapPlacementGuidance()));
-  byId("planner-empty").querySelector("p").textContent = "Tap the map to choose Start, then keep tapping to add stops.";
+  const frenchPlanner = localPlanner && /^fr(?:-|$)/i.test(navigator.language);
+  byId("empty-title").textContent = frenchPlanner ? "Ou touchez la carte" : localPlanner ? "Or start on the map" : "Start on the map";
+  byId("planner-empty").querySelector("p").textContent = frenchPlanner ? "Choisissez votre départ." : localPlanner ? "Choose your Start." : "Tap the map to choose Start, then keep tapping to add stops.";
 }
 
 function renderElevation(value) {
@@ -2999,6 +3054,7 @@ function bindEvents() {
   const measureDock = () => {
     dockPanel.style.setProperty("--route-dock-height", `${byId("route-dock").getBoundingClientRect().height}px`);
     const attribution = dockPanel.querySelector(".maplibregl-ctrl-attrib");
+    if (attribution) dockObserver.observe(attribution);
     dockPanel.style.setProperty("--route-attribution-clearance", `${Math.max(32, (attribution?.getBoundingClientRect().height ?? 0) + 18)}px`);
   };
   const dockObserver = new ResizeObserver(measureDock);
@@ -3013,6 +3069,7 @@ function bindEvents() {
   byId("error-remove-waypoint").addEventListener("click", () => updateFailedExactPoint("remove"));
   byId("generate").addEventListener("click", generate);
   byId("generate-top").addEventListener("click", generate);
+  byId("generate-map").addEventListener("click", generate);
   byId("cancel").addEventListener("click", () => { state.abortController?.abort(); adventureDialog?.cancel(); });
   byId("clear-results").addEventListener("click", () => invalidateAndRender());
   for (const id of ["undo-point-edit", "undo-point-edit-plan"]) {

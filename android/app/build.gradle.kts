@@ -19,6 +19,16 @@ val bundledShellDirectory = layout.buildDirectory.dir("generated/bundled-shell")
 // Opt-in, isolated storage for acceptance. Never reuses an installed app's UID.
 val stagingSuffix = providers.gradleProperty("sugargliderV2StagingSuffix").orElse(".v2staging").get()
 require(stagingSuffix == ".v2staging" || stagingSuffix.matches(Regex("\\.v2audit[a-z0-9]{1,16}")))
+val sourceCommit = providers.exec {
+    workingDir(rootProject.projectDir.parentFile)
+    commandLine("git", "rev-parse", "--short=7", "HEAD")
+}.standardOutput.asText.get().trim()
+val sourceDirty = providers.exec {
+    workingDir(rootProject.projectDir.parentFile)
+    commandLine("git", "status", "--porcelain", "--untracked-files=no")
+}.standardOutput.asText.get().isNotBlank()
+require(sourceCommit.matches(Regex("[a-f0-9]{7,40}")))
+val sourceRevision = sourceCommit + if (sourceDirty) "-dirty" else ""
 val bundleSharedWebShell by tasks.registering(Sync::class) {
     inputs.file(shellAssetList)
     from(sharedWebDirectory) { include(shellAssetPaths); into("web") }
@@ -91,6 +101,8 @@ android {
         else "io.github.victorgabillon.sugarglider.HeightResearchInstrumentation"
         buildConfigField("boolean", "ALLOW_HTTP", "false")
         buildConfigField("String", "PRIVACY_POLICY_URL", "\"$publicPrivacyPolicy\"")
+        buildConfigField("String", "SOURCE_REVISION", "\"$sourceRevision\"")
+        manifestPlaceholders["launcherCategory"] = "android.intent.category.LAUNCHER"
         ndk.abiFilters += "arm64-v8a"
     }
 
@@ -123,6 +135,12 @@ android {
             versionNameSuffix = "-v2-staging"
             buildConfigField("boolean", "ALLOW_HTTP", "false")
             matchingFallbacks += "debug"
+            // Audit clones stay explicitly launchable by instrumentation, but
+            // have no ordinary launcher entry. Normal AI Test remains visible.
+            if (stagingSuffix != ".v2staging") {
+                manifestPlaceholders["launcherCategory"] = "io.github.victorgabillon.sugarglider.AUDIT"
+            }
+            resValue("string", "app_name", if (stagingSuffix == ".v2staging") "SG AI Test" else "SG Audit ${stagingSuffix.removePrefix(".v2audit")}")
         }
         release {
             signingConfig = externalSigning?.let { signingConfigs.getByName("externalUpload") }

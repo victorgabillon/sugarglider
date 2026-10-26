@@ -88,7 +88,7 @@ export async function runAdventureUiHarness() {
       elevation: { clear() {} }, onResult() {}, onChooseStart() {}, onChooseEnd() {} });
     try {
       await dialog.open(); await until(() => !byId("microphone").disabled, "speech controls ready");
-      assert(!byId("language").closest("details") && byId("language").options[0].textContent.includes(navigator.language), "actual language visible outside advanced settings");
+      assert(byId("language").closest("details").id === "adventure-speech-settings" && byId("language").options[0].textContent.includes(navigator.language), "actual language remains available in dedicated speech settings");
       byId("language").value = "fr-FR"; byId("text").value = "Je veux courir.";
       byId("microphone").click(); await until(() => calls.length === 1, "first dictation");
       byId("text").value += " En forêt."; byId("finish-speech").click();
@@ -158,6 +158,7 @@ export async function runAdventureUiHarness() {
       assert(spoken === 1 && r.calls.length === 0 && r.nativeCalls.length === 0, "microphone sends no model request or route call");
       byId("text").value += " avec de beaux points de vue"; byId("text").dispatchEvent(new Event("input"));
       assert(!byId("generate").disabled, "one explicit Generate action available");
+      assert(f.root.querySelector(".adventure-body").clientHeight >= 100, "Header and footer leave a usable scroll area at large text");
       assert(f.root.scrollWidth <= f.root.clientWidth + 1 && f.doc.documentElement.scrollWidth <= width + 1, `no horizontal overflow ${width}/${scale}`);
       byId("generate").click(); await until(() => output !== null && !f.root.open, "normal proposal-to-GPX UI");
       assert(r.calls.length === 2 && busy[0] && busy.at(-1) === false, "one bounded AI operation");

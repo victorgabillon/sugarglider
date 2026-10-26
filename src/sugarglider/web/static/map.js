@@ -204,6 +204,43 @@ export function initialMapStyle(config, bootstrap = offlineMapBootstrapForConfig
   };
 }
 
+// Keep MapLibre's responsive control and its complete active-source credits.
+// OSMF permits automatic collapse after five seconds. A deliberate expansion
+// or keyboard focus cancels that timer; changing the pack starts a new interval.
+function settleCompactAttribution(instance) {
+  const control = instance.getContainer().querySelector(".maplibregl-ctrl-attrib");
+  const button = control?.querySelector("summary"), credits = control?.querySelector(".maplibregl-ctrl-attrib-inner");
+  if (!button || !credits) return;
+  let timer = null, touched = false;
+  const stop = () => { clearTimeout(timer); timer = null; };
+  const compact = () => control.classList.contains("maplibregl-compact");
+  const expanded = () => !compact() || control.classList.contains("maplibregl-compact-show");
+  const describe = () => button.setAttribute("aria-expanded", String(expanded()));
+  button.setAttribute("aria-label", /^fr(?:-|$)/i.test(navigator.language) ? "Crédits de la carte et licences" : "Map credits and licences");
+  function schedule() {
+    stop(); describe();
+    if (!compact() || touched || document.hidden || !credits.textContent.trim()) return;
+    if (!expanded()) button.click();
+    timer = setTimeout(() => {
+      if (compact() && expanded() && !touched && !control.contains(document.activeElement)) button.click();
+    }, 5000);
+  }
+  const interact = event => { if (event.isTrusted) { touched = true; stop(); } };
+  button.addEventListener("click", interact);
+  control.addEventListener("focusin", interact);
+  const sourceObserver = new MutationObserver(() => { touched = false; schedule(); });
+  sourceObserver.observe(credits, { childList: true, subtree: true, characterData: true });
+  const stateObserver = new MutationObserver(describe);
+  stateObserver.observe(control, { attributes: true, attributeFilter: ["class", "open"] });
+  document.addEventListener("visibilitychange", schedule);
+  instance.on("resize", schedule);
+  instance.on("remove", () => {
+    stop(); sourceObserver.disconnect(); stateObserver.disconnect();
+    document.removeEventListener("visibilitychange", schedule);
+  });
+  schedule();
+}
+
 export function initializeMap(config, handlers) {
   resetMapInstance();
   try {
@@ -219,6 +256,7 @@ export function initializeMap(config, handlers) {
     return false;
   }
   elevationMapMarker.attach(map);
+  settleCompactAttribution(map);
   map.addControl(new maplibregl.NavigationControl(), "top-left");
   map.on("load", async () => {
     const loadedMap = map;

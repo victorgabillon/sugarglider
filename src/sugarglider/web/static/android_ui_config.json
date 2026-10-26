@@ -37,6 +37,6 @@
   "poi_index_available": false,
   "poi_max_limit": 1000,
   "saved_routes_available": false,
-  "tile_attribution": "\u00a9 OpenStreetMap contributors",
+  "tile_attribution": "<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\" rel=\"noopener noreferrer\">\u00a9 OpenStreetMap contributors</a>",
   "tile_url_template": "https://appassets.androidplatform.net/unavailable-tiles/{z}/{x}/{y}.png"
 }
