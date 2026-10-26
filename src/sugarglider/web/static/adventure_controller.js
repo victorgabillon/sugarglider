@@ -1,5 +1,5 @@
 import { ADVENTURE_INSTRUCTIONS, ADVENTURE_SCHEMA, parseAdventureProposal, adventureWishCapabilities } from "./adventure_proposal.js";
-import { groundAdventurePlaces, resolveAdventureEndpoint } from "./adventure_grounding.js";
+import { groundAdventurePlaces, resolveAdventureEndpoint, ADVENTURE_CONTEXT_PLACE_LIMIT } from "./adventure_grounding.js";
 import { AdventureIntentError, buildAdventureIntent } from "./adventure_intent.js";
 import { assessAdventure, compactAdventureAssessment, compareAdventureAssessments, adventureMeasuredImprovement } from "./adventure_assessment.js";
 import { deepFreeze } from "./local_candidate_evaluator.js";
@@ -54,6 +54,7 @@ export function createAdventureController({ model, planner, confirmProposal = nu
         activity: input.profile ?? input.suggested_profile ?? null, activity_is_fixed: Boolean(input.profile),
         exact_points: (input.hardWaypoints ?? []).map(({ id, name, coordinate }) => ({ id, name, coordinate })),
         region: { region_id: input.reference.region_id, bounds: input.reference.bounds },
+        local_places: (input.localPlaces ?? []).slice(0, ADVENTURE_CONTEXT_PLACE_LIMIT),
         available: { offline_routing: true, mapped_nature: true, exact_repetition: false, native_surface: false, current_access: false } } }, "initial");
       let original = first.proposal;
       if (input.end && original.intent.topology === "loop") throw new AdventureIntentError("adventure_endpoint_review_required", "Your chosen End must be kept. Review it before changing this route to a loop.");

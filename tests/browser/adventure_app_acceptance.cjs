@@ -164,6 +164,11 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           improved: state.adventureResult?.refinement_improved, grounding: state.adventureResult?.chosen.grounding, result: state.generationResult, source: state.generationSourceRequest,
           error: document.querySelector('#adventure-error').textContent }; });
         assert(adventure.active && adventure.improved, JSON.stringify(adventure));
+        const modelContext=await page.evaluate(()=>JSON.parse(adventureNativeCalls.find(call=>call.type==='chatgpt_infer').input).planning_context);
+        assert(modelContext.local_places.length>0&&modelContext.local_places.length<=24);
+        assert(modelContext.local_places.some(place=>place.osm_id==='node/1'&&place.location.name==='Fixture 1'),'Actual installed OPFS landmarks are supplied to research through the normal Generate action');
+        assert(!JSON.stringify(modelContext.local_places).includes('approach_candidates'),'Research never receives raw mapped approaches');
+
         assert(adventure.grounding.places.some(place => place.match_method === 'exact_local_name'),'Real worker grounds name-only suggestions without a prior location-picker session');
         assert(adventure.result.candidates.some(c => c.reached_stops.length === 2));
         await view('routes'); await page.locator('.candidate-select').last().click();
@@ -241,7 +246,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await page.locator('.candidate-select').first().click();
         assert.equal(await page.evaluate(async () => { const { store } = await (await import('/static/pwa_runtime.js')).pwaRuntime(); return (await store.get('public_runtime','latest-adventure')) ?? null; }), null, 'Selecting after Forget must not resurrect the saved adventure');
         assert.deepEqual(errors, []); assert.deepEqual(external, []);
-        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, status: 'passed', cases: ['name_grounding_without_prior_location_picker','optional_endpoints_and_cancelled_map_roundtrip','no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
+        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, status: 'passed', cases: ['bounded_local_landmark_context_before_research','name_grounding_without_prior_location_picker','optional_endpoints_and_cancelled_map_roundtrip','no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
       } finally { await context.close(); }
     }
   } finally { await browser.close(); }

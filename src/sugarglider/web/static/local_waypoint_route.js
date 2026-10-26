@@ -92,7 +92,8 @@ export function validateLocalWaypointRouteRequest(value, { adventure = false } =
   if ((!adventure && rawWaypoints.length + 2 > MAX_ROUTE_POINTS) || rawWaypoints.length > 30) {
     fail("too_many_waypoints", { maximum: adventure ? 30 : LOCAL_WAYPOINT_MAX_WAYPOINTS });
   }
-  if (value.topology === "loop" && rawWaypoints.length === 0) fail("loop_requires_waypoint");
+  // Adventure loops have their own bounded, native-routed control skeletons.
+  if (value.topology === "loop" && rawWaypoints.length === 0 && !adventure) fail("loop_requires_waypoint");
   const identities = new Set();
   const coordinates = new Set([coordinateKey(start), ...(end ? [coordinateKey(end)] : [])]);
   const waypoints = rawWaypoints.map((point, index) => {

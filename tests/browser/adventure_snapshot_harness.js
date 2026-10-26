@@ -11,6 +11,15 @@ export async function runAdventureSnapshotHarness() {
   const r = await setup(), cases = [];
   let store;
   try {
+    const control=await setup();
+    try {
+      control.proposal.intent.topology='loop';control.proposal.intent.end=null;control.proposal.places=[];control.input.context.end=null;
+      const value=await control.controller.run({...control.input,refine:false});
+      const record=await encodeAdventureSnapshot(value),selected_id=value.chosen.result.candidates[0].id,calls=control.nativeCalls.length;
+      const recovered=await decodeAdventureSnapshot({...record,selected_id});
+      assert(same(recovered.output,value)&&control.nativeCalls.length===calls,'a no-stop native loop control recovers exactly without routing or invented visits');
+      cases.push('no_stop_adventure_control_restores_exactly_without_routing');
+    } finally {control.controller.cancel();control.planner.invalidate();}
     const inferred = await setup({ confirmProposal: async () => ({ confirmedMandatoryIds: [] }) });
     try {
       const value = await inferred.controller.run({ ...inferred.input, context: { ...inferred.input.context, start:null, end:null }, refine:false });

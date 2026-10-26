@@ -153,7 +153,7 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
     planningFinished = new Promise(resolve => { finishPlanning = resolve; });
     aiBusy = true; message(""); render(); onBusy(true);
     try {
-      const context = endpointContext(await getContext());
+      const context = endpointContext(await getContext({ includePlaces: true, useStart: element("keep-start").checked, useEnd: element("keep-end").checked, signal: abort.signal }));
       if (owned !== epoch || !root.open || abort.signal.aborted) return;
       const output = await controller.run({ prompt: element("text").value, modelId: element("model").value, context,
         research: element("research").checked, structured: element("structured").checked, refine: element("refine").checked }, abort.signal);

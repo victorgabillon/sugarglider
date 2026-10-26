@@ -14,6 +14,31 @@ const categoryMatches = (suggestion, actual) => suggestion === "historical"
   : suggestion === "viewpoint" ? ["viewpoint", "observation_tower"].includes(actual)
     : suggestion === "water" ? ["drinking_water", "fountain", "water_tap"].includes(actual) : true;
 
+// A small public-map context gives research stable names/identities, without
+// uploading an index, routing geometry, approaches, tags or private features.
+export const ADVENTURE_CONTEXT_PLACE_LIMIT = 24;
+export async function nearbyAdventurePlaceContext({ session, reference, center, signal }) {
+  if (!center || !covered(center, reference.bounds)) return [];
+  const current = reply => {
+    if (signal?.aborted) throw new DOMException("Adventure cancelled.", "AbortError");
+    if (!session.identity || reply && !reply.identity
+      || [session.identity, reply?.identity].filter(Boolean).some(identity => identity.region_id !== reference.region_id || identity.build_id !== reference.build_id)) {
+      throw new Error("The selected region changed while checking nearby places.");
+    }
+  };
+  current();
+  const reply = await session.queryPois({ center: { lat: center.lat, lon: center.lon }, radius_m: 30_000, limit: 64, requested_ids: [] });
+  current(reply);
+  const priority = feature => ["castle", "ruins", "archaeological_site", "tourism_attraction"].includes(feature.category) ? 0 : feature.group === "scenic" ? 1 : 2;
+  return deepFreeze(reply.features.filter(feature => usable(feature) && covered(feature.coordinate, reference.bounds)
+    && feature.approach_candidates.some(approach => !["private", "restricted"].includes(approach.access) && covered(approach.coordinate, reference.bounds)
+      && distance(approach.coordinate, feature.coordinate) <= 1000))
+    .sort((a, b) => priority(a) - priority(b) || distance(center, a.coordinate) - distance(center, b.coordinate) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .slice(0, ADVENTURE_CONTEXT_PLACE_LIMIT).map(feature => ({ osm_id: feature.id,
+      location: { name: feature.display_name.slice(0, 120), lat: feature.coordinate.lat, lon: feature.coordinate.lon },
+      category: feature.category, access: feature.access_status, potability: feature.potability })));
+}
+
 // Both endpoints use this same review boundary. A model coordinate never
 // disambiguates duplicate local names or becomes a verified place by itself.
 export async function resolveAdventureEndpoint(location, { session, reference, signal }) {
@@ -38,6 +63,17 @@ export async function resolveAdventureEndpoint(location, { session, reference, s
     proposed_coordinate: location, evidence: "model_coordinate_unverified" }) : null;
 }
 
+// The service appends this known tracking parameter to cited links. Keep every
+// meaningful path/query distinction when matching proposal links to citations.
+function citationIdentity(value) {
+  const safe = safeAdventureLink(value);
+  if (!safe) return null;
+  const url = new URL(safe);
+  const tracking = url.searchParams.getAll("utm_source");
+  if (tracking.length === 1 && tracking[0] === "openai") url.searchParams.delete("utm_source");
+  return url.href;
+}
+
 export async function groundAdventurePlaces(proposal, { session, reference, start, citations = [], researched = false, signal } = {}) {
   const identity = session.identity;
   const current = response => {
@@ -47,15 +83,15 @@ export async function groundAdventurePlaces(proposal, { session, reference, star
   };
   current();
   const bounds = identity.bounds;
-  const citationLinks = new Set(researched ? citations.map(item => safeAdventureLink(item.url)).filter(Boolean) : []);
+  const citationLinks = new Set(researched ? citations.map(item => citationIdentity(item.url)).filter(Boolean) : []);
   const results = [];
   for (const place of proposal.places) {
     current();
     const proposed = place.location.lat === null ? null : place.location;
     const base = { ...place, proposed_coordinate: proposed, semantic_coordinate: null, routing_coordinate: null,
       local_id: null, local_name: null, local_category: null, local_potability: null, match_method: null, approach: null, access_status: "unknown", status: "unresolved_location",
-      story_status: place.sources.some(source => citationLinks.has(source.url)) ? "source_linked_ai_text" : "unverified_ai_text",
-      sources: place.sources.map(source => ({ ...source, retrieved: citationLinks.has(source.url) })) };
+      story_status: place.sources.some(source => citationLinks.has(citationIdentity(source.url))) ? "source_linked_ai_text" : "unverified_ai_text",
+      sources: place.sources.map(source => ({ ...source, retrieved: citationLinks.has(citationIdentity(source.url)) })) };
     if (proposed && !covered(proposed, bounds)) { results.push({ ...base, status: "outside_coverage" }); continue; }
     let feature = null, method = null, ambiguous = false;
     if (place.osm_id) {

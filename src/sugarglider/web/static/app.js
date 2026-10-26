@@ -1,5 +1,6 @@
 import { createSelectedRouteElevation } from "./route_elevation.js";
 import { initializeAdventureDialog } from "./adventure_dialog.js";
+import { nearbyAdventurePlaceContext } from "./adventure_grounding.js";
 import { createAdventureResults } from "./adventure_results.js";
 import { renderAdventurePlaces } from "./map.js";
 import { regionalRoutingReference } from "./regional_routing_reference.js";
@@ -191,7 +192,7 @@ function returnToManualPlan({ refresh = true } = {}) {
   manualAdventureSnapshot = null; state.visualizationCache.clear();
   if (refresh) { render(); appShell?.show("plan"); }
 }
-async function adventureContext() {
+async function adventureContext({ includePlaces = false, useStart = true, useEnd = true, signal } = {}) {
   if (!localPlanner || regionPlanningError) throw new Error(regionFailureMessage(regionPlanningError ?? "regional_required"));
   const request = state.adventureDisplay ? state.generationSourceRequest : null;
   const context = request ? { start: request.start, end: request.end,
@@ -199,8 +200,19 @@ async function adventureContext() {
     suggested_profile: request.routing_profile, seed: request.seed, endpointSnapPolicy: request.endpoint_snap_policy }
     : currentAdventureContext();
   if (context.hardWaypoints.length > 14) throw new Error("This adventure can preserve up to 14 exact intermediate points. Review your required points first.");
-  const reference = await regionVersions.withCommittedRegions(async rows => regionalRoutingReference(selectCommittedRegion(rows, selectedRegionId).manifest));
-  return { ...context, reference };
+  return regionVersions.withCommittedRegions(async rows => {
+    signal?.throwIfAborted();
+    const row = selectCommittedRegion(rows, selectedRegionId), reference = await regionalRoutingReference(row.manifest);
+    const center = (useStart ? context.start : null) ?? (useEnd ? context.end : null);
+    let localPlaces = [];
+    if (includePlaces && center) {
+      const directory = await regionVersions.committedDirectory(row.region_id, row.manifest.build_id);
+      const session = await localRegionClient().loadVersion(row.manifest, directory);
+      localPlaces = await nearbyAdventurePlaceContext({ session, reference, center, signal });
+    }
+    signal?.throwIfAborted();
+    return { ...context, reference, localPlaces };
+  });
 }
 async function displayExactAdventure(output, selectedId, requestId) {
   state.adventureDisplay = true; state.adventureResult = output;

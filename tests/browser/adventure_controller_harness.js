@@ -3,6 +3,7 @@
 import { createAdventureController } from "../../src/sugarglider/web/static/adventure_controller.js";
 import { assessAdventure, compactAdventureAssessment, adventureMeasuredImprovement } from "../../src/sugarglider/web/static/adventure_assessment.js";
 import { parseAdventureProposal } from "../../src/sugarglider/web/static/adventure_proposal.js";
+import { validateLocalWaypointRouteRequest } from "../../src/sugarglider/web/static/local_waypoint_route.js";
 import { buildAdventureIntent } from "../../src/sugarglider/web/static/adventure_intent.js";
 import { createLocalRegionData } from "../../src/sugarglider/web/static/local_region_data.js";
 import { exportCanonicalCandidate } from "../../src/sugarglider/web/static/local_gpx_export.js";
@@ -55,6 +56,31 @@ async function rejected(promise, code) {
 
 export async function runAdventureControllerHarness() {
   const cases = [], beforeState = JSON.stringify(state);
+  for (const unresolved of [false,true]) {
+    const r=await setup();
+    try {
+      r.proposal.intent.topology='loop';r.proposal.intent.end=null;r.input.context.end=null;
+      if(unresolved){r.proposal.places[0].location={name:'Unknown synthetic landmark',lat:null,lon:null};r.proposal.places[0].osm_id=null;r.proposal.places[0].confidence='uncertain';}
+      else r.proposal.places=[];
+      const output=await r.controller.run({...r.input,refine:false});
+      assert(output.chosen.result.candidates.length>0&&output.routing_diagnostics.budget.total_used<=8,'bounded native control survives when no suggested stop can be located');
+      assert(output.chosen.result.candidates.every(c=>c.reached_stops.length===0),'a control route cannot invent landmark visits');
+      if(unresolved)assert(output.chosen.assessment.assessments.every(a=>a.places[0].status==='unresolved_location'),'unresolved place remains visibly unresolved on control routes');
+      let manualRejected=false;try{validateLocalWaypointRouteRequest({...output.chosen.request,preferences:{nature:"off",path_selection:"shortest",loop_geometry:"off"}})}catch(e){manualRejected=e.code==='loop_requires_waypoint'}assert(manualRejected,'ordinary manual waypoint loops still require an explicit point');
+      cases.push(unresolved?'unresolved_suggestions_keep_routed_control_without_fabricated_visits':'adventure_loop_without_suggestions_uses_bounded_native_control');
+    } finally {r.controller.cancel();r.planner.invalidate();}
+  }
+  {
+    const r=await setup();
+    try {
+      const place={osm_id:'node/1',location:{name:'Fixture 1',lat:.01,lon:.005},category:'castle',access:'unknown',potability:'not_applicable'};
+      r.input.context.localPlaces=Array.from({length:40},()=>structuredClone(place));
+      await r.controller.run({...r.input,refine:false});
+      const sent=JSON.parse(r.calls[0].input).planning_context.local_places;
+      assert(sent.length===24&&sent[0].osm_id==='node/1'&&sent[0].location.lat===.01,'the model receives the bounded local geographic facts before proposing stops');
+      cases.push('bounded_mapped_landmarks_reach_initial_inference');
+    } finally {r.controller.cancel();r.planner.invalidate();}
+  }
   {
     const r = await setup();
     try {

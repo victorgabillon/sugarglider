@@ -365,3 +365,42 @@ full bundled-app test reproduce the failure before the fix; the app fixture now
 grounds one suggestion by exact local name without an OSM ID. No private regional
 data changes or hosted lookup is needed. This corrected source still needs its
 own audited staging build and physical retest.
+
+
+## Grounding research in available mapped places
+
+The separately authorized ede5827 staging build passed the loop schema and worker
+boundaries. A real researched proposal still supplied descriptive place names
+without coordinates or OSM IDs. All remained unresolved; the app accepted no
+route. A read-only debugger observation captured only the validated proposal,
+grounding and usage, then detached; no credential, raw HTTP/SSE or browser account
+data was inspected or changed. Five suggestions and five actual cited links were
+observed. The second diagnostic request used 14,268 input and 2,072 output tokens.
+
+On explicit Generate, the existing committed-region lease and shared worker now
+query at most 64 nearby mapped features within 30 km of a kept Start or End.
+At most 24 usable identity/name/coordinate/category/access/potability records
+are sent as research context, prioritizing historical and scenic records. This
+is a partial local inventory, not automatic stop selection, an access guarantee,
+or historical evidence. Private/restricted, non-potable, uncovered and unusable
+approaches are excluded. No index, approach collection, raw tags or routed line
+is sent. The dialog discloses this subset. Opening the panel does not make that
+query, and released/unset endpoints are not used as an undisclosed query centre.
+The region identity and cancellation are checked before and after the query.
+No extra index/store, hosted discovery endpoint or route call is introduced.
+
+The model can research these names and reuse their stable IDs and coordinates.
+All suggestions still pass the same local grounding and strict arrival checks;
+a record is never a proof of access or an independently verified historical
+story. Citation matching now ignores only the observed single utm_source=openai
+tracking parameter, preserving other path/query distinctions. The original link
+and the AI-story limitation stay visible. No link is automatically fetched.
+
+The dedicated adventure producer already has bounded native-routed loop control
+skeletons. Its validation now permits no intermediate stop when no optional
+suggestion resolves or the user requests none. This preserves a useful routed
+control with explicit unresolved/omitted outcomes; it cannot invent a visit or
+establish that a historical-place preference was satisfied. Manual waypoint
+loops still require an explicit point, and all exact/mandatory constraints and
+shared route-call limits remain enforced. This source follow-up needs a new
+audited APK, separate installation authorization and actual physical retesting.

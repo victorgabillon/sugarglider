@@ -136,9 +136,9 @@ export async function runAdventureUiHarness() {
     }finally{dialog.clear();r.planner.invalidate();f.element.remove();}
   }
   {
-    const r=await setup(),f=await frame();let output=null;
+    const r=await setup(),f=await frame();let output=null;const contextOptions=[];
     const dialog=initializeAdventureDialog({root:f.root,launcher:f.doc.getElementById('plan-with-ai'),planner:r.planner,
-      model:accounts(r.model),speech:{cancel(){}},elevation:{measure:async()=>({}),clear(){}},getContext:async()=>r.input.context,
+      model:accounts(r.model),speech:{cancel(){}},elevation:{measure:async()=>({}),clear(){}},getContext:async options=>{contextOptions.push(options);return r.input.context;},
       onChooseStart(){},onChooseEnd(){},onResult:value=>{output=value;}});
     try{
       await dialog.open();f.byId('text').value='Use places from my description';f.byId('text').dispatchEvent(new Event('input'));f.byId('refine').checked=false;
@@ -147,6 +147,7 @@ export async function runAdventureUiHarness() {
       await until(()=>!f.byId('review').hidden,'explicitly released manual endpoints reviewed');f.byId('confirm').click();await until(()=>Boolean(output),'new reviewed endpoints accepted');
       const sent=JSON.parse(r.calls[0].input).planning_context;
       assert(sent.start===null&&sent.end===null&&r.input.context.start!==null&&r.input.context.end!==null,'choosing inference leaves the manual planner untouched');
+      assert(contextOptions.at(-1).includePlaces&&contextOptions.at(-1).useStart===false&&contextOptions.at(-1).useEnd===false,'released manual endpoints are not used to select the online landmark context');
       cases.push('explicit_prompt_endpoint_choice_preserves_manual_draft');
     }finally{dialog.clear();r.planner.invalidate();f.element.remove();}
   }
