@@ -43,11 +43,69 @@ export async function runAdventureUiHarness() {
     } };
     const speech = createAdventureSpeech({ transport, origin: "https://appassets.androidplatform.net" });
     speech.cancel(); assert(calls.length === 0, "idle cleanup must not send a native speech command at startup");
-    const abort = new AbortController(), started = speech.start("fr-FR", false, abort.signal).catch(error => error);
+    const abort = new AbortController(), started = speech.start("fr-FR", "on_device", abort.signal).catch(error => error);
     abort.abort(); speech.cancel();
     assert((await started).name === "AbortError" && calls.filter(type => type === "adventure_speech_cancel").length === 1,
       "owned recording cancellation is sent once and discards late transcription");
     cases.push("idle_speech_cleanup_is_silent_and_owned_abort_is_single_flight");
+  }
+  {
+    const calls = []; let finish, cancellations = 0;
+    const transport = { nativeAvailable: true, cancelOwner() { cancellations++; }, request: async (type, fields, options) => {
+      calls.push({ type, fields });
+      if (type.endsWith("_start")) return new Promise(resolve => { finish = text => resolve(options.parseReply(JSON.stringify({ schema_version: 1,
+        request_id: "synthetic", type: "adventure_speech_result", status: "partial", mode: "on_device", text }))); });
+      return null;
+    } };
+    const speech = createAdventureSpeech({ transport, origin: "https://appassets.androidplatform.net" });
+    await speech.stop(); assert(!calls.length, "idle Done never contacts native speech");
+    const started = speech.start("en-GB", "platform");
+    await speech.stop();
+    assert(calls[0].fields.language === "en-GB" && calls[0].fields.mode === "platform", "explicit language and provider cross the strict bridge");
+    assert(calls[1].type === "adventure_speech_stop" && cancellations === 0, "Done waits for recognition rather than aborting its result");
+    finish("A useful unfinished draft");
+    assert((await started).status === "partial", "an interrupted transcript is labelled partial");
+    cases.push("speech_done_keeps_ownership_and_partial_drafts_are_explicit");
+  }
+  {
+    const r = await setup(), f = await frame(), { byId } = f;
+    const calls = []; let finish, reject, stopCount = 0;
+    const speech = { status: async () => ({ mode: "on_device" }), cancel() {},
+      start: (language, mode) => { calls.push({ language, mode }); return new Promise((resolve, fail) => { finish = resolve; reject = fail; }); },
+      stop: async () => { stopCount++; finish({ status: "completed", text: "Avec des châteaux.", mode: "on_device" }); } };
+    const dialog = initializeAdventureDialog({ root: f.root, launcher: f.doc.getElementById("plan-with-ai"),
+      planner: r.planner, getContext: async () => r.input.context, model: accounts(r.model), speech,
+      elevation: { clear() {} }, onResult() {}, onChooseStart() {}, onChooseEnd() {} });
+    try {
+      await dialog.open(); await until(() => !byId("microphone").disabled, "speech controls ready");
+      assert(!byId("language").closest("details") && byId("language").options[0].textContent.includes(navigator.language), "actual language visible outside advanced settings");
+      byId("language").value = "fr-FR"; byId("text").value = "Je veux courir.";
+      byId("microphone").click(); await until(() => calls.length === 1, "first dictation");
+      byId("text").value += " En forêt."; byId("finish-speech").click();
+      await until(() => !byId("microphone").disabled, "Done returns editable transcript");
+      assert(stopCount === 1 && byId("text").value === "Je veux courir. En forêt.\nAvec des châteaux.", "Done appends and preserves concurrent manual edits");
+      byId("speech-service").value = "platform"; byId("language").value = "en-US";
+      byId("microphone").click(); await until(() => calls.length === 2, "additional phrase");
+      assert(byId("finish-speech").hidden && calls[1].mode === "platform" && calls[1].language === "en-US", "platform UI owns completion, selected language is exact");
+      finish({ status: "partial", text: "Another viewpoint.", mode: "platform" });
+      await until(() => !byId("microphone").disabled, "partial added");
+      assert(byId("text").value.endsWith("\nAnother viewpoint.") && byId("speech-status").textContent.includes("draft carefully"), "successive recordings append and uncertain text is visible");
+      const saved = byId("text").value;
+      byId("microphone").click(); await until(() => calls.length === 3, "cancelled recording");
+      const cancelledReject = reject;
+      byId("stop-speech").click();
+      assert(byId("text").value === saved, "Cancel keeps earlier text");
+      byId("text").value = "x".repeat(7999);
+      byId("microphone").click(); await until(() => calls.length === 4, "bounded combined transcript");
+      cancelledReject(new DOMException("Cancelled", "AbortError"));
+      await new Promise(resolve => setTimeout(resolve, 0));
+      assert(byId("microphone").disabled && !byId("speech-status").textContent.includes("cancelled"), "old cancellation cannot overwrite a newer recording or release its controls");
+      finish({ status: "completed", text: "Keep this phrase too", mode: "platform" });
+      await until(() => byId("text").value.length > 8000, "oversized editor draft preserved");
+      assert(byId("generate").disabled && byId("microphone").disabled && byId("text").value.endsWith("Keep this phrase too"), "oversized combined draft keeps text and prevents sending or more recording");
+      assert(r.calls.length === 0 && r.nativeCalls.length === 0, "speech has no model, geographic or route calls");
+      cases.push("visible_language_provider_done_append_cancel_and_text_bound");
+    } finally { dialog.clear(); r.planner.invalidate(); f.element.remove(); }
   }
   for (const [width, height, scale] of [[360, 800, 1], [390, 844, 1], [1280, 800, 1], [360, 640, 2]]) {
     const r = await setup(), f = await frame(width, height, scale), { byId } = f;

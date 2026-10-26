@@ -157,14 +157,14 @@ def test_worker_policy_is_root_shell_only_and_has_no_background_authority() -> N
         assert f'"{header}"' in policy
 
 
-def test_shared_shell_generation_tracks_v111_cached_assets() -> None:
+def test_shared_shell_generation_tracks_v112_cached_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     generation = re.search(
         r"const SHELL_CACHE = `\$\{SHELL_CACHE_PREFIX\}(v\d+)`;",
         worker,
     )
     assert generation is not None
-    assert generation.group(1) == "v111"
+    assert generation.group(1) == "v112"
     assert {
         name: _sha256(STATIC_DIRECTORY / name)
         for name in (
@@ -332,7 +332,7 @@ def test_shared_shell_generation_tracks_v111_cached_assets() -> None:
             "f47b62e8a6d7aa00deb7e1312e5eda57ca91fc59e082c465b4c161a791f7f0d0"
         ),
         "index.html": (
-            "9fc50c21023c8c67ed7d1ce6ff00c79e8ee858d937dca1de4b8fd6fc933f1075"
+            "0994d93cd3a9c6435c52b3f8f50d0a7086433d053e763512e0be2baff4362f48"
         ),
         "location_search.js": (
             "635f5aaf5603cadbc3b77f035055251e54358b16a831d927e51fe6c44c031c36"
@@ -368,10 +368,10 @@ def test_shared_shell_generation_tracks_v111_cached_assets() -> None:
             "ccc2a3c0bf48a6cbd01cbe9fc09a3d8688e31378cc99e9af3f990a85c1b01739"
         ),
         "adventure_speech.js": (
-            "a5ea6a98c7ed602b9ada993fb689e9f57e77027b6422dcd830616a83915c0d11"
+            "886d1a7348fee81b78d8b8ee16cb2cc90655d8f49d720c1f6b8f5a89a8f516a2"
         ),
         "adventure_dialog.js": (
-            "7396cadc919421324e73b3beb5fbbcc513e7a84dda1835fe5ca864d4f0866d17"
+            "482e49b5ba8cdc9e46039b01b70cd726efc5288887f518c841c7b3b73a2e8a15"
         ),
         "adventure_results.js": (
             "f1ceb73408b7fee7cb47fd56da6b72e5a4cd8e2294efc27bec4d209ba8a332c9"

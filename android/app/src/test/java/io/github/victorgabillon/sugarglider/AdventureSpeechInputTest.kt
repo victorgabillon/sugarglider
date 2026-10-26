@@ -23,18 +23,46 @@ class AdventureSpeechInputTest {
         assertFalse(AdventureSpeechInput.handlesPermission(0x6001))
         assertFalse(AdventureSpeechInput.handlesResult(41))
     }
+    @Test fun confirmedSegmentsSurvivePausesWithoutDuplicatingFinalResults() {
+        val text = AdventureSpeechTranscript()
+        text.partial("Une balade")
+        text.partial("Une balade en forêt")
+        assertEquals("Une balade en forêt", text.draft())
+        assertTrue(text.segment("Une balade en forêt."))
+        assertTrue(text.segment("Avec un château."))
+        assertEquals("Une balade en forêt. Avec un château.", text.finalResult("Une balade en forêt. Avec un château."))
+        assertEquals(text.finalResult(null), text.draft())
+    }
+    @Test fun interruptedRecognitionKeepsOnlyLatestPartialAndEnforcesTextBound() {
+        val text = AdventureSpeechTranscript()
+        assertNull(text.draft())
+        assertFalse(text.segment("\u0000"))
+        assertTrue(text.segment("Départ à Marly."))
+        text.partial("Je veux")
+        text.partial("Je veux courir trente kilomètres")
+        assertEquals("Départ à Marly. Je veux courir trente kilomètres", text.draft())
+        assertFalse(text.segment("x".repeat(8000)))
+        assertEquals("Départ à Marly.", text.finalResult(null))
+        text.partial("x".repeat(8000))
+        assertEquals("Départ à Marly.", text.draft())
+        // Each new explicit recording starts empty; cancelled text is not reused.
+        assertNull(AdventureSpeechTranscript().draft())
+    }
     @Test fun speechCommandsRequireExactOriginAndExplicitPlatformChoice() {
-        val value = envelope("start").put("language", "fr-FR").put("allow_platform", false)
+        val value = envelope("start").put("language", "fr-FR").put("mode", "on_device")
         val parsed = BridgeProtocol.parse(value.toString()) as BridgeRequest.AdventureSpeech
-        assertFalse(parsed.allowPlatform)
+        assertEquals(AdventureSpeechMode.ON_DEVICE, parsed.mode)
         assertTrue(BundledShellPolicy.acceptsOrigin(parsed, BundledShellPolicy.ORIGIN))
         assertFalse(BundledShellPolicy.acceptsOrigin(parsed, "https://untrusted.invalid"))
         assertTrue(V1ReleasePolicy.acceptsBridge(parsed, BundledShellPolicy.ORIGIN))
-        for (change in listOf("language" to "fr-FR;execute", "allow_platform" to "true", "audio_url" to "https://untrusted.invalid")) {
+        for (change in listOf("language" to "fr-FR;execute", "mode" to "auto", "audio_url" to "https://untrusted.invalid")) {
             assertNull(BridgeProtocol.parse(JSONObject(value.toString()).put(change.first, change.second).toString()))
         }
         assertNull(BridgeProtocol.parse(envelope("start").put("language", "fr-FR").toString()))
         assertNotNull(BridgeProtocol.parse(envelope("cancel").toString()))
+        assertNotNull(BridgeProtocol.parse(envelope("stop").toString()))
+        assertEquals(AdventureSpeechMode.PLATFORM, (BridgeProtocol.parse(JSONObject(value.toString()).put("mode", "platform").toString()) as BridgeRequest.AdventureSpeech).mode)
+        assertNull(BridgeProtocol.parse(envelope("stop").put("audio", "anything").toString()))
         assertNull(BridgeProtocol.parse(envelope("background_start").toString()))
     }
 }

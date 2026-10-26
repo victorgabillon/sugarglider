@@ -114,12 +114,23 @@ The Android application now has a Plan with AI dialog with account/model control
 text input, editable speech, explicit online-research/refinement choices, essential
 required-place/destination review, progress and cancellation. An on-device speech
 recognizer is preferred when available. Its microphone permission is requested
-only for an explicit utterance. A platform speech fallback requires a native
-provider-processing disclosure; its offline preference is not a guarantee.
+only for explicit foreground dictation. Speech language (including the actual
+current device language) and recognition-service choice are visible before Speak.
+The explicitly selectable Android speech service requires native disclosure that
+its provider may process audio online; it is not forced to prefer offline mode.
 Backgrounding the app stops its own recognizer. Native callbacks own their page
 and operation, and late system results cannot become a later transcription.
-Forty-eight focused JVM tests and Android Debug lint pass, including three speech
-policy/protocol tests. Physical microphone behavior remains unverified.
+On API 33+, the on-device recognizer requests Android's segmented mode with a
+one-minute minimum, bounded by a separate one-minute application deadline and
+three-second finalization grace. Done calls stopListening and waits for results;
+Cancel discards the current recording. Confirmed segments survive pauses and a
+single latest partial hypothesis can be returned as an explicitly uncertain draft
+on interruption. There is no automatic recognizer restart, retained audio, new
+speech backend or automatic model submission. Services may ignore segmented mode
+and stop early; another explicit Speak appends to the editable text, preserving
+manual edits. Oversized combined drafts are preserved for shortening before
+Generate, with further recording disabled. Physical speech quality and pause
+handling still require acceptance on the changed APK.
 
 Completed candidates use the existing native elevation client and sampling worker
 in a bounded sequential batch. Matching retained results are reused across rounds;
@@ -404,3 +415,18 @@ establish that a historical-place preference was satisfied. Manual waypoint
 loops still require an explicit point, and all exact/mandatory constraints and
 shared route-call limits remain enforced. This source follow-up needs a new
 audited APK, separate installation authorization and actual physical retesting.
+
+## Fairphone speech feedback (26 October 2026)
+
+The initial physical test on APK b9f4e7f8 produced editable text, but the user
+reported poor recognition and premature completion. Both device and WebView were
+configured for fr-FR; the user could not remember the language spoken, so a
+language mismatch is possible but unproven. The prior implementation ignored
+partial results and completed the whole operation at the first final utterance.
+The changes above address text preservation, explicit language/provider choice
+and supported multi-segment capture. They do not establish that either Android
+recognizer now meets the user's quality expectations; that needs a fresh test.
+
+Android references: [segmented recognition](https://developer.android.com/reference/android/speech/RecognizerIntent#EXTRA_SEGMENTED_SESSION),
+[stopListening](https://developer.android.com/reference/android/speech/SpeechRecognizer#stopListening()),
+and [segment callbacks](https://developer.android.com/reference/android/speech/RecognitionListener#onSegmentResults(android.os.Bundle)).

@@ -7,7 +7,7 @@ import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
 const progressText = { understanding: "Understanding your wishes and researching places…", checking_places: "Checking locations on this device…",
   reviewing: "Review the required places below.", routing: "Calculating actual offline routes…", comparing: "Comparing routes and measuring terrain…",
   improving: "Improving suggestions using the measured results…", ready: "Your adventure is ready." };
-const speechText = { completed: "Transcription ready. Edit it before you Generate.", cancelled: "Microphone cancelled.",
+const speechText = { completed: "Transcription added. Check it before Generate; tap Speak to add more.", partial: "Recording ended before final recognition. Check this draft carefully; tap Speak to add more.", cancelled: "Microphone cancelled.",
   unavailable: "Speech recognition is unavailable. You can type your adventure.", permission_denied: "Microphone permission was not granted. Typing still works.",
   language_unavailable: "This language is unavailable for on-device recognition. Try another speech language or type your request.",
   no_match: "No speech was recognized. Try again or type your request.", timeout: "Speech recognition timed out. You can try again.", busy: "The previous speech request is still finishing." };
@@ -16,6 +16,7 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
   onBusy = () => {}, onResult, onChooseStart, onChooseEnd,
   model = createAdventureModel(), speech = createAdventureSpeech(), elevation = createAdventureElevationSampler() }) {
   const element = id => root.querySelector(`#adventure-${id}`);
+  let voiceMode = null, voiceFinishing = false;
   let epoch = 0, accountBusy = false, aiBusy = false, voiceBusy = false, accountAbort = null, speechAbort = null, planningAbort = null;
   let accountState = { accounts: [], selected_account: null, models: [] }, review = null, successfulClose = false;
   let contextReady = false, displayedContext = null, planningFinished = Promise.resolve(), finishPlanning = null;
@@ -26,15 +27,17 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
   const message = text => { element("error").textContent = text; };
   function render() {
     const account = connected(), eligible = Boolean(account?.connected && account.plan_usage);
-    for (const id of ["connect", "add-account", "account", "refresh-models", "model", "research", "structured", "refine", "language", "keep-start", "keep-end"]) {
+    for (const id of ["connect", "add-account", "account", "refresh-models", "model", "research", "structured", "refine", "language", "speech-service", "keep-start", "keep-end"]) {
       element(id).disabled = accountBusy || aiBusy || voiceBusy;
     }
     for (const id of ["choose-start", "choose-end"]) element(id).disabled = accountBusy || voiceBusy;
     element("text").disabled = aiBusy;
-    element("generate").disabled = !contextReady || accountBusy || aiBusy || voiceBusy || !eligible || !element("model").value || element("text").value.trim().length < 3;
-    element("microphone").disabled = aiBusy || voiceBusy || accountBusy;
+    element("generate").disabled = !contextReady || accountBusy || aiBusy || voiceBusy || !eligible || !element("model").value || element("text").value.length > 8000 || element("text").value.trim().length < 3;
+    element("microphone").disabled = aiBusy || voiceBusy || accountBusy || element("text").value.length >= 8000;
     element("microphone").setAttribute("aria-pressed", String(voiceBusy));
     element("stop-speech").hidden = !voiceBusy;
+    element("finish-speech").hidden = !voiceBusy || voiceMode !== "on_device";
+    element("finish-speech").disabled = voiceFinishing;
     element("cancel").hidden = !aiBusy;
     element("sign-out").hidden = !account;
     element("sign-out").disabled = accountBusy;
@@ -108,7 +111,10 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
     void accountOperation(() => model.status());
     return true;
   }
-  function stopSpeech() { speechAbort?.abort(); speechAbort = null; speech.cancel(); }
+  function stopSpeech() {
+    speechAbort?.abort(); speechAbort = null; speech.cancel();
+    voiceBusy = false; voiceMode = null; voiceFinishing = false; render();
+  }
   function cancel() {
     planningAbort?.abort(); controller.cancel(); accountAbort?.abort(); stopSpeech();
     review?.resolve(null); review = null;
@@ -133,19 +139,40 @@ export function initializeAdventureDialog({ root, launcher, planner, getContext,
     });
   }
   element("stop-speech").addEventListener("click", stopSpeech);
+  element("finish-speech").addEventListener("click", () => {
+    if (!voiceBusy || voiceFinishing || voiceMode !== "on_device") return;
+    const owned = speechAbort;
+    voiceFinishing = true; element("speech-status").textContent = "Finishing transcription…"; render();
+    void speech.stop().catch(() => { if (speechAbort === owned && voiceBusy) element("speech-status").textContent = "Unable to finish recognition. Cancel and try again."; });
+  });
+  // The actual device language must be visible before recording; it is not an
+  // automatic language detector. No extra preference store is needed.
+  element("language").options[0].textContent = `Device language (${navigator.language || "en-GB"})`;
   element("microphone").addEventListener("click", async () => {
     if (voiceBusy || aiBusy) return;
     const abort = new AbortController(), owned = epoch; speechAbort = abort; voiceBusy = true; render();
     try {
       const available = await speech.status();
       if (abort.signal.aborted || owned !== epoch || !root.open) return;
-      element("speech-status").textContent = available.mode === "on_device" ? "Listening on this device…" : "Android will ask before using your configured speech service.";
-      const result = await speech.start(element("language").value || navigator.language || "en-GB", true, abort.signal);
+      voiceMode = element("speech-service").value === "platform" ? "platform" : available.mode;
+      render();
+      if (!["on_device", "platform"].includes(voiceMode)) { element("speech-status").textContent = speechText.unavailable; return; }
+      const language = element("language").value || navigator.language || "en-GB";
+      element("speech-status").textContent = voiceMode === "on_device" ? `Listening in ${language} on this device. Tap Done speaking when finished.` : "Android will ask before using your configured speech service. It may send audio to its provider.";
+      const result = await speech.start(language, voiceMode, abort.signal);
       if (abort.signal.aborted || owned !== epoch || !root.open) return;
       element("speech-status").textContent = speechText[result.status] ?? speechText.unavailable;
-      if (result.status === "completed") { element("text").value = result.text; element("text").focus(); }
-    } catch (error) { if (owned === epoch && root.open) element("speech-status").textContent = error.name === "AbortError" ? speechText.cancelled : speechText.unavailable; }
-    finally { if (speechAbort === abort) speechAbort = null; voiceBusy = false; render(); }
+      if (["completed", "partial"].includes(result.status)) {
+        // Append to the current editor, including edits made while listening.
+        // Keep all text if the combined draft exceeds the sending limit; the
+        // user can shorten it rather than silently losing either contribution.
+        const text = element("text");
+        text.value = [text.value.trimEnd(), result.text].filter(Boolean).join("\n");
+        if (text.value.length > 8000) element("speech-status").textContent = "Transcription added. Shorten the text to 8,000 characters before Generate or more recording.";
+        text.focus();
+      }
+    } catch (error) { if (speechAbort === abort && owned === epoch && root.open) element("speech-status").textContent = error.name === "AbortError" ? speechText.cancelled : speechText.unavailable; }
+    finally { if (speechAbort === abort) { speechAbort = null; voiceBusy = false; voiceMode = null; voiceFinishing = false; render(); } }
   });
   element("generate").addEventListener("click", async () => {
     if (aiBusy || accountBusy || voiceBusy || element("generate").disabled) return;

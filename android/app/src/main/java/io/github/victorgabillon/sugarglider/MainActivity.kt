@@ -813,7 +813,8 @@ class MainActivity : Activity() {
                     when (request.action) {
                         "cancel" -> { adventureSpeech.cancel(); finish("cancelled", adventureSpeech.mode(), null) }
                         "status" -> finish("ready", adventureSpeech.mode(), null)
-                        "start" -> adventureSpeech.begin(request.language!!, request.allowPlatform, finish)
+                        "stop" -> { adventureSpeech.stop(); finish("ready", adventureSpeech.mode(), null) }
+                        "start" -> adventureSpeech.begin(request.language!!, request.mode!!, finish)
                     }
                 }
                 is BridgeRequest.ChatGpt -> beginChatGpt(request,payload,channel)

@@ -154,7 +154,12 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await view('plan'); await page.locator('#plan-with-ai').click();
         await page.locator('#adventure-connect').click();
         await page.waitForFunction(() => document.querySelector('#adventure-model').value === 'synthetic-model');
-        await page.locator('#adventure-microphone').click(); await page.waitForFunction(() => document.querySelector('#adventure-text').value.startsWith('Une aventure'));
+        const beforeSpeech = await page.locator('#adventure-text').inputValue();
+        await page.locator('#adventure-language').selectOption('fr-FR');
+        await page.locator('#adventure-microphone').click();
+        await page.waitForFunction(before => document.querySelector('#adventure-text').value === before + '\nUne aventure historique avec des lieux intéressants', beforeSpeech);
+        assert.equal(await page.evaluate(() => adventureNativeCalls.findLast(call => call.type === 'adventure_speech_start').mode), 'on_device');
+        assert.equal(await page.evaluate(() => adventureNativeCalls.findLast(call => call.type === 'adventure_speech_start').language), 'fr-FR');
         assert.equal(await page.evaluate(() => adventureModelCount), 0, 'Speech alone must not infer');
         await page.locator('#adventure-text').fill('A synthetic 2.2 km historical route with interesting places');
         await page.locator('#adventure-generate').click();

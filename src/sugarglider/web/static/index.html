@@ -131,15 +131,16 @@
         <section id="adventure-input">
           <label for="adventure-text">What would you like to do?</label>
           <textarea id="adventure-text" rows="5" maxlength="8000" placeholder="A 35 km trail run in the woods around Marly, with historical places and viewpoints…"></textarea>
-          <div class="button-row"><button id="adventure-microphone" class="button secondary" type="button" aria-pressed="false">🎤 Speak</button><button id="adventure-stop-speech" class="text-button" type="button" hidden>Cancel microphone</button></div>
-          <p id="adventure-speech-status" class="field-help" role="status" aria-live="polite">Speech is optional. You can edit the transcription before sending.</p>
+          <label>Speech language<select id="adventure-language"><option value="">Device language</option><option value="fr-FR">Français</option><option value="en-GB">English (UK)</option><option value="en-US">English (US)</option></select></label>
+          <label>Speech recognition<select id="adventure-speech-service"><option value="">On this device if available</option><option value="platform">Android speech service (may send audio)</option></select></label>
+          <div class="button-row"><button id="adventure-microphone" class="button secondary" type="button" aria-pressed="false">🎤 Speak</button><button id="adventure-finish-speech" class="button secondary" type="button" hidden>Done speaking</button><button id="adventure-stop-speech" class="text-button" type="button" hidden>Cancel microphone</button></div>
+          <p id="adventure-speech-status" class="field-help" role="status" aria-live="polite">Choose the language you will speak. Speak adds to your text; check it before Generate. Recording lasts at most one minute. If Android finishes early, tap Speak to continue.</p>
           <details><summary>Advanced settings</summary>
             <label>Model<select id="adventure-model"><option value="">Connect an eligible account to load models</option></select></label>
             <button id="adventure-refresh-models" class="text-button" type="button">Refresh available models</button>
             <label class="adventure-check"><input id="adventure-research" type="checkbox" checked> Research places and sources online</label>
             <label class="adventure-check"><input id="adventure-structured" type="checkbox" checked> Use structured answers when supported by this model</label>
             <label class="adventure-check"><input id="adventure-refine" type="checkbox" checked> Allow one extra model request to improve the suggestions after routing</label>
-            <label>Speech language<select id="adventure-language"><option value="">Device language</option><option value="fr-FR">Français</option><option value="en-GB">English</option></select></label>
             <p class="field-help">Asphalt, exact retracing, technical difficulty and current access cannot yet be verified. Elevation is measured after routing; a climbing target is not guaranteed.</p>
           </details>
         </section>
