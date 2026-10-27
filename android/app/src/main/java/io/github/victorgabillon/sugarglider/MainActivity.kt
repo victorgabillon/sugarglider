@@ -35,7 +35,6 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
@@ -498,22 +497,9 @@ class MainActivity : Activity() {
     }
 
     private fun showPrivacyDetails() {
-        val content = TextView(this).apply {
-            setText(ApplicationLanguage.text(this@MainActivity, R.string.privacy_description))
-            textSize = 16f
-            setPadding(dp(20), dp(12), dp(20), dp(12))
-        }
-        val scroll = ScrollView(this).apply { addView(content) }
-        val dialog = AlertDialog.Builder(ApplicationLanguage.context(this))
-            .setTitle(R.string.privacy_title)
-            .setView(scroll)
-            .setPositiveButton(R.string.privacy_close, null)
-        if (BuildConfig.PRIVACY_POLICY_URL.isNotEmpty()) {
-            dialog.setNeutralButton(R.string.privacy_online) { _, _ ->
-                openExternal(BuildConfig.PRIVACY_POLICY_URL.toUri())
-            }
-        }
-        dialog.show()
+        PrivacyDetailsDialog.show(this, if (BuildConfig.PRIVACY_POLICY_URL.isEmpty()) null else {
+            { openExternal(BuildConfig.PRIVACY_POLICY_URL.toUri()) }
+        })
     }
 
     private fun showServerMenu(origin: String) {

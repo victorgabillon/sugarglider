@@ -453,7 +453,7 @@ function poiCategoriesAndPotability() {
   }
   if (state.poiFilters.unknownWater) {
     categories.push("fountain", "water_tap");
-    potability.push(t("unknown"));
+    potability.push("unknown");
   }
   if (state.poiFilters.nonPotable) {
     categories.push(...HYDRATION_CATEGORIES);
@@ -498,7 +498,7 @@ function poiRequestBody(bounds) {
   if (filters.categories.some((category) => HYDRATION_CATEGORIES.includes(category))) {
     groups.push("hydration");
   }
-  const access = ["public", t("unknown")];
+  const access = ["public", "unknown"];
   if (state.poiFilters.restrictedAccess) access.push("restricted");
   if (state.poiFilters.includePrivate) access.push("private");
   return {
@@ -572,7 +572,7 @@ function poiRenderOptions() {
 
 function preferPoi(feature) {
   if (isSavedRouteSnapshotDisplay()) return;
-  const eligibleAccess = ["public", t("unknown")].includes(feature.access_status);
+  const eligibleAccess = ["public", "unknown"].includes(feature.access_status);
   const scenic = PRIMARY_SCENIC_CATEGORIES.includes(feature.category) || feature.category === "tourism_attraction";
   const verifiedWater = feature.category === "drinking_water" && feature.potability === "verified";
   if (!eligibleAccess || (!scenic && !verifiedWater) || feature.potability === "non_potable") return;

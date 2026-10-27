@@ -935,7 +935,7 @@ function poiPopupContent(feature) {
   content.append(createPassThroughAction(feature, passThrough));
   const scenic = ["viewpoint", "observation_tower", "castle", "archaeological_site", "ruins", "tourism_attraction"].includes(feature.category);
   const verifiedWater = feature.category === "drinking_water" && feature.potability === "verified";
-  const eligibleAccess = ["public", t("unknown")].includes(feature.access_status);
+  const eligibleAccess = ["public", "unknown"].includes(feature.access_status);
   if (eligibleAccess && (scenic || verifiedWater) && feature.potability !== "non_potable") {
     const prefer = document.createElement("button");
     prefer.type = "button";

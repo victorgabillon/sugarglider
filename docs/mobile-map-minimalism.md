@@ -6,7 +6,8 @@ same toolbar DOM returns to its original location when leaving mobile Map;
 Android window insets remain owned by the existing native layout.
 The floating Tools menu also subtracts the WebView's reported top safe-area
 inset from its height budget. The Fairphone reports 37 CSS pixels here; browser
-acceptance reproduces that inset at normal and 200% text sizes.
+acceptance reproduces that inset at normal and 200% text sizes. Physical
+625ef8b measurements confirm about 32 CSS pixels of bottom clearance at both sizes.
 
 On mobile touch devices (at most 840 CSS pixels with a coarse pointer and touch
 support), MapLibre gestures remain enabled and the permanent NavigationControl
@@ -42,7 +43,9 @@ native routing, terrain and model replies; it is not physical-device evidence.
 
 Screenshots, measurements, APK audits and delivery receipts live outside Git in
 `/home/pompote/sugarglider-ai-mobile-2026-10-26/map-minimalism`. The retained
-Fairphone screenshot from build 8265c59 is the visual baseline. Installing a new
-staging APK and validating real Fairphone gestures/offline generation require
-separate installation authorization and fresh full-state preservation checks.
+Fairphone screenshot from build 8265c59 is the visual baseline. Physical editing,
+gestures, offline generation and exact GPX checks were completed on the installed
+625ef8b lineage; see [the final audit](final-ai-mobile-integration-audit.md). A new
+staging installation still requires its own applicable authorization and fresh
+full-state preservation checks.
 No cleanup, production or regional-data operation belongs to this UI change.

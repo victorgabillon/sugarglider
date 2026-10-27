@@ -139,5 +139,19 @@ export async function runPlacesHarness() {
   equal(selected,null,'Escape deselects');assert(document.activeElement===canvas,'Dismiss returns focus to map');
   renderPois([],null,choose);equal(placeMapDiagnostics().selectedId,null,'Filter removal clears selected marker');
   cases.push('real_map_click_selected_exception_close_escape_focus_and_no_route_mutation');
+  for (const language of ['fr', 'en']) {
+    await setLanguage(language, { persist: false, document: null });
+    let preferences = 0;
+    const scenic = { ...fixture.pois.features.find(feature => feature.category === 'castle'), access_status: 'unknown' };
+    renderPois([scenic], scenic.id, () => {}, { onPrefer: () => preferences++ });
+    const prefer = document.querySelector('.popup-prefer');
+    assert(prefer && !prefer.disabled, `${language}: unknown-access scenic place retains its explicit preference action`);
+    prefer.click(); equal(preferences, 1, 'Only explicit preference click acts');
+    renderPois([], null, () => {});
+    renderPois([{ ...scenic, access_status: 'private' }], scenic.id, () => {});
+    assert(!document.querySelector('.popup-prefer'), 'Private places remain ineligible');
+    renderPois([], null, () => {});
+  }
+  cases.push('french_and_english_preserve_unknown_access_eligibility_and_private_exclusion');
   return cases;
 }

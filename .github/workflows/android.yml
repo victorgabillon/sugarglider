@@ -26,11 +26,23 @@ jobs:
       - name: Test both build variants, lint, and build debug APK
         working-directory: android
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest testReleaseUnitTest lintRelease assembleRelease
+      - name: Prepare disposable staging build inputs
+        run: |
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=Sugarglider-CI-only \
+            -keyout "$RUNNER_TEMP/staging-key.pem" -out "$RUNNER_TEMP/staging-ca.pem"
+          rm "$RUNNER_TEMP/staging-key.pem"
+          cp src/sugarglider/web/static/offline_region_catalog.json "$RUNNER_TEMP/staging-catalog.json"
+      - name: Test, lint and assemble staging without private regional data
+        working-directory: android
+        run: |
+          ./gradlew --no-daemon testV2StagingUnitTest lintV2Staging assembleV2Staging \
+            -PsugargliderV2StagingCA="$RUNNER_TEMP/staging-ca.pem" \
+            -PsugargliderV2StagingCatalog="$RUNNER_TEMP/staging-catalog.json"
       - name: Check native 16 KiB compatibility in Debug and Release APKs
         working-directory: android
         run: |
           set -euo pipefail
-          for APK in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release-unsigned.apk; do
+          for APK in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release-unsigned.apk app/build/outputs/apk/v2Staging/app-v2Staging.apk; do
             "${ANDROID_HOME}/build-tools/36.0.0/zipalign" -c -P 16 4 "$APK"
             unzip -p "$APK" lib/arm64-v8a/libvalhalla-wrapper.so > "$RUNNER_TEMP/valhalla-wrapper.so"
           python3 - <<'PY'

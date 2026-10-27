@@ -8,6 +8,14 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Resolve the Android test image with Gradle, never over the network inside a test.
+val robolectricSdk by configurations.creating { isTransitive = false }
+val robolectricSdkDirectory = layout.buildDirectory.dir("robolectric-sdk")
+val prepareRobolectricSdk by tasks.registering(Sync::class) {
+    from(robolectricSdk)
+    into(robolectricSdkDirectory)
+}
+
 val sharedWebDirectory = rootProject.file("../src/sugarglider/web/static")
 val shellAssetList = rootProject.file("shell-assets.txt")
 val shellAssetPaths = shellAssetList.readLines().filter { it.isNotBlank() && !it.startsWith('#') }
@@ -171,6 +179,12 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            it.dependsOn(prepareRobolectricSdk)
+            it.systemProperty("robolectric.offline", "true")
+            it.systemProperty("robolectric.dependency.dir", robolectricSdkDirectory.get().asFile.absolutePath)
+        }
     }
 
     sourceSets.getByName("androidTest").assets.srcDir(rootProject.file("../tests/fixtures/elevation"))
@@ -207,6 +221,8 @@ dependencies {
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.16.1")
+    robolectricSdk("org.robolectric:android-all-instrumented:16-robolectric-13921718-i7")
     testImplementation("com.squareup.moshi:moshi-kotlin:1.15.1")
     testImplementation("org.json:json:20250517")
 }

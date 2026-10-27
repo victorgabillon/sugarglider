@@ -130,6 +130,31 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await page.waitForFunction(() => document.querySelector('#regional-status').dataset.state === 'regional_ready');
         const startupCalls = await page.evaluate(() => adventureNativeCalls.map(call => call.type));
         assert(!startupCalls.some(type => ['local_route', 'route_elevation', 'chatgpt_infer', 'adventure_speech_start'].includes(type)), 'Startup must not route, infer or listen');
+        if (width === 372) {
+          await page.waitForFunction(() => adventureAppState.state.routingProfile === 'trail_run'
+            && adventureAppState.state.config.poi_index_available);
+          const original = await page.evaluate(() => JSON.stringify(adventureAppState.currentAdventureContext()));
+          const nativeCount = await page.evaluate(() => adventureNativeCalls.length);
+          for (const language of ['fr', 'en']) {
+            await page.evaluate(async language => {
+              await (await import('/static/i18n.js')).setLanguage(language, { persist: false });
+              const checkbox = document.querySelector('#place-unknown-water');
+              checkbox.checked = true;
+              checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+            }, language);
+            await page.waitForFunction(() => ['success', 'error'].includes(adventureAppState.state.poiRequest.status));
+            assert.equal(await page.evaluate(() => adventureAppState.state.poiRequest.status), 'success', `${language}: real local POI query accepts canonical access and potability values`);
+            assert(await page.evaluate(() => adventureAppState.state.poiFeatures.some(feature => feature.category === 'fountain'
+              && feature.access_status === 'unknown' && feature.potability === 'unknown')), `${language}: unknown-access water remains discoverable`);
+          }
+          await page.evaluate(async () => {
+            const checkbox = document.querySelector('#place-unknown-water');
+            checkbox.checked = false; checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+            await (await import('/static/i18n.js')).setLanguage('fr', { persist: false });
+          });
+          assert.equal(await page.evaluate(() => JSON.stringify(adventureAppState.currentAdventureContext())), original);
+          assert(!await page.evaluate(count => adventureNativeCalls.slice(count).some(call => ['local_route', 'route_elevation', 'chatgpt_infer', 'adventure_speech_start'].includes(call.type)), nativeCount));
+        }
         const screenshot = async name => {
           if (!process.env.MOBILE_EVIDENCE_DIR) return;
           await fs.mkdir(process.env.MOBILE_EVIDENCE_DIR, { recursive: true });
