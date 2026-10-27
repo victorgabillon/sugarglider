@@ -549,7 +549,15 @@ export function currentAdventureContext() {
     : waypointPlanState(state.points, state.options).waypoints.filter(point => point.constraint_strength === "exact");
   return { start: endpoints.start ? coordinatePayload(endpoints.start, "Start") : null,
     end: endpoints.routeTopology === "point_to_point" && endpoints.end ? coordinatePayload(endpoints.end, "End") : null,
-    hardWaypoints, suggested_profile: state.routingProfile, seed: state.options.seed,
+    hardWaypoints, contextualPins: [
+      ...(endpoints.start ? [{ kind: "start", coordinate: coordinatePayload(endpoints.start, "Start") }] : []),
+      ...(state.planningMode === "auto_tour" ? state.autoTour.hardPoints : state.points).map((point, index) => ({
+        kind: "waypoint", id: point.id ?? `route-waypoint-${index + 1}`,
+        coordinate: coordinatePayload(point, pointDisplayName(point, index + 1)),
+      })),
+      ...(endpoints.routeTopology === "point_to_point" && endpoints.end ? [{ kind: "end", coordinate: coordinatePayload(endpoints.end, "End") }] : []),
+    ].map((pin, index) => ({ ...pin, name: pin.coordinate.name, order: index + 1 })),
+    suggested_profile: state.routingProfile, seed: state.options.seed,
     endpointSnapPolicy: { start: endpoints.start?.snapPolicy ?? "near", end: endpoints.end?.snapPolicy ?? "near" } };
 }
 

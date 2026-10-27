@@ -1,0 +1,4 @@
+<!doctype html><meta charset="utf-8"><pre></pre><script type="module">
+import { runPinContextHarness } from './adventure_pin_context_harness.js';
+const node=document.querySelector('pre');try{node.textContent=JSON.stringify(await runPinContextHarness());node.dataset.status='passed';}catch(error){node.textContent=error.stack;node.dataset.status='failed';}
+</script>

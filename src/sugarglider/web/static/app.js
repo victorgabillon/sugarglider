@@ -2,7 +2,6 @@ import { t, tr, getLanguage, initializeLocalization, onLanguageChange, setLocali
 import { createSelectedRouteElevation } from "./route_elevation.js";
 import { initializeAdventureDialog } from "./adventure_dialog.js";
 import { nativeBridgeTransport } from "./native_bridge_transport.js";
-import { nearbyAdventurePlaceContext } from "./adventure_grounding.js";
 import { createAdventureResults } from "./adventure_results.js";
 import { renderAdventurePlaces, zoomMap, resetMapNorth, mapViewportPadding } from "./map.js";
 import { regionalRoutingReference } from "./regional_routing_reference.js";
@@ -196,26 +195,19 @@ function returnToManualPlan({ refresh = true } = {}) {
   manualAdventureSnapshot = null; state.visualizationCache.clear();
   if (refresh) { render(); appShell?.show("plan"); }
 }
-async function adventureContext({ includePlaces = false, useStart = true, useEnd = true, signal } = {}) {
+async function adventureContext({ includeMapPins = false, signal } = {}) {
   if (!localPlanner || regionPlanningError) throw new Error(regionFailureMessage(regionPlanningError ?? "regional_required"));
-  const request = state.adventureDisplay ? state.generationSourceRequest : null;
-  const context = request ? { start: request.start, end: request.end,
-    hardWaypoints: request.waypoints.filter(point => point.constraint_strength === "exact"),
-    suggested_profile: request.routing_profile, seed: request.seed, endpointSnapPolicy: request.endpoint_snap_policy }
-    : currentAdventureContext();
-  if (context.hardWaypoints.length > 14) throw new Error(t("This adventure can preserve up to 14 exact intermediate points. Review your required points first."));
+  // Snapshot only the editable manual pins, and only after explicit opt-in.
+  // Displayed adventure requests, selected geometry and camera/GPS are never context.
+  const context = includeMapPins ? currentAdventureContext() : { suggested_profile: state.routingProfile };
+  if ((context.contextualPins?.length ?? 0) > 16 || (context.hardWaypoints?.length ?? 0) > 14) {
+    throw new Error(t("This adventure can preserve up to 14 exact intermediate points. Review your required points first."));
+  }
   return regionVersions.withCommittedRegions(async rows => {
     signal?.throwIfAborted();
     const row = selectCommittedRegion(rows, selectedRegionId), reference = await regionalRoutingReference(row.manifest);
-    const center = (useStart ? context.start : null) ?? (useEnd ? context.end : null);
-    let localPlaces = [];
-    if (includePlaces && center) {
-      const directory = await regionVersions.committedDirectory(row.region_id, row.manifest.build_id);
-      const session = await localRegionClient().loadVersion(row.manifest, directory);
-      localPlaces = await nearbyAdventurePlaceContext({ session, reference, center, signal });
-    }
     signal?.throwIfAborted();
-    return { ...context, reference, localPlaces };
+    return { ...context, reference };
   });
 }
 async function displayExactAdventure(output, selectedId, requestId) {
@@ -3789,7 +3781,8 @@ async function start() {
           );
           const reopenAdventure = adventureMapEndpoint === kind;
           adventureMapEndpoint = null;
-          if (reopenAdventure) void adventureDialog?.open();
+          if (reopenAdventure) void adventureDialog?.open(undefined, { selectedEndpoint: { kind,
+            coordinate: { ...coordinate, name: byId(`hard-${kind}-name`).value.trim() || (kind === "start" ? "Start" : "End") } } });
 
           return;
         }

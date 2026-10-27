@@ -6,6 +6,7 @@ import { createAdventureElevationSampler } from "./adventure_elevation.js";
 import { readSpeechProviderPreference, writeSpeechProviderPreference, readUiPreference, writeUiPreference } from "./pwa_store.js";
 import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
 import { adventureEndpointFailure } from "./adventure_grounding.js";
+import { deepFreeze } from "./local_candidate_evaluator.js";
 
 const progressText = { understanding: "Understanding your wishes and proposing places…", checking_places: "Checking locations on this device…",
   reviewing: "Review the required places below.", routing: "Calculating actual offline routes…", comparing: "Comparing routes and measuring terrain…",
@@ -34,6 +35,7 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
   let epoch = 0, accountBusy = false, aiBusy = false, voiceBusy = false, accountAbort = null, speechAbort = null, planningAbort = null;
   let accountState = { accounts: [], selected_account: null, models: [] }, review = null, successfulClose = false;
   let contextReady = false, displayedContext = null, planningFinished = Promise.resolve(), finishPlanning = null;
+  let pinSnapshot = null, pinVersion = 0, selectedEndpoints = {};
   const controller = createAdventureController({ model, planner, measureElevations: elevation.measure, reviewEndpoint: locateEndpoint,
     onProgress: stage => { setLocalizedText(element("progress"), () => t(progressText[stage] ?? "Planning…")); },
     confirmProposal: confirm, lifecycleTarget: null });
@@ -41,7 +43,7 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
   const message = text => { setLocalizedText(element("error"), () => t(text)); };
   function render() {
     const account = connected(), eligible = Boolean(account?.connected && account.plan_usage);
-    for (const id of ["connect", "add-account", "account", "refresh-models", "model", "research", "structured", "refine", "language", "speech-service", "keep-start", "keep-end"]) {
+    for (const id of ["connect", "add-account", "account", "refresh-models", "model", "research", "structured", "refine", "language", "speech-service", "include-pins", "keep-start", "keep-end", "keep-waypoints"]) {
       element(id).disabled = accountBusy || aiBusy || voiceBusy;
     }
     for (const id of ["choose-start", "choose-end"]) element(id).disabled = accountBusy || voiceBusy;
@@ -68,14 +70,24 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
     root.setAttribute("aria-busy", String(aiBusy || accountBusy));
   }
   function endpointContext(context) {
-    return { ...context, start: element("keep-start").checked ? context.start : null,
-      end: element("keep-end").checked ? context.end : null,
-      endpointSnapPolicy: { start: element("keep-start").checked ? context.endpointSnapPolicy?.start ?? "near" : "near",
-        end: element("keep-end").checked ? context.endpointSnapPolicy?.end ?? "near" : "near" } };
+    const pins = element("include-pins").checked ? pinSnapshot : null;
+    // Whitelist non-pin context; callers cannot smuggle an old route or nearby
+    // inventory into an unchecked request. Explicit map choices are independent.
+    return { reference: context.reference, suggested_profile: context.suggested_profile,
+      start: element("keep-start").checked ? selectedEndpoints.start ?? pins?.start ?? null : null,
+      end: element("keep-end").checked ? selectedEndpoints.end ?? pins?.end ?? null : null,
+      contextualPins: pins?.contextualPins ?? [],
+      hardWaypoints: pins && element("keep-waypoints").checked ? pins.hardWaypoints ?? [] : [],
+      endpointSnapPolicy: { start: pins?.endpointSnapPolicy?.start ?? "near", end: pins?.endpointSnapPolicy?.end ?? "near" } };
   }
   function renderEndpoints() {
     if (!displayedContext) return;
     const context = endpointContext(displayedContext);
+    for (const kind of ["start", "end"]) element(`keep-${kind}`).parentElement.hidden = !(selectedEndpoints[kind] || pinSnapshot?.[kind]);
+    element("keep-waypoints").parentElement.hidden = !pinSnapshot?.hardWaypoints?.length;
+    setLocalizedText(element("pin-status"), () => pinSnapshot
+      ? t("{count} map pins captured. They are context only unless you explicitly require them below.", { count: pinSnapshot.contextualPins.length })
+      : t("Current map pins are excluded. Describe a location or explicitly choose one."));
     const label = (kind, point) => point ? `${kind}: ${point.name || t("chosen map point")} · ${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}` : tr`${kind}: from your description, or choose on map`;
     setLocalizedText(element("start"), () => tr`${label(t("Start"), context.start)} · ${label(t("End"), context.end)}. Loops return to Start.`);
   }
@@ -110,14 +122,17 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
     finally { if (accountAbort === abort) { accountBusy = false; accountAbort = null; render(); } }
   }
   let returnFocus = launcher;
-  async function open(source = returnFocus) {
+  async function open(source = returnFocus, { selectedEndpoint = null } = {}) {
     if (!canOpen() || aiBusy || accountBusy) return false;
     returnFocus = source;
     epoch++; successfulClose = false; contextReady = false; displayedContext = null; message(""); element("progress").textContent = "";
+    pinVersion++; pinSnapshot = null; selectedEndpoints = selectedEndpoint ? { [selectedEndpoint.kind]: structuredClone(selectedEndpoint.coordinate) } : {};
+    element("include-pins").checked = false; element("keep-waypoints").checked = false;
     element("regions").hidden = true; element("endpoint-search").hidden = true;
     element("region-status").hidden = true;
     setLocalizedText(element("start"), () => t("Describe where to start and finish, or choose on the map. Loops return to Start."));
-    for (const kind of ["start", "end"]) { element(`keep-${kind}`).checked = true; element(`keep-${kind}`).parentElement.hidden = true; }
+    for (const kind of ["start", "end"]) { element(`keep-${kind}`).checked = Boolean(selectedEndpoints[kind]); element(`keep-${kind}`).parentElement.hidden = true; }
+    element("keep-waypoints").parentElement.hidden = true;
     element("review").hidden = true; element("input").hidden = false;
     // Leave the keyboard closed until the user chooses typing. Speech remains
     // visible on a phone, and opening never activates the microphone.
@@ -127,7 +142,6 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
       const context = await getContext();
       if (owned === epoch && root.open) {
         displayedContext = context; contextReady = true;
-        for (const kind of ["start", "end"]) element(`keep-${kind}`).parentElement.hidden = !context[kind];
         renderEndpoints(); render();
       }
     } catch { if (owned === epoch && root.open) {
@@ -159,6 +173,24 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
   });
   element("cancel").addEventListener("click", cancel);
   element("text").addEventListener("input", render);
+  element("include-pins").addEventListener("change", async () => {
+    const owned = epoch, version = ++pinVersion;
+    pinSnapshot = null;
+    for (const kind of ["start", "end"]) element(`keep-${kind}`).checked = Boolean(selectedEndpoints[kind]);
+    element("keep-waypoints").checked = false;
+    contextReady = !element("include-pins").checked; renderEndpoints(); render();
+    if (!element("include-pins").checked) return;
+    try {
+      const context = await getContext({ includeMapPins: true });
+      if (owned !== epoch || version !== pinVersion || !root.open || !element("include-pins").checked) return;
+      if ((context.contextualPins?.length ?? 0) > 16 || (context.hardWaypoints?.length ?? 0) > 14) throw new Error(t("This adventure can preserve up to 14 exact intermediate points. Review your required points first."));
+      pinSnapshot = deepFreeze(structuredClone({ start: context.start, end: context.end,
+        contextualPins: context.contextualPins ?? [], hardWaypoints: context.hardWaypoints ?? [], endpointSnapPolicy: context.endpointSnapPolicy }));
+      contextReady = true; renderEndpoints(); render();
+    } catch (error) {
+      if (owned === epoch && version === pinVersion) { message(error.message); render(); }
+    }
+  });
   element("connect").addEventListener("click", () => { void accountOperation(signal => model.signIn(connected()?.id ?? null, signal)); });
   element("add-account").addEventListener("click", () => { void accountOperation(signal => model.signIn(null, signal)); });
   element("sign-out").addEventListener("click", () => { cancel(); void accountOperation(() => model.signOut(), false); });
@@ -223,7 +255,7 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
     aiBusy = true; message(""); element("regions").hidden = true; render(); onBusy(true);
     try {
       const contextStarted = performance.now();
-      const context = endpointContext(await getContext({ includePlaces: true, useStart: element("keep-start").checked, useEnd: element("keep-end").checked, signal: abort.signal }));
+      const context = endpointContext(await getContext({ signal: abort.signal }));
       if (owned !== epoch || !root.open || abort.signal.aborted) return;
       const output = await controller.run({ prompt: element("text").value, modelId: element("model").value, context,
         responseLanguage: getLanguage(), contextPreparationMs: performance.now() - contextStarted, research: element("research").checked, structured: element("structured").checked, refine: element("refine").checked }, abort.signal);

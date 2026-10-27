@@ -16,7 +16,7 @@ async function until(check, label) {
   throw Error(`Did not settle: ${label}`);
 }
 
-async function frame(width = 390, height = 844, scale = 1) {
+export async function frame(width = 390, height = 844, scale = 1) {
   const markup = new DOMParser().parseFromString(await (await fetch("/src/sugarglider/web/static/index.html")).text(), "text/html");
   markup.querySelectorAll("script,link[rel=manifest]").forEach(node => node.remove());
   for (const node of markup.querySelectorAll("link[href],img[src]")) {
@@ -30,7 +30,7 @@ async function frame(width = 390, height = 844, scale = 1) {
   doc.getElementById("adventure-launch").hidden = false;
   return { element, doc, root: doc.getElementById("adventure-dialog"), byId: id => doc.getElementById(`adventure-${id}`) };
 }
-function accounts(model, initiallyConnected = true) {
+export function accounts(model, initiallyConnected = true) {
   let connected = initiallyConnected;
   const state = () => ({ accounts: connected ? [{ id: "oaiapp_synthetic", label: "Synthetic account", connected: true, plan_usage: true }] : [],
     selected_account: connected ? "oaiapp_synthetic" : null, models: connected ? [{ id: "synthetic-model", label: "Synthetic available model" }] : [] });
@@ -113,7 +113,9 @@ export async function runAdventureUiHarness() {
       model: accounts(r.model), speech: { cancel() {} }, elevation: { measure: async () => ({}), clear() {} },
       getContext: async () => r.input.context, onChooseStart() {}, onChooseEnd() {}, onResult() { throw Error("Failure cannot publish"); } });
     try {
-      await dialog.open(); f.byId("text").value = "Un petit tour"; f.byId("text").dispatchEvent(new Event("input"));
+      await dialog.open();
+      if (conflict) { await until(() => !f.byId("include-pins").disabled, "account ready"); f.byId("include-pins").click(); await until(() => !f.byId("include-pins").disabled && !f.byId("keep-start").parentElement.hidden, "captured endpoints"); f.byId("keep-start").click(); }
+      f.byId("text").value = "Un petit tour"; f.byId("text").dispatchEvent(new Event("input"));
       await until(() => !f.byId("generate").disabled, "failure ready"); f.byId("generate").click();
       await until(() => !dialog.busy() && f.byId("error").textContent, "localized failure");
       const expected = conflict ? (language === "fr" ? "ne correspond pas" : "conflicts with") : (language === "fr" ? "Où souhaitez-vous partir" : "Where would you like to start");
@@ -264,7 +266,7 @@ export async function runAdventureUiHarness() {
       assert(!byId("generate").disabled, "one explicit Generate action available");
       assert(f.root.querySelector(".adventure-body").clientHeight >= 100, "Header and footer leave a usable scroll area at large text");
       assert(f.root.scrollWidth <= f.root.clientWidth + 1 && f.doc.documentElement.scrollWidth <= width + 1, `no horizontal overflow ${width}/${scale}`);
-      byId("generate").click(); await until(() => output !== null && !f.root.open, "normal proposal-to-GPX UI");
+      byId("generate").click(); await until(() => !byId("review").hidden, "review text endpoints"); byId("confirm").click(); await until(() => output !== null && !f.root.open, "normal proposal-to-GPX UI");
       assert(r.calls.length === 2 && busy[0] && busy.at(-1) === false, "one bounded AI operation");
       const interesting = output.chosen.result.candidates.find(candidate => candidate.reached_stops.length > 0);
       const alternate = [...f.doc.querySelectorAll(".candidate-select")].find(button => button.dataset.candidateId === interesting.id); alternate.click();
@@ -337,11 +339,11 @@ export async function runAdventureUiHarness() {
     try{
       await dialog.open();f.byId('text').value='Use places from my description';f.byId('text').dispatchEvent(new Event('input'));f.byId('refine').checked=false;
       await until(()=>!f.byId('generate').disabled,'chosen endpoint controls ready');
-      f.byId('keep-start').click();f.byId('keep-end').click();f.byId('generate').click();
+      f.byId('generate').click();
       await until(()=>!f.byId('review').hidden,'explicitly released manual endpoints reviewed');f.byId('confirm').click();await until(()=>Boolean(output),'new reviewed endpoints accepted');
       const sent=JSON.parse(r.calls[0].input).planning_context;
       assert(sent.start===null&&sent.end===null&&r.input.context.start!==null&&r.input.context.end!==null,'choosing inference leaves the manual planner untouched');
-      assert(contextOptions.at(-1).includePlaces&&contextOptions.at(-1).useStart===false&&contextOptions.at(-1).useEnd===false,'released manual endpoints are not used to select the online landmark context');
+      assert(!contextOptions.some(options=>options?.includeMapPins || options?.includePlaces),'released manual endpoints are not used to select the online landmark context');
       cases.push('explicit_prompt_endpoint_choice_preserves_manual_draft');
     }finally{dialog.clear();r.planner.invalidate();f.element.remove();}
   }
@@ -373,7 +375,7 @@ export async function runAdventureUiHarness() {
       await until(()=>!f.byId('generate').disabled,'ready to start');f.byId('generate').click();await until(()=>Boolean(finish),'context pending');
       f.byId('choose-start').click();assert(!f.root.open&&mapChoices===0,'map choice cancels before taking over planner controls');
       finish(r.input.context);await until(()=>mapChoices===1,'cancel drained before map choice');
-      await dialog.open();await until(()=>!f.byId('generate').disabled,'resumed after map selection');
+      await dialog.open(undefined, {selectedEndpoint:{kind:'start',coordinate:r.input.context.start}});await until(()=>!f.byId('generate').disabled,'resumed after map selection');
       assert(f.byId('text').value==='Keep this description while I choose the Start'&&f.byId('start').textContent.includes('New map Start')&&r.calls.length===0&&r.nativeCalls.length===0,'description and updated manual endpoint return without hidden generation');
       cases.push('choose_endpoint_during_planning_drains_and_preserves_description');
     }finally{dialog.clear();r.planner.invalidate();f.element.remove();}

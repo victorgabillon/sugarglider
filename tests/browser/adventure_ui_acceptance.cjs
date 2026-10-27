@@ -23,7 +23,7 @@ const server = http.createServer((request, response) => {
     browser = await chromium.launch({ headless: true,
       ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
     const forbidden = [];
-    for (const name of ['pr91_route_elevation', 'localization', 'adventure_ui']) {
+    for (const name of ['pr91_route_elevation', 'localization', 'adventure_pin_context', 'adventure_ui']) {
     const context = await browser.newContext();
     await context.route('**/*', route => {
       if (new URL(route.request().url()).origin === base) return route.continue();
