@@ -102,11 +102,14 @@ class CalculationLifecycleInstrumentation : Instrumentation() {
             // No WebView evaluations while hidden: they could accidentally wake
             // its renderer and invalidate the background-continuation evidence.
             while (SystemClock.elapsedRealtime() - began < backgroundDuration) SystemClock.sleep(250)
+            val backgroundElapsed = if (backgroundDuration == 0L) 0L else SystemClock.elapsedRealtime() - began
+            if (transition == "lock_180") shell("input keyevent KEYCODE_WAKEUP")
+            // Return at the requested interval, including while the first 75 s
+            // reply is still pending in home_60. Never wait for completion first.
+            runOnMainSync { activity.startActivity(Intent(activity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) }
             var active = true
             waitUntil(600_000) { runOnMainSync { active = app.calculations.activeId != null }; !active }
             check(calls.get() == 2) { "The full optional second model request was not reached" }
-            if (transition == "lock_180") shell("input keyevent KEYCODE_WAKEUP")
-            runOnMainSync { activity.startActivity(Intent(activity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) }
             waitUntil(10_000) { evaluate(web, "!document.querySelector('#adventure-dialog').open") == "true" }
             evaluate(web, "(async()=>{const {state,selectedCandidate}=await import('/static/state.js');const {exportCanonicalCandidate}=await import('/static/local_gpx_export.js');const candidate=selectedCandidate();const a=await exportCanonicalCandidate(candidate).blob.text(),b=await exportCanonicalCandidate(candidate).blob.text();const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(a));globalThis.__calculationProof={same_gpx:a===b,gpx_sha256:[...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join(''),model_calls:state.adventureResult.model_calls.length,native_calls:state.adventureResult.routing_diagnostics.cache.backend_call_count,distance_m:candidate.route.summary.distance_m};})()")
             waitUntil(10_000) { evaluate(web, "Boolean(globalThis.__calculationProof)") == "true" }
@@ -115,7 +118,7 @@ class CalculationLifecycleInstrumentation : Instrumentation() {
             check(evaluate(web, "__calculationProof.same_gpx&&__calculationProof.model_calls===2&&__calculationProof.native_calls>0") == "true")
             result.putBoolean("passed", true)
             result.putInt("fake_native_model_calls", calls.get())
-            result.putLong("background_duration_ms", backgroundDuration)
+            result.putLong("background_duration_ms", backgroundElapsed)
             result.putString("transition", transition)
             result.putString("ui_proof", proof)
             result.putBoolean("live_inference", false)
