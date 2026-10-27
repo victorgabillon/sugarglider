@@ -36,6 +36,9 @@ exports.checkMinimalMobileMap = async ({ page, width, screenshot, checkLayout })
   const mapTap = async coordinate => {
     await stationary();
     const point = await page.evaluate(async coordinate => (await import('/static/map.js')).keepCoordinateVisible(coordinate), coordinate);
+    // The GL label collision index must match the corrected camera before hit
+    // testing; an immediately injected tap can otherwise pick a stale label.
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const box = await page.locator('#map').boundingBox();
     const hit=await page.evaluate(([x,y])=>document.elementFromPoint(x,y)?.outerHTML.slice(0,240),[box.x+point.x,box.y+point.y]);assert(hit?.includes('maplibregl-canvas'),'Map tap targets uncovered canvas: '+JSON.stringify({coordinate,point,box,hit}));
     await page.touchscreen.tap(box.x+point.x,box.y+point.y);
@@ -150,7 +153,7 @@ exports.checkMinimalMobileMap = async ({ page, width, screenshot, checkLayout })
   cases.push('map_taps_grammar_marker_context_dismiss_reselect_keyboard');
 
   const beforeMove=await request();
-  await page.locator('[data-dock-action="move"]').click();await page.locator('[data-dock-action="move-map"]').click();await mapTap([.018,.002]);
+  await page.locator('[data-dock-action="move"]').click();await page.locator('[data-dock-action="move-map"]').click();await mapTap([.018,.018]);
   const moved=await request();assert.equal(moved.waypoints.length,2);assert.notDeepEqual(moved.waypoints[0].coordinate,beforeMove.waypoints[0].coordinate);
   await page.locator('#undo-point-edit').click();assert.deepEqual(await request(),beforeMove);await page.locator('#redo-point-edit').click();assert.deepEqual(await request(),moved);
   await page.locator('[data-dock-action="more"]').click();await page.locator('[data-dock-action="later"]').click();const reordered=await request();assert.deepEqual({...reordered.waypoints[1],id:moved.waypoints[0].id},moved.waypoints[0]);assert.equal(reordered.waypoints[1].id,'route-waypoint-2','Canonical positional IDs follow the existing visit order');
