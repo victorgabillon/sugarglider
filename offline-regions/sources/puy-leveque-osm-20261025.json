@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "region_id": "puy-leveque-vallee-lot",
+  "bounds": [
+    0.9,
+    44.3,
+    1.6,
+    44.75
+  ],
+  "originals": [
+    {
+      "filename": "aquitaine-261025.osm.pbf",
+      "byte_size": 296567832,
+      "sha256": "ddd4ee61d75074f74eb75075d2bc48d5fc2150fd2f29d3f99dfb9ace277ccba2",
+      "url": "https://download.geofabrik.de/europe/france/aquitaine-261025.osm.pbf",
+      "acquired_date": "2026-10-27",
+      "provider_md5_verified": true,
+      "data_timestamp": "2026-10-25T21:21:21Z",
+      "footprint_url": "https://download.geofabrik.de/europe/france/aquitaine.poly",
+      "footprint_sha256": "57095926b499121231a20a2355a30b7a607be011251b882f94b435c36b790285"
+    },
+    {
+      "filename": "midi-pyrenees-261025.osm.pbf",
+      "byte_size": 363511147,
+      "sha256": "45d72c5081c688c33a644a0f11f2190f5e748a3c7cc59b7ae9977bc76f580bad",
+      "url": "https://download.geofabrik.de/europe/france/midi-pyrenees-261025.osm.pbf",
+      "acquired_date": "2026-10-27",
+      "provider_md5_verified": true,
+      "data_timestamp": "2026-10-25T21:21:21Z",
+      "footprint_url": "https://download.geofabrik.de/europe/france/midi-pyrenees.poly",
+      "footprint_sha256": "4a3b87a2b1d75ad5f89fff3280803442dd7dda3cf1dbc29fd7b029aa9bd4a0b4"
+    }
+  ],
+  "merged": {
+    "filename": "aquitaine-midi-pyrenees-261025.osm.pbf",
+    "byte_size": 658840557,
+    "sha256": "8e4bafad54a531c365b2a575ea8e133fa6ed822723aaf3b5be54097071408e36"
+  },
+  "prepared": {
+    "filename": "puy-leveque-expanded-20261025.osm.pbf",
+    "byte_size": 17586885,
+    "sha256": "e72409ea7cdc3f0d980be4f90e2b3affca893af2936a157afb0f459131325214"
+  },
+  "transformations": [
+    "osmium 1.16.0 merge: equal-snapshot extracts; no coordinate or tag changes",
+    "osmium extract --bbox 0.9,44.30,1.60,44.75 --strategy smart -S types=any -S complete-partial-relations=1 --set-bounds"
+  ],
+  "geographical_evidence": "The union of retained provider .poly footprints covers the entire rectangle (Shapely covers = true; uncovered area zero). The PBF header is not used as evidence of geographical completeness.",
+  "reference_handling": "Complete ways retained; smart requests completion of all touching relation types and parent relations from the available inputs. Zero missing way nodes. Enclosing national/long-distance relations absent from the provider inputs cannot be completed; see private check-refs audit. Routing builder separately retains complete ways and turn restrictions using its existing BackReferenceWriter.",
+  "attribution": "© OpenStreetMap contributors; Open Database License (ODbL) 1.0; https://www.openstreetmap.org/copyright",
+  "publication_allowed": false
+}
