@@ -176,7 +176,7 @@ export class MapPackStore {
     });
   }
 
-  async installPack(manifestUrl, { signal, onProgress, expectedArchive = null, regionalManifest = null } = {}) {
+  async installPack(manifestUrl, { signal, onProgress, expectedArchive = null, expectedManifest = null, regionalManifest = null } = {}) {
     // PR42's coordinator supplies the verified top-level regional descriptor.
     // Standalone PR36 manifests have no checksum field and retain that limitation.
     const suppliedIntegrity = expectedArchive === null ? null : regionalFileIntegrity(expectedArchive);
@@ -194,6 +194,7 @@ export class MapPackStore {
       MAXIMUM_MAP_PACK_MANIFEST_BYTES,
       signal,
     );
+    if (expectedManifest) await verifyRegionalBytes(new TextEncoder().encode(manifestText), expectedManifest);
     if (region) await verifyRegionalBytes(new TextEncoder().encode(manifestText), region.components.map.files[0]);
     const manifest = parseMapPackManifestJson(manifestText);
     if (region) requireData(manifest.pack_id === region.components.map.component_id
@@ -222,7 +223,7 @@ export class MapPackStore {
       operation,
       onProgress,
       integrity,
-      originalManifestText: region ? manifestText : null,
+      originalManifestText: region || expectedManifest ? manifestText : null,
     });
     this.activeInstalls.set(manifest.pack_id, operation);
     try {

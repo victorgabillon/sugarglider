@@ -122,6 +122,7 @@ async function startup(browser, scenario) {
         ? [
           ...await (await import('/tests/browser/pr42_region_product_harness.js')).runPr42RegionProductHarness(),
           ...await (await import('/tests/browser/pr42_regional_runtime_harness.js')).runPr42RegionalRuntimeHarness(),
+          ...await (await import('/tests/browser/planner_map_store_harness.js')).runPlannerMapStoreHarness(),
         ]
         : (await import('/tests/browser/region_preference_harness.js')).runRegionPreferenceHarness(), scenario.runHarness === 'product');
       assert.deepEqual(errors, []);
@@ -165,7 +166,8 @@ async function startup(browser, scenario) {
         const readIndex = early.events.findIndex(event => event.type === 'preference_read');
         assert.ok(readIndex >= 0 && readIndex < early.events.findIndex(event => event.type === 'map_open'), 'Map checked before preference read finished');
       }
-    } else assert.equal(opens.length, 0, 'Ambiguous choice opened an arbitrary map');
+    } else assert.equal(early.snapshot.packs.length, scenario.regions.length - Number(Boolean(scenario.deleted)),
+      'Display maps may be available without choosing a routing region');
     releaseCatalog();
     if (scenario.holdNative) {
       await page.waitForFunction(() => typeof releasePreferenceNative === 'function');
@@ -180,6 +182,7 @@ async function startup(browser, scenario) {
       await page.evaluate(() => releasePreferenceNative());
     }
     await page.waitForFunction(() => !document.querySelector('#regional-refresh').disabled
+      && Boolean(document.querySelector('#regional-status').dataset.state)
       && !['', 'regional_checking'].includes(document.querySelector('#regional-status').dataset.state));
     const result = await page.evaluate(async () => ({
       selected: document.querySelector('#planning-region').value,
@@ -221,7 +224,8 @@ async function startup(browser, scenario) {
       await page.reload();
       await page.waitForFunction(() => document.querySelector('#regional-status').dataset.state === 'regional_selection_required');
       assert.equal(await page.locator('#planning-region').inputValue(), '');
-      assert.equal(await page.evaluate(() => preferenceEvents.filter(event => event.type === 'map_open').length), 0);
+      assert.equal(await page.evaluate(async () => (await import('/static/offline_map.js')).offlineMapSnapshot().packs.length), 2,
+        'Clearing the routing selection preserves installed display maps');
       assert.equal(await page.evaluate(() => preferenceNative.some(request => ['local_route', 'route_elevation', 'regional_routing_install'].includes(request.type))), false);
     }
     assert.equal(result.candidate, null, 'Startup restored a route candidate');
