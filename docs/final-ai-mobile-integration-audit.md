@@ -27,7 +27,8 @@ full route/editor backups and detailed machine receipts remain outside Git under
   It changes only this report; runtime `src`, `android` and `assets` trees still
   exactly match both the reviewed GUI and prepared cda0572 artifact source. The
   current documentation revision is identified by this file's Git history.
-  The installed device build remains distinct from the consolidated artifact.
+  The installed device now matches the consolidated cda0572 artifact after separate
+  explicit approval and fresh preservation checks.
 
 The audit inspected **54 registered worktrees**, 51 existing and three stale
 registrations, **70 local branches**, all 152 local/remote refs, untracked files,
@@ -62,7 +63,9 @@ inventories are retained in the external audit receipts.
 
 “Device” means physical Fairphone evidence, not synthetic browser replies.
 `main before` means the verified PR #110 baseline; the final source contains all
-rows. Installed APK evidence below is for **625ef8b**, not the uninstalled fix.
+rows. Current installed APK evidence is for **cda0572**. Prior physical editing,
+offline generation and export evidence from the unchanged 625ef8b lineage is
+identified separately; those expensive checks were not unnecessarily repeated.
 
 | Feature | Main before | Final source / implementation evidence | Tested | Device / remaining acceptance |
 |---|---|---|---|---|
@@ -81,10 +84,10 @@ rows. Installed APK evidence below is for **625ef8b**, not the uninstalled fix.
 | Minimal header, Tools and Map display | No | `app_shell.js`, intact settings DOM, touch-only navigation removal | Narrow/landscape/200%/desktop harnesses | Tested on Fairphone; Tools has 32.005 px normal / 31.677 px doubled-text bottom clearance. |
 | Contextual editor and collapsed route bar | No | `route_dock.js`, existing editing authorities | Gestures, keyboard, edit/history, candidate and GPX checks | Real editing, dragging, local search and offline generation completed. |
 | Compact legal attribution and marker clearance | No | Real control/painted-pin rectangles, five-second acknowledgement | Source changes, expanded credits, keyboard and insets | Auto-collapse measured 5,011 ms; explicit expansion and dock separation tested. |
-| French default, English option and persistence | No | `i18n.js`, `translations.js`, existing PWA store, typed native UI locale | Full canonical request/result/form/camera/GPX invariants | French/English controls verified on installed lineage. |
+| French default, English option and persistence | No | `i18n.js`, `translations.js`, existing PWA store, typed native UI locale | Full canonical request/result/form/camera/GPX invariants | French/English controls and persistence across font-driven Activity recreation verified; original French preference restored. |
 | Distinct SG AI Test / TEST launcher | No | Variant label and XML overlay, production bitmap untouched | Manifest/resource/asset checks | Physical launcher badge and actual packaged identity verified. |
-| Native Privacy multiline actions | No | `PrivacyDetailsDialog.kt`, full disclosure and explicit link retained | Android 36 native-layout tests: French/English, font 1×/2×, 320/372 portrait and 800 landscape | Fixed in source; installed 625ef8b still has the clipped policy label. New APK acceptance requires approval. |
-| Locale-independent POI wire values | Main correct | Canonical `unknown` restored in queries and eligibility; no translation of data enums | French real-worker query and unknown-access map-action regressions fail before/pass after | Corrected artifact not installed; final physical confirmation pending. |
+| Native Privacy multiline actions | No | `PrivacyDetailsDialog.kt`, full disclosure and explicit link retained | Android 36 native-layout tests: French/English, font 1×/2×, 320/372 portrait and 800 landscape | Verified on cda0572 in French and English at normal and Android font scale 2.0; full policy and Close labels visible in all four screenshots. |
+| Locale-independent POI wire values | Main correct | Canonical `unknown` restored in queries and eligibility; no translation of data enums | French real-worker query and unknown-access map-action regressions fail before/pass after | French query succeeds on the real phone, including 72 unknown-potability entries; toggling filters preserves exact route/result/GPX. |
 
 ### Correctness and security review
 
@@ -116,18 +119,24 @@ shared application assets.
 
 - Device: Fairphone 6, Android 16 / API 36, serial `014728cc`.
 - Installed package: `io.github.victorgabillon.sugarglider.v2staging`, **SG AI Test**,
-  version `1.2.0-v2-staging`, code **8**, UID **10308**, revision **625ef8b**.
+  version `1.2.0-v2-staging`, code **8**, UID **10308**, revision **cda0572**.
 - Installed APK SHA-256:
-  `9ecff7cd7a35523094d66450d5fd971278ba25c9093184893890c46d86d9edb3`.
+  `f19a1a255d131870a7a8f475cde54068ba313ae6c49507fcd427bf60b2e8a7ce`.
 - Development/staging signer SHA-256:
   `e84155df3a2c7ea48723876b1fe8e0e602cb600f8374d6539b9fea9aa42cfbd7`.
-- Read-only ADB verified the installed bytes equal the audited 625ef8b artifact;
-  its signature, bundled revision, launcher label and TEST resource consequently
-  match. No reinstall was performed.
+- Initial read-only ADB verified the matching 625ef8b installation, which was
+  retained until separate approval naming cda0572 and confirming the phone was
+  free. Fresh signer/package/full-state/account/region/GPX checks passed. The
+  625ef8b rollback APK was retained, and normal `adb install -r --no-streaming`
+  replaced staging only. Installed cda0572 bytes, UID, packaged revision and
+  native regional hashes were verified. No uninstall or data clear occurred.
 - Initial foreground was ChatGPT. The empty staging draft was captured separately.
   After the user's explicit phone-free/restoration answers, the original
   **23,172 m** route, selected candidate, point index **0**, all **22 editor fields**,
   raw form values, speech draft and original camera were restored from full state.
+  The same full state was backed up again before replacement and restored after
+  native font tests. Candidate, result, source request, GPX and editor values match
+  the protected snapshot; transient elevation operation/timing IDs are normalized.
   This was not a GPX-only reconstruction and did not reroute.
 - Original GPX SHA-256:
   `52b5d326937e532bb4e4a3f66ce625774674d85b3c15ed97320332cfcb5ca6f0`.
@@ -138,8 +147,30 @@ shared application assets.
 - Ordinary connected-account UI and sanitized native status confirm the same
   connected identity and plan usage. No OAuth credentials were read/exported;
   no inference or recording was made. Production's four APK splits are unchanged.
-- Device handoff: French Map, original route and selection, editor collapsed.
-  Native bridge restored and only this audit's debugger forward removed.
+- Physical cda0572 checks: one-tap AI dialog with the supplied artwork, connected
+  account and accessible text/microphone; French POI filtering; Tools clearance
+  32.005 CSS px; native Privacy in French/English at system font scales 1.0 and 2.0.
+  Policy/Close button heights are 144/144 physical px normally and 244/153 px at
+  scale 2.0, with both buttons wholly inside the dialog.
+- Original system font scale **1.0**, rotation settings and French preference are
+  restored. Device handoff: French Map, original route/selection/camera, collapsed
+  editor. Native bridge restored and only this audit's debugger forward removed.
+
+### Actual Fairphone screenshots
+
+Private 1116 × 2484 PNGs are in the external audit root's `fairphone/` directory:
+
+| Scene | File |
+|---|---|
+| Final French Map and original route | `cda-final-original-map.png` |
+| Connected AI dialog | `cda-final-ai-dialog.png` |
+| Native Privacy, French normal | `cda-privacy-fr-1.png` |
+| Native Privacy, English normal | `cda-privacy-en-1.png` |
+| Native Privacy, French font scale 2.0 | `cda-privacy-fr-2.png` |
+| Native Privacy, English font scale 2.0 | `cda-privacy-en-2.png` |
+
+The full physical receipt is `fairphone-cda0572-acceptance.json` outside Git; full
+editor/route backups remain private. No screenshot or generated GPX is committed.
 
 ### Exact remaining package inventory
 
@@ -220,7 +251,7 @@ identity, certificate continuity, ZIP integrity, APK page alignment and ELF LOAD
 alignment checks. Its receipt is separate from the installed-device identity.
 
 - Prepared APK: `artifacts/sugarglider-SG-AI-Test-cda0572.apk` under the external
-  `/home/pompote/sugarglider-ai-mobile-2026-10-26` artifact root; **not installed**.
+  `/home/pompote/sugarglider-ai-mobile-2026-10-26` artifact root; **installed after explicit approval**.
 - APK SHA-256: `f19a1a255d131870a7a8f475cde54068ba313ae6c49507fcd427bf60b2e8a7ce`.
 - Size: 26,893,257 bytes; same staging package, version/code and signer as the
   installed app. All 156 declared bundled web files match exact source/input bytes.
@@ -255,17 +286,14 @@ was used to reach this state.
 
 ## Outstanding acceptance and limits
 
-- A separately authorized replacement with the consolidated staging artifact is
-  needed to verify the new Privacy layout and French POI correction on the real
-  phone. Source/Android-layout/browser tests do not claim that installation.
 - A final live ChatGPT forest-adventure request requires separate account-inference
   authorization. No live request was initiated for this audit or CI.
 - The existing manual draft is volatile across cold WebView/process recreation;
   full-state backups remain necessary. Exact adventure recovery is separate and
   remains implemented/tested.
-- Final physical 625ef8b evidence is portrait; landscape and broad 200% coverage
-  are browser/native-layout regressions. At doubled CSS text its bottom Parcours
-  navigation label wraps, but remains operable.
+- Native Privacy at font scale 2.0 is now physically verified on cda0572 in
+  portrait. Landscape and broad map/CSS 200% coverage remain browser/native-layout
+  regressions. The earlier doubled-CSS Parcours label wraps but remains operable.
 
 No Google Play upload, production replacement, public regional publication,
 unapproved app deletion or modification of the forest checkout/processes occurred.
