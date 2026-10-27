@@ -1,0 +1,33 @@
+{
+  "schema_version": 2,
+  "region_id": "puy-leveque-vallee-lot",
+  "display_name": "Puy-l'Évêque et vallée du Lot",
+  "bounds": [
+    0.9,
+    44.3,
+    1.6,
+    44.75
+  ],
+  "map": {
+    "pack_id": "puy-leveque-vallee-lot-map-v1",
+    "template": "map-packs/puy-leveque-vallee-lot-map-v1.template.json"
+  },
+  "routing": {
+    "pack_id": "puy-leveque-vallee-lot-routing-v2",
+    "engine": "valhalla",
+    "engine_version": "3.9.1",
+    "access_modes": [
+      "foot",
+      "bicycle"
+    ]
+  },
+  "pois": {
+    "component_id": "puy-leveque-vallee-lot-pois-v1"
+  },
+  "nature": {
+    "component_id": "puy-leveque-vallee-lot-nature-v1"
+  },
+  "elevation": {
+    "component_id": "puy-leveque-vallee-lot-elevation-v2"
+  }
+}

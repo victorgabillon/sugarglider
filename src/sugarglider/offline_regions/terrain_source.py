@@ -97,14 +97,45 @@ class TerrainSources(StrictModel):
         "https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/DEM/"
         "resources/license/License-COPDEM-30.pdf"
     ]
-    files: Annotated[tuple[SourceFile, ...], Field(min_length=11, max_length=11)]
+    files: Annotated[tuple[SourceFile, ...], Field(min_length=6, max_length=11)]
+
+    @property
+    def raster_tiles(self) -> tuple[tuple[int, int], ...]:
+        """The bounded rectangular source grid, including its south/east halo."""
+        return tuple(
+            sorted(
+                (
+                    int(pin.filename.split("_")[4][1:]),
+                    int(pin.filename.split("_")[6][1:]),
+                )
+                for pin in self.files
+                if pin.filename.startswith("Copernicus_DSM_COG_10_N")
+            )
+        )
 
     @model_validator(mode="after")
     def complete_product(self) -> Self:
+        tiles: list[tuple[int, int]] = []
+        for pin in self.files:
+            match = re.fullmatch(
+                r"Copernicus_DSM_COG_10_N([0-8][0-9])_00_E([01][0-9]{2})_00_DEM\.tif",
+                pin.filename,
+            )
+            if match is not None:
+                lat, lon = int(match[1]), int(match[2])
+                if lon >= 180:
+                    raise ValueError("unsupported Copernicus source longitude")
+                tiles.append((lat, lon))
+        if not tiles:
+            raise ValueError("incomplete Copernicus source grid")
+        south, north = min(t[0] for t in tiles), max(t[0] for t in tiles)
+        west, east = min(t[1] for t in tiles), max(t[1] for t in tiles)
+        if south == north or west == east:
+            raise ValueError("incomplete south/east source halo")
         expected = {}
-        for lat in (47, 48, 49):
-            for lon in (1, 2, 3):
-                name = f"Copernicus_DSM_COG_10_N{lat}_00_E{lon:03}_00_DEM"
+        for lat in range(south, north + 1):
+            for lon in range(west, east + 1):
+                name = f"Copernicus_DSM_COG_10_N{lat:02}_00_E{lon:03}_00_DEM"
                 expected[name + ".tif"] = (
                     f"https://copernicus-dem-30m.s3.amazonaws.com/{name}/{name}.tif"
                 )
@@ -112,7 +143,7 @@ class TerrainSources(StrictModel):
             expected[name] = "https://cdn.proj.org/" + name
         if {p.filename: p.url for p in self.files} != expected or len(
             {p.filename for p in self.files}
-        ) != 11:
+        ) != len(expected):
             raise ValueError("incomplete, duplicate or mismatched product source URLs")
         return self
 
