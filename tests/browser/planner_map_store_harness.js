@@ -143,6 +143,13 @@ export async function runPlannerMapStoreHarness() {
     cases.push("tools_form_uses_trusted_selection_and_cancels_pending_manifest_without_touching_regions");
 
     const count = requests.length;
+    const raced = independent(), openSource = raced.openPackSource.bind(raced);
+    raced.openPackSource = async (...args) => {
+      const opened = await openSource(...args);
+      return { ...opened, manifest: { ...opened.manifest, build_id: "unverified-replacement" } };
+    };
+    equal((await compose(raced).scanInstalledPacks()).invalid_pack_ids, [offer.pack_id],
+      "metadata replacement between verification and source opening cannot adopt an unverified identity");
     separate = independent(); composed = compose();
     equal((await composed.scanInstalledPacks()).packs.length, 3, "cold restart revalidates independent identity without download");
     equal(requests.length, count, "restart is local only");

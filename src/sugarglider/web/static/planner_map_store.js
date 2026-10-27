@@ -1,4 +1,5 @@
 import { createMapPackStore } from "./map_pack_store.js";
+import { parseMapPackManifestJson } from "./map_pack_manifest.js";
 import { loadRegionCatalog } from "./region_catalog.js";
 import { freezeData, requireData } from "./regional_manifest.js";
 import { verifyRegionalFile } from "./regional_integrity.js";
@@ -46,7 +47,10 @@ export function createPlannerMapStore({ regional, independent = createMapPackSto
     verified.delete(packId);
     await verifyRegionalFile(manifestFile, offer.manifest);
     await verifyRegionalFile(archiveFile, offer.archive);
+    const trustedManifest = parseMapPackManifestJson(await manifestFile.text());
+    requireData(JSON.stringify(record.manifest) === JSON.stringify(trustedManifest), "regional_identity_mismatch");
     const opened = await independent.openPackSource(packId, { archiveFile });
+    requireData(JSON.stringify(opened.manifest) === JSON.stringify(trustedManifest), "regional_identity_mismatch");
     verified.set(packId, { manifestFile, archiveFile, opened });
     return opened;
   }
