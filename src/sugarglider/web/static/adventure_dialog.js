@@ -48,6 +48,7 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
       element(id).disabled = accountBusy || aiBusy || voiceBusy;
     }
     for (const id of ["choose-start", "choose-end"]) element(id).disabled = accountBusy || voiceBusy;
+    element("include-pins").disabled ||= displayedContext?.pinContextAvailable === false;
     element("text").disabled = aiBusy;
     element("restore-request").disabled = aiBusy || voiceBusy || accountBusy;
     element("forget-request").disabled = aiBusy || voiceBusy || accountBusy;
@@ -90,7 +91,9 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
     element("keep-waypoints").parentElement.hidden = !pinSnapshot?.hardWaypoints?.length;
     setLocalizedText(element("pin-status"), () => pinSnapshot
       ? t("{count} map pins captured. They are context only unless you explicitly require them below.", { count: pinSnapshot.contextualPins.length })
-      : t("Current map pins are excluded. Describe a location or explicitly choose one."));
+      : displayedContext.pinContextAvailable === false
+        ? t("Return to your manual plan to include its map pins. Saved-adventure pins are excluded.")
+        : t("Current map pins are excluded. Describe a location or explicitly choose one."));
     const label = (kind, point) => point ? `${kind}: ${point.name || t("chosen map point")} · ${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}` : tr`${kind}: from your description, or choose on map`;
     setLocalizedText(element("start"), () => tr`${label(t("Start"), context.start)} · ${label(t("End"), context.end)}. Loops return to Start.`);
   }

@@ -474,6 +474,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
             await page.locator('#ask-chatgpt').click();
             await page.locator('#adventure-endpoints').evaluate(node => { node.open = true; });
             assert.equal(await page.locator('#adventure-include-pins').isChecked(),false);
+            assert(await page.locator('#adventure-include-pins').isDisabled(), 'Saved-adventure display cannot disclose hidden manual pins or reuse snapshot pins');
             await page.locator('#adventure-text').fill('Un tour autour de ' + name);
             await page.waitForFunction(() => !document.querySelector('#adventure-generate').disabled);
             await page.locator('#adventure-generate').click();

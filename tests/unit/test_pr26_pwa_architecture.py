@@ -336,7 +336,7 @@ def test_shared_shell_generation_tracks_v126_cached_assets() -> None:
         ),
         "i18n.js": ("708543feff434012bfa950a16ac6156619f5475cc54d97f2f693db73e810e7b2"),
         "translations.js": (
-            "c7206027057dfe9a5d67fdd36167e286633733955eaf15dddad86cbdd48064e6"
+            "332f91ea6a3107fb227f4e617b2c52874b119285dab3d84dd0963862c3621f79"
         ),
         "index.html": (
             "9b28305c9ae5d58f19e013f4d4a9681a61d1b21fe7db55a4a49ebfac81a6ee7d"
@@ -381,7 +381,7 @@ def test_shared_shell_generation_tracks_v126_cached_assets() -> None:
             "886d1a7348fee81b78d8b8ee16cb2cc90655d8f49d720c1f6b8f5a89a8f516a2"
         ),
         "adventure_dialog.js": (
-            "a19c20e2850827cc00bfd916a10e293ba9679700a461484de8e736a60224c46f"
+            "b04d3993884ef04a6fd40da03a0cb40107f5731f06c03c691e7c831ef4ffbc72"
         ),
         "adventure_results.js": (
             "04bb4626caf9556384590a948fc547e764b19788adcc75cd7fa47d6f16be7651"
@@ -398,7 +398,7 @@ def test_shared_shell_generation_tracks_v126_cached_assets() -> None:
         "local_adventure_search.js": (
             "faae64c661a211505d82bad9b78f1c7d8533904182db967b6ff0b603ef08086b"
         ),
-        "app.js": ("75b94e53685952c41f3ab9a2d927546cb16d8a06a0182ae8ba93863cb5bbbca8"),
+        "app.js": ("1aedc5baa2aa6226cae71715859e90b5162ee96beaa8d001332e026b3ac217e0"),
         "region_screen.js": (
             "ac0aad40280167eca27482eb4256512b48453a2883a6a588ab5b2e3a98fa1301"
         ),

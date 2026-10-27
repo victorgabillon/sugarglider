@@ -200,7 +200,7 @@ async function adventureContext({ includeMapPins = false, signal } = {}) {
   if (!localPlanner || regionPlanningError) throw new Error(regionFailureMessage(regionPlanningError ?? "regional_required"));
   // Snapshot only the editable manual pins, and only after explicit opt-in.
   // Displayed adventure requests, selected geometry and camera/GPS are never context.
-  const context = includeMapPins ? currentAdventureContext() : { suggested_profile: state.routingProfile };
+  const context = includeMapPins && !state.adventureDisplay ? currentAdventureContext() : { suggested_profile: state.routingProfile };
   if ((context.contextualPins?.length ?? 0) > 16 || (context.hardWaypoints?.length ?? 0) > 14) {
     throw new Error(t("This adventure can preserve up to 14 exact intermediate points. Review your required points first."));
   }
@@ -208,7 +208,7 @@ async function adventureContext({ includeMapPins = false, signal } = {}) {
     signal?.throwIfAborted();
     const row = selectCommittedRegion(rows, selectedRegionId), reference = await regionalRoutingReference(row.manifest);
     signal?.throwIfAborted();
-    return { ...context, reference };
+    return { ...context, reference, pinContextAvailable: !state.adventureDisplay };
   });
 }
 async function displayExactAdventure(output, selectedId, requestId) {

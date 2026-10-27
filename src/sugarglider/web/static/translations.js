@@ -1,5 +1,6 @@
 // Complete interface messages only. Canonical data, user text, place names and original source notices remain unchanged.
 export const FRENCH = Object.freeze({
+  "Return to your manual plan to include its map pins. Saved-adventure pins are excluded.": "Revenez à votre plan manuel pour inclure ses points. Les points des aventures enregistrées sont exclus.",
   "An adventure was interrupted. Open Ask ChatGPT to review your original description and explicitly retry. Nothing restarts automatically.": "Une aventure a été interrompue. Ouvrez Demander à ChatGPT pour vérifier votre description d’origine et réessayer explicitement. Rien ne redémarre automatiquement.",
   "Forget interrupted request": "Oublier la demande interrompue",
   "The interrupted request could not be forgotten. Try again.": "La demande interrompue n’a pas pu être supprimée. Réessayez.",
