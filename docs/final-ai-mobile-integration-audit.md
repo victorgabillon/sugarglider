@@ -13,11 +13,30 @@ full route/editor backups and detailed machine receipts remain outside Git under
 - PR #110 source: `26c6dbe325333c48e2b7d5f126c165314f9a19ea`. It is already
   contained in the GUI branch. It was neither cherry-picked nor merged again.
 - Consolidated implementation: `212a497f87f4f6b27675f7e73ec83c7f88a1e09a`.
-- Verified artifact/code head: `740bd2b` (only strict cache-fingerprint expectations
-  change after the implementation commit; application/native/brand trees match).
-- Final GUI PR, head, merge SHA, tree identity and CI receipts are recorded below
-  once GitHub validation and merging finish. The installed device build remains
-  distinct from the newer consolidated artifact.
+- Verified artifact/code head: `cda0572`. Later commits synchronize strict cache
+  fingerprints, record the audit and keep test placements clear of mapped POIs.
+  Application/native/brand trees match the implementation commit.
+- Final GUI branch head before the code merge: `cda0572647752bf480cbb182d3fe46d354d87497`; 18 commits ahead of the
+  verified baseline and zero behind before merging.
+- [Final GUI PR #111](https://github.com/victorgabillon/sugarglider/pull/111) is merged.
+- Audited `main` code-merge SHA: `422e43715ba2530e452171efb94cc42db989fbd5`.
+- Merged tree: `e625149ebd8bab6c23569414b5ca8691dd2b7b0c`, exactly equal to the
+  reviewed GUI head's tree. The merge parents are the verified main baseline and
+  final GUI head; forest and GUI ancestry are both retained.
+- Reconciled main source base: `36c023aa30318443aac1ba9bc6025448ceb82980`,
+  after the parallel session merged [PR #114](https://github.com/victorgabillon/sugarglider/pull/114).
+  Its private Puy-l’Évêque coverage configuration and bounded terrain conversion
+  changes are retained. They do not change bundled web, Android or brand trees;
+  those trees still exactly match reviewed GUI source and installed cda0572.
+  The broader Python `src` tree includes PR #114 and is not claimed identical to
+  the APK's build source. No new regional pack was installed or published here.
+- [Documentation PR #112](https://github.com/victorgabillon/sugarglider/pull/112)
+  changes only this report relative to that main source base. The report's final
+  merge revision is identified by its Git history; its merge and CI receipts are
+  retained outside Git to avoid a self-referential commit hash.
+- The installed device matches the consolidated cda0572 artifact after separate
+  explicit approval and fresh preservation checks. This records acceptance of
+  PR #111's GUI, not physical acceptance of later parallel changes.
 
 The audit inspected **54 registered worktrees**, 51 existing and three stale
 registrations, **70 local branches**, all 152 local/remote refs, untracked files,
@@ -48,11 +67,23 @@ was found missing from the consolidated implementation. No worktree, stash,
 untracked file or private evidence was deleted. Full ref, worktree and commit-graph
 inventories are retained in the external audit receipts.
 
+During final receipt preparation, the original checkout independently moved onto
+`fix/named-start-mobile-toolbar` for [PR #115](https://github.com/victorgabillon/sugarglider/pull/115).
+That is active follow-on work on named adventure starts and compact toolbars,
+opened after the GUI code merge; it is not missing completed baseline work.
+At reconciliation it remains open. Its checkout, branch, edits and processes were
+left untouched. It is outside the installed cda0572 acceptance boundary and remains
+owned by its parallel session. All other existing worktree heads/statuses and the
+stash match their initial audit, including the untouched forest checkout. No new
+worktree was created for this audit; the report branch uses the existing GUI checkout.
+
 ## Feature completeness
 
 “Device” means physical Fairphone evidence, not synthetic browser replies.
 `main before` means the verified PR #110 baseline; the final source contains all
-rows. Installed APK evidence below is for **625ef8b**, not the uninstalled fix.
+rows. Current installed APK evidence is for **cda0572**. Prior physical editing,
+offline generation and export evidence from the unchanged 625ef8b lineage is
+identified separately; those expensive checks were not unnecessarily repeated.
 
 | Feature | Main before | Final source / implementation evidence | Tested | Device / remaining acceptance |
 |---|---|---|---|---|
@@ -71,10 +102,10 @@ rows. Installed APK evidence below is for **625ef8b**, not the uninstalled fix.
 | Minimal header, Tools and Map display | No | `app_shell.js`, intact settings DOM, touch-only navigation removal | Narrow/landscape/200%/desktop harnesses | Tested on Fairphone; Tools has 32.005 px normal / 31.677 px doubled-text bottom clearance. |
 | Contextual editor and collapsed route bar | No | `route_dock.js`, existing editing authorities | Gestures, keyboard, edit/history, candidate and GPX checks | Real editing, dragging, local search and offline generation completed. |
 | Compact legal attribution and marker clearance | No | Real control/painted-pin rectangles, five-second acknowledgement | Source changes, expanded credits, keyboard and insets | Auto-collapse measured 5,011 ms; explicit expansion and dock separation tested. |
-| French default, English option and persistence | No | `i18n.js`, `translations.js`, existing PWA store, typed native UI locale | Full canonical request/result/form/camera/GPX invariants | French/English controls verified on installed lineage. |
+| French default, English option and persistence | No | `i18n.js`, `translations.js`, existing PWA store, typed native UI locale | Full canonical request/result/form/camera/GPX invariants | French/English controls and persistence across font-driven Activity recreation verified; original French preference restored. |
 | Distinct SG AI Test / TEST launcher | No | Variant label and XML overlay, production bitmap untouched | Manifest/resource/asset checks | Physical launcher badge and actual packaged identity verified. |
-| Native Privacy multiline actions | No | `PrivacyDetailsDialog.kt`, full disclosure and explicit link retained | Android 36 native-layout tests: French/English, font 1×/2×, 320/372 portrait and 800 landscape | Fixed in source; installed 625ef8b still has the clipped policy label. New APK acceptance requires approval. |
-| Locale-independent POI wire values | Main correct | Canonical `unknown` restored in queries and eligibility; no translation of data enums | French real-worker query and unknown-access map-action regressions fail before/pass after | Corrected artifact not installed; final physical confirmation pending. |
+| Native Privacy multiline actions | No | `PrivacyDetailsDialog.kt`, full disclosure and explicit link retained | Android 36 native-layout tests: French/English, font 1×/2×, 320/372 portrait and 800 landscape | Verified on cda0572 in French and English at normal and Android font scale 2.0; full policy and Close labels visible in all four screenshots. |
+| Locale-independent POI wire values | Main correct | Canonical `unknown` restored in queries and eligibility; no translation of data enums | French real-worker query and unknown-access map-action regressions fail before/pass after | French query succeeds on the real phone, including 72 unknown-potability entries; toggling filters preserves exact route/result/GPX. |
 
 ### Correctness and security review
 
@@ -106,18 +137,24 @@ shared application assets.
 
 - Device: Fairphone 6, Android 16 / API 36, serial `014728cc`.
 - Installed package: `io.github.victorgabillon.sugarglider.v2staging`, **SG AI Test**,
-  version `1.2.0-v2-staging`, code **8**, UID **10308**, revision **625ef8b**.
+  version `1.2.0-v2-staging`, code **8**, UID **10308**, revision **cda0572**.
 - Installed APK SHA-256:
-  `9ecff7cd7a35523094d66450d5fd971278ba25c9093184893890c46d86d9edb3`.
+  `f19a1a255d131870a7a8f475cde54068ba313ae6c49507fcd427bf60b2e8a7ce`.
 - Development/staging signer SHA-256:
   `e84155df3a2c7ea48723876b1fe8e0e602cb600f8374d6539b9fea9aa42cfbd7`.
-- Read-only ADB verified the installed bytes equal the audited 625ef8b artifact;
-  its signature, bundled revision, launcher label and TEST resource consequently
-  match. No reinstall was performed.
+- Initial read-only ADB verified the matching 625ef8b installation, which was
+  retained until separate approval naming cda0572 and confirming the phone was
+  free. Fresh signer/package/full-state/account/region/GPX checks passed. The
+  625ef8b rollback APK was retained, and normal `adb install -r --no-streaming`
+  replaced staging only. Installed cda0572 bytes, UID, packaged revision and
+  native regional hashes were verified. No uninstall or data clear occurred.
 - Initial foreground was ChatGPT. The empty staging draft was captured separately.
   After the user's explicit phone-free/restoration answers, the original
   **23,172 m** route, selected candidate, point index **0**, all **22 editor fields**,
   raw form values, speech draft and original camera were restored from full state.
+  The same full state was backed up again before replacement and restored after
+  native font tests. Candidate, result, source request, GPX and editor values match
+  the protected snapshot; transient elevation operation/timing IDs are normalized.
   This was not a GPX-only reconstruction and did not reroute.
 - Original GPX SHA-256:
   `52b5d326937e532bb4e4a3f66ce625774674d85b3c15ed97320332cfcb5ca6f0`.
@@ -128,8 +165,30 @@ shared application assets.
 - Ordinary connected-account UI and sanitized native status confirm the same
   connected identity and plan usage. No OAuth credentials were read/exported;
   no inference or recording was made. Production's four APK splits are unchanged.
-- Device handoff: French Map, original route and selection, editor collapsed.
-  Native bridge restored and only this audit's debugger forward removed.
+- Physical cda0572 checks: one-tap AI dialog with the supplied artwork, connected
+  account and accessible text/microphone; French POI filtering; Tools clearance
+  32.005 CSS px; native Privacy in French/English at system font scales 1.0 and 2.0.
+  Policy/Close button heights are 144/144 physical px normally and 244/153 px at
+  scale 2.0, with both buttons wholly inside the dialog.
+- Original system font scale **1.0**, rotation settings and French preference are
+  restored. Device handoff: French Map, original route/selection/camera, collapsed
+  editor. Native bridge restored and only this audit's debugger forward removed.
+
+### Actual Fairphone screenshots
+
+Private 1116 × 2484 PNGs are in the external audit root's `fairphone/` directory:
+
+| Scene | File |
+|---|---|
+| Final French Map and original route | `cda-final-original-map.png` |
+| Connected AI dialog | `cda-final-ai-dialog.png` |
+| Native Privacy, French normal | `cda-privacy-fr-1.png` |
+| Native Privacy, English normal | `cda-privacy-en-1.png` |
+| Native Privacy, French font scale 2.0 | `cda-privacy-fr-2.png` |
+| Native Privacy, English font scale 2.0 | `cda-privacy-en-2.png` |
+
+The full physical receipt is `fairphone-cda0572-acceptance.json` outside Git; full
+editor/route backups remain private. No screenshot or generated GPX is committed.
 
 ### Exact remaining package inventory
 
@@ -163,8 +222,9 @@ historical branches likewise require no cleanup to finish this integration.
 
 ## Final validation and consolidated artifact
 
-All final local checks passed. GitHub PR and post-merge receipts are completed in
-the merge record below. Exact local results:
+The consolidated GUI's local, GitHub PR and post-code-merge checks passed. The
+exact remote receipts are in the merge record below. Local results for cda0572
+and its implementation lineage:
 
 | Check | Result |
 |---|---|
@@ -172,7 +232,7 @@ the merge record below. Exact local results:
 | Strict mypy | 303 source files; pass |
 | Python | 1,612 passed, 16 service integration tests deselected; nine existing NumPy warnings |
 | Browser harnesses | 62 passed, no page errors |
-| Self-contained acceptance drivers | 19 passed (18 individual drivers plus the full-app driver) |
+| Self-contained acceptance drivers | 18 passed (17 standalone drivers plus the full-app driver) |
 | Full-app viewports | 372×760 French, 412×844 English, 320×720 French, 800×372 French, 1280×844 English; all pass |
 | Android JVM | Debug 296, Release 291, Staging 291; 878 total, zero failure/error/skip |
 | Android lint/assembly | Debug, Release and Staging all pass |
@@ -181,10 +241,20 @@ the merge record below. Exact local results:
 | Shell identity | v121 fingerprint expectations and complete allowlists pass |
 | APK/ELF | All three APK ZIP/page-alignment/native-byte checks pass; staging ELF LOAD alignment ≥16 KiB |
 
-The comprehensive native/application checks ran on the implementation commit;
-740bd2b synchronizes two strict cache fingerprints and reruns the complete Python
-check plus final staging identity assembly. No assertion was relaxed or skipped
-to hide the integration failures.
+After incorporating main's independent PR #114 into the documentation branch,
+a fresh `make check` also passed: Ruff checked 320 formatted files, strict mypy
+checked **304 files**, and Python reported **1,627 passed, 16 deselected**, with
+the same nine NumPy warnings. This later count includes PR #114's additional
+Python tests; it does not replace the exact cda0572 validation counts above.
+Its log is `make-check-main-reconciled.log` in the external audit root.
+
+The comprehensive native/application checks ran on the implementation commit.
+740bd2b synchronizes two strict cache fingerprints; final Python, full-app and
+staging identity checks also pass on cda0572. Browser CI additionally exposed a
+landscape test tap that selected a now-visible drinking-water marker instead of
+empty map. The fixture now uses unoccupied corners and explicitly checks Start/stop
+acquisition; all five viewports pass without screenshot delays. Assertions retain
+their original route/GPX guarantees.
 Robolectric resolves its pinned Android image through Gradle; test execution is
 explicitly offline and needs no Docker, map data, account or external service.
 Android CI now includes staging tests/lint/assembly and 16 KiB checks alongside
@@ -198,17 +268,18 @@ six-profile routing/map-service fixture is unavailable. The 16 separately marked
 Python integration tests remain deselected; nine existing NumPy warnings remain.
 `map_editing_controls.cjs`, `map_minimalism_checks.cjs` and
 `pr97_form_acceptance.cjs` are support modules exercised by their parent drivers,
-not additional standalone passes.
+not additional standalone passes. The former 19-driver aggregate counted the
+form helper separately; this audit corrects the total to 18 genuine drivers.
 
 The supplied source PNG, optimized/runtime PNG, production mascot and launcher
 artwork retain their verified hashes. The consolidated staging artifact passed exact bundled bytes/allowlist, build
 identity, certificate continuity, ZIP integrity, APK page alignment and ELF LOAD
 alignment checks. Its receipt is separate from the installed-device identity.
 
-- Prepared APK: `artifacts/sugarglider-SG-AI-Test-740bd2b.apk` under the external
-  `/home/pompote/sugarglider-ai-mobile-2026-10-26` artifact root; **not installed**.
-- APK SHA-256: `1b37eb2a31e5c171f926c989c6d1e0940577abcc1064fb3922b84f414f813b30`.
-- Size: 26,893,285 bytes; same staging package, version/code and signer as the
+- Prepared APK: `artifacts/sugarglider-SG-AI-Test-cda0572.apk` under the external
+  `/home/pompote/sugarglider-ai-mobile-2026-10-26` artifact root; **installed after explicit approval**.
+- APK SHA-256: `f19a1a255d131870a7a8f475cde54068ba313ae6c49507fcd427bf60b2e8a7ce`.
+- Size: 26,893,257 bytes; same staging package, version/code and signer as the
   installed app. All 156 declared bundled web files match exact source/input bytes.
 - Native library SHA-256:
   `09b6d312b19caa5410561b804213641f5f8a772d1b3db570cc17bac8a55fb878`.
@@ -219,23 +290,40 @@ alignment checks. Its receipt is separate from the installed-device identity.
 
 ## GitHub merge record
 
-The reviewed GUI PR, exact head/merge/tree identity and four post-merge workflow
-receipts are filled in here after required checks pass. This report does not
-treat a prepared artifact or a requested merge as an installed/merged result.
+PR #111 merged only after all seven head checks completed successfully: three
+push workflows and four PR workflows. Reviews/threads had no unresolved blocker.
+The four push workflows on the actual merged main SHA also completed successfully.
+The browser workflow used a full unchanged retry after slow Ubuntu package-mirror
+downloads during tooling setup; no test was skipped.
+The local main ref was fast-forwarded from its stale historical head. Main requires
+pull requests, so the completed receipt follows through a documentation-only PR.
+
+| Post-merge workflow | Exact run | Result |
+|---|---|---|
+| Python checks | [40483591684](https://github.com/victorgabillon/sugarglider/actions/runs/40483591684) | success |
+| Android checks | [40483591608](https://github.com/victorgabillon/sugarglider/actions/runs/40483591608) | success |
+| Elevation browser regressions | [40483591530](https://github.com/victorgabillon/sugarglider/actions/runs/40483591530) | success |
+| Social deployment | [40483591582](https://github.com/victorgabillon/sugarglider/actions/runs/40483591582) | success |
+
+Full head-check receipts, both code-merge parents, exact code-merge tree,
+web/native/brand tree equivalence through main `36c023a`, source and device
+receipts are retained in the external audit root. The documentation branch
+incorporates PR #114 before merging and preserves its changes. PR #112's final
+head and post-merge receipts are recorded separately outside Git; documentation
+changes trigger three workflows because Social deployment excludes this path.
+The owned source worktree is clean at handoff. No source rewrite or duplicate
+forest merge was used to reach this state.
 
 ## Outstanding acceptance and limits
 
-- A separately authorized replacement with the consolidated staging artifact is
-  needed to verify the new Privacy layout and French POI correction on the real
-  phone. Source/Android-layout/browser tests do not claim that installation.
 - A final live ChatGPT forest-adventure request requires separate account-inference
   authorization. No live request was initiated for this audit or CI.
 - The existing manual draft is volatile across cold WebView/process recreation;
   full-state backups remain necessary. Exact adventure recovery is separate and
   remains implemented/tested.
-- Final physical 625ef8b evidence is portrait; landscape and broad 200% coverage
-  are browser/native-layout regressions. At doubled CSS text its bottom Parcours
-  navigation label wraps, but remains operable.
+- Native Privacy at font scale 2.0 is now physically verified on cda0572 in
+  portrait. Landscape and broad map/CSS 200% coverage remain browser/native-layout
+  regressions. The earlier doubled-CSS Parcours label wraps but remains operable.
 
 No Google Play upload, production replacement, public regional publication,
 unapproved app deletion or modification of the forest checkout/processes occurred.
