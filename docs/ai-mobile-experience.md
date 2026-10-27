@@ -111,3 +111,38 @@ A newly prepared APK does not imply permission to install it. Replacement requir
 applicable authorization naming that artifact and fresh preservation checks.
 Live ChatGPT inference requires separate authorization. No production replacement,
 Google Play upload or public regional publication is part of this work.
+
+## Named starting locations and all mobile tabs
+
+The follow-up starts from merged GUI baseline `422e437` (PRs #110 and #111).
+Endpoint lookup distinguishes missing descriptions, unresolved names, ambiguous
+matches, coordinates outside the selected committed region, fixed-endpoint
+conflicts, and failed graph arrival. A place name such as “Bastille” remains a
+lookup request. Local exact matches use the existing Places index. Ambiguous
+matches require selection; inferred endpoints still require review before routing.
+
+An unresolved name offers an explicit **Search with IGN** action, disclosing that
+only the place name goes to IGN Géoplateforme. It reuses the normal geocoder's
+request limits, cancellation and credential-free transport. Selecting an outside
+result reports missing coverage in the selected UI language and offers **View
+regions**, which opens the existing manager. It does not select, install or download
+a region, retry the model, or route online. The repository's Paris specification
+does not establish that a usable Paris pack is installed. Existing selected points
+require explicit release before a conflicting described location can replace them.
+Completed search selections retain their provenance through exact saved-adventure
+recovery, without another lookup or route calculation.
+
+The available preserved Fairphone state contains the original Bastille request.
+It does not establish the model's endpoint payload for that failed operation;
+neither name-only nor out-of-region model coordinates are claimed as its observed
+cause. No live inference, device installation, reset or application-data change is
+needed for this follow-up's deterministic browser checks.
+
+Mobile Map, Plan and Routes hide the permanent mascot/name in the shared toolbar.
+The same AI action and Tools remain accessible; desktop branding and About remain.
+The full-app browser driver captures all three tabs in French and English at
+100% and 200% text, with a simulated 37 px Android top inset. It checks content
+clearance, menu bounds, focus restoration, unchanged canonical route/editor/GPX,
+and absence of automatic routing, inference or recording. Screenshots remain
+outside Git. Native routing and model replies in these tests are synthetic;
+browser screenshots are not new physical Fairphone acceptance.

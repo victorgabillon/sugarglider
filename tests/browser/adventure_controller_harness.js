@@ -10,13 +10,14 @@ import { exportCanonicalCandidate } from "../../src/sugarglider/web/static/local
 import { syntheticAdventure } from "./adventure_proposal_harness.js";
 import { rig } from "./adventure_routing_harness.js";
 import { state } from "../../src/sugarglider/web/static/state.js";
+import { resolveAdventureEndpoint } from "../../src/sugarglider/web/static/adventure_grounding.js";
 
 const assert = (ok, message) => { if (!ok) throw Error(message); };
 const equal = (a, b, message) => assert(JSON.stringify(a) === JSON.stringify(b), message);
 const point = (lat, lon, name = null) => ({ lat, lon, name });
 export const outputs = [];
 
-export async function setup({ failure = null, mutateRevision = null, confirmProposal = null, change = undefined } = {}) {
+export async function setup({ failure = null, mutateRevision = null, confirmProposal = null, reviewEndpoint = null, change = undefined } = {}) {
   const r = await rig({ change });
   const f = await (await fetch("/tests/fixtures/pr40_regional_data.json")).json();
   const data = createLocalRegionData(f.manifest, { pois: f.pois, nature: f.nature });
@@ -44,7 +45,7 @@ export async function setup({ failure = null, mutateRevision = null, confirmProp
     return { text: JSON.stringify(value), elapsed_ms: 13, usage: { input_tokens: 20, output_tokens: 40, total_tokens: 60, access_token: "must-never-survive" },
       researched: true, citations: [{ url: "https://example.invalid/source", title: "Explicitly synthetic source" }] };
   } };
-  const controller = createAdventureController({ model, planner: r.planner, confirmProposal, onProgress: stage => stages.push(stage), lifecycleTarget: null });
+  const controller = createAdventureController({ model, planner: r.planner, confirmProposal, reviewEndpoint, onProgress: stage => stages.push(stage), lifecycleTarget: null });
   const input = { prompt: "Synthetic test: a 2.2 km historical adventure with interesting stops.", modelId: "synthetic-model",
     context: { start: proposal.intent.start, end: proposal.intent.end, reference: r.region.reference }, research: true };
   return { ...r, model, nativeCalls: r.calls, controller, proposal, revision, calls, stages, input, finishModel: () => pendingModel?.(), modelPending: () => Boolean(pendingModel) };
@@ -56,6 +57,70 @@ async function rejected(promise, code) {
 
 export async function runAdventureControllerHarness() {
   const cases = [], beforeState = JSON.stringify(state);
+  {
+    const reference = { region_id: "yvelines", build_id: "synthetic", bounds: [1.4, 48.3, 2.25, 49.1] };
+    let rows = [];
+    const session = { identity: reference, searchPlaceNames: async () => ({ identity: reference, results: rows }) };
+    const options = { session, reference };
+    for (const name of ["Bastille", "Place de la Bastille, Paris"]) {
+      const location = { name, lat: null, lon: null };
+      equal((await resolveAdventureEndpoint(location, options)).status, "unresolved", "Named place is not missing");
+      const selected = { name: "Place de la Bastille", lat: 48.853, lon: 2.369, source: "online" };
+      const result = await resolveAdventureEndpoint(location, { ...options, selected });
+      equal(result.status, "outside_coverage", "IGN selection outside actual selected coverage");
+      equal(result.evidence, "selected_ign_result", "Explicit IGN provenance retained");
+      equal((await resolveAdventureEndpoint(selected, options)).status, "outside_coverage", "Valid outside coordinate is not missing");
+      equal((await resolveAdventureEndpoint(location, { ...options, selected, fixed: { name: "Marly", lat: 48.87, lon: 2.1 } })).status,
+        "conflict", "An existing Start is never silently ignored");
+    }
+    equal((await resolveAdventureEndpoint(null, options)).status, "missing", "No place supplied");
+    rows = [{ name: "Marly", lat: 48.87, lon: 2.1 }];
+    equal((await resolveAdventureEndpoint({ name: "Marly", lat: null, lon: null }, options)).status, "resolved", "Supported local named place");
+    rows.push({ name: "Marly", lat: 48.88, lon: 2.12 });
+    equal((await resolveAdventureEndpoint({ name: "Marly", lat: 48.87, lon: 2.1 }, options)).status, "ambiguous", "Model coordinate cannot disambiguate duplicate names");
+    cases.push("named_endpoint_missing_unresolved_ambiguous_outside_and_fixed_conflict_are_distinct");
+  }
+  for (const [location, code, hasStart] of [
+    [{ name: "Bastille", lat: null, lon: null }, "adventure_endpoint_unresolved", false],
+    [{ name: "Place de la Bastille, Paris", lat: null, lon: null }, "adventure_endpoint_unresolved", false],
+    [{ name: "Bastille", lat: 48.853, lon: 2.369 }, "adventure_endpoint_outside_coverage", false],
+    [{ name: "Bastille", lat: null, lon: null }, "adventure_endpoint_conflict", true],
+  ]) {
+    const r = await setup();
+    try {
+      r.proposal.intent.start = location;
+      const before = JSON.stringify(state), input = structuredClone(r.input.context);
+      await rejected(r.controller.run({ ...r.input, context: { ...input, start: hasStart ? input.start : null }, refine: false }), code);
+      equal(JSON.stringify(state), before, "Failed lookup leaves editor, route and selection unchanged");
+      equal(r.input.context, input, "Fixed editor endpoints are preserved");
+      assert(r.calls.length === 1 && r.nativeCalls.length === 0, "Failure makes no extra model, route or download request");
+    } finally { r.controller.cancel(); r.planner.invalidate(); }
+  }
+  {
+    let r;
+    r = await setup({ reviewEndpoint: async () => {
+      assert(r.calls.length === 1 && r.nativeCalls.length === 0, "Lookup review precedes routing without new inference");
+      return { name: "Place de la Bastille", lat: 48.853, lon: 2.369, source: "online" };
+    } });
+    try {
+      r.proposal.intent.start = { name: "Bastille", lat: null, lon: null };
+      await rejected(r.controller.run({ ...r.input, context: { ...r.input.context, start: null } }), "adventure_endpoint_outside_coverage");
+      assert(r.calls.length === 1 && r.nativeCalls.length === 0, "Resolved outside place never retries inference or routes");
+    } finally { r.controller.cancel(); r.planner.invalidate(); }
+  }
+  cases.push("named_endpoint_failures_preserve_state_without_hidden_generation_or_retry");
+  {
+    const r = await setup({ change: reply => {
+      reply.snapped_points[0] = { ...reply.snapped_points[0], lat: .006 };
+      reply.geometry[0] = [reply.snapped_points[0].lon, .006];
+    } });
+    try {
+      r.input.context.endpointSnapPolicy = { start: "exact", end: "exact" };
+      await rejected(r.controller.run({ ...r.input, refine: true }), "adventure_endpoint_not_routable");
+      assert(r.calls.length === 1 && r.nativeCalls.length > 0, "Inside coverage but failed graph arrival never weakens constraints or retries inference");
+      cases.push("located_endpoint_inside_coverage_but_not_routable_is_distinct");
+    } finally { r.controller.cancel(); r.planner.invalidate(); }
+  }
   for (const unresolved of [false,true]) {
     const r=await setup();
     try {

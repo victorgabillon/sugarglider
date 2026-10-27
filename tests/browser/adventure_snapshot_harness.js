@@ -43,6 +43,21 @@ export async function runAdventureSnapshotHarness() {
       let rejected=false;try{await encodeAdventureSnapshot(wrong)}catch{rejected=true}assert(rejected,'inferred endpoint evidence cannot move away from the stored request');
       cases.push('inferred_endpoint_evidence_restores_exactly_and_rejects_moved_coordinates');
     } finally { inferred.controller.cancel();inferred.planner.invalidate(); }
+    for (const source of ["online", "local", "long_online"]) {
+      const selectedName = source === "long_online" ? "Named IGN starting place ".repeat(8) : "Selected mapped start";
+      const searched = await setup({ confirmProposal: async () => ({ confirmedMandatoryIds: [] }),
+        reviewEndpoint: async () => ({ name: selectedName, lat: .005, lon: .005, source: source === "local" ? "local" : "online" }) });
+      try {
+        searched.proposal.intent.start = { name: "Named start to look up", lat: null, lon: null };
+        const value = await searched.controller.run({ ...searched.input, context: { ...searched.input.context, start: null }, refine: false });
+        const encoded = await encodeAdventureSnapshot(value), calls = searched.nativeCalls.length;
+        const restored = await decodeAdventureSnapshot({ ...encoded, selected_id: value.chosen.result.candidates[0].id });
+        assert(same(restored.output, value) && searched.nativeCalls.length === calls && searched.calls.length === 1,
+          "Selected search provenance and canonical geometry restore exactly without geocoding or routing");
+        assert(value.chosen.request.start.name === selectedName.slice(0, 120), "Search names respect the reviewed adventure contract without changing coordinates");
+        cases.push(`selected_${source}_endpoint_restores_without_lookup_or_routing`);
+      } finally { searched.controller.cancel(); searched.planner.invalidate(); }
+    }
     const output = await r.controller.run(r.input);
     const selected = output.chosen.result.candidates.at(-1), id = selected.id;
     const legacy=structuredClone(output);delete legacy.timings;legacy.model_calls.forEach(call=>{delete call.timings;});

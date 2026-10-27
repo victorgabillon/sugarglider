@@ -5,6 +5,7 @@ import { createAdventureSpeech } from "./adventure_speech.js";
 import { createAdventureElevationSampler } from "./adventure_elevation.js";
 import { readSpeechProviderPreference, writeSpeechProviderPreference, readUiPreference, writeUiPreference } from "./pwa_store.js";
 import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
+import { adventureEndpointFailure } from "./adventure_grounding.js";
 
 const progressText = { understanding: "Understanding your wishes and proposing places…", checking_places: "Checking locations on this device…",
   reviewing: "Review the required places below.", routing: "Calculating actual offline routes…", comparing: "Comparing routes and measuring terrain…",
@@ -15,7 +16,7 @@ const speechText = { completed: "Transcription added. Check it before Generate; 
   no_match: "No speech was recognized. Try again or type your request.", timeout: "Speech recognition timed out. You can try again.", busy: "The previous speech request is still finishing." };
 
 export function initializeAdventureDialog({ root, launcher, launchers = [launcher], planner, getContext, canOpen = () => true,
-  onBusy = () => {}, onResult, onChooseStart, onChooseEnd,
+  onBusy = () => {}, onResult, onChooseStart, onChooseEnd, onRegions = null, searchLocations = null, geocoding = () => null,
   model = createAdventureModel(), speech = createAdventureSpeech(), elevation = createAdventureElevationSampler() }) {
   const element = id => root.querySelector(`#adventure-${id}`);
   // Only an explicit choice is persisted. Restoring it never records audio;
@@ -33,7 +34,7 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
   let epoch = 0, accountBusy = false, aiBusy = false, voiceBusy = false, accountAbort = null, speechAbort = null, planningAbort = null;
   let accountState = { accounts: [], selected_account: null, models: [] }, review = null, successfulClose = false;
   let contextReady = false, displayedContext = null, planningFinished = Promise.resolve(), finishPlanning = null;
-  const controller = createAdventureController({ model, planner, measureElevations: elevation.measure,
+  const controller = createAdventureController({ model, planner, measureElevations: elevation.measure, reviewEndpoint: locateEndpoint,
     onProgress: stage => { setLocalizedText(element("progress"), () => t(progressText[stage] ?? "Planning…")); },
     confirmProposal: confirm, lifecycleTarget: null });
   const connected = () => accountState.accounts.find(account => account.id === accountState.selected_account);
@@ -113,6 +114,7 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
     if (!canOpen() || aiBusy || accountBusy) return false;
     returnFocus = source;
     epoch++; successfulClose = false; contextReady = false; displayedContext = null; message(""); element("progress").textContent = "";
+    element("regions").hidden = true; element("endpoint-search").hidden = true;
     element("region-status").hidden = true;
     setLocalizedText(element("start"), () => t("Describe where to start and finish, or choose on the map. Loops return to Start."));
     for (const kind of ["start", "end"]) { element(`keep-${kind}`).checked = true; element(`keep-${kind}`).parentElement.hidden = true; }
@@ -147,6 +149,9 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
   function close() { cancel(); if (root.open) root.close(); }
   for (const action of launchers) action.addEventListener("click", () => { void open(action); });
   element("close").addEventListener("click", close);
+  element("regions").addEventListener("click", async () => {
+    const finishing = planningFinished; close(); await finishing; onRegions?.();
+  });
   root.addEventListener("cancel", cancel);
   root.addEventListener("close", () => {
     epoch++; cancel();
@@ -215,7 +220,7 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
     if (aiBusy || accountBusy || voiceBusy || element("generate").disabled) return;
     const owned = epoch, abort = new AbortController(); planningAbort = abort;
     planningFinished = new Promise(resolve => { finishPlanning = resolve; });
-    aiBusy = true; message(""); render(); onBusy(true);
+    aiBusy = true; message(""); element("regions").hidden = true; render(); onBusy(true);
     try {
       const contextStarted = performance.now();
       const context = endpointContext(await getContext({ includePlaces: true, useStart: element("keep-start").checked, useEnd: element("keep-end").checked, signal: abort.signal }));
@@ -231,14 +236,59 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
         message(error.name === "AbortError" ? t("Planning cancelled. Your previous route is kept.")
           : ["loop_requires_waypoint", "invalid_endpoints"].includes(code) ? t("Choose the missing endpoint or describe some places that can be checked in this region. Your previous route is kept.")
           : typeof error.message === "string" && !/^[a-z_]+$/.test(error.message) ? error.message : t("No valid adventure could be calculated. Your previous route is kept."));
+        if (error.parameters) setLocalizedText(element("error"), () => t(error.message, { ...error.parameters,
+          endpoint: t(error.parameters.endpoint === "end" ? "End" : "Start") }));
+        element("regions").hidden = !onRegions || !["adventure_endpoint_outside_coverage", "no_covering_routing_pack"].includes(code);
       }
     } finally {
-      aiBusy = false; review = null; element("review").hidden = true; element("input").hidden = false;
+      aiBusy = false; review = null; element("review").hidden = true; element("endpoint-search").hidden = true; element("input").hidden = false;
       if (planningAbort === abort) planningAbort = null;
       render(); onBusy(false);
       finishPlanning?.(); finishPlanning = null;
     }
   });
+  function locateEndpoint({ kind, resolution }, signal) {
+    const failure = adventureEndpointFailure(resolution, kind), query = resolution.proposed_coordinate.name;
+    element("input").hidden = true; element("review").hidden = true; element("endpoint-search").hidden = false;
+    setLocalizedText(element("endpoint-title"), () => t("Find {place}", { place: query }));
+    setLocalizedText(element("endpoint-explanation"), () => t(failure.message, failure.parameters));
+    element("endpoint-status").textContent = "";
+    element("endpoint-attribution").textContent = geocoding()?.attribution ?? "";
+    const searchButton = element("search-ign"); searchButton.disabled = !searchLocations || !geocoding()?.available;
+    if (searchButton.disabled) setLocalizedText(element("endpoint-status"), () => t("Online address search is unavailable. You can still choose a point on the map."));
+    const results = element("endpoint-results"); results.replaceChildren();
+    return new Promise(resolve => {
+      const finish = value => {
+        signal.removeEventListener("abort", abort); searchButton.onclick = null;
+        element("endpoint-search").hidden = true; review = null; resolve(value);
+      };
+      const abort = () => finish(null);
+      const receipt = { resolve: finish }; review = receipt;
+      const current = () => review === receipt && root.open && !signal.aborted;
+      function rows(locations) {
+        results.replaceChildren();
+        for (const location of locations) {
+          const button = document.createElement("button"); button.type = "button"; button.className = "button secondary";
+          setLocalizedText(button, () => `${t(location.source === "online" ? "Online results" : "On this device")} · ${location.name} · ${location.secondaryLabel ?? ""} · ${location.lat.toFixed(5)}, ${location.lon.toFixed(5)}`);
+          button.addEventListener("click", () => { if (current()) finish(location); }); results.append(button);
+        }
+      }
+      rows(resolution.matches.map(row => ({ ...row, source: "local" })));
+      searchButton.onclick = async () => {
+        if (!current() || searchButton.disabled) return;
+        searchButton.disabled = true; setLocalizedText(element("endpoint-status"), () => t("Searching online…"));
+        try {
+          const response = await searchLocations(query, { signal });
+          if (!current()) return;
+          rows([...response.local, ...response.remote]);
+          setLocalizedText(element("endpoint-status"), () => [t(response.localMessage), t(response.remoteMessage)].filter(Boolean).join(" "));
+        } catch (error) { if (current()) setLocalizedText(element("endpoint-status"), () => t(error.message)); }
+        finally { if (current()) searchButton.disabled = false; }
+      };
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted) abort(); else (results.querySelector("button") ?? searchButton).focus();
+    });
+  }
   function confirm({ proposal, grounding, unsupportedHard, startResolution, endResolution }, signal) {
     const mandatory = proposal.places.filter(place => place.importance === "mandatory");
     if (!mandatory.length && !unsupportedHard.length && !startResolution && !endResolution) return Promise.resolve({ confirmedMandatoryIds: [] });
@@ -251,6 +301,8 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
       const point = resolution.coordinate, description = document.createElement("p");
       setLocalizedText(description, () => resolution.evidence === "unique_exact_local_name"
         ? tr`${kind} found on this device: ${point.name} · ${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}. Use it only if it is the place you intended.`
+        : ["selected_ign_result", "selected_local_result"].includes(resolution.evidence)
+          ? tr`${kind} selected from place search: ${point.name} · ${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}. Routing availability and access still need checking.`
         : tr`Proposed ${kind}: ${point.name} · ${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}. This AI coordinate has no matching local place record. Check the location before continuing; its name and access are unverified.`);
       required.append(description);
     }

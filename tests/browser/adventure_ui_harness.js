@@ -9,6 +9,7 @@ import { renderRouteChoices } from "../../src/sugarglider/web/static/route_resul
 import { exportCanonicalCandidate } from "../../src/sugarglider/web/static/local_gpx_export.js";
 import { readSpeechProviderPreference, writeSpeechProviderPreference, openPwaStore, PWA_STORES } from "../../src/sugarglider/web/static/pwa_store.js";
 import { setup } from "./adventure_controller_harness.js";
+import { state } from "../../src/sugarglider/web/static/state.js";
 const assert = (ok, message) => { if (!ok) throw Error(message); };
 async function until(check, label) {
   for (let i = 0; i < 500; i++) { if (check()) return; await new Promise(resolve => setTimeout(resolve, 10)); }
@@ -40,6 +41,88 @@ function accounts(model, initiallyConnected = true) {
 export async function runAdventureUiHarness() {
   await setLanguage("en", { persist: false, document: null });
   const cases = [];
+  for (const language of ["fr", "en"]) {
+    const r = await setup(), f = await frame(); await setLanguage(language, { persist: false, document: f.doc });
+    r.input.context.start = null; r.proposal.intent.start = { name: "Ambiguous local start", lat: null, lon: null };
+    const getData = r.region.getRegionData;
+    r.region.getRegionData = async () => {
+      const data = await getData();
+      return { ...data, searchPlaceNames: async name => name === "Ambiguous local start"
+        ? { identity: data.identity, results: [.005, .006].map(lat => ({ name, lat, lon: .005 })) } : data.searchPlaceNames(name) };
+    };
+    let output = null;
+    const dialog = initializeAdventureDialog({ root: f.root, launcher: f.doc.getElementById("plan-with-ai"), planner: r.planner,
+      model: accounts(r.model), speech: { cancel() {} }, elevation: { measure: async () => ({}), clear() {} },
+      getContext: async () => r.input.context, onChooseStart() {}, onChooseEnd() {}, onResult(value) { output = value; },
+      geocoding: () => ({ available: true }), searchLocations() { throw Error("Local disambiguation must not search online"); } });
+    try {
+      await dialog.open(); f.byId("text").value = "Start at Ambiguous local start"; f.byId("text").dispatchEvent(new Event("input"));
+      f.byId("refine").checked = false;
+      await until(() => !f.byId("generate").disabled, "ambiguous Start ready"); f.byId("generate").click();
+      await until(() => !f.byId("endpoint-search").hidden, "local disambiguation");
+      assert(f.byId("endpoint-explanation").textContent.includes(language === "fr" ? "Plusieurs lieux" : "Several locations"), "Ambiguity is localized");
+      assert(f.byId("endpoint-results").children.length === 2 && r.nativeCalls.length === 0, "Neither ambiguous point is chosen automatically");
+      f.byId("endpoint-results").firstElementChild.click();
+      await until(() => !f.byId("review").hidden, "selected local endpoint review");
+      assert(r.nativeCalls.length === 0, "Selected search result still needs explicit endpoint review");
+      f.byId("confirm").click(); await until(() => output !== null, "confirmed local result routed");
+      assert(output.chosen.endpoint_resolution.start.evidence === "selected_local_result" && r.calls.length === 1, "Explicit disambiguation keeps provenance and avoids another model call");
+      cases.push(`ambiguous_local_start_requires_selection_and_review_${language}`);
+    } finally { dialog.clear(); r.planner.invalidate(); f.element.remove(); }
+  }
+  await setLanguage("en", { persist: false, document: null });
+  for (const language of ["fr", "en"]) for (const name of ["Bastille", "Place de la Bastille, Paris"]) {
+    const r = await setup(), f = await frame();
+    await setLanguage(language, { persist: false, document: f.doc });
+    r.input.context.start = null; r.proposal.intent.start = { name, lat: null, lon: null };
+    let lookups = 0, regionViews = 0, publications = 0;
+    const before = JSON.stringify(state), contextBefore = JSON.stringify(r.input.context);
+    const dialog = initializeAdventureDialog({ root: f.root, launcher: f.doc.getElementById("plan-with-ai"), planner: r.planner,
+      model: accounts(r.model), speech: { cancel() {} }, elevation: { measure: async () => ({}), clear() {} },
+      getContext: async () => r.input.context, onChooseStart() {}, onChooseEnd() {}, onResult() { publications++; },
+      onRegions() { regionViews++; }, geocoding: () => ({ available: true, attribution: "IGN Géoplateforme · BAN / BD TOPO" }),
+      searchLocations: async query => {
+        assert(query === name, "Only the named place crosses the disclosed geocoder boundary"); lookups++;
+        return { local: [], localMessage: "", remoteMessage: "", remote: [{ name: "Place de la Bastille", lat: 48.853, lon: 2.369, source: "online" }] };
+      } });
+    try {
+      await dialog.open(); f.byId("text").value = "Un tour autour de " + name; f.byId("text").dispatchEvent(new Event("input"));
+      await until(() => !f.byId("generate").disabled, "named place ready"); f.byId("generate").click();
+      await until(() => !f.byId("endpoint-search").hidden, "disclosed named place lookup");
+      assert(lookups === 0 && r.calls.length === 1 && r.nativeCalls.length === 0, "No automatic IGN, model retry or route call");
+      assert(f.byId("endpoint-explanation").textContent.includes(language === "fr" ? "n’a pas été trouvé" : "was not found"), "Unresolved name is localized and distinct from missing Start");
+      f.byId("search-ign").click(); await until(() => f.byId("endpoint-results").querySelector("button"), "IGN results");
+      f.byId("endpoint-results").querySelector("button").click();
+      await until(() => !dialog.busy(), "outside coverage failure");
+      assert(f.byId("error").textContent.includes(language === "fr" ? "en dehors de la région hors ligne" : "outside the selected offline region"), "Outside coverage is localized");
+      assert(f.byId("error").textContent.includes("Place de la Bastille") && !f.byId("regions").hidden, "Found name and region action remain useful");
+      assert(f.byId("regions").textContent === (language === "fr" ? "Voir les régions" : "View regions"), "Region action localized");
+      assert(lookups === 1 && r.calls.length === 1 && r.nativeCalls.length === 0 && publications === 0 && regionViews === 0, "Failure never downloads, switches, generates or publishes");
+      assert(JSON.stringify(state) === before && JSON.stringify(r.input.context) === contextBefore, "Route, selection and editor preserved");
+      f.byId("regions").click(); await until(() => regionViews === 1, "explicit region review");
+      assert(!f.root.open && r.calls.length === 1, "Region review closes AI without another model call");
+      cases.push(`named_bastille_explicit_ign_outside_region_preserves_state_${language}_${name}`);
+    } finally { dialog.clear(); r.planner.invalidate(); f.element.remove(); }
+  }
+  for (const language of ["fr", "en"]) for (const conflict of [false, true]) {
+    const r = await setup(), f = await frame(); await setLanguage(language, { persist: false, document: f.doc });
+    r.proposal.intent.start = conflict ? { name: "Bastille", lat: null, lon: null } : null;
+    if (!conflict) r.input.context.start = null;
+    const before = JSON.stringify(r.input.context);
+    const dialog = initializeAdventureDialog({ root: f.root, launcher: f.doc.getElementById("plan-with-ai"), planner: r.planner,
+      model: accounts(r.model), speech: { cancel() {} }, elevation: { measure: async () => ({}), clear() {} },
+      getContext: async () => r.input.context, onChooseStart() {}, onChooseEnd() {}, onResult() { throw Error("Failure cannot publish"); } });
+    try {
+      await dialog.open(); f.byId("text").value = "Un petit tour"; f.byId("text").dispatchEvent(new Event("input"));
+      await until(() => !f.byId("generate").disabled, "failure ready"); f.byId("generate").click();
+      await until(() => !dialog.busy() && f.byId("error").textContent, "localized failure");
+      const expected = conflict ? (language === "fr" ? "ne correspond pas" : "conflicts with") : (language === "fr" ? "Où souhaitez-vous partir" : "Where would you like to start");
+      assert(f.byId("error").textContent.includes(expected), "Missing and conflicting Start have separate localized errors");
+      assert(JSON.stringify(r.input.context) === before && r.calls.length === 1 && r.nativeCalls.length === 0, "Failure preserves the chosen endpoint without retry");
+      cases.push(`missing_or_conflicting_start_localized_${language}_${conflict}`);
+    } finally { dialog.clear(); r.planner.invalidate(); f.element.remove(); }
+  }
+  await setLanguage("en", { persist: false, document: null });
   {
     const place = id => ({ canonical_id: id, status: "reached", local_category: "ruins" });
     const round = { proposal: { wishes: [{ metric: "woodland", goal: "maximize", importance: "high", value: null }] },

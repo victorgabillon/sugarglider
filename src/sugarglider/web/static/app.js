@@ -342,6 +342,8 @@ function initializeAdventure() {
   adventureDialog = initializeAdventureDialog({ root: byId("adventure-dialog"), launcher: byId("plan-with-ai"), launchers, planner: localPlanner,
     canOpen: () => !state.outingDisplay && !isSavedRouteSnapshotDisplay() && !["running", "reversing"].includes(state.request.status),
     getContext: adventureContext,
+    searchLocations: (...args) => locationSearch.searchResolvedLocations(...args), geocoding: () => state.config?.geocoding,
+    onRegions: () => byId("plan-regions").click(),
     onBusy: busy => {
       adventurePlanning = busy;
       if (busy) {
