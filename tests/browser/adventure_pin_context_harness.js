@@ -14,6 +14,10 @@ export async function runPinContextHarness() {
     try{const opening=dialog.open();assert(f.byId('include-pins').disabled,'pin context stays disabled throughout asynchronous opening');
       release({...r.input.context,pinContextAvailable:false});await opening;
       assert(f.byId('include-pins').disabled&&!f.byId('include-pins').checked,'saved-adventure view stays excluded after context resolves');
+      await until(()=>!f.byId('connect').disabled);f.byId('close').click();
+      const reopening=dialog.open();await setLanguage('fr',{persist:false,document:f.doc});
+      assert(f.byId('include-pins').disabled,'language changes during reopening cannot enable pin context');
+      release({...r.input.context,pinContextAvailable:false});await reopening;
       assert(r.calls.length===0&&r.nativeCalls.length===0,'opening cannot infer or route');cases.push('delayed_opening_never_exposes_pin_control_before_context');
     }finally{dialog.clear();r.planner.invalidate();f.element.remove();}
   }
