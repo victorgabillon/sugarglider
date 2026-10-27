@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "product": "COP-DEM_GLO-30-DGED-COG",
+  "release": "2021",
+  "horizontal_crs": "EPSG:4326",
+  "vertical_crs": "EPSG:3855",
+  "surface": "DSM",
+  "license_url": "https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/DEM/resources/license/License-COPDEM-30.pdf",
+  "files": [
+    {
+      "filename": "Copernicus_DSM_COG_10_N43_00_E000_00_DEM.tif",
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N43_00_E000_00_DEM/Copernicus_DSM_COG_10_N43_00_E000_00_DEM.tif",
+      "byte_size": 44889944,
+      "sha256": "a1cf59303e1a69be1c701cf34382845b82432c782565a006bd97a45aa665df0c",
+      "acquired_at": "2026-10-27T10:08:58.955938+00:00",
+      "last_modified": "Mon, 09 May 2022 14:23:21 GMT",
+      "etag": "\"a6f33620c2c1e612e8b0108ed257484b\"",
+      "version_id": "null"
+    },
+    {
+      "filename": "Copernicus_DSM_COG_10_N43_00_E001_00_DEM.tif",
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N43_00_E001_00_DEM/Copernicus_DSM_COG_10_N43_00_E001_00_DEM.tif",
+      "byte_size": 44264875,
+      "sha256": "4d29425ec0632eacf5446044c434e6ef69a1dcc2e13018714d77b1099bd49a03",
+      "acquired_at": "2026-10-27T10:08:58.842667+00:00",
+      "last_modified": "Mon, 09 May 2022 14:23:21 GMT",
+      "etag": "\"cb7dc8751b7c05c0216208a6640cc494\"",
+      "version_id": "null"
+    },
+    {
+      "filename": "Copernicus_DSM_COG_10_N43_00_E002_00_DEM.tif",
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N43_00_E002_00_DEM/Copernicus_DSM_COG_10_N43_00_E002_00_DEM.tif",
+      "byte_size": 44917011,
+      "sha256": "a8c8d52fb2727dcb100eb2a8d975b617aa83ed5f03bf37e65d43fd411701e0c5",
+      "acquired_at": "2026-10-27T10:08:58.765019+00:00",
+      "last_modified": "Mon, 09 May 2022 14:23:22 GMT",
+      "etag": "\"da6896525787d915eeb70cc5bbe3c4fe\"",
+      "version_id": "null"
+    },
+    {
+      "filename": "Copernicus_DSM_COG_10_N44_00_E000_00_DEM.tif",
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N44_00_E000_00_DEM/Copernicus_DSM_COG_10_N44_00_E000_00_DEM.tif",
+      "byte_size": 48157240,
+      "sha256": "277bdafedd823287add045eeb52c13654572cfceb7007d22e22587b243dc24d0",
+      "acquired_at": "2026-10-27T10:09:03.431424+00:00",
+      "last_modified": "Mon, 09 May 2022 14:24:09 GMT",
+      "etag": "\"bd532ba235d1ed6caf20ffe604e0ed85\"",
+      "version_id": "null"
+    },
+    {
+      "filename": "Copernicus_DSM_COG_10_N44_00_E001_00_DEM.tif",
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N44_00_E001_00_DEM/Copernicus_DSM_COG_10_N44_00_E001_00_DEM.tif",
+      "byte_size": 46034462,
+      "sha256": "c69142bb32216ef5b386e579ab268e1ad84c8adc534d9745438ff0dbec3f8e5c",
+      "acquired_at": "2026-10-27T10:09:03.063673+00:00",
+      "last_modified": "Mon, 09 May 2022 14:24:09 GMT",
+      "etag": "\"476568d33034ef8e87e518ad8932d0d3\"",
+      "version_id": "null"
+    },
+    {
+      "filename": "Copernicus_DSM_COG_10_N44_00_E002_00_DEM.tif",
+      "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N44_00_E002_00_DEM/Copernicus_DSM_COG_10_N44_00_E002_00_DEM.tif",
+      "byte_size": 43316096,
+      "sha256": "6a4fc7c022b2f7c066e04a7323e7410fabb6cecac1a7014b71df5263d7063ded",
+      "acquired_at": "2026-10-27T10:09:03.931143+00:00",
+      "last_modified": "Mon, 09 May 2022 14:24:09 GMT",
+      "etag": "\"56dacf76adc92306f254d0e2f3bf94bf\"",
+      "version_id": "null"
+    },
+    {
+      "filename": "us_nga_egm08_25.tif",
+      "url": "https://cdn.proj.org/us_nga_egm08_25.tif",
+      "byte_size": 80585622,
+      "sha256": "4191d471eefebf24091b56dbc604353cb3b8cf8cc70e448bb9ae56a272bef17a",
+      "acquired_at": "2026-10-16T14:02:57.664773+00:00",
+      "last_modified": "Tue, 28 Jan 2020 14:45:44 GMT",
+      "etag": "\"c873f04972c6df1749dc7295028a0882-10\"",
+      "version_id": "D2_sgZCZ992Oj.5YeII.tn_2upgrKPQS"
+    },
+    {
+      "filename": "us_nga_egm96_15.tif",
+      "url": "https://cdn.proj.org/us_nga_egm96_15.tif",
+      "byte_size": 2710815,
+      "sha256": "db493027562c9b004d7220fa881f5603adada4e1c5029b933fa7de4547b0e78d",
+      "acquired_at": "2026-10-16T14:02:58.633556+00:00",
+      "last_modified": "Tue, 28 Jan 2020 14:45:44 GMT",
+      "etag": "\"03c4d18008506b58c5e206770a992c6c\"",
+      "version_id": "dYTifQAFpLE.qztPUkWH0BO4idouus8."
+    }
+  ]
+}

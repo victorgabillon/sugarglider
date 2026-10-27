@@ -16,6 +16,7 @@ from sugarglider.offline_regions.terrain_source import (
     TerrainSources,
     verify_source,
 )
+from sugarglider.osm_build_bounds import validate_bounds
 
 TRANSFORMATION = "cop-dem-cog-egm96-v1"
 
@@ -88,30 +89,30 @@ def convert_sources(
     output: Path,
     bounds: tuple[float, float, float, float] | None = None,
 ) -> None:
-    """Full nine-tile halo is mandatory: COGs removed east/south shared samples."""
+    """A complete south/east halo supplies the COGs' omitted shared samples."""
     if isinstance(pins, IGNSources):
         if bounds is None:
             raise ValueError("IGN conversion requires explicit regional bounds")
         convert_ign_sources(pins, source, output, bounds)
         return
+    targets = copernicus_targets(pins, bounds)
     import numpy as np
     import pyproj
     import rasterio  # type: ignore[import-untyped]
     from rasterio.windows import Window  # type: ignore[import-untyped]
 
     names = {
-        f"Copernicus_DSM_COG_10_N{lat}_00_E{lon:03}_00_DEM.tif": (lat, lon)
-        for lat in (47, 48, 49)
-        for lon in (1, 2, 3)
+        f"Copernicus_DSM_COG_10_N{lat:02}_00_E{lon:03}_00_DEM.tif": (lat, lon)
+        for lat, lon in pins.raster_tiles
     }
     required = {*names, "us_nga_egm08_25.tif", "us_nga_egm96_15.tif"}
-    if {p.filename for p in pins.files} != required or len(pins.files) != 11:
+    if {p.filename for p in pins.files} != required:
         raise ValueError("incomplete or duplicate source/vertical-grid set")
     for pin in pins.files:
         verify_source(source, pin)
     if output.exists() or output.is_symlink():
         raise FileExistsError(output)
-    if shutil.disk_usage(output.parent).free < 4 * 26_982_978 + 65_536:
+    if shutil.disk_usage(output.parent).free < len(targets) * 26_982_978 + 65_536:
         raise ValueError("insufficient disk for bounded terrain conversion")
     output.mkdir()
     # H96 = H08 + N08 - N96. No optional grids, network or ballpark operation.
@@ -166,20 +167,19 @@ def convert_sources(
             return float(result)
 
         results = []
-        for lat in (48, 49):
-            for lon in (1, 2):
-                name = f"N{lat}E{lon:03}.hgt.gz"
-                target = output / f"N{lat}" / name
-                convert_tile(target, lat, lon, read_row, shift)
-                probe = probe_hgt_file(target, sha256_file(target))
-                results.append(
-                    {
-                        "path": f"N{lat}/{name}",
-                        "sha256": probe.source_sha256,
-                        "byte_size": target.stat().st_size,
-                        "probe": probe.report(),
-                    }
-                )
+        for lat, lon in targets:
+            name = f"N{lat:02}E{lon:03}.hgt.gz"
+            target = output / f"N{lat:02}" / name
+            convert_tile(target, lat, lon, read_row, shift)
+            probe = probe_hgt_file(target, sha256_file(target))
+            results.append(
+                {
+                    "path": f"N{lat:02}/{name}",
+                    "sha256": probe.source_sha256,
+                    "byte_size": target.stat().st_size,
+                    "probe": probe.report(),
+                }
+            )
     (output / "transformation.json").write_bytes(
         canonical_json(
             {
@@ -211,26 +211,22 @@ def convert_sources(
 
     originals = {pin.filename: pin for pin in pins.files}
     acquired = []
-    for lat in (48, 49):
-        for lon in (1, 2):
-            name = f"N{lat}E{lon:03}"
-            path = output.resolve() / f"N{lat}/{name}.hgt.gz"
-            original = originals[
-                f"Copernicus_DSM_COG_10_N{lat}_00_E{lon:03}_00_DEM.tif"
-            ]
-            acquired.append(
-                AcquiredTile(
-                    tile=name,
-                    path=str(path),
-                    source_url=original.url,
-                    acquired_at=original.acquired_at,
-                    byte_size=path.stat().st_size,
-                    sha256=sha256_file(path),
-                    last_modified=None,
-                    origin=TRANSFORMATION
-                    + "; acquisition time refers to pinned source",
-                )
+    for lat, lon in targets:
+        name = f"N{lat:02}E{lon:03}"
+        path = output.resolve() / f"N{lat:02}/{name}.hgt.gz"
+        original = originals[f"Copernicus_DSM_COG_10_N{lat:02}_00_E{lon:03}_00_DEM.tif"]
+        acquired.append(
+            AcquiredTile(
+                tile=name,
+                path=str(path),
+                source_url=original.url,
+                acquired_at=original.acquired_at,
+                byte_size=path.stat().st_size,
+                sha256=sha256_file(path),
+                last_modified=None,
+                origin=TRANSFORMATION + "; acquisition time refers to pinned source",
             )
+        )
     (output / "elevation-inputs.json").write_bytes(
         canonical_json(
             ElevationInputs(
@@ -238,6 +234,31 @@ def convert_sources(
             ).model_dump(mode="json")
         )
     )
+
+
+def copernicus_targets(
+    pins: TerrainSources,
+    bounds: tuple[float, float, float, float] | None,
+) -> tuple[tuple[int, int], ...]:
+    """Preserve legacy output by default; explicit bounds require an exact halo."""
+    tiles = pins.raster_tiles
+    if bounds is None:
+        west, east = min(t[1] for t in tiles), max(t[1] for t in tiles) - 1
+        south, north = min(t[0] for t in tiles) + 1, max(t[0] for t in tiles)
+    else:
+        validate_bounds(bounds)
+        west, south, east, north = (math.floor(value) for value in bounds)
+    targets = tuple(
+        (lat, lon) for lat in range(south, north + 1) for lon in range(west, east + 1)
+    )
+    halo = {
+        (lat, lon)
+        for lat in range(south - 1, north + 1)
+        for lon in range(west, east + 2)
+    }
+    if not targets or halo != set(tiles):
+        raise ValueError("regional bounds require the exact complete source halo")
+    return targets
 
 
 def convert_ign_sources(
