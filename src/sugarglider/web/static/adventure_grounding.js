@@ -46,21 +46,25 @@ export async function resolveAdventureEndpoint(location, { session, reference, s
   if (session.identity.region_id !== reference.region_id || session.identity.build_id !== reference.build_id) throw new Error("The selected region changed while checking endpoints.");
   const result = (status, extra = {}) => {
     const value = { status, coordinate: null, proposed_coordinate: location, matches: [], ...extra };
-    if (fixed && location && !value.coordinate && status === "unresolved"
-      && normalizeLocationText(location.name) === normalizeLocationText(fixed.name ?? "")) {
-      return deepFreeze({ ...value, status: "resolved", coordinate: fixed, evidence: "explicit_selection" });
-    }
     if (fixed && location && (value.coordinate ? distance(fixed, value.coordinate) > 1
       : normalizeLocationText(location.name) !== normalizeLocationText(fixed.name ?? ""))) {
       return deepFreeze({ ...value, status: "conflict", described_status: status, fixed_coordinate: fixed });
     }
     return deepFreeze(value);
   };
-  if (!location) return fixed ? result("resolved", { coordinate: fixed, evidence: "explicit_selection" }) : result("missing");
+  // An already selected coordinate (including a dragged named point) is the
+  // authority. A local name's centroid or duplicates must not replace it.
+  if (fixed && !selected && (!location || Number.isFinite(location.lat) && Number.isFinite(location.lon) && distance(fixed, location) <= 1
+    || location.lat === null && location.lon === null && normalizeLocationText(location.name) === normalizeLocationText(fixed.name ?? ""))) {
+    return result(covered(fixed, reference.bounds) ? "resolved" : "outside_coverage", { coordinate: fixed, evidence: "explicit_selection" });
+  }
+  if (!location) return result("missing");
   // Selected results come only from an explicit local/IGN result button. Model
   // coordinates never disambiguate names or acquire geocoder provenance.
   if (selected) return result(covered(selected, reference.bounds) ? "resolved" : "outside_coverage", {
-    coordinate: { name: selected.name, lat: selected.lat, lon: selected.lon },
+    // Search labels allow 200 characters; the reviewed adventure contract uses
+    // 120. Apply that bound before both review and exact snapshot serialization.
+    coordinate: { name: selected.name.slice(0, 120), lat: selected.lat, lon: selected.lon },
     evidence: selected.source === "online" ? "selected_ign_result" : "selected_local_result" });
   let matches = [];
   if (location.name.trim().length >= 3) {

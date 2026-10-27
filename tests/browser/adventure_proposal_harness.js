@@ -49,6 +49,14 @@ export async function runAdventureProposalHarness(){
  const exactSession={...session,searchPlaceNames:async()=>({identity,results:[{name:'Synthetic endpoint',lat:.0201,lon:.02}]})};
  const resolved=await resolveAdventureEndpoint(proposed,{...endpoints,session:exactSession});
  assert(resolved.evidence==='unique_exact_local_name'&&resolved.coordinate.lat===.0201&&resolved.proposed_coordinate.lat===.02,'resolved and proposed endpoint coordinates remain distinct');
+ const selectedStart={name:proposed.name,lat:.0205,lon:.02};
+ const noLookup={...session,searchPlaceNames:async()=>{throw Error('An unchanged selected endpoint must not be resolved again');}};
+ for(const location of [selectedStart,{name:selectedStart.name,lat:null,lon:null}]){
+   const fixed=await resolveAdventureEndpoint(location,{...endpoints,session:noLookup,fixed:selectedStart});
+   assert(fixed.status==='resolved'&&fixed.coordinate.lat===selectedStart.lat&&fixed.evidence==='explicit_selection','a selected or dragged Start retains its exact coordinate without local-name replacement or disambiguation');
+ }
+ const fixedOutside={name:'Outside chosen Start',lat:1,lon:1};
+ assert((await resolveAdventureEndpoint(fixedOutside,{...endpoints,session:noLookup,fixed:fixedOutside})).status==='outside_coverage','an unchanged selected point still receives an explicit regional coverage check');
  const ambiguousSession={...session,searchPlaceNames:async()=>({identity,results:[{name:proposed.name,lat:.02,lon:.02},{name:proposed.name,lat:.03,lon:.03}]})};
  assert((await resolveAdventureEndpoint(proposed,{...endpoints,session:ambiguousSession})).status==='ambiguous','model coordinates cannot resolve ambiguous local names');
  assert((await resolveAdventureEndpoint({...proposed,lat:1},endpoints)).status==='outside_coverage','out-of-region endpoint rejected');
