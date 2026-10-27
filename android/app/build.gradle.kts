@@ -104,7 +104,9 @@ android {
         versionCode = 8
         versionName = "1.2.0"
 
-        testInstrumentationRunner = if (providers.gradleProperty("sugargliderV2Research").isPresent || providers.gradleProperty("sugargliderV2Staging").isPresent)
+        testInstrumentationRunner = if (providers.gradleProperty("sugargliderCalculationAcceptance").isPresent)
+            "io.github.victorgabillon.sugarglider.CalculationLifecycleInstrumentation"
+        else if (providers.gradleProperty("sugargliderV2Research").isPresent || providers.gradleProperty("sugargliderV2Staging").isPresent)
             "io.github.victorgabillon.sugarglider.V2RegionInstrumentation"
         else "io.github.victorgabillon.sugarglider.HeightResearchInstrumentation"
         buildConfigField("boolean", "ALLOW_HTTP", "false")
