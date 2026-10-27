@@ -114,10 +114,15 @@ exports.checkMinimalMobileMap = async ({ page, width, screenshot, checkLayout })
 
   await page.evaluate(async()=>{(await import('/static/map.js')).resetMapNorth();});await stationary();
   await page.evaluate(async()=>{(await import('/static/map.js')).fitCoordinates([[.003,.003],[.017,.017]],{maxZoom:15});});await page.waitForTimeout(650);await stationary();
-  await mapTap([.006,.006]); assert(!await page.locator('#route-editor-body').isVisible()); await screenshot('minimal-start');
-  // Keep placements clear of the tall existing pins, even at landscape's
-  // lower fitted zoom. Selecting a marker is tested separately below.
-  await mapTap([.018,.006]);assert.equal((await request()).waypoints.length,1,'First separate canvas tap adds the first stop');await mapTap([.002,.018]);
+  await mapTap([.001,.019]);
+  assert(await page.evaluate(()=>adventureAppState.currentAdventureContext().start!==null && adventureAppState.state.selectedPoiId===null), 'An empty canvas tap sets Start without selecting a mapped place');
+  assert(!await page.locator('#route-editor-body').isVisible()); await screenshot('minimal-start');
+  // French discovery now shows the real fixture POIs along latitude .01.
+  // Use empty corners, clear of those icons/labels and the tall required pins
+  // at landscape's lower fitted zoom. POI and marker selection have their own checks.
+  await mapTap([.019,.019]);
+  assert.equal(await page.evaluate(()=>adventureAppState.state.planningMode),'waypoint_route','A second empty canvas tap adds a route stop');
+  assert.equal((await request()).waypoints.length,1,'First separate canvas tap adds the first stop');await mapTap([.019,.001]);
   assert.equal((await request()).waypoints.length,2);assert(!await page.locator('#route-editor-body').isVisible());
   await page.locator('.header-tools > summary').click();await page.locator('#map-fit-points').click();await page.locator('.header-tools > summary').click();await page.waitForTimeout(650);await stationary();await screenshot('minimal-two-stops');await measure('two-stops-collapsed');
   assert(await page.evaluate(()=>{const map=document.querySelector('#map').getBoundingClientRect();return [...document.querySelectorAll('#map .required-marker')].every(n=>{const r=n.getBoundingClientRect();return r.left>=map.left&&r.right<=map.right&&r.top>=map.top&&r.bottom<=map.bottom;});}),'Fit points exposes Start and both stop pins');
@@ -153,7 +158,7 @@ exports.checkMinimalMobileMap = async ({ page, width, screenshot, checkLayout })
   cases.push('map_taps_grammar_marker_context_dismiss_reselect_keyboard');
 
   const beforeMove=await request();
-  await page.locator('[data-dock-action="move"]').click();await page.locator('[data-dock-action="move-map"]').click();await mapTap([.018,.018]);
+  await page.locator('[data-dock-action="move"]').click();await page.locator('[data-dock-action="move-map"]').click();await mapTap([.001,.001]);
   const moved=await request();assert.equal(moved.waypoints.length,2);assert.notDeepEqual(moved.waypoints[0].coordinate,beforeMove.waypoints[0].coordinate);
   await page.locator('#undo-point-edit').click();assert.deepEqual(await request(),beforeMove);await page.locator('#redo-point-edit').click();assert.deepEqual(await request(),moved);
   await page.locator('[data-dock-action="more"]').click();await page.locator('[data-dock-action="later"]').click();const reordered=await request();assert.deepEqual({...reordered.waypoints[1],id:moved.waypoints[0].id},moved.waypoints[0]);assert.equal(reordered.waypoints[1].id,'route-waypoint-2','Canonical positional IDs follow the existing visit order');
