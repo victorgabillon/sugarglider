@@ -47,7 +47,12 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           const { syntheticAdventure } = await import('/tests/browser/adventure_proposal_harness.js');
           const { openPwaStore, PWA_STORES } = await import('/static/pwa_store.js');
           const manifest = await seedRegion(data, createRegionVersionStore(), 'adventure-fixture', 'Synthetic adventure region');
-          await seedRegion(data, createRegionVersionStore(), 'second-fixture', 'Synthetic second region');
+          const secondData = structuredClone(data);
+          secondData.manifest.bounds = [0, 0, .04, .04];
+          secondData.manifest.source.header_bounds = secondData.manifest.bounds;
+          secondData.pois.metadata.bounding_box = secondData.manifest.bounds;
+          secondData.nature.metadata.bounding_box = secondData.manifest.bounds;
+          await seedRegion(secondData, createRegionVersionStore(), 'second-fixture', 'Synthetic second region');
           const store = await openPwaStore();
           await store.put(PWA_STORES.trailProfile, 'current', { schema_version: 1, display_name: 'Synthetic reviewer', avatar_key: 'forest' });
           await store.put(PWA_STORES.publicRuntime, 'planner-region-id', manifest.region_id); store.close();
@@ -192,6 +197,24 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           assert(!overlaps(layout.dock, layout.credits) && (width > 840 || layout.credits.bottom <= layout.nav.top + 1), JSON.stringify(layout));
           return layout;
         };
+        const gpsStates = await page.locator('#planner-location-control').evaluate(control => {
+          const probe = control.cloneNode(true); probe.removeAttribute('id');
+          probe.style.visibility = 'hidden'; control.parentElement.append(probe);
+          try { return ['default', 'acquiring', 'active', 'denied', 'unavailable'].map(state => {
+            probe.dataset.state = state;
+            const style = getComputedStyle(probe), rect = probe.getBoundingClientRect();
+            return { state, width: rect.width, height: rect.height, background: style.backgroundColor,
+              border: style.borderTopWidth, radius: style.borderTopLeftRadius, shadow: style.boxShadow,
+              color: style.borderTopColor };
+          }); } finally { probe.remove(); }
+        });
+        for (const appearance of gpsStates) {
+          assert.equal(appearance.width, 48); assert.equal(appearance.height, 48);
+          assert.equal(appearance.background, 'rgba(255, 252, 245, 0.97)');
+          assert.equal(appearance.border, '1px'); assert.equal(appearance.radius, '16px');
+          assert.notEqual(appearance.shadow, 'none');
+        }
+        assert.notEqual(gpsStates[2].color, gpsStates[0].color, 'Active follow retains a distinct blue outline');
         assert(await page.locator('#ask-chatgpt').isVisible(), 'Ask ChatGPT is visible on startup without opening Plan');
         const suppliedIcons = page.locator('#ask-chatgpt .ai-planner-icon, #plan-with-ai .ai-planner-icon, #adventure-title .ai-planner-icon');
         assert.equal(await suppliedIcons.count(), 3, 'Map, Plan and the shared dialog use the supplied artwork');
@@ -254,6 +277,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           for (let parent = node.parentElement; parent; parent = parent.parentElement) if (parent.tagName === 'DETAILS') parent.open = true;
         });
         await page.locator('#planning-region').selectOption('second-fixture');
+        await page.evaluate(async () => (await import('/static/map.js')).fitCoordinates([[.029, .029], [.031, .031]]));
         assert(!(await packCredits('Synthetic pack B')).includes('Synthetic pack A'), 'Previous pack credits do not remain associated with the new map');
         await tools.evaluate(node => { node.open = false; });
         assert(await osm.isVisible(), 'A new region reveals its complete credits again');
@@ -262,6 +286,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           for (let parent = node.parentElement; parent; parent = parent.parentElement) if (parent.tagName === 'DETAILS') parent.open = true;
         });
         await page.locator('#planning-region').selectOption('adventure-fixture');
+        await page.evaluate(async () => (await import('/static/map.js')).fitCoordinates([[.009, .009], [.011, .011]]));
         await packCredits('Synthetic pack A');
         await tools.evaluate(node => { node.open = false; });
         await page.evaluate(async () => { const { createRegionVersionStore } = await import('/static/region_versions.js'); await createRegionVersionStore().removeRegion('second-fixture'); });

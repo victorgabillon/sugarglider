@@ -3,27 +3,29 @@ import { createVersionedRegionComponents } from "./region_components.js";
 import { selectCommittedRegion } from "./regional_planning.js";
 import { RegionalDataError, freezeData, requireData } from "./regional_manifest.js";
 
-// A read adapter for the existing offline-map runtime. One explicitly selected
-// regional version supplies its shared PMTiles source; it never scans old packs.
+// Maps may display any committed region. Planning still verifies only its
+// explicitly selected version, under the unchanged version lease.
 export function createRegionalMapStore({ versions, selectedRegionId,
   components = createVersionedRegionComponents,
   probe = createMapPackStore(),
+  includeAllCommittedMaps = false,
 } = {}) {
-  let cached = null;
+  const cached = new Map();
+  let selectedBounds = null;
   const scan = (packs = [], invalid = []) => freezeData({ packs, invalid_pack_ids: invalid, partial_pack_ids: [] });
 
   async function openSelected(row, directory = null) {
     const manifest = row.manifest;
     directory ??= await versions.committedDirectory(manifest.region_id, manifest.build_id);
-    if (cached?.regionId === manifest.region_id && cached.buildId === manifest.build_id
-      && await cached.directory.isSameEntry(directory)) {
-      try { await cached.opened.checkUnchanged(); return cached.opened; }
-      catch (error) { cached = null; throw error; }
+    const previous = cached.get(manifest.region_id);
+    if (previous?.buildId === manifest.build_id && await previous.directory.isSameEntry(directory)) {
+      try { await previous.opened.checkUnchanged(); return previous.opened; }
+      catch (error) { cached.delete(manifest.region_id); throw error; }
     }
-    cached = null;
+    cached.delete(manifest.region_id);
     const scoped = await components({ manifest, directory });
     const opened = await scoped.openMap();
-    cached = { regionId: manifest.region_id, buildId: manifest.build_id, directory, opened };
+    cached.set(manifest.region_id, { buildId: manifest.build_id, directory, opened });
     return opened;
   }
 
@@ -38,20 +40,38 @@ export function createRegionalMapStore({ versions, selectedRegionId,
   async function scanInstalledPacks() {
     return versions.withCommittedRegions(async (snapshot) => {
       let row;
+      selectedBounds = null;
       try { row = selectCommittedRegion(snapshot, selectedRegionId()); }
       catch (error) {
-        cached = null;
-        if (["regional_required", "regional_selection_required"].includes(error.code)) return scan();
-        return scan([], selectedRegionId() ? [selectedRegionId()] : []);
+        if (!includeAllCommittedMaps) {
+          cached.clear();
+          if (["regional_required", "regional_selection_required"].includes(error.code)) return scan();
+          return scan([], selectedRegionId() ? [selectedRegionId()] : []);
+        }
       }
-      try { return scan([(await openSelected(row)).manifest]); }
-      catch { return scan([], [row.manifest.components.map.component_id]); }
+      selectedBounds = row?.manifest.bounds ?? null;
+      const rows = includeAllCommittedMaps ? snapshot.filter((entry) => entry.status === "committed") : [row];
+      // Keep startup verification of the selected routing version first. Map
+      // display selection still uses the shared smallest-area/ID ordering.
+      rows.sort((a, b) => Number(b === row) - Number(a === row));
+      const retained = new Set(rows.map((entry) => entry.manifest.region_id));
+      for (const id of cached.keys()) if (!retained.has(id)) cached.delete(id);
+      const packs = [], invalid = [];
+      for (const entry of rows) {
+        try { packs.push((await openSelected(entry)).manifest); }
+        catch { invalid.push(entry.manifest.components.map.component_id); }
+      }
+      return scan(packs, invalid);
     });
   }
 
   async function openPackSource(packId) {
     return versions.withCommittedRegions(async (snapshot) => {
-      const row = selectCommittedRegion(snapshot, selectedRegionId()), manifest = row.manifest;
+      const row = includeAllCommittedMaps
+        ? snapshot.find((entry) => entry.status === "committed" && entry.manifest.components.map.component_id === packId)
+        : selectCommittedRegion(snapshot, selectedRegionId());
+      requireData(row, "regional_version_changed");
+      const manifest = row.manifest;
       requireData(manifest.components.map.component_id === packId, "regional_version_changed");
       return openSelected(row);
     });
@@ -59,5 +79,6 @@ export function createRegionalMapStore({ versions, selectedRegionId,
 
   const unavailable = () => { throw new RegionalDataError("regional_use_download_screen"); };
   return Object.freeze({ capabilities: () => probe.capabilities(), scanInstalledPacks, openPackSource, verifyMap,
+    selectedMapBounds: () => selectedBounds,
     installPack: unavailable, removePack: unavailable, cancelActiveInstalls() {}, requestPersistence: () => probe.requestPersistence() });
 }

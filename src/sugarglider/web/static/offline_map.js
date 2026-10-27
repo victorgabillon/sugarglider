@@ -50,6 +50,7 @@ export function createOfflineMapRuntime({
   elements = {},
   confirmRemoval = (message) => globalThis.confirm?.(message) ?? false,
   onStatus = () => {},
+  onManageRegions = () => {},
 } = {}) {
   let initialized = false;
   let capability = null;
@@ -185,6 +186,7 @@ export function createOfflineMapRuntime({
         && activePack?.build_id === selected.build_id
       ) {
         setStatus("local_pack_active", tr`Offline map pack active: ${selected.display_name}.`);
+        render();
         return selected;
       }
       try {
@@ -249,6 +251,7 @@ export function createOfflineMapRuntime({
     installController = new AbortController();
     setBusy(true);
     setStatus("map_pack_installing", t("Downloading map pack…"));
+    render();
     try {
       const persistence = await store.requestPersistence();
       if (epoch !== installEpoch) return null;
@@ -301,7 +304,8 @@ export function createOfflineMapRuntime({
 
   async function remove(packId) {
     if (!confirmRemoval(tr`Remove offline map pack ${packId}?`)) return false;
-    installEpoch += 1;
+    if (installController) cancelInstall();
+    else installEpoch += 1;
     try {
       await store.removePack(packId);
       scan = await store.scanInstalledPacks();
@@ -361,7 +365,7 @@ export function createOfflineMapRuntime({
   function bindUi() {
     elements.form?.addEventListener("submit", (event) => {
       event.preventDefault();
-      void install(elements.urlInput?.value ?? "");
+      void install(elements.packageInput?.value ?? elements.urlInput?.value ?? "");
     });
     elements.cancelButton?.addEventListener("click", cancelInstall);
   }
@@ -369,9 +373,15 @@ export function createOfflineMapRuntime({
   function render() {
     try { onStatus(snapshot()); } catch { /* Presentation must not change map availability. */ }
     if (elements.support) {
-      elements.support.textContent = capability?.opfs_supported
+      elements.support.textContent = scan.independent_storage_unavailable
+        ? t("Independent map storage is unavailable. Complete regional maps remain usable.")
+        : capability?.opfs_supported
         ? tr`OPFS random-access storage supported${capability.persisted === true ? t(" and persisted") : ""}.`
         : t("OPFS random-access storage unavailable.");
+    }
+    if (elements.installAvailability) {
+      elements.installAvailability.hidden = !elements.packageInput || Boolean(store.installOffers?.length);
+      elements.installAvailability.textContent = t("No approved map-only download is available in this build.");
     }
     if (elements.status) {
       elements.status.dataset.state = status.state;
@@ -384,10 +394,15 @@ export function createOfflineMapRuntime({
     }
     if (elements.form) {
       for (const control of elements.form.elements ?? []) {
-        control.disabled = !capability?.opfs_supported || Boolean(installController);
+        if (control === elements.cancelButton) continue;
+        control.disabled = !capability?.opfs_supported || Boolean(installController)
+          || (Boolean(elements.packageInput) && !store.installOffers?.length);
       }
     }
-    if (elements.cancelButton) elements.cancelButton.classList.toggle("hidden", !installController);
+    if (elements.cancelButton) {
+      elements.cancelButton.disabled = !installController;
+      elements.cancelButton.classList.toggle("hidden", !installController);
+    }
     if (!elements.list) return;
     elements.list.replaceChildren();
     for (const pack of scan.packs) {
@@ -401,9 +416,11 @@ export function createOfflineMapRuntime({
       const button = document.createElement("button");
       button.type = "button";
       button.className = "text-button danger";
-      button.textContent = t("Remove");
+      const removable = store.canRemovePack?.(pack.pack_id) !== false;
+      button.textContent = removable ? t("Remove") : t("Manage complete region");
       button.addEventListener("click", () => {
-        void remove(pack.pack_id);
+        if (removable) void remove(pack.pack_id);
+        else onManageRegions();
       });
       item.append(title, details, attribution, button);
       elements.list.append(item);
@@ -419,9 +436,11 @@ export function createOfflineMapRuntime({
         const button = document.createElement("button");
         button.type = "button";
         button.className = "text-button danger";
-        button.textContent = t("Remove");
+        const removable = store.canRemovePack?.(packId) !== false;
+        button.textContent = removable ? t("Remove") : t("Manage complete region");
         button.addEventListener("click", () => {
-          void remove(packId);
+          if (removable) void remove(packId);
+          else onManageRegions();
         });
         item.append(title, button);
         elements.list.append(item);
@@ -447,6 +466,8 @@ export function createOfflineMapRuntime({
       packs: scan.packs,
       partial_pack_ids: scan.partial_pack_ids,
       invalid_pack_ids: scan.invalid_pack_ids,
+      independent_storage_unavailable: scan.independent_storage_unavailable ?? false,
+      center: currentMap ? { lon: currentMap.getCenter().lng, lat: currentMap.getCenter().lat } : null,
       active_pack_id: activePack?.pack_id ?? null,
       active_source_diagnostics: activeSource?.diagnostics?.() ?? null,
       status,
@@ -466,6 +487,7 @@ export function createOfflineMapRuntime({
     cancelInstall,
     remove,
     snapshot,
+    refreshControls: render,
   });
 }
 

@@ -104,6 +104,7 @@ outings.js
 place_capabilities.js
 place_presentation.js
 planner_location.js
+planner_map_store.js
 planner_profile.js
 poi_route_location.js
 public_profile_metadata.js

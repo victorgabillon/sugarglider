@@ -96,7 +96,10 @@
                 <p id="offline-map-pack-status" role="status" aria-live="polite"><span data-i18n="Checking installed map packs…">Checking installed map packs…</span></p>
                 <p id="offline-map-active"><span data-i18n="No local map pack is active.">No local map pack is active.</span></p>
                 <ul id="offline-map-pack-list" class="offline-map-pack-list"></ul>
+                <p id="offline-map-install-availability" class="help" hidden></p>
                 <form id="offline-map-install-form" class="offline-map-install-form">
+                  <label id="offline-map-trusted-label" for="offline-map-trusted-package" hidden data-i18n="Map-only package">Map-only package</label>
+                  <select id="offline-map-trusted-package" hidden></select>
                   <label for="offline-map-manifest-url"><span data-i18n="Pack manifest URL">Pack manifest URL</span></label>
                   <input id="offline-map-manifest-url" type="url" inputmode="url" autocomplete="off" placeholder="https://example.org/marly/manifest.json" required data-i18n-placeholder="https://example.org/marly/manifest.json">
                   <div class="button-row">
@@ -104,6 +107,7 @@
                     <button id="offline-map-cancel-install" class="text-button hidden" type="button"><span data-i18n="Cancel download">Cancel download</span></button>
                   </div>
                 </form>
+                <p id="offline-map-routing-help" class="help" hidden><span data-i18n="Map-only packages provide map display. Routing, places, nature and elevation require a complete region. Installing or removing a map does not change your routing region.">Map-only packages provide map display. Routing, places, nature and elevation require a complete region. Installing or removing a map does not change your routing region.</span> <button id="offline-map-manage-regions" class="text-button" type="button" data-i18n="View regions">View regions</button></p>
                 <p class="help"><span data-i18n="Installation is explicit. Regional PMTiles stay in this browser; remote raster tiles are never copied into offline storage.">Installation is explicit. Regional PMTiles stay in this browser; remote raster tiles are never copied into offline storage.</span></p>
               </div>
             </details>
@@ -603,6 +607,7 @@
       <section class="map-panel" aria-labelledby="map-title">
         <h2 id="map-title" class="visually-hidden"><span data-i18n="Interactive route map">Interactive route map</span></h2>
         <div id="map" role="application" aria-label="Interactive trail route map" data-i18n-aria-label="Interactive trail route map"></div>
+        <p id="offline-map-routing-notice" class="map-routing-notice" role="status" hidden><span data-i18n="Map display is available here. Offline routing requires a complete region covering this location.">Map display is available here. Offline routing requires a complete region covering this location.</span> <button id="offline-map-view-regions" class="text-button" type="button" data-i18n="View regions">View regions</button></p>
         <section id="route-dock" class="route-dock" aria-label="Edit route" data-i18n-aria-label="Edit route">
           <div class="route-dock-summary">
             <button id="route-editor-toggle" type="button" aria-expanded="false" aria-controls="route-editor-body" aria-describedby="route-collapsed-summary" aria-label="Edit route" data-i18n-aria-label="Edit route"><span id="route-collapsed-summary"></span><span aria-hidden="true">⌃</span></button>

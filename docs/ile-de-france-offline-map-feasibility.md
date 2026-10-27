@@ -60,9 +60,15 @@ Only one map source is active; regions are never stitched. Existing installed
 copies were not modified: the test installed copies into a fresh desktop origin.
 
 The private site contains the map at
-`https://localhost:9444/maps/ile-de-france-map-v1/manifest.json`. After the authorized
-staging APK/CA update and USB tunnel, install that URL through the existing
-**Tools → Offline maps → Pack manifest URL** form. The Regions catalog still
+`https://localhost:9444/maps/ile-de-france-map-v1/manifest.json`. The original
+desktop URL-form acceptance did not establish Android installation support:
+the then-installed Android planner hid that form and used a read-only adapter.
+The final consolidation adds **Tools → Map display → Offline maps → Map-only
+package** to the normal bundled planner. It offers the reviewed Île-de-France
+artifact only for the matching private staging distribution; both the exact
+manifest and the archive SHA-256 are pinned. Arbitrary URLs remain unavailable
+in the Android planner. A separately authorized staging update and USB tunnel
+are still required before physical installation. The Regions catalog still
 contains complete five-component products only. The staging catalog does not
 pretend the full map is a routing product. The full map adds 243,080,284 archive
 bytes plus its small manifest/OPFS metadata. Attribution remains visible.

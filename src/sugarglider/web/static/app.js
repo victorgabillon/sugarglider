@@ -41,6 +41,7 @@ import { createRegionVersionStore } from "./region_versions.js";
 import { createRegionalNativeClient } from "./regional_native.js";
 import { createRegionalPlanningContext } from "./regional_planning.js";
 import { createRegionalMapStore } from "./regional_map_store.js";
+import { createPlannerMapStore } from "./planner_map_store.js";
 import { createRegionProduct } from "./region_product.js";
 import { createRegionPreference } from "./region_preference.js";
 import { createRegionScreen, regionFailureMessage } from "./region_screen.js";
@@ -116,7 +117,8 @@ let offlineMaps = null;
 let regionPlanningError = "regional_checking";
 const regionVersions = createRegionVersionStore();
 const nativeRegions = createRegionalNativeClient();
-const regionalMaps = createRegionalMapStore({ versions: regionVersions, selectedRegionId: () => selectedRegionId });
+const regionalMaps = createRegionalMapStore({ versions: regionVersions, selectedRegionId: () => selectedRegionId,
+  includeAllCommittedMaps: true });
 function localRegionClient() {
   sharedLocalRegionClient ??= createLocalRegionClient();
   return sharedLocalRegionClient;
@@ -3543,6 +3545,7 @@ async function start() {
   await initializeLocalization(document);
   onLanguageChange(() => {
     if (state.config) render();
+    offlineMaps?.refreshControls();
   });
   initializeSourceInformation(document);
   appShell = initializeAppShell({ resizeMap: ({ layoutChanged, view }) => {
@@ -3598,27 +3601,51 @@ async function start() {
       requireSetup: !currentOutingSlug && !currentSharedRouteSlug,
     });
     try {
-      if (localPlanner) byId("offline-maps").classList.add("hidden");
+      let plannerMaps;
+      if (localPlanner) {
+        plannerMaps = createPlannerMapStore({ regional: regionalMaps });
+        byId("offline-map-manifest-url").hidden = true;
+        byId("offline-map-manifest-url").required = false;
+        document.querySelector('label[for="offline-map-manifest-url"]').hidden = true;
+        byId("offline-map-trusted-label").hidden = false;
+        const select = byId("offline-map-trusted-package");
+        select.hidden = false;
+        byId("offline-map-routing-help").hidden = false;
+        byId("offline-map-manage-regions").addEventListener("click", () => byId("plan-regions").click());
+        byId("offline-map-view-regions").addEventListener("click", () => byId("plan-regions").click());
+      }
       offlineMaps = await initializeOfflineMaps({
-        ...(localPlanner ? { store: regionalMaps,
+        ...(localPlanner ? { store: plannerMaps,
+          onManageRegions: () => byId("plan-regions").click(),
           onStatus: (snapshot) => {
             regionScreen?.mapState(snapshot);
+            const bounds = regionalMaps.selectedMapBounds(), center = snapshot.center;
+            const outside = center && (!bounds || center.lon < bounds[0] || center.lat < bounds[1]
+              || center.lon > bounds[2] || center.lat > bounds[3]);
+            byId("offline-map-routing-notice").hidden = !(outside && snapshot.active_pack_id);
             // The opened basemap no longer needs the version lease. Start the
             // independent planning checks while tiles and icons are rendering.
             if (snapshot.status.state === "local_pack_active") void prepareRegion();
           } } : {}),
-        elements: localPlanner ? {} : {
+        elements: {
           container: byId("offline-maps"),
           support: byId("offline-map-storage-support"),
+          installAvailability: byId("offline-map-install-availability"),
           status: byId("offline-map-pack-status"),
           active: byId("offline-map-active"),
           list: byId("offline-map-pack-list"),
           form: byId("offline-map-install-form"),
           urlInput: byId("offline-map-manifest-url"),
+          ...(localPlanner ? { packageInput: byId("offline-map-trusted-package") } : {}),
           installButton: byId("offline-map-install"),
           cancelButton: byId("offline-map-cancel-install"),
         },
       });
+      // Catalog availability must not delay startup or the selected region map.
+      if (plannerMaps) void plannerMaps.loadOffers().then((offers) => {
+        byId("offline-map-trusted-package").replaceChildren(...offers.map((offer) => new Option(`${offer.display_name} · ${(offer.archive.byte_size / 1048576).toFixed(1)} MiB`, offer.manifest_url)));
+        offlineMaps.refreshControls();
+      }).catch(() => {});
     } catch {
       setLocalizedText(byId("offline-map-storage-support"), () => t("OPFS random-access storage unavailable."));
       const mapPackStatus = byId("offline-map-pack-status");

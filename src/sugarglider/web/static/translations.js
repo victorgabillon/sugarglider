@@ -1,5 +1,11 @@
 // Complete interface messages only. Canonical data, user text, place names and original source notices remain unchanged.
 export const FRENCH = Object.freeze({
+  "Map-only package": "Carte indépendante",
+  "No approved map-only download is available in this build.": "Aucun téléchargement de carte indépendante approuvé n’est disponible dans cette version.",
+  "Independent map storage is unavailable. Complete regional maps remain usable.": "Le stockage des cartes indépendantes est indisponible. Les cartes des régions complètes restent utilisables.",
+  "Manage complete region": "Gérer la région complète",
+  "Map-only packages provide map display. Routing, places, nature and elevation require a complete region. Installing or removing a map does not change your routing region.": "Les cartes indépendantes servent à afficher la carte. Le calcul des parcours, les lieux, la nature et l’altitude nécessitent une région complète. Installer ou supprimer une carte ne change pas votre région de calcul.",
+  "Map display is available here. Offline routing requires a complete region covering this location.": "La carte est disponible ici. Le calcul hors ligne nécessite une région complète couvrant ce lieu.",
   "The locations are inside the selected region, but no connected route was found on its graph for this activity. Your previous route is kept.": "Les lieux se trouvent dans la région sélectionnée, mais aucun parcours continu n’a été trouvé sur son réseau pour cette activité. Votre parcours précédent est conservé.",
   "Where would you like to start? Describe a starting place or choose Start on the map.": "Où souhaitez-vous partir ? Indiquez un lieu de départ ou choisissez le départ sur la carte.",
   "Where would you like to finish? Describe a destination or choose End on the map.": "Où souhaitez-vous arriver ? Indiquez une destination ou choisissez l’arrivée sur la carte.",
