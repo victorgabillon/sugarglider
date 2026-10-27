@@ -2,6 +2,54 @@
 // are real; its native routing/terrain and model responses remain synthetic.
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises'), path = require('node:path');
+exports.checkCompactMobileTabs = async ({ page, screenshot }) => {
+  const languageBefore = await page.locator('html').getAttribute('lang');
+  const before = await page.evaluate(() => JSON.stringify({ context: adventureAppState.currentAdventureContext(),
+    result: adventureAppState.state.generationResult, selected: adventureAppState.state.selectedSignature }));
+  const callsBefore = await page.evaluate(() => adventureNativeCalls.length);
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 37, left: 0, right: 0, bottom: 0 } });
+    for (const language of ['fr', 'en']) for (const scale of [1, 2]) for (const view of ['map', 'plan', 'routes']) {
+      await page.evaluate(async ({ language, scale }) => {
+        document.documentElement.style.fontSize = `${16 * scale}px`;
+        await (await import('/static/i18n.js')).setLanguage(language, { persist: false });
+      }, { language, scale });
+      await page.locator(`[data-shell-view="${view}"]`).click();
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert(!await page.locator('.topbar .brand').isVisible(), `${view}: mobile branding stays hidden`);
+      assert(await page.locator('#ask-chatgpt').isVisible() && await page.locator('.header-tools > summary').isVisible());
+      const layout = await page.evaluate(() => {
+        const rect = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
+        return { header: rect('.topbar'), planner: rect('#planner'), nav: rect('.workspace-navigation'),
+          ai: rect('#ask-chatgpt'), tools: rect('.header-tools > summary'), overflow: document.documentElement.scrollWidth > innerWidth };
+      });
+      assert(!layout.overflow && layout.header.height <= Math.max(layout.ai.height, layout.tools.height) + 55, 'No tall empty toolbar row or horizontal overflow');
+      assert(layout.ai.y >= 37 && layout.tools.y >= 37, 'Every tab preserves the Android top inset');
+      if (view !== 'map') assert(layout.planner.y >= layout.header.bottom - 1, 'Plan and Routes content starts below the compact toolbar');
+      await screenshot(`compact-${view}-${language}-text-${scale}`);
+      await page.locator('.header-tools > summary').click();
+      const menu = await page.locator('.header-tools-menu').boundingBox();
+      assert(menu.y >= 0 && menu.y + menu.height <= layout.nav.y + 1, `${view}: Tools clears bottom navigation at text scale ${scale}`);
+      await page.keyboard.press('Escape');
+      assert(await page.locator('.header-tools > summary').evaluate(node => node === document.activeElement), 'Escape restores Tools focus');
+      await page.locator('#ask-chatgpt').click();
+      assert.equal(await page.locator('#adventure-dialog[open]').count(), 1, 'Each tab opens the one existing AI dialog');
+      await page.locator('#adventure-close').click();
+      assert(await page.locator('#ask-chatgpt').evaluate(node => node === document.activeElement), 'AI close restores its launcher focus');
+    }
+    assert.equal(await page.evaluate(() => JSON.stringify({ context: adventureAppState.currentAdventureContext(),
+      result: adventureAppState.state.generationResult, selected: adventureAppState.state.selectedSignature })), before, 'Tab headers preserve route and editor state');
+    assert(!await page.evaluate(count => adventureNativeCalls.slice(count).some(call => ['local_route', 'chatgpt_infer', 'adventure_speech_start'].includes(call.type)), callsBefore), 'Toolbar actions never route, infer or record');
+  } finally {
+    await page.evaluate(async language => {
+      document.documentElement.style.fontSize = '';
+      await (await import('/static/i18n.js')).setLanguage(language, { persist: false });
+    }, languageBefore);
+    await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 0, left: 0, right: 0, bottom: 0 } });
+    await cdp.detach();
+  }
+};
 exports.checkMinimalMobileMap = async ({ page, width, screenshot, checkLayout }) => {
   const measurements=[];
   async function measure(stage){measurements.push(await page.evaluate(stage=>{const map=document.querySelector('#map').getBoundingClientRect();const rect=s=>{const n=document.querySelector(s);if(!n?.getClientRects().length)return null;return n.getBoundingClientRect().toJSON();};const controls=['.topbar','#route-dock','.planner-location-control','.maplibregl-ctrl-attrib','.maplibregl-ctrl-group'].map(rect).filter(Boolean).map(r=>({left:Math.max(map.left,r.left),right:Math.min(map.right,r.right),top:Math.max(map.top,r.top),bottom:Math.min(map.bottom,r.bottom)})).filter(r=>r.right>r.left&&r.bottom>r.top);const xs=[...new Set(controls.flatMap(r=>[r.left,r.right]))].sort((a,b)=>a-b),ys=[...new Set(controls.flatMap(r=>[r.top,r.bottom]))].sort((a,b)=>a-b);let obstructed=0;for(let i=1;i<xs.length;i++)for(let j=1;j<ys.length;j++){const x=(xs[i-1]+xs[i])/2,y=(ys[j-1]+ys[j])/2;if(controls.some(r=>x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom))obstructed+=(xs[i]-xs[i-1])*(ys[j]-ys[j-1]);}return{stage,viewport:{width:innerWidth,height:innerHeight},map:map.toJSON(),header:rect('.topbar'),dock:rect('#route-dock'),credits:rect('.maplibregl-ctrl-attrib'),gps:rect('.planner-location-control'),markers:[...document.querySelectorAll('#map .required-marker')].map(n=>({label:n.getAttribute('aria-label'),rect:n.getBoundingClientRect().toJSON()})),context:adventureAppState.currentAdventureContext(),obstructed_map_area_px:obstructed,unobstructed_map_area_px:map.width*map.height-obstructed};},stage));}

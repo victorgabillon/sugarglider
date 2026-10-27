@@ -41,10 +41,27 @@ export async function nearbyAdventurePlaceContext({ session, reference, center, 
 
 // Both endpoints use this same review boundary. A model coordinate never
 // disambiguates duplicate local names or becomes a verified place by itself.
-export async function resolveAdventureEndpoint(location, { session, reference, signal }) {
-  if (!location) return null;
+export async function resolveAdventureEndpoint(location, { session, reference, signal, selected = null, fixed = null }) {
   if (signal?.aborted) throw new DOMException("Adventure cancelled.", "AbortError");
   if (session.identity.region_id !== reference.region_id || session.identity.build_id !== reference.build_id) throw new Error("The selected region changed while checking endpoints.");
+  const result = (status, extra = {}) => {
+    const value = { status, coordinate: null, proposed_coordinate: location, matches: [], ...extra };
+    if (fixed && location && !value.coordinate && status === "unresolved"
+      && normalizeLocationText(location.name) === normalizeLocationText(fixed.name ?? "")) {
+      return deepFreeze({ ...value, status: "resolved", coordinate: fixed, evidence: "explicit_selection" });
+    }
+    if (fixed && location && (value.coordinate ? distance(fixed, value.coordinate) > 1
+      : normalizeLocationText(location.name) !== normalizeLocationText(fixed.name ?? ""))) {
+      return deepFreeze({ ...value, status: "conflict", described_status: status, fixed_coordinate: fixed });
+    }
+    return deepFreeze(value);
+  };
+  if (!location) return fixed ? result("resolved", { coordinate: fixed, evidence: "explicit_selection" }) : result("missing");
+  // Selected results come only from an explicit local/IGN result button. Model
+  // coordinates never disambiguate names or acquire geocoder provenance.
+  if (selected) return result(covered(selected, reference.bounds) ? "resolved" : "outside_coverage", {
+    coordinate: { name: selected.name, lat: selected.lat, lon: selected.lon },
+    evidence: selected.source === "online" ? "selected_ign_result" : "selected_local_result" });
   let matches = [];
   if (location.name.trim().length >= 3) {
     const response = await session.searchPlaceNames(location.name);
@@ -52,15 +69,29 @@ export async function resolveAdventureEndpoint(location, { session, reference, s
     if (response.identity.region_id !== reference.region_id || response.identity.build_id !== reference.build_id) throw new Error("The selected region changed while checking endpoints.");
     matches = response.results.filter(row => normalizeLocationText(row.name) === normalizeLocationText(location.name));
   }
-  if (matches.length > 1) return null;
+  if (matches.length > 1) return result("ambiguous", { matches });
   if (matches.length === 1) {
     const found = matches[0];
-    if (!covered(found, reference.bounds) || location.lat !== null && distance(found, location) > 1000) return null;
-    return deepFreeze({ coordinate: { lat: found.lat, lon: found.lon, name: found.name },
-      proposed_coordinate: location, evidence: "unique_exact_local_name" });
+    if (location.lat !== null && distance(found, location) > 1000) return result("ambiguous", { matches });
+    return result(covered(found, reference.bounds) ? "resolved" : "outside_coverage", {
+      coordinate: { lat: found.lat, lon: found.lon, name: found.name }, evidence: "unique_exact_local_name" });
   }
-  return covered(location, reference.bounds) ? deepFreeze({ coordinate: { ...location },
-    proposed_coordinate: location, evidence: "model_coordinate_unverified" }) : null;
+  if (!Number.isFinite(location.lat) || !Number.isFinite(location.lon)) return result("unresolved");
+  return result(covered(location, reference.bounds) ? "resolved" : "outside_coverage", {
+    coordinate: { ...location }, evidence: "model_coordinate_unverified" });
+}
+
+export function adventureEndpointFailure(resolution, kind) {
+  const messages = {
+    missing: kind === "start" ? "Where would you like to start? Describe a starting place or choose Start on the map."
+      : "Where would you like to finish? Describe a destination or choose End on the map.",
+    unresolved: "The named place {place} was not found in the selected region. Search with IGN or review the place on the map.",
+    ambiguous: "Several locations match {place}. Choose the intended place before routing.",
+    outside_coverage: "{place} is outside the selected offline region. Choose or install a region covering this place before generating the route.",
+    conflict: "The described place {place} conflicts with your selected {endpoint}. Your selected point is kept. Review the description or explicitly release that point before trying again.",
+  };
+  return { code: resolution.status === "missing" ? `adventure_${kind}_required` : `adventure_endpoint_${resolution.status}`,
+    message: messages[resolution.status], parameters: { place: resolution.coordinate?.name || resolution.proposed_coordinate?.name || "", endpoint: kind }, resolution };
 }
 
 // The service appends this known tracking parameter to cited links. Keep every

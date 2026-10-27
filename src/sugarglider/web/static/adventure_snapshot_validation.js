@@ -71,7 +71,7 @@ async function validateOutput(output) {
       const resolution = round.endpoint_resolution[kind];
       if (resolution === null) continue;
       requireValue(exact(resolution, ["coordinate", "proposed_coordinate", "evidence"])
-        && ["unique_exact_local_name", "model_coordinate_unverified"].includes(resolution.evidence)
+        && ["unique_exact_local_name", "model_coordinate_unverified", "selected_ign_result", "selected_local_result"].includes(resolution.evidence)
         && exact(resolution.coordinate, ["name", "lat", "lon"])
         && request[kind] && ["lat", "lon", "name"].every(key => resolution.coordinate[key] === request[kind][key])
         && (kind !== "end" || request.topology === "point_to_point"));

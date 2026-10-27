@@ -1,12 +1,12 @@
 import { ADVENTURE_INSTRUCTIONS, ADVENTURE_SCHEMA, ADVENTURE_STORY_SCHEMA, parseAdventureStories, parseAdventureProposal, adventureWishCapabilities } from "./adventure_proposal.js";
-import { groundAdventurePlaces, adventureStoryEvidence, resolveAdventureEndpoint, ADVENTURE_CONTEXT_PLACE_LIMIT } from "./adventure_grounding.js";
+import { groundAdventurePlaces, adventureStoryEvidence, resolveAdventureEndpoint, adventureEndpointFailure, ADVENTURE_CONTEXT_PLACE_LIMIT } from "./adventure_grounding.js";
 import { AdventureIntentError, buildAdventureIntent, requestedAdventureAlternatives } from "./adventure_intent.js";
 import { assessAdventure, compactAdventureAssessment, compareAdventureAssessments, adventureMeasuredImprovement } from "./adventure_assessment.js";
 import { deepFreeze } from "./local_candidate_evaluator.js";
 
 // One visible product operation: one initial model request, at most one revision,
 // one local planning session. A failed revision cannot erase a valid first pass.
-export function createAdventureController({ model, planner, confirmProposal = null,
+export function createAdventureController({ model, planner, confirmProposal = null, reviewEndpoint = null,
   measureElevations = null, onProgress = () => {}, lifecycleTarget = globalThis } = {}) {
   let generation = 0, active = null;
   function cancel() {
@@ -85,17 +85,32 @@ export function createAdventureController({ model, planner, confirmProposal = nu
           || session.reference.pack_id !== input.reference.pack_id) throw cancelled();
         if (!session.data) throw new AdventureIntentError("adventure_places_unavailable", "The selected region's Places data is unavailable.");
         progress("checking_places");
-        let startResolution = null, endResolution = null;
-        if (!input.start) {
-          startResolution = await resolveAdventureEndpoint(original.intent.start, { session: session.data, reference: session.reference, signal: abort.signal });
+        async function endpoint(kind) {
+          const location = original.intent[kind], fixed = input[kind];
+          const options = { session: session.data, reference: session.reference, signal: abort.signal, fixed };
+          let resolution = await resolveAdventureEndpoint(location, options);
           current();
-          if (!startResolution) throw new AdventureIntentError("adventure_start_required", "Where would you like to start? Describe a more precise place or choose Start on the map.");
+          if (["unresolved", "ambiguous"].includes(resolution.status) && reviewEndpoint) {
+            const selected = await reviewEndpoint({ kind, resolution }, abort.signal);
+            current();
+            if (!selected) throw cancelled();
+            resolution = await resolveAdventureEndpoint(location, { ...options, selected });
+            current();
+          }
+          if (resolution.status !== "resolved") {
+            const failure = adventureEndpointFailure(resolution, kind);
+            throw Object.assign(new AdventureIntentError(failure.code, failure.message), failure);
+          }
+          return fixed ? null : deepFreeze({ coordinate: resolution.coordinate,
+            proposed_coordinate: resolution.proposed_coordinate, evidence: resolution.evidence });
+        }
+        let startResolution = null, endResolution = null;
+        startResolution = await endpoint("start");
+        if (startResolution) {
           original = deepFreeze({ ...original, intent: { ...original.intent, start: startResolution.coordinate } });
         }
-        if (!input.end && original.intent.topology === "point_to_point") {
-          endResolution = await resolveAdventureEndpoint(original.intent.end, { session: session.data, reference: session.reference, signal: abort.signal });
-          current();
-          if (!endResolution) throw new AdventureIntentError("adventure_end_required", "The destination could not be resolved unambiguously in this region. Choose End on the map, then try again.");
+        if (original.intent.topology === "point_to_point") endResolution = await endpoint("end");
+        if (endResolution) {
           original = deepFreeze({ ...original, intent: { ...original.intent, end: endResolution.coordinate } });
         }
         if ((startResolution || endResolution) && !confirmProposal) throw new AdventureIntentError("adventure_endpoint_review_required", "Review the proposed Start and End before routing.");
@@ -124,7 +139,18 @@ export function createAdventureController({ model, planner, confirmProposal = nu
         async function searchRound(proposal, grounding, intent) {
           progress("routing");
           const routingStarted = performance.now();
-          const produced = await session.generate(intent.request, intent.targets, original.wishes);
+          let produced;
+          try { produced = await session.generate(intent.request, intent.targets, original.wishes); }
+          catch (error) {
+            if (error.code === "endpoint_not_reached") throw unroutableEndpoint();
+            throw error;
+          }
+          if (!produced.result.candidates.length) {
+            const failure = produced.result.search_diagnostics.details.local_planning.failure_code;
+            if (failure === "endpoint_not_reached") throw unroutableEndpoint();
+            if (failure === "no_route") throw new AdventureIntentError("adventure_no_connected_route",
+              "The locations are inside the selected region, but no connected route was found on its graph for this activity. Your previous route is kept.");
+          }
           timings.routing_and_nature_ms += performance.now() - routingStarted;
           current();
           progress("comparing");
@@ -228,6 +254,10 @@ export function createAdventureController({ model, planner, confirmProposal = nu
 }
 
 function cancelled() { return new DOMException("Adventure cancelled.", "AbortError"); }
+function unroutableEndpoint() {
+  return new AdventureIntentError("adventure_endpoint_not_routable",
+    "A located endpoint is inside the selected region but could not be reached on its routing graph for this activity. Review Start and End. Your previous route is kept.");
+}
 function errorCode(error, fallback) {
   return typeof error?.code === "string" && /^[a-z_]{1,80}$/.test(error.code) ? error.code : fallback;
 }

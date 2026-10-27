@@ -3,7 +3,7 @@
 // synthetic CI fixtures; no real account, geographic evidence or device install.
 const fs = require('node:fs/promises'), path = require('node:path'), assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const { checkMinimalMobileMap } = require('./map_minimalism_checks.cjs');
+const { checkMinimalMobileMap, checkCompactMobileTabs } = require('./map_minimalism_checks.cjs');
 const root = path.resolve(__dirname, '../..'), origin = 'https://appassets.androidplatform.net';
 const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bike', 'road_bike'];
 
@@ -96,7 +96,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
               if (request.type === 'chatgpt_infer') {
                 adventureModelCount++;
                 reply = { type: 'chatgpt_result', result: failAdventureModel ? null : {
-                  text: JSON.stringify(adventureModelCount === 1 ? fixture.initial : fixture.revised), researched: true,
+                  text: JSON.stringify(globalThis.adventureProposalOverride ?? (adventureModelCount === 1 ? fixture.initial : fixture.revised)), researched: true,
                   citations: [{ title: 'Synthetic citation', url: 'https://example.invalid/source' }], usage: { input_tokens: 30, output_tokens: 60, total_tokens: 90 }, elapsed_ms: 25 }, error: failAdventureModel ? 'usage_limit' : null };
               } else reply = { type: 'chatgpt_result', result: request.type === 'chatgpt_cancel' ? {} : account(), error: null };
             } else if (request.type.startsWith('adventure_speech_')) reply = { type: 'adventure_speech_result', mode: 'on_device',
@@ -408,6 +408,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await page.waitForFunction(french => document.querySelector('#adventure-storage-status').textContent.startsWith(french ? 'Enregistrée sur cet appareil' : 'Saved on this device'),locale==='fr-FR');
         assert.equal(await page.locator('#candidate-list .candidate-card').count(),3,'The adventure screenshot contains three actual alternatives');
         await view('map'); await screenshot('minimal-ai-three-alternatives-map'); await view('routes'); await screenshot('minimal-ai-three-alternatives-routes');
+        if (width === 372) await checkCompactMobileTabs({ page, screenshot });
         const exactAdventure = await page.evaluate(() => JSON.stringify(adventureAppState.state.adventureResult));
         const adventureBeforeLanguage = await languageFingerprint();
         await page.evaluate(async language => { const { setLanguage } = await import('/static/i18n.js'); await setLanguage(language); }, originalLanguage === 'fr' ? 'en' : 'fr');
@@ -416,6 +417,55 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         assert.equal(await page.evaluate(() => JSON.stringify(adventureAppState.state.adventureResult)), exactAdventure, 'Original model stories and adventure remain exact across language changes');
         assert.equal(adventureAfterLanguage.gpx, adventureBeforeLanguage.gpx);
         assert.equal(adventureAfterLanguage.routeCalls, adventureBeforeLanguage.routeCalls);
+
+        if (width === 372) {
+          const queries = [];
+          await page.route('https://data.geopf.fr/geocodage/search?*', route => {
+            queries.push(new URL(route.request().url()).searchParams.get('q'));
+            return route.fulfill({ json: { type: 'FeatureCollection', features: [{ type: 'Feature',
+              geometry: { type: 'Point', coordinates: [2.369, 48.853] }, properties: { name: 'Place de la Bastille', city: 'Paris' } }] } });
+          });
+          const preserved = () => page.evaluate(async () => JSON.stringify({ context: adventureAppState.currentAdventureContext(),
+            result: adventureAppState.state.generationResult, source: adventureAppState.state.generationSourceRequest,
+            selection: adventureAppState.state.selectedSignature, adventure: adventureAppState.state.adventureResult,
+            region: document.querySelector('#planning-region').value,
+            form: [...document.querySelectorAll('#route-form input,#route-form select,#route-form textarea')].map(node => [node.id,node.value,node.checked]),
+            gpx: await (await import('/static/local_gpx_export.js')).exportCanonicalCandidate(adventureAppState.selectedCandidate()).blob.text() }));
+          for (const language of ['fr', 'en']) for (const name of ['Bastille', 'Place de la Bastille, Paris']) {
+            await page.evaluate(async ({ language, name }) => {
+              await (await import('/static/i18n.js')).setLanguage(language, { persist: false });
+              globalThis.adventureProposalOverride = structuredClone(adventureAppState.state.adventureResult.chosen.proposal);
+              adventureProposalOverride.intent.start = { name, lat: null, lon: null };
+            }, { language, name });
+            const before = await preserved(), callsBefore = await page.evaluate(() => adventureNativeCalls.length), lookupsBefore = queries.length;
+            await page.locator('#ask-chatgpt').click();
+            await page.locator('#adventure-endpoints').evaluate(node => { node.open = true; });
+            await page.locator('#adventure-keep-start').uncheck();
+            await page.locator('#adventure-text').fill('Un tour autour de ' + name);
+            await page.waitForFunction(() => !document.querySelector('#adventure-generate').disabled);
+            await page.locator('#adventure-generate').click();
+            await page.locator('#adventure-endpoint-search').waitFor({ state: 'visible' });
+            assert.equal(queries.length, lookupsBefore, 'Name lookup remains local until explicit IGN consent');
+            await page.locator('#adventure-search-ign').click();
+            await page.locator('#adventure-endpoint-results button').click();
+            await page.waitForFunction(() => document.querySelector('#adventure-dialog').getAttribute('aria-busy') === 'false');
+            assert((await page.locator('#adventure-error').textContent()).includes(language === 'fr' ? 'en dehors de la région hors ligne' : 'outside the selected offline region'));
+            assert.equal(queries.at(-1), name, 'Existing IGN client sends only the requested place name');
+            const calls = await page.evaluate(count => adventureNativeCalls.slice(count).map(call => call.type), callsBefore);
+            assert.equal(calls.filter(type => type === 'chatgpt_infer').length, 1, 'Failure does not retry the model');
+            assert(!calls.some(type => ['local_route', 'route_elevation', 'adventure_speech_start'].includes(type) || /download|install/u.test(type)), 'No routing, recording or region download');
+            assert.equal(await preserved(), before, 'Named-start failure preserves exact route, GPX, selected candidate, editor and region');
+            await screenshot(`named-start-outside-${language}-${name === 'Bastille' ? 'short' : 'qualified'}`);
+            await page.locator('#adventure-regions').click();
+            await page.waitForFunction(() => !document.querySelector('#adventure-dialog').open && document.querySelector('.header-tools').open);
+            assert(await page.locator('#offline-regions').evaluate(node => node.open), 'View regions opens the existing manager without selecting or downloading');
+            await page.keyboard.press('Escape');
+          }
+          await page.evaluate(async language => {
+            delete globalThis.adventureProposalOverride;
+            await (await import('/static/i18n.js')).setLanguage(language, { persist: false });
+          }, originalLanguage);
+        }
 
         await page.locator('#adventure-stories-open').click();
         assert(await page.locator('#adventure-stories').isVisible());
