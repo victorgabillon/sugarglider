@@ -354,6 +354,11 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         // Settle that independent camera operation before testing language.
         await page.waitForTimeout(650);
         await page.waitForFunction(async () => !(await import('/static/map.js')).mapPresentationDiagnostics().moving);
+        // Manual generation publishes the route before its selected-candidate
+        // elevation worker finishes. Wait for that independent work as well;
+        // its later native call must not be attributed to a language change.
+        await page.waitForFunction(() => adventureAppState.state.selectedElevation?.status === 'ready'
+          && adventureAppState.state.selectedElevation.candidate_id === adventureAppState.selectedCandidate()?.id);
         const originalLanguage = locale === 'fr-FR' ? 'fr' : 'en';
         for (const language of [originalLanguage === 'fr' ? 'en' : 'fr', originalLanguage]) {
           const beforeLanguage = await languageFingerprint();
