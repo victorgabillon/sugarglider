@@ -48,7 +48,7 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
       element(id).disabled = accountBusy || aiBusy || voiceBusy;
     }
     for (const id of ["choose-start", "choose-end"]) element(id).disabled = accountBusy || voiceBusy;
-    element("include-pins").disabled ||= displayedContext?.pinContextAvailable === false;
+    element("include-pins").disabled ||= !displayedContext || displayedContext.pinContextAvailable === false;
     element("text").disabled = aiBusy;
     element("restore-request").disabled = aiBusy || voiceBusy || accountBusy;
     element("forget-request").disabled = aiBusy || voiceBusy || accountBusy;

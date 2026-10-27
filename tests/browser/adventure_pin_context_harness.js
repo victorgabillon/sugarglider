@@ -7,6 +7,17 @@ const equal = (a,b,message) => assert(JSON.stringify(a) === JSON.stringify(b), m
 async function until(check) { for(let i=0;i<500;i++){if(check()) return; await new Promise(r=>setTimeout(r,10));} throw Error('Pin context did not settle'); }
 export async function runPinContextHarness() {
   const cases=[];
+  {
+    const r=await setup(),f=await frame();let release;
+    const dialog=initializeAdventureDialog({root:f.root,launcher:f.doc.getElementById('plan-with-ai'),planner:r.planner,
+      model:accounts(r.model),speech:{cancel(){}},elevation:{clear(){}},getContext:()=>new Promise(resolve=>{release=resolve;}),onChooseStart(){},onChooseEnd(){},onResult(){}});
+    try{const opening=dialog.open();assert(f.byId('include-pins').disabled,'pin context stays disabled throughout asynchronous opening');
+      release({...r.input.context,pinContextAvailable:false});await opening;
+      assert(f.byId('include-pins').disabled&&!f.byId('include-pins').checked,'saved-adventure view stays excluded after context resolves');
+      assert(r.calls.length===0&&r.nativeCalls.length===0,'opening cannot infer or route');cases.push('delayed_opening_never_exposes_pin_control_before_context');
+    }finally{dialog.clear();r.planner.invalidate();f.element.remove();}
+  }
+
   for(const language of ['fr','en']) for(const count of [0,1,16,17]) for(const include of [false,true]) {
     const r=await setup(), f=await frame(360,640,2), sent=[], reads=[];
     await setLanguage(language,{persist:false,document:f.doc});
