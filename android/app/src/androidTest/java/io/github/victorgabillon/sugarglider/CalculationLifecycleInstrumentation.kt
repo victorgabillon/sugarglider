@@ -68,7 +68,14 @@ class CalculationLifecycleInstrumentation : Instrumentation() {
             val field = SugargliderApplication::class.java.getDeclaredField("chatGpt\$delegate").apply { isAccessible = true }
             val original = field.get(app)
             field.set(app, lazyOf(connection))
-            restore = { connection.cancel(); field.set(app, original) }
+            restore = {
+                connection.cancel()
+                val drained = CountDownLatch(1)
+                app.chatGptExecutor.execute { drained.countDown() }
+                // A queued test command must never acquire the real connection.
+                check(drained.await(10, TimeUnit.SECONDS))
+                field.set(app, original)
+            }
             val activity = startActivitySync(Intent(targetContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
             val webField = MainActivity::class.java.getDeclaredField("webView").apply { isAccessible = true }
             lateinit var web: WebView
