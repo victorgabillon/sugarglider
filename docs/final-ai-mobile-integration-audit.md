@@ -13,11 +13,21 @@ full route/editor backups and detailed machine receipts remain outside Git under
 - PR #110 source: `26c6dbe325333c48e2b7d5f126c165314f9a19ea`. It is already
   contained in the GUI branch. It was neither cherry-picked nor merged again.
 - Consolidated implementation: `212a497f87f4f6b27675f7e73ec83c7f88a1e09a`.
-- Verified artifact/code head: `740bd2b` (only strict cache-fingerprint expectations
-  change after the implementation commit; application/native/brand trees match).
-- Final GUI PR, head, merge SHA, tree identity and CI receipts are recorded below
-  once GitHub validation and merging finish. The installed device build remains
-  distinct from the newer consolidated artifact.
+- Verified artifact/code head: `cda0572`. Later commits synchronize strict cache
+  fingerprints, record the audit and keep test placements clear of mapped POIs.
+  Application/native/brand trees match the implementation commit.
+- Final GUI branch head before the code merge: `cda0572647752bf480cbb182d3fe46d354d87497`; 18 commits ahead of the
+  verified baseline and zero behind before merging.
+- [Final GUI PR #111](https://github.com/victorgabillon/sugarglider/pull/111) is merged.
+- Audited `main` code-merge SHA: `422e43715ba2530e452171efb94cc42db989fbd5`.
+- Merged tree: `e625149ebd8bab6c23569414b5ca8691dd2b7b0c`, exactly equal to the
+  reviewed GUI head's tree. The merge parents are the verified main baseline and
+  final GUI head; forest and GUI ancestry are both retained.
+- This audit's follow-up documentation commit records completed remote receipts.
+  It changes only this report; runtime `src`, `android` and `assets` trees still
+  exactly match both the reviewed GUI and prepared cda0572 artifact source. The
+  current documentation revision is identified by this file's Git history.
+  The installed device build remains distinct from the consolidated artifact.
 
 The audit inspected **54 registered worktrees**, 51 existing and three stale
 registrations, **70 local branches**, all 152 local/remote refs, untracked files,
@@ -163,8 +173,8 @@ historical branches likewise require no cleanup to finish this integration.
 
 ## Final validation and consolidated artifact
 
-All final local checks passed. GitHub PR and post-merge receipts are completed in
-the merge record below. Exact local results:
+All final local, GitHub PR and post-merge checks passed. The exact remote
+receipts are in the merge record below. Exact local results:
 
 | Check | Result |
 |---|---|
@@ -172,7 +182,7 @@ the merge record below. Exact local results:
 | Strict mypy | 303 source files; pass |
 | Python | 1,612 passed, 16 service integration tests deselected; nine existing NumPy warnings |
 | Browser harnesses | 62 passed, no page errors |
-| Self-contained acceptance drivers | 19 passed (18 individual drivers plus the full-app driver) |
+| Self-contained acceptance drivers | 18 passed (17 standalone drivers plus the full-app driver) |
 | Full-app viewports | 372×760 French, 412×844 English, 320×720 French, 800×372 French, 1280×844 English; all pass |
 | Android JVM | Debug 296, Release 291, Staging 291; 878 total, zero failure/error/skip |
 | Android lint/assembly | Debug, Release and Staging all pass |
@@ -181,10 +191,13 @@ the merge record below. Exact local results:
 | Shell identity | v121 fingerprint expectations and complete allowlists pass |
 | APK/ELF | All three APK ZIP/page-alignment/native-byte checks pass; staging ELF LOAD alignment ≥16 KiB |
 
-The comprehensive native/application checks ran on the implementation commit;
-740bd2b synchronizes two strict cache fingerprints and reruns the complete Python
-check plus final staging identity assembly. No assertion was relaxed or skipped
-to hide the integration failures.
+The comprehensive native/application checks ran on the implementation commit.
+740bd2b synchronizes two strict cache fingerprints; final Python, full-app and
+staging identity checks also pass on cda0572. Browser CI additionally exposed a
+landscape test tap that selected a now-visible drinking-water marker instead of
+empty map. The fixture now uses unoccupied corners and explicitly checks Start/stop
+acquisition; all five viewports pass without screenshot delays. Assertions retain
+their original route/GPX guarantees.
 Robolectric resolves its pinned Android image through Gradle; test execution is
 explicitly offline and needs no Docker, map data, account or external service.
 Android CI now includes staging tests/lint/assembly and 16 KiB checks alongside
@@ -198,17 +211,18 @@ six-profile routing/map-service fixture is unavailable. The 16 separately marked
 Python integration tests remain deselected; nine existing NumPy warnings remain.
 `map_editing_controls.cjs`, `map_minimalism_checks.cjs` and
 `pr97_form_acceptance.cjs` are support modules exercised by their parent drivers,
-not additional standalone passes.
+not additional standalone passes. The former 19-driver aggregate counted the
+form helper separately; this audit corrects the total to 18 genuine drivers.
 
 The supplied source PNG, optimized/runtime PNG, production mascot and launcher
 artwork retain their verified hashes. The consolidated staging artifact passed exact bundled bytes/allowlist, build
 identity, certificate continuity, ZIP integrity, APK page alignment and ELF LOAD
 alignment checks. Its receipt is separate from the installed-device identity.
 
-- Prepared APK: `artifacts/sugarglider-SG-AI-Test-740bd2b.apk` under the external
+- Prepared APK: `artifacts/sugarglider-SG-AI-Test-cda0572.apk` under the external
   `/home/pompote/sugarglider-ai-mobile-2026-10-26` artifact root; **not installed**.
-- APK SHA-256: `1b37eb2a31e5c171f926c989c6d1e0940577abcc1064fb3922b84f414f813b30`.
-- Size: 26,893,285 bytes; same staging package, version/code and signer as the
+- APK SHA-256: `f19a1a255d131870a7a8f475cde54068ba313ae6c49507fcd427bf60b2e8a7ce`.
+- Size: 26,893,257 bytes; same staging package, version/code and signer as the
   installed app. All 156 declared bundled web files match exact source/input bytes.
 - Native library SHA-256:
   `09b6d312b19caa5410561b804213641f5f8a772d1b3db570cc17bac8a55fb878`.
@@ -219,9 +233,25 @@ alignment checks. Its receipt is separate from the installed-device identity.
 
 ## GitHub merge record
 
-The reviewed GUI PR, exact head/merge/tree identity and four post-merge workflow
-receipts are filled in here after required checks pass. This report does not
-treat a prepared artifact or a requested merge as an installed/merged result.
+PR #111 merged only after all seven head checks completed successfully: three
+push workflows and four PR workflows. Reviews/threads had no unresolved blocker.
+The four push workflows on the actual merged main SHA also completed successfully.
+The browser workflow used a full unchanged retry after slow Ubuntu package-mirror
+downloads during tooling setup; no test was skipped.
+The local main ref was fast-forwarded from its stale historical head. Main requires
+pull requests, so the completed receipt follows through a documentation-only PR.
+
+| Post-merge workflow | Exact run | Result |
+|---|---|---|
+| Python checks | [40483591684](https://github.com/victorgabillon/sugarglider/actions/runs/40483591684) | success |
+| Android checks | [40483591608](https://github.com/victorgabillon/sugarglider/actions/runs/40483591608) | success |
+| Elevation browser regressions | [40483591530](https://github.com/victorgabillon/sugarglider/actions/runs/40483591530) | success |
+| Social deployment | [40483591582](https://github.com/victorgabillon/sugarglider/actions/runs/40483591582) | success |
+
+Full head-check receipts, both merge parents, exact merged tree, runtime tree
+equivalence, source and device receipts are retained in the external audit root.
+The final source worktree is clean. No source rewrite or duplicate forest merge
+was used to reach this state.
 
 ## Outstanding acceptance and limits
 
