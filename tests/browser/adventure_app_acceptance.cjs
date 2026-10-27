@@ -421,6 +421,8 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         assert.equal(await page.evaluate(() => adventureModelCount), 0, 'Speech alone must not infer');
         await page.locator('#adventure-text').fill('A synthetic 2.2 km historical route with interesting places');
         await page.locator('#adventure-generate').click();
+        await page.locator('#adventure-review').waitFor({state:'visible'});
+        await page.locator('#adventure-confirm').click();
         await page.waitForFunction(() => !document.querySelector('#adventure-dialog').open
           || document.querySelector('#adventure-dialog').getAttribute('aria-busy') === 'false' && document.querySelector('#adventure-error').textContent, null, { timeout: 30000 });
         const adventure = await page.evaluate(async () => { const { state } = await import('/static/state.js'); return { active: state.adventureDisplay,
@@ -428,9 +430,9 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           error: document.querySelector('#adventure-error').textContent }; });
         assert(adventure.active && adventure.improved, JSON.stringify(adventure));
         const modelContext=await page.evaluate(()=>JSON.parse(adventureNativeCalls.find(call=>call.type==='chatgpt_infer').input).planning_context);
-        assert(modelContext.local_places.length>0&&modelContext.local_places.length<=24);
-        assert(modelContext.local_places.some(place=>place.osm_id==='node/1'&&place.location.name==='Fixture 1'),'Actual installed OPFS landmarks are supplied to research through the normal Generate action');
-        assert(!JSON.stringify(modelContext.local_places).includes('approach_candidates'),'Research never receives raw mapped approaches');
+        assert.equal(modelContext.start,null); assert.equal(modelContext.end,null);
+        assert.deepEqual(modelContext.exact_points,[]); assert.deepEqual(modelContext.contextual_pins,[]);
+        assert.deepEqual(modelContext.local_places,[], 'No automatic inventory is derived from excluded manual endpoints');
 
         assert(adventure.grounding.places.some(place => place.match_method === 'exact_local_name'),'Real worker grounds name-only suggestions without a prior location-picker session');
         assert(adventure.result.candidates.some(c => c.reached_stops.length === 2));
@@ -470,7 +472,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
             const before = await preserved(), callsBefore = await page.evaluate(() => adventureNativeCalls.length), lookupsBefore = queries.length;
             await page.locator('#ask-chatgpt').click();
             await page.locator('#adventure-endpoints').evaluate(node => { node.open = true; });
-            await page.locator('#adventure-keep-start').uncheck();
+            assert.equal(await page.locator('#adventure-include-pins').isChecked(),false);
             await page.locator('#adventure-text').fill('Un tour autour de ' + name);
             await page.waitForFunction(() => !document.querySelector('#adventure-generate').disabled);
             await page.locator('#adventure-generate').click();
@@ -583,7 +585,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await screenshot('dialog-region-unavailable');
         await page.locator('#adventure-close').click();
         assert.deepEqual(errors, []); assert.deepEqual(external, []);
-        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, height, locale, status: 'passed', cases: [...minimalCases,'french_default_on_english_device', 'icon_only_localized_accessible_map_action', 'remembered_english_survives_restart', 'language_preserves_canonical_request_result_selection_form_camera_and_gpx', 'language_does_not_acquire_location_route_infer_or_record', 'supplied_ai_artwork_map_plan_dialog_loaded_accessible_and_clickable','startup_map_ai_cta_shared_lifecycle_privacy_build_identity','initial_settled_keyboard_credits_and_active_region_switch','french_portrait_landscape_large_text','region_unavailable_visible_without_automatic_request','bounded_local_landmark_context_before_research','name_grounding_without_prior_location_picker','optional_endpoints_and_cancelled_map_roundtrip','no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
+        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, height, locale, status: 'passed', cases: [...minimalCases,'french_default_on_english_device', 'icon_only_localized_accessible_map_action', 'remembered_english_survives_restart', 'language_preserves_canonical_request_result_selection_form_camera_and_gpx', 'language_does_not_acquire_location_route_infer_or_record', 'supplied_ai_artwork_map_plan_dialog_loaded_accessible_and_clickable','startup_map_ai_cta_shared_lifecycle_privacy_build_identity','initial_settled_keyboard_credits_and_active_region_switch','french_portrait_landscape_large_text','region_unavailable_visible_without_automatic_request','unchecked_context_excludes_pins_and_derived_landmarks','name_grounding_without_prior_location_picker','optional_endpoints_and_cancelled_map_roundtrip','no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
       } finally { await context.close(); }
     }
   } finally { await browser.close(); }

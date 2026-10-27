@@ -72,6 +72,7 @@ export function createAdventureController({ model, planner, confirmProposal = nu
         requested_alternatives: requestedCount,
         activity: input.profile ?? input.suggested_profile ?? null, activity_is_fixed: Boolean(input.profile),
         exact_points: (input.hardWaypoints ?? []).map(({ id, name, coordinate }) => ({ id, name, coordinate })),
+        contextual_pins: (input.contextualPins ?? []).slice(0, 16),
         region: { region_id: input.reference.region_id, bounds: input.reference.bounds },
         local_places: (input.localPlaces ?? []).slice(0, ADVENTURE_CONTEXT_PLACE_LIMIT),
         available: { offline_routing: true, mapped_nature: true, exact_repetition: false, native_surface: false, current_access: false } } }, "initial", ADVENTURE_SCHEMA, parseAdventureProposal, research && !deferResearch);
