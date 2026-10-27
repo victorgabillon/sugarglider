@@ -121,10 +121,12 @@ class CalculationLifecycleInstrumentation : Instrumentation() {
             result.putBoolean("live_inference", false)
             exitCode = 1
         } finally {
-            runCatching { runOnMainSync { ownedApp?.calculations?.activeId?.let { ownedApp?.calculations?.cancel(it) } } }
+            runCatching { ownedApp?.let { app -> runOnMainSync { app.calculations.activeId?.let { app.calculations.cancel(it) } } } }
             page?.let { web -> runCatching {
                 evaluate(web, "globalThis.__calculationReview?.disconnect();document.querySelector('#adventure-close')?.click();document.querySelector('#adventure-return-manual')?.click();(async()=>{const {pwaRuntime}=await import('/static/pwa_runtime.js');const repository=(await pwaRuntime()).adventures;if(globalThis.__calculationSavedBefore)await repository.save(__calculationSavedBefore.output,__calculationSavedBefore.selected_id);else if(globalThis.__calculationBackupReady)await repository.clear();if(typeof globalThis.__calculationEditorBefore==='string')document.querySelector('#adventure-text').value=__calculationEditorBefore;globalThis.__calculationCleanupReady=true;})()")
                 waitUntil(10_000) { evaluate(web, "globalThis.__calculationCleanupReady===true") == "true" }
+            }.onFailure {
+                result.putBoolean("passed", false); result.putString("diagnostic", "manual_state_restoration_failed"); exitCode = 1
             } }
             restore?.invoke()
         }
