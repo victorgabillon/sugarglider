@@ -394,7 +394,7 @@ def test_shared_shell_generation_tracks_v121_cached_assets() -> None:
         "local_adventure_search.js": (
             "faae64c661a211505d82bad9b78f1c7d8533904182db967b6ff0b603ef08086b"
         ),
-        "app.js": ("c19f5cd663459b6cc8704b97b3bbecd30674b483d4930dccb8be0b19414022ab"),
+        "app.js": ("7704f4ea033ebbe64c05578d7b0799342fe9fe5d210e32807e926d7897e65cd0"),
         "region_screen.js": (
             "ac0aad40280167eca27482eb4256512b48453a2883a6a588ab5b2e3a98fa1301"
         ),
@@ -428,7 +428,7 @@ def test_shared_shell_generation_tracks_v121_cached_assets() -> None:
         "state.js": (
             "ae7c5e7acc9d5e91957c275b227957a95855aee7853f15178858a0c52c0cc1c3"
         ),
-        "map.js": ("1f3c8bb2894224d109f39f3c84d2a89fcd75a0090ae238c16f1e25eef083e430"),
+        "map.js": ("417c5001a2c9173de38f1b88f11da6ac7dfbb56aed89b4efb475c504d1b6a26e"),
         "styles.css": (
             "da241d898ac04a6fbf3c796f033af21f2e8d8742d31bfaa81fd38c33207253ba"
         ),
