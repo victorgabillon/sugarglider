@@ -5,7 +5,7 @@ import java.time.Instant
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** One Activity-owned native connection. Call blocking methods on its dedicated executor. */
+/** One process-owned native connection. Call blocking methods on its dedicated executor. */
 internal class ChatGptConnection(
     private val accounts: ChatGptAccounts,
     private val http: ChatGptHttp = ChatGptHttp(),

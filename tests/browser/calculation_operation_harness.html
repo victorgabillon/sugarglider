@@ -1,0 +1,4 @@
+<!doctype html><meta charset="utf-8"><pre></pre><script type="module">
+import { runCalculationHarness } from './calculation_operation_harness.js';
+const n=document.querySelector('pre');try{n.textContent=JSON.stringify(await runCalculationHarness());n.dataset.status='passed';}catch(e){n.textContent=e.stack;n.dataset.status='failed';}
+</script>

@@ -1,3 +1,4 @@
+import { calculationOperations } from "./calculation_operation.js";
 import { t, tr, getLanguage, speechDefaultLanguage, onLanguageChange, setLocalizedText } from "./i18n.js";
 import { createAdventureController } from "./adventure_controller.js";
 import { createAdventureModel, AdventureModelError } from "./adventure_model.js";
@@ -18,7 +19,7 @@ const speechText = { completed: "Transcription added. Check it before Generate; 
 
 export function initializeAdventureDialog({ root, launcher, launchers = [launcher], planner, getContext, canOpen = () => true,
   onBusy = () => {}, onResult, onChooseStart, onChooseEnd, onRegions = null, searchLocations = null, geocoding = () => null,
-  model = createAdventureModel(), speech = createAdventureSpeech(), elevation = createAdventureElevationSampler() }) {
+  operations = calculationOperations, model = createAdventureModel(), speech = createAdventureSpeech(), elevation = createAdventureElevationSampler() }) {
   const element = id => root.querySelector(`#adventure-${id}`);
   // Only an explicit choice is persisted. Restoring it never records audio;
   // the native provider disclosure still asks for consent on every use.
@@ -35,7 +36,7 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
   let epoch = 0, accountBusy = false, aiBusy = false, voiceBusy = false, accountAbort = null, speechAbort = null, planningAbort = null;
   let accountState = { accounts: [], selected_account: null, models: [] }, review = null, successfulClose = false;
   let contextReady = false, displayedContext = null, planningFinished = Promise.resolve(), finishPlanning = null;
-  let pinSnapshot = null, pinVersion = 0, selectedEndpoints = {};
+  let pinSnapshot = null, pinVersion = 0, selectedEndpoints = {}, recoveredRequest = null;
   const controller = createAdventureController({ model, planner, measureElevations: elevation.measure, reviewEndpoint: locateEndpoint,
     onProgress: stage => { setLocalizedText(element("progress"), () => t(progressText[stage] ?? "Planning…")); },
     confirmProposal: confirm, lifecycleTarget: null });
@@ -48,6 +49,8 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
     }
     for (const id of ["choose-start", "choose-end"]) element(id).disabled = accountBusy || voiceBusy;
     element("text").disabled = aiBusy;
+    element("restore-request").disabled = aiBusy || voiceBusy || accountBusy;
+    element("forget-request").disabled = aiBusy || voiceBusy || accountBusy;
     element("generate").disabled = !contextReady || accountBusy || aiBusy || voiceBusy || !eligible || !element("model").value || element("text").value.length > 8000 || element("text").value.trim().length < 3;
     element("microphone").disabled = aiBusy || voiceBusy || accountBusy || element("text").value.length >= 8000;
     element("microphone").setAttribute("aria-pressed", String(voiceBusy));
@@ -126,6 +129,7 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
     if (!canOpen() || aiBusy || accountBusy) return false;
     returnFocus = source;
     epoch++; successfulClose = false; contextReady = false; displayedContext = null; message(""); element("progress").textContent = "";
+    recoveredRequest = null; element("restore-request").hidden = true; element("forget-request").hidden = true;
     pinVersion++; pinSnapshot = null; selectedEndpoints = selectedEndpoint ? { [selectedEndpoint.kind]: structuredClone(selectedEndpoint.coordinate) } : {};
     element("include-pins").checked = false; element("keep-waypoints").checked = false;
     element("regions").hidden = true; element("endpoint-search").hidden = true;
@@ -149,6 +153,13 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
       element("region-status").textContent = element("start").textContent;
       element("region-status").hidden = false;
     } }
+    void operations.recovery().then(receipt => {
+      if (owned !== epoch || !root.open || !receipt) return;
+      recoveredRequest = receipt; element("restore-request").hidden = false; element("forget-request").hidden = false;
+      if (!element("text").value.trim()) element("text").value = receipt.prompt;
+      setLocalizedText(element("progress"), () => t("An earlier calculation was interrupted. Your description is kept. Review it and press Generate to retry; ChatGPT usage may be charged again. Nothing restarts automatically."));
+      render();
+    }).catch(() => {});
     void accountOperation(() => model.status());
     return true;
   }
@@ -157,7 +168,7 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
     voiceBusy = false; voiceMode = null; voiceFinishing = false; render();
   }
   function cancel() {
-    planningAbort?.abort(); controller.cancel(); accountAbort?.abort(); stopSpeech();
+    planningAbort?.abort(); operations.cancel(); controller.cancel(); accountAbort?.abort(); stopSpeech();
     review?.resolve(null); review = null;
   }
   function close() { cancel(); if (root.open) root.close(); }
@@ -173,6 +184,19 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
   });
   element("cancel").addEventListener("click", cancel);
   element("text").addEventListener("input", render);
+  element("restore-request").addEventListener("click", () => {
+    if (recoveredRequest && !aiBusy && !voiceBusy) { element("text").value = recoveredRequest.prompt; element("text").focus(); render(); }
+  });
+  element("forget-request").addEventListener("click", async () => {
+    const receipt = recoveredRequest, owned = epoch;
+    if (!receipt || aiBusy || voiceBusy) return;
+    const forgotten = await operations.forget(receipt.operation_id).catch(() => false);
+    if (owned !== epoch || recoveredRequest !== receipt) return;
+    if (!forgotten) { message(t("The interrupted request could not be forgotten. Try again.")); return; }
+    recoveredRequest = null; element("restore-request").hidden = true; element("forget-request").hidden = true;
+    if (element("text").value === receipt.prompt) element("text").value = "";
+    element("progress").textContent = ""; render();
+  });
   element("include-pins").addEventListener("change", async () => {
     const owned = epoch, version = ++pinVersion;
     pinSnapshot = null;
@@ -254,13 +278,15 @@ export function initializeAdventureDialog({ root, launcher, launchers = [launche
     planningFinished = new Promise(resolve => { finishPlanning = resolve; });
     aiBusy = true; message(""); element("regions").hidden = true; render(); onBusy(true);
     try {
-      const contextStarted = performance.now();
-      const context = endpointContext(await getContext({ signal: abort.signal }));
-      if (owned !== epoch || !root.open || abort.signal.aborted) return;
-      const output = await controller.run({ prompt: element("text").value, modelId: element("model").value, context,
-        responseLanguage: getLanguage(), contextPreparationMs: performance.now() - contextStarted, research: element("research").checked, structured: element("structured").checked, refine: element("refine").checked }, abort.signal);
-      if (owned !== epoch || !root.open) return;
-      await onResult(output);
+      await operations.run({ kind: "adventure", prompt: element("text").value }, async (operationSignal, operationId) => {
+        const contextStarted = performance.now();
+        const context = endpointContext(await getContext({ signal: operationSignal }));
+        if (owned !== epoch || !root.open || operationSignal.aborted) throw new DOMException("Cancelled", "AbortError");
+        const output = await controller.run({ prompt: element("text").value, modelId: element("model").value, context,
+          operationId, responseLanguage: getLanguage(), contextPreparationMs: performance.now() - contextStarted, research: element("research").checked, structured: element("structured").checked, refine: element("refine").checked }, operationSignal);
+        if (owned !== epoch || !root.open) return;
+        await onResult(output);
+      }, abort.signal);
       successfulClose = true; root.close();
     } catch (error) {
       if (owned === epoch && root.open) {

@@ -34,6 +34,7 @@ brand/sugarglider-flying-map.png
 brand/sugarglider-ice-cream-pin.png
 brand/sugarglider-map-pin.png
 brand/sugarglider-water-pin.png
+calculation_operation.js
 canonical_numbers.js
 data_notice_registry.js
 data_notices.js

@@ -4,7 +4,7 @@ import org.json.JSONObject
 
 internal class ChatGptCommand(val action: String, val accountId: String? = null,
     val model: String? = null, val instructions: String? = null, val input: String? = null,
-    val research: Boolean = false, val schema: JSONObject? = null)
+    val research: Boolean = false, val schema: JSONObject? = null, val operationId: String? = null)
 
 internal object ChatGptProtocol {
     fun parse(value: JSONObject): ChatGptCommand? = runCatching {
@@ -25,12 +25,13 @@ internal object ChatGptProtocol {
                 ChatGptCommand(action,accountId=id)
             }
             "infer" -> {
-                exact(setOf("model","instructions","input","research","output_schema"))
+                exact(setOf("model","instructions","input","research","output_schema") + if (value.has("operation_id")) setOf("operation_id") else emptySet())
+                val operationId = if (value.has("operation_id")) text("operation_id",32).also { require(it.matches(Regex("[a-f0-9]{32}"))) } else null
                 require(value.get("research") is Boolean)
                 val schema = if (value.isNull("output_schema")) null else value.getJSONObject("output_schema")
                 require(schema == null || schema.toString().length <= 24_576)
                 ChatGptCommand(action,model=text("model",128),instructions=text("instructions",24_576),
-                    input=text("input",32_768),research=value.getBoolean("research"),schema=schema)
+                    input=text("input",32_768),research=value.getBoolean("research"),schema=schema,operationId=operationId)
             }
             else -> null
         }

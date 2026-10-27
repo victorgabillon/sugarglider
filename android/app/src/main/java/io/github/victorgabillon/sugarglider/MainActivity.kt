@@ -79,9 +79,9 @@ class MainActivity : Activity() {
     private val bridgeLedger = BridgeRequestLedger()
     private val localRouteExecutor = Executors.newSingleThreadExecutor()
     private val chatGptInferences = mutableSetOf<String>()
-    private val chatGptExecutor = Executors.newSingleThreadExecutor()
+    private val chatGptExecutor get() = application.chatGptExecutor
     private val chatGptForeground = ChatGptForegroundGate()
-    private val chatGpt by lazy { ChatGptConnection(AndroidChatGptAccounts(applicationContext)) }
+    private val chatGpt get() = application.chatGpt
     private val adventureSpeech by lazy { AdventureSpeechInput(this) { activityVisible && !isFinishing && !isDestroyed } }
     private val documentExecutor = Executors.newSingleThreadExecutor()
     private val gpxDocumentSaver = GpxDocumentSaver(
@@ -169,7 +169,6 @@ class MainActivity : Activity() {
     override fun onPause() {
         chatGptForeground.paused()
         adventureSpeech.paused()
-        if (chatGptInferences.isNotEmpty()) chatGpt.cancel()
         activityVisible = false
         super.onPause()
     }
@@ -186,7 +185,6 @@ class MainActivity : Activity() {
         chatGptForeground.close()
         chatGpt.cancel()
         adventureSpeech.cancel()
-        chatGptExecutor.shutdownNow()
         externalItineraryReceiver.close()
         externalItineraryExecutor.shutdownNow()
         pendingStart = null
@@ -695,6 +693,47 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun beginCalculation(request: BridgeRequest.Calculation, payload: String, channel: BridgeChannel) {
+        val command = request.command
+        fun reply(state: String, recovery: org.json.JSONObject? = null) = completeBridgePayload(request, payload, channel,
+            CalculationProtocol.reply(request.requestId, command.operationId, state, recovery))
+        when (command.action) {
+            "recovery" -> reply("idle", if (application.calculations.activeId == null) application.calculationJournal.recovery() else null)
+            "forget" -> reply(if (application.calculations.activeId == null && application.calculationJournal.forget(command.operationId!!)) "completed" else "stale")
+            "finish" -> {
+                val finished = application.calculations.finish(channel.pageNonce, command.operationId!!, command.state!!)
+                reply(if (finished) command.state else "stale")
+            }
+            "begin" -> {
+                if (!activityVisible) { reply("unavailable"); return }
+                val notifications = getSystemService(android.app.NotificationManager::class.java)
+                if (!notifications.areNotificationsEnabled() || Build.VERSION.SDK_INT >= 33 &&
+                    checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 119)
+                    reply("notifications_required"); return
+                }
+                val id = command.operationId!!
+                try {
+                    val alreadyRunning = application.calculations.owns(channel.pageNonce, id)
+                    val accepted = application.calculations.begin(id, channel.pageNonce, command.kind!!, command.prompt, ready = { reply("running") }) {
+                        chatGpt.cancel()
+                        pendingElevation?.cancelled?.set(true)
+                        // The outstanding native route still drains to its owned channel.
+                        bridgeStatusCounter++
+                        postToBridge(channel, CalculationProtocol.reply("native-${channel.pageNonce}-$bridgeStatusCounter", id, "cancelled"))
+                    }
+                    if (!accepted) { reply("busy"); return }
+                    if (alreadyRunning) return
+                    startForegroundService(Intent(this, CalculationService::class.java).setAction(CalculationService.ACTION_START)
+                        .putExtra(CalculationService.EXTRA_ID, id))
+                } catch (_: Exception) {
+                    application.calculations.finish(channel.pageNonce, id, "interrupted")
+                    reply("unavailable")
+                }
+            }
+        }
+    }
+
     private fun beginChatGpt(request: BridgeRequest.ChatGpt, payload: String, channel: BridgeChannel) {
         val command = request.command
         if (command.action == "cancel") {
@@ -702,11 +741,19 @@ class MainActivity : Activity() {
             completeBridgePayload(request,payload,channel,ChatGptProtocol.reply(request.requestId,org.json.JSONObject()))
             return
         }
-        if (!activityVisible) {
+        val ownedCalculation = command.action == "infer" && command.operationId != null && application.calculations.owns(channel.pageNonce, command.operationId)
+        if (!activityVisible && !ownedCalculation) {
             completeBridgePayload(request,payload,channel,ChatGptProtocol.reply(request.requestId,error="unavailable"))
             return
         }
-        if (command.action in setOf("select","sign_out","sign_in")) chatGpt.cancel()
+        if (command.action == "infer" && command.operationId != null && !application.calculations.reserveModel(channel.pageNonce, command.operationId)) {
+            completeBridgePayload(request,payload,channel,ChatGptProtocol.reply(request.requestId,error="cancelled"))
+            return
+        }
+        if (command.action in setOf("select","sign_out","sign_in")) {
+            application.calculations.activeId?.takeIf { application.calculations.owns(channel.pageNonce, it) }?.let { application.calculations.cancel(it) }
+            chatGpt.cancel()
+        }
         val expectedEpoch = chatGpt.epoch()
         if (command.action == "infer") chatGptInferences.add(request.requestId)
         chatGptExecutor.execute {
@@ -795,6 +842,7 @@ class MainActivity : Activity() {
                 return@addWebMessageListener
             }
             when (request) {
+                is BridgeRequest.Calculation -> beginCalculation(request, payload, channel)
                 is BridgeRequest.SetUiLanguage -> {
                     val selected = ApplicationLanguage.select(this, request.language)
                     completeBridgePayload(request, payload, channel, org.json.JSONObject()
@@ -955,6 +1003,10 @@ class MainActivity : Activity() {
     }
 
     private fun beginRouteElevation(request: BridgeRequest.RouteElevation, payload: String, channel: BridgeChannel) {
+        if (!activityVisible && !application.calculations.owns(channel.pageNonce)) {
+            completeBridgePayload(request, payload, channel, RouteElevationProtocol.failure(request.requestId, request.elevation.operationId, "elevation_unavailable"))
+            return
+        }
         if (pendingElevation != null || localRouteWorkerBusy) {
             completeBridgePayload(request, payload, channel, RouteElevationProtocol.failure(request.requestId, request.elevation.operationId, "elevation_busy"))
             return
@@ -1015,6 +1067,10 @@ class MainActivity : Activity() {
                 channel,
                 NativeRouteFailureCode.ROUTING_BUSY,
             )
+            return
+        }
+        if (!activityVisible && !application.calculations.owns(channel.pageNonce)) {
+            completeLocalRouteFailure(request, payload, channel, NativeRouteFailureCode.ROUTING_BUSY)
             return
         }
         val operation = PendingLocalRoute(request, payload, channel)
@@ -1400,6 +1456,7 @@ class MainActivity : Activity() {
     }
 
     private fun invalidateBridgePage() {
+        activeBridgeChannel?.let { application.calculations.interruptOwner(it.pageNonce) }
         chatGpt.cancel()
         adventureSpeech.cancel()
         chatGptInferences.clear()

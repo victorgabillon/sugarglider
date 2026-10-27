@@ -37,10 +37,20 @@ def test_local_only_manifest_retains_only_planner_permissions() -> None:
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.RECORD_AUDIO",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.WAKE_LOCK",
     }
     application = root.find("application")
     assert application is not None
-    assert not application.findall("service")
+    services = application.findall("service")
+    assert len(services) == 1
+    assert services[0].get(ANDROID_NAME) == ".CalculationService"
+    assert (
+        services[0].get("{http://schemas.android.com/apk/res/android}exported")
+        == "false"
+    )
     text = (APP / "AndroidManifest.xml").read_text()
     assert "ACCESS_BACKGROUND_LOCATION" not in text
     assert "BOOT_COMPLETED" not in text
@@ -100,6 +110,7 @@ def test_service_is_not_sticky_and_has_no_background_job_or_history() -> None:
     service = (KOTLIN / "LocationSharingService.kt").read_text()
     engine = (KOTLIN / "NativeTrackingEngine.kt").read_text()
     combined = "\n".join(path.read_text() for path in KOTLIN.glob("*.kt"))
+    assert "WakeLock" not in service + engine
     assert "START_NOT_STICKY" in service
     assert "ServiceCompat.startForeground" in service
     assert "FOREGROUND_SERVICE_TYPE_LOCATION" in service
@@ -113,7 +124,6 @@ def test_service_is_not_sticky_and_has_no_background_job_or_history() -> None:
     for forbidden in (
         "WorkManager",
         "AlarmManager",
-        "WakeLock",
         "ACCESS_BACKGROUND_LOCATION",
         "BOOT_COMPLETED",
         "coordinateHistory",

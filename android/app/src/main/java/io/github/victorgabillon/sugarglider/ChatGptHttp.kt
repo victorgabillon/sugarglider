@@ -43,7 +43,7 @@ internal class ChatGptRejection private constructor(private val status: Int, pri
     }
 }
 
-/** Owns one foreground operation's connections; closing aborts blocked network reads. */
+/** Owns one authorized operation's connections; closing aborts blocked network reads. */
 internal class ChatGptCall(private val nowNanos: () -> Long = System::nanoTime) : AutoCloseable {
     private val stopped = AtomicBoolean(false)
     @Volatile private var networkStarted: Long? = null

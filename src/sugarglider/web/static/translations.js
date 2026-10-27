@@ -1,5 +1,16 @@
 // Complete interface messages only. Canonical data, user text, place names and original source notices remain unchanged.
 export const FRENCH = Object.freeze({
+  "An adventure was interrupted. Open Ask ChatGPT to review your original description and explicitly retry. Nothing restarts automatically.": "Une aventure a été interrompue. Ouvrez Demander à ChatGPT pour vérifier votre description d’origine et réessayer explicitement. Rien ne redémarre automatiquement.",
+  "Forget interrupted request": "Oublier la demande interrompue",
+  "The interrupted request could not be forgotten. Try again.": "La demande interrompue n’a pas pu être supprimée. Réessayez.",
+  "Restore interrupted description": "Récupérer la description interrompue",
+  "Calculation cancelled. Your previous route is kept.": "Calcul annulé. Votre parcours précédent est conservé.",
+  "A calculation is already running.": "Un calcul est déjà en cours.",
+  "Allow calculation notifications in Android, then press Generate again. No calculation has started.": "Autorisez les notifications de calcul dans Android, puis appuyez à nouveau sur Générer. Aucun calcul n’a démarré.",
+  "Background calculation could not start. Return to Sugarglider and try again.": "Le calcul en arrière-plan n’a pas pu démarrer. Revenez dans Sugarglider et réessayez.",
+  "An earlier calculation was interrupted. Your description is kept. Review it and press Generate to retry; ChatGPT usage may be charged again. Nothing restarts automatically.": "Un calcul précédent a été interrompu. Votre description est conservée. Vérifiez-la et appuyez sur Générer pour réessayer ; votre forfait ChatGPT pourra être débité à nouveau. Rien ne redémarre automatiquement.",
+  "Calculations can continue while you switch apps or lock the screen, with an Android notification and Cancel action. Recording always stops when the app loses focus. After a restart, review your recovered description and explicitly retry; an interrupted ChatGPT stream cannot resume.": "Les calculs peuvent continuer lorsque vous changez d’application ou verrouillez l’écran, avec une notification Android et une action Annuler. L’enregistrement s’arrête toujours lorsque l’application perd le premier plan. Après un redémarrage, vérifiez votre description récupérée et réessayez explicitement ; un flux ChatGPT interrompu ne peut pas reprendre.",
+
   "Include current map pins": "Inclure les points actuels de la carte",
   "Pin names, coordinates and order are sent to ChatGPT only when you press Generate.": "Les noms, coordonnées et l’ordre des points sont envoyés à ChatGPT uniquement lorsque vous appuyez sur Générer.",
   "{count} map pins captured. They are context only unless you explicitly require them below.": "{count} points de carte capturés. Ils servent de contexte, sauf si vous les rendez explicitement obligatoires ci-dessous.",

@@ -18,6 +18,8 @@ internal sealed interface BridgeRequest {
 
     class ChatGpt(override val requestId: String, override val pageNonce: String,
         val command: ChatGptCommand) : BridgeRequest
+    class Calculation(override val requestId: String, override val pageNonce: String,
+        val command: CalculationCommand) : BridgeRequest
     class AdventureSpeech(override val requestId: String, override val pageNonce: String,
         val action: String, val language: String? = null, val mode: AdventureSpeechMode? = null) : BridgeRequest
 
@@ -136,11 +138,13 @@ internal object BridgeProtocol {
             return null
         }
         if (payload.length > 8_192 && value.optString("type") != "route_elevation"
+            && !(value.optString("type") == "calculation_begin" && payload.toByteArray(StandardCharsets.UTF_8).size <= 65_536)
             && !(value.optString("type") == "chatgpt_infer" && payload.toByteArray(StandardCharsets.UTF_8).size <= 98_304)) return null
         if (value.optInt("schema_version", -1) != SCHEMA_VERSION) return null
         val requestId = value.optString("request_id", "")
         val pageNonce = pageNonce(requestId) ?: return null
         if (value.optString("type").startsWith("chatgpt_")) return ChatGptProtocol.parse(value)?.let { BridgeRequest.ChatGpt(requestId,pageNonce,it) }
+        if (value.optString("type").startsWith("calculation_")) return CalculationProtocol.parse(value)?.let { BridgeRequest.Calculation(requestId,pageNonce,it) }
         if (value.optString("type").startsWith("adventure_speech_")) {
             val action = value.getString("type").removePrefix("adventure_speech_")
             val fields = value.keys().asSequence().toSet()

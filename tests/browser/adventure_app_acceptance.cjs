@@ -87,7 +87,8 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
               adventureSavedGpx = new TextDecoder().decode(new Uint8Array(payload, 4 + length));
             } else request = JSON.parse(payload);
             adventureNativeCalls.push(request); let reply;
-            if (request.type === 'set_ui_language') reply = { type: 'set_ui_language_result', language: request.language, selected: true };
+            if (request.type.startsWith('calculation_')) reply = { type:'calculation_result',operation_id:request.operation_id??null,state:request.type==='calculation_begin'?'running':request.type==='calculation_forget'?'completed':request.state??'idle',recovery:null };
+            else if (request.type === 'set_ui_language') reply = { type: 'set_ui_language_result', language: request.language, selected: true };
             else if (request.type === 'show_privacy') reply = { type: 'show_privacy_result', shown: true };
             else if (request.type === 'get_app_identity') reply = { type: 'app_identity_result', label: 'SG AI Test', revision: '88bdb8c', variant: 'v2Staging', version: '1.2.0-v2-staging' };
             else if (request.type === 'hello') reply = { type: 'hello_result', outing_slug: null, participant_id: null, active: false, state: 'stopped', last_published_at: null, pending_sample: false, stop_warning: null };

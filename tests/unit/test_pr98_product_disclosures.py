@@ -89,8 +89,16 @@ def test_new_contract_preserves_packaged_capabilities_and_strict_uid_assertion()
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.RECORD_AUDIO",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.WAKE_LOCK",
     }
-    assert not manifest.findall(".//service")
+    services = manifest.findall(".//service")
+    assert len(services) == 1
+    assert services[0].attrib[android + "name"] == ".CalculationService"
+    assert services[0].attrib[android + "foregroundServiceType"] == "dataSync"
+    assert services[0].attrib[android + "exported"] == "false"
     config = json.loads(
         (ROOT / "src/sugarglider/web/static/android_ui_config.json").read_text()
     )
