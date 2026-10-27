@@ -12,6 +12,10 @@ internal sealed interface BridgeRequest {
     val requestId: String
     val pageNonce: String
 
+    data class ShowPrivacy(override val requestId: String, override val pageNonce: String) : BridgeRequest
+    data class GetAppIdentity(override val requestId: String, override val pageNonce: String) : BridgeRequest
+    data class SetUiLanguage(override val requestId: String, override val pageNonce: String, val language: String) : BridgeRequest
+
     class ChatGpt(override val requestId: String, override val pageNonce: String,
         val command: ChatGptCommand) : BridgeRequest
     class AdventureSpeech(override val requestId: String, override val pageNonce: String,
@@ -149,6 +153,10 @@ internal object BridgeProtocol {
             return null
         }
         return when (value.optString("type", "")) {
+            "show_privacy" -> if (hasExactly(value, baseFields)) BridgeRequest.ShowPrivacy(requestId, pageNonce) else null
+            "get_app_identity" -> if (hasExactly(value, baseFields)) BridgeRequest.GetAppIdentity(requestId, pageNonce) else null
+            "set_ui_language" -> if (hasExactly(value, baseFields + "language") && value.opt("language") is String
+                && value.getString("language") in setOf("fr", "en")) BridgeRequest.SetUiLanguage(requestId, pageNonce, value.getString("language")) else null
             "hello" -> if (hasExactly(value, baseFields)) {
                 BridgeRequest.Hello(requestId, pageNonce)
             } else {

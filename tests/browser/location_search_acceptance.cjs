@@ -1,3 +1,4 @@
+const { revealMapEditor, zoomFromUi } = require('./map_editing_controls.cjs');
 // Real immutable Yvelines bytes, live IGN query, isolated browser OPFS; no device action.
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const fs=require('fs'),path=require('path'),assert=require('assert/strict');
@@ -26,10 +27,10 @@ for(const[name,width,height]of sizes.filter(v=>!process.env.VIEW_FILTER||v[0]===
  });
  await versions.activate(ticket,{verifyComponent:async(kind,m,d)=>{if(['pois','nature'].includes(kind))return(await(await import('/static/region_components.js')).createVersionedRegionComponents({manifest:m,directory:d})).verifyIndexes();return true}});
  });
- await p.goto(B+'/');await p.evaluate(async()=>{window.S=await import('/static/state.js');window.M=await import('/static/map.js')});await p.waitForFunction(()=>window.S.state.config&&document.querySelectorAll('#profile option').length===6);
+ await p.evaluate(async()=>{await(await import('/static/pwa_store.js')).writeLanguagePreference('en')});await p.goto(B+'/');await p.evaluate(async()=>{window.S=await import('/static/state.js');window.M=await import('/static/map.js')});await p.waitForFunction(()=>window.S.state.config&&document.querySelectorAll('#profile option').length===6);
  if(name==='text200')await p.evaluate(()=>document.documentElement.style.fontSize='32px');
  const req=()=>p.evaluate(()=>window.S.currentPlanRequest()),snap=label=>p.screenshot({path:path.join(O,'screenshots',name+'-'+label+'.png')});
- const view=async v=>{const t=p.locator(`[data-shell-view="${v}"]`);if(await t.isVisible())await t.click();await p.waitForTimeout(80)};
+ const view=async v=>{const t=p.locator(`[data-shell-view="${v}"]`);if(await t.isVisible())await t.click();await p.waitForTimeout(80);if(v==='map')await revealMapEditor(p)};
  async function open(target){await view('map');if(target){const chip=p.locator(`[data-route-chip="${target}"]`);if(await chip.getAttribute('aria-pressed')!=='true')await chip.click();await p.locator('[data-dock-action="move"]').click();await p.locator('[data-dock-action="move-search"]').click()}else{await p.locator('#dock-add').click();await p.locator('[data-dock-action="search-location"]').click()}await p.waitForFunction(()=>document.querySelector('#location-search-dialog').open);assert.equal(await p.evaluate(()=>document.activeElement.id),'location-search-query')}
  async function query(text){await p.locator('#location-search-query').fill(text);await p.locator('#location-search-query').press('Enter');await p.waitForFunction(()=>document.querySelector('#location-search-results').getAttribute('aria-busy')==='false');}
  // Core local workflow is tested with actual network disabled and stored coordinates.
@@ -55,7 +56,7 @@ for(const[name,width,height]of sizes.filter(v=>!process.env.VIEW_FILTER||v[0]===
  }
  // Real ordinary map POIs remain inspection-only.
  await view("map");const beforePoi=await req();for(const[id,lon,lat]of[['node/2479030759',2.1329326,48.8067453],['node/2421490186',2.1240874,48.8040423]]){
- await p.evaluate(([lon,lat])=>window.M.focusCoordinate([lon,lat]),[lon,lat]);await p.locator('.maplibregl-ctrl-zoom-in').click({clickCount:2});await p.waitForTimeout(350);await p.evaluate(([lon,lat])=>window.M.keepCoordinateVisible([lon,lat]),[lon,lat]);await p.waitForFunction(id=>window.M.placeMapDiagnostics().markerIds.includes(id),id);await p.waitForTimeout(700);
+ await p.evaluate(([lon,lat])=>window.M.focusCoordinate([lon,lat]),[lon,lat]);await zoomFromUi(p,1,2);await p.waitForTimeout(350);await p.evaluate(([lon,lat])=>window.M.keepCoordinateVisible([lon,lat]),[lon,lat]);await p.waitForFunction(id=>window.M.placeMapDiagnostics().markerIds.includes(id),id);await p.waitForTimeout(700);
  const xy=await p.evaluate(id=>window.M.placeMapDiagnostics().positions.find(f=>f.id===id)?.point,id);assert(xy,'POI position');const r=await p.locator('#map .maplibregl-canvas').boundingBox();console.log(name,'map POI',id,xy,await p.evaluate(([x,y])=>({hit:document.elementFromPoint(x,y)?.className,dock:document.querySelector('#route-dock').getBoundingClientRect().top}),[r.x+xy[0],r.y+xy[1]]));await p.mouse.click(r.x+xy[0],r.y+xy[1]);await p.waitForFunction(id=>window.S.state.selectedPoiId===id,id);assert.deepEqual(await req(),beforePoi);await snap(id.includes('247903')?'ice-inspection':'water-inspection');await p.locator('.priority-place-popup .maplibregl-popup-close-button').click();}
  record('real ice-cream and verified-water map taps inspect only');assert(await p.locator('.maplibregl-ctrl-attrib').innerText().then(t=>t.includes('OpenStreetMap')));
  if(name==='phone390'){

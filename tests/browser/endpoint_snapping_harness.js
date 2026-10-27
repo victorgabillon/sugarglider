@@ -1,3 +1,7 @@
+// This existing fixture exercises explicit English output. French defaults and
+// both-language state preservation are covered by localization_harness and the
+// full bundled-app acceptance, with strict canonical and GPX comparisons.
+import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
 import { createLocalPlanner } from '../../src/sugarglider/web/static/local_planner.js';
 import { createLocalPlanPublisher } from '../../src/sugarglider/web/static/local_plan_client.js';
 import { PUBLIC_PROFILE_METADATA } from '../../src/sugarglider/web/static/public_profile_metadata.js';
@@ -36,6 +40,7 @@ export function snappedReply(input, { start = 0, end = 0, interior = 0, pack = '
       memory_before_initialization_bytes:0,memory_after_initialization_bytes:0,memory_after_route_bytes:0}};
 }
 export async function runEndpointSnappingHarness() {
+  await setLanguage("en", { persist: false, document: null });
   const cases = [];
   const publisher = createLocalPlanPublisher({ lifecycleTarget:null });
   async function generate(request, options, transform = reply => reply) {

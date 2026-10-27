@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
-    <application android:networkSecurityConfig="@xml/pr94_staging_network"
-        android:usesCleartextTraffic="false" tools:replace="android:usesCleartextTraffic">
+    <application android:icon="@drawable/sugarglider_staging_icon" android:networkSecurityConfig="@xml/pr94_staging_network"
+        android:usesCleartextTraffic="false" tools:replace="android:usesCleartextTraffic,android:icon">
         <activity android:name=".WebViewReviewActivity" android:exported="false"
             android:launchMode="singleTop" android:documentLaunchMode="never" />
         <activity android:name=".AutofillControlActivity" android:exported="false"

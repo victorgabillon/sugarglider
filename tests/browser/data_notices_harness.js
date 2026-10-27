@@ -1,3 +1,7 @@
+// This existing fixture exercises explicit English output. French defaults and
+// both-language state preservation are covered by localization_harness and the
+// full bundled-app acceptance, with strict canonical and GPX comparisons.
+import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
 import { appendRegionSources } from "../../src/sugarglider/web/static/terrain_attribution.js";
 import { DATA_NOTICES } from "../../src/sugarglider/web/static/data_notice_registry.js";
 import { appendMapSources, initializeSourceInformation } from "../../src/sugarglider/web/static/data_notices.js";
@@ -5,6 +9,7 @@ import { exportCanonicalCandidate } from "../../src/sugarglider/web/static/local
 
 function assert(value, message) { if (!value) throw Error(message); }
 export async function run() {
+  await setLanguage("en", { persist: false, document: null });
   const cases = [];
   const fixture = await (await fetch("../fixtures/ign_terrain_attribution.json")).json();
   const manifest = structuredClone(fixture.manifest);

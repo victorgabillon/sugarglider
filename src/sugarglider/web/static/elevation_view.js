@@ -1,8 +1,9 @@
+import { t, tr, getLanguage, setLocalizedText } from "./i18n.js";
 import { elevationDistanceLabel, elevationPositionAtDistance, elevationSampleIndex, projectElevationProfile } from "./elevation_profile.js";
 import { appendElevationSource } from "./terrain_attribution.js";
 
 const SVG = "http://www.w3.org/2000/svg";
-const metres = value => value === null ? "Unavailable" : `${Math.round(value)} m`;
+const metres = value => value === null ? t("Unavailable") : `${Math.round(value)} m`;
 
 export function createElevationView({root, onPosition = () => {}, onShowMap = () => {},
   onCancel = () => {}, onRetry = () => {}, isCurrent = () => false} = {}) {
@@ -32,9 +33,9 @@ export function createElevationView({root, onPosition = () => {}, onShowMap = ()
     pointer = null;
     cursor?.setAttribute("hidden", ""); cursorPoint?.setAttribute("hidden", "");
     showMap.hidden = true; clearPosition.hidden = true;
-    readout.textContent = "Touch the profile or use arrow keys to inspect a position.";
+    setLocalizedText(readout, () => t("Touch the profile or use arrow keys to inspect a position."));
     control?.setAttribute("aria-valuenow", "0");
-    control?.setAttribute("aria-valuetext", "No position selected. Use arrow keys to inspect.");
+    control?.setAttribute("aria-valuetext", t("No position selected. Use arrow keys to inspect."));
     onPosition(null);
   }
   function removeChart() {
@@ -52,9 +53,9 @@ export function createElevationView({root, onPosition = () => {}, onShowMap = ()
     interactionFrames++;
     const label = elevationDistanceLabel(position.distance_m, analysis.route_distance_m);
     const available = position.height_m !== null;
-    readout.textContent = `${label} km · ${available ? `${position.height_m.toFixed(1)} m altitude` : "Elevation unavailable here"}`;
+    setLocalizedText(readout, () => `${label} km · ${available ? `${position.height_m.toFixed(1)} m altitude` : t("Elevation unavailable here")}`);
     control.setAttribute("aria-valuenow", String(position.distance_m));
-    control.setAttribute("aria-valuetext", `${label} kilometres, ${available ? `${position.height_m.toFixed(1)} metres altitude` : "elevation unavailable here"}`);
+    control.setAttribute("aria-valuetext", `${label} kilometres, ${available ? tr`${position.height_m.toFixed(1)} metres altitude` : t("elevation unavailable here")}`);
     const x = projection.x(position.distance_m);
     cursor.removeAttribute("hidden"); cursor.setAttribute("x1", x); cursor.setAttribute("x2", x);
     cursorPoint.toggleAttribute("hidden", !available);
@@ -125,17 +126,17 @@ export function createElevationView({root, onPosition = () => {}, onShowMap = ()
     if (!control) {
       control = document.createElement("div"); control.className = "elevation-profile-control";
       control.tabIndex = 0; control.setAttribute("role", "slider");
-      control.setAttribute("aria-label", "Position on elevation profile");
+      control.setAttribute("aria-label", t("Position on elevation profile"));
       control.setAttribute("aria-describedby", "elevation-chart-help elevation-position-readout");
       control.setAttribute("aria-orientation", "horizontal"); control.setAttribute("aria-valuemin", "0");
       control.setAttribute("aria-valuemax", value.result.analysis.route_distance_m);
-      control.setAttribute("aria-valuenow", "0"); control.setAttribute("aria-valuetext", "Use arrow keys to inspect the elevation profile.");
+      control.setAttribute("aria-valuenow", "0"); control.setAttribute("aria-valuetext", t("Use arrow keys to inspect the elevation profile."));
       host.append(control); bindControl();
     }
     const p = projection;
     svg = node("svg", {viewBox:`0 0 ${p.width} ${p.height}`, role:"img", "aria-labelledby":"elevation-chart-title elevation-chart-description"});
-    svg.append(node("title", {id:"elevation-chart-title"}, "Route elevation profile"),
-      node("desc", {id:"elevation-chart-description"}, "Filtered altitude in metres against cumulative routed distance in kilometres. Separate lines and isolated points preserve gaps in available elevation."));
+    svg.append(node("title", {id:"elevation-chart-title"}, t("Route elevation profile")),
+      node("desc", {id:"elevation-chart-description"}, t("Filtered altitude in metres against cumulative routed distance in kilometres. Separate lines and isolated points preserve gaps in available elevation.")));
     svg.append(node("text", {x:p.left, y:13, class:"elevation-axis-title"}, "Altitude (m)"));
     for (const tick of p.altitudeTicks) {
       svg.append(node("line", {x1:p.left, x2:p.right, y1:p.y(tick), y2:p.y(tick), class:"elevation-grid-line"}),
@@ -154,9 +155,11 @@ export function createElevationView({root, onPosition = () => {}, onShowMap = ()
     if (position) inspect(position.distance_m);
     root.dispatchEvent(new window.CustomEvent("elevation-rendered", {detail:{duration_ms:renderMs, samples:value.result.analysis.samples.length}}));
   }
+  let displayedLanguage = null;
   function render(next, selectedCandidate) {
     if (destroyed) return;
-    if (next === value && selectedCandidate === candidate && owns()) return;
+    if (next === value && selectedCandidate === candidate && owns() && displayedLanguage === getLanguage()) return;
+    displayedLanguage = getLanguage();
     value = next; candidate = selectedCandidate;
     removeChart();
     const current = owns() && value.status !== "idle";
@@ -164,33 +167,33 @@ export function createElevationView({root, onPosition = () => {}, onShowMap = ()
     if (!current) return;
     summary.hidden = false;
     find("[data-elevation-distance]").textContent = `${elevationDistanceLabel(candidate.route.summary.distance_m, candidate.route.summary.distance_m)} km`;
-    for (const selector of ["[data-elevation-ascent]", "[data-elevation-descent]", "[data-elevation-altitude]"]) find(selector).textContent = "Unavailable";
+    for (const selector of ["[data-elevation-ascent]", "[data-elevation-descent]", "[data-elevation-altitude]"]) setLocalizedText(find(selector), () => (t("Unavailable")));
     cancel.hidden = value.status !== "loading"; retry.hidden = true; observed.hidden = true;
     status.hidden = false;
     if (value.status === "loading") {
-      badge.textContent = "Calculating"; status.textContent = "Calculating elevation… Your route is ready to use."; return;
+      setLocalizedText(badge, () => (t("Calculating"))); setLocalizedText(status, () => t("Calculating elevation… Your route is ready to use.")); return;
     }
     if (value.status !== "ready") {
-      badge.textContent = "Unavailable"; retry.hidden = false;
-      status.textContent = value.diagnostic === "elevation_cancelled"
-        ? "Elevation calculation cancelled. Your route remains available." : "Elevation unavailable. Your route remains available.";
+      setLocalizedText(badge, () => (t("Unavailable"))); retry.hidden = false;
+      setLocalizedText(status, () => value.diagnostic === "elevation_cancelled"
+        ? t("Elevation calculation cancelled. Your route remains available.") : t("Elevation unavailable. Your route remains available."));
       return;
     }
     const analysis = value.result.analysis;
-    badge.textContent = analysis.coverage === "complete" ? "Complete" : analysis.coverage === "partial" ? "Partial coverage" : "Unavailable";
+    setLocalizedText(badge, () => analysis.coverage === "complete" ? t("Complete") : analysis.coverage === "partial" ? t("Partial coverage") : t("Unavailable"));
     if (analysis.coverage === "complete") {
       find("[data-elevation-ascent]").textContent = metres(analysis.total_ascent_m);
       find("[data-elevation-descent]").textContent = metres(analysis.total_descent_m);
-      status.textContent = "Elevation profile ready.";
+      setLocalizedText(status, () => t("Elevation profile ready."));
     } else if (analysis.coverage === "partial") {
-      status.textContent = "Partial elevation. Full-route D+ and D− are unavailable.";
+      setLocalizedText(status, () => t("Partial elevation. Full-route D+ and D− are unavailable."));
       observed.hidden = false;
       const coverage = (100 * analysis.analyzed_distance_m / analysis.route_distance_m).toFixed(1);
-      observed.textContent = `Measured segments cover ${coverage}% of the route. ${analysis.observed_ascent_m === null
-        ? "Available heights are isolated; ascent and descent cannot be measured."
-        : `Measured segments only: D+ ${metres(analysis.observed_ascent_m)} · D− ${metres(analysis.observed_descent_m)}.`}`;
+      setLocalizedText(observed, () => tr`Measured segments cover ${coverage}% of the route. ${analysis.observed_ascent_m === null
+        ? t("Available heights are isolated; ascent and descent cannot be measured.")
+        : tr`Measured segments only: D+ ${metres(analysis.observed_ascent_m)} · D− ${metres(analysis.observed_descent_m)}.`}`);
     } else {
-      status.textContent = "Elevation unavailable for this route. Your route remains available."; retry.hidden = false; return;
+      setLocalizedText(status, () => t("Elevation unavailable for this route. Your route remains available.")); retry.hidden = false; return;
     }
     find("[data-elevation-altitude]").textContent = analysis.minimum_height_m === analysis.maximum_height_m
       ? metres(analysis.minimum_height_m) : `${Math.round(analysis.minimum_height_m)}–${Math.round(analysis.maximum_height_m)} m`;

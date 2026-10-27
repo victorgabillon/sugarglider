@@ -1,3 +1,7 @@
+// This existing fixture exercises explicit English output. French defaults and
+// both-language state preservation are covered by localization_harness and the
+// full bundled-app acceptance, with strict canonical and GPX comparisons.
+import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
 import {projectElevationProfile,elevationPositionAtDistance} from '../../src/sugarglider/web/static/elevation_profile.js';
 import {createElevationView} from '../../src/sugarglider/web/static/elevation_view.js';
 import {createElevationMapMarker} from '../../src/sugarglider/web/static/elevation_map_marker.js';
@@ -11,6 +15,7 @@ const tick=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFr
 async function until(check){for(let i=0;i<100;i++){if(check())return;await new Promise(r=>setTimeout(r,10));}throw Error('did not settle');}
 
 export async function runElevationUiHarness(){
+  await setLanguage("en", { persist: false, document: null });
   const scenarios=[];
   const original=await(await fetch('../../src/sugarglider/web/static/index.html')).text();
   const markup=new DOMParser().parseFromString(original,'text/html').querySelector('#route-elevation');

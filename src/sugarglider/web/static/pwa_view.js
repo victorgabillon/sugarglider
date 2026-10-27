@@ -1,3 +1,4 @@
+import { t, tr, setLocalizedText } from "./i18n.js";
 import { isBundledAndroidApp } from "./android_app.js";
 
 const byId = (id) => document.getElementById(id);
@@ -56,8 +57,8 @@ export function renderPwaStatus(state) {
     && ["idle", "ready"].includes(state.pwaStatus) && state.storagePersistenceStatus === "unknown";
   panel.classList.toggle("hidden", !meaningful || healthy);
   const summary = byId("app-status-summary");
-  if (summary) summary.textContent = `${isBundledAndroidApp() ? "On device" : offline ? "Offline" : "Online"} · ${message}`;
-  byId("pwa-network-status").textContent = isBundledAndroidApp() ? "On device" : offline ? "Offline" : "Online";
+  if (summary) setLocalizedText(summary, () => `${isBundledAndroidApp() ? t("On device") : offline ? t("Offline") : t("Online")} · ${message}`);
+  setLocalizedText(byId("pwa-network-status"), () => isBundledAndroidApp() ? t("On device") : offline ? t("Offline") : t("Online"));
   byId("pwa-status-message").textContent = statusMessage(state);
   byId("retry-connection").classList.toggle("hidden", !offline);
   byId("reload-pwa-update").classList.toggle(
@@ -131,38 +132,38 @@ function toggleOfflineButtons(saveId, removeId, visible, saved, offline) {
 }
 
 function statusMessage(state) {
-  if (state.pwaStatus === "reloading_update") return "Reloading update.";
+  if (state.pwaStatus === "reloading_update") return t("Reloading update.");
   if (state.pwaStatus === "update_blocked") {
-    return "Stop foreground sharing and finish the current outing action before reloading the update.";
+    return t("Stop foreground sharing and finish the current outing action before reloading the update.");
   }
-  if (state.pwaUpdateAvailable) return "Update available.";
-  if (state.offlineSnapshotKind) return "Showing saved offline copy.";
+  if (state.pwaUpdateAvailable) return t("Update available.");
+  if (state.offlineSnapshotKind) return t("Showing saved offline copy.");
   if (state.pwaStatus === "storage_cleared") {
-    return "Saved offline data cleared.";
+    return t("Saved offline data cleared.");
   }
   if (state.pwaStatus === "offline_copy_updated") {
-    return "Offline copy updated.";
+    return t("Offline copy updated.");
   }
   if (state.pwaStatus === "offline_copy_removed") {
-    return "Offline copy removed.";
+    return t("Offline copy removed.");
   }
   if (state.pwaStatus === "participant_remembered") {
-    return "Participant remembered on this device.";
+    return t("Participant remembered on this device.");
   }
   if (state.pwaStatus === "participant_forgotten") {
-    return "Participant forgotten.";
+    return t("Participant forgotten.");
   }
   if (state.storagePersistenceStatus === "evictable") {
-    return "Saved offline data is available, but the browser may evict it.";
+    return t("Saved offline data is available, but the browser may evict it.");
   }
   if (state.storagePersistenceStatus === "unavailable") {
-    return "Offline storage unavailable.";
+    return t("Offline storage unavailable.");
   }
   if (state.networkStatus === "offline") {
     return isBundledAndroidApp()
-      ? "You can use regions already installed on this device."
-      : "Server features are unavailable. Retry when connectivity returns.";
+      ? t("You can use regions already installed on this device.")
+      : t("Server features are unavailable. Retry when connectivity returns.");
   }
-  if (isBundledAndroidApp()) return "Maps and routes use installed regions.";
-  return "App ready for offline use.";
+  if (isBundledAndroidApp()) return t("Maps and routes use installed regions.");
+  return t("App ready for offline use.");
 }

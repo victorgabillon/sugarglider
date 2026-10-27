@@ -1,8 +1,13 @@
+// This existing fixture exercises explicit English output. French defaults and
+// both-language state preservation are covered by localization_harness and the
+// full bundled-app acceptance, with strict canonical and GPX comparisons.
+import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
 import { renderWaypointEditor } from '../../src/sugarglider/web/static/waypoint_editor.js';
 import { state, switchPlanningMode, currentPlanRequest, generationAvailability } from '../../src/sugarglider/web/static/state.js';
 const assert = (ok, message) => { if (!ok) throw Error(message); };
 const same = (a, b, message) => assert(JSON.stringify(a) === JSON.stringify(b), message);
 export async function runWaypointHarness() {
+  await setLanguage("en", { persist: false, document: null });
   const cases = [], initial = structuredClone(state), list = document.createElement('div');
   list.role = 'list'; document.body.append(list);
   let points = ['exact', 'approach', 'best_effort'].map((constraintStrength, i) => ({ id: `stop-${i}`, name: `Chosen ${i + 1}`, lat: 48.81 + i * .001, lon: 2.14 + i * .001, constraintStrength, accessSearchRadiusM: 300 + i * 100, maximumBestEffortDistanceM: i === 2 ? 650 : null, approachOverride: i === 1 ? { lat: 48.8111, lon: 2.1411 } : null }));

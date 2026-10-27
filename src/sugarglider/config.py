@@ -68,7 +68,10 @@ class Settings(BaseSettings):
     map_attribution: Annotated[
         str,
         Field(min_length=1, validation_alias="SUGARGLIDER_MAP_ATTRIBUTION"),
-    ] = "© OpenStreetMap contributors"
+    ] = (
+        '<a href="https://www.openstreetmap.org/copyright" target="_blank" '
+        'rel="noopener noreferrer">© OpenStreetMap contributors</a>'
+    )
     map_initial_lat: Annotated[
         float,
         Field(ge=-90, le=90, validation_alias="SUGARGLIDER_MAP_INITIAL_LAT"),

@@ -1,3 +1,7 @@
+// This existing fixture exercises explicit English output. French defaults and
+// both-language state preservation are covered by localization_harness and the
+// full bundled-app acceptance, with strict canonical and GPX comparisons.
+import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
 import {
   PLANNER_LOCATION_WATCH_OPTIONS,
   PLANNER_PERMISSION_QUERY_TIMEOUT_MS,
@@ -15,6 +19,7 @@ const VIEWPORTS = Object.freeze([
 ]);
 
 export async function runPr31PrivatePlannerLocationHarness() {
+  await setLanguage("en", { persist: false, document: null });
   const scenarios = [];
   await grantedPermissionScenario();
   scenarios.push("granted_permission_auto_watch_private_render_follow");
@@ -192,12 +197,12 @@ async function responsiveControlScenario() {
       attribution.style.cssText = "position:absolute;right:0;bottom:0;width:150px;height:24px";
       document.querySelector(".map-panel").append(attribution);
       const controlRect = control.getBoundingClientRect();
-      const layersRect = document.querySelector(".map-tools").getBoundingClientRect();
-      const legendRect = document.querySelector(".legend").getBoundingClientRect();
+      const layers = document.querySelector(".map-tools");
+      const legend = document.querySelector(".legend");
       const attributionRect = attribution.getBoundingClientRect();
       assert(controlRect.width >= 44 && controlRect.height >= 44, `touch target ${width}`);
-      assert(!overlaps(controlRect, layersRect), `does not cover Layers ${width}`);
-      assert(!overlaps(controlRect, legendRect), `does not cover legend ${width}`);
+      assert(layers.closest(".header-tools") && legend.closest(".header-tools"), `map display and legend are secondary Tools content ${width}`);
+      assert(!document.querySelector(".map-panel > .map-tools"), `no competing map menu over private location ${width}`);
       assert(!overlaps(controlRect, attributionRect), `does not cover attribution ${width}`);
       assert(
         document.documentElement.scrollWidth <= document.documentElement.clientWidth,

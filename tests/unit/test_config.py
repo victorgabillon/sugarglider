@@ -19,7 +19,8 @@ def test_low_overlap_setting_defaults() -> None:
 def test_map_setting_defaults() -> None:
     settings = Settings()
     assert settings.map_tile_url == "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-    assert settings.map_attribution == "© OpenStreetMap contributors"
+    assert "© OpenStreetMap contributors" in settings.map_attribution
+    assert 'href="https://www.openstreetmap.org/copyright"' in settings.map_attribution
     assert settings.map_initial_lat == 48.87
     assert settings.map_initial_lon == 2.10
     assert settings.map_initial_zoom == 11.0

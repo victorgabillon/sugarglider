@@ -3,6 +3,7 @@
 // synthetic CI fixtures; no real account, geographic evidence or device install.
 const fs = require('node:fs/promises'), path = require('node:path'), assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const { checkMinimalMobileMap } = require('./map_minimalism_checks.cjs');
 const root = path.resolve(__dirname, '../..'), origin = 'https://appassets.androidplatform.net';
 const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bike', 'road_bike'];
 
@@ -10,8 +11,8 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
   const browser = await chromium.launch({ headless: true, args: ['--enable-unsafe-swiftshader'],
     ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
   try {
-    for (const width of [390, 1280]) {
-      const context = await browser.newContext({ viewport: { width, height: 844 }, serviceWorkers: 'block' });
+    for (const [width, height, locale] of [[372, 760, "fr-FR"], [412, 844, "en-GB"], [320, 720, "fr-FR"], [800, 372, "fr-FR"], [1280, 844, "en-GB"]].filter(row => !process.env.FOCUSED_WIDTH || row[0] === Number(process.env.FOCUSED_WIDTH))) {
+      const context = await browser.newContext({ viewport: { width, height }, locale: locale === "fr-FR" ? "en-US" : locale, serviceWorkers: 'block', hasTouch: width <= 840 });
       const errors = [], external = [], unexpected = [];
       try {
         await context.route('**/*', async route => {
@@ -21,17 +22,24 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           if (url.pathname === '/static/offline_region_catalog.json') return route.fulfill({ json: { schema_version: 1, regions: [] } });
           const relative = url.pathname.startsWith('/tests/') || url.pathname.startsWith('/src/') ? url.pathname.slice(1)
             : 'src/sugarglider/web/static/' + (url.pathname === '/' ? 'index.html' : url.pathname === '/v1/ui/config' ? 'android_ui_config.json' : url.pathname.replace(/^\/static\//u, ''));
-          const file = path.resolve(root, relative);
+          const file = path.resolve(root, decodeURIComponent(relative));
           if (!file.startsWith(root + path.sep)) return route.abort();
           const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
           try {
-            const body = await fs.readFile(file);
+            let body = await fs.readFile(file);
+            if (relative.endsWith('/pr36_offline_maps_harness.js')) body = Buffer.from(body.toString().replace(
+              'attribution: "© OpenStreetMap contributors · Protomaps",',
+              'attribution: packId.includes("second") ? "© OpenStreetMap contributors · ODbL · ESA WorldCover · Natural Earth · Protomaps · Synthetic pack B" : "© OpenStreetMap contributors · ODbL · ESA WorldCover (CC BY 4.0) · Natural Earth · Protomaps · Synthetic pack A",'));
             if (url.pathname === '/v1/ui/config') { const config = JSON.parse(body); config.initial_center = [.01, .01]; config.initial_zoom = 14; return route.fulfill({ json: config }); }
             return route.fulfill({ body, contentType: types[path.extname(file)] ?? 'application/octet-stream' });
           } catch { return route.fulfill({ status: 404, body: '' }); }
         });
         const page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
         await page.goto(origin + '/seed.html');
+        if (locale.startsWith('en')) await page.evaluate(async () => {
+          const { writeLanguagePreference } = await import('/static/pwa_store.js');
+          await writeLanguagePreference('en');
+        });
         const fixture = await page.evaluate(async () => {
           const data = await (await fetch('/tests/fixtures/pr40_regional_data.json')).json();
           const { createRegionVersionStore } = await import('/static/region_versions.js');
@@ -39,6 +47,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           const { syntheticAdventure } = await import('/tests/browser/adventure_proposal_harness.js');
           const { openPwaStore, PWA_STORES } = await import('/static/pwa_store.js');
           const manifest = await seedRegion(data, createRegionVersionStore(), 'adventure-fixture', 'Synthetic adventure region');
+          await seedRegion(data, createRegionVersionStore(), 'second-fixture', 'Synthetic second region');
           const store = await openPwaStore();
           await store.put(PWA_STORES.trailProfile, 'current', { schema_version: 1, display_name: 'Synthetic reviewer', avatar_key: 'forest' });
           await store.put(PWA_STORES.publicRuntime, 'planner-region-id', manifest.region_id); store.close();
@@ -55,6 +64,11 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           return { manifest, initial, revised, flat };
         });
         await context.addInitScript(({ profiles, fixture }) => {
+          globalThis.localizationLocationStarts = 0;
+          for (const method of ['getCurrentPosition', 'watchPosition']) {
+            const original = navigator.geolocation[method].bind(navigator.geolocation);
+            navigator.geolocation[method] = (...args) => { localizationLocationStarts++; return original(...args); };
+          }
           globalThis.adventureNativeCalls = []; globalThis.adventureSavedGpx = null; globalThis.adventureModelCount = 0; globalThis.failAdventureModel = false;
           let connected = false;
           const account = () => ({ accounts: connected ? [{ id: 'oaiapp_synthetic', label: 'Synthetic account', connected: true, plan_usage: true }] : [],
@@ -68,7 +82,10 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
               adventureSavedGpx = new TextDecoder().decode(new Uint8Array(payload, 4 + length));
             } else request = JSON.parse(payload);
             adventureNativeCalls.push(request); let reply;
-            if (request.type === 'hello') reply = { type: 'hello_result', outing_slug: null, participant_id: null, active: false, state: 'stopped', last_published_at: null, pending_sample: false, stop_warning: null };
+            if (request.type === 'set_ui_language') reply = { type: 'set_ui_language_result', language: request.language, selected: true };
+            else if (request.type === 'show_privacy') reply = { type: 'show_privacy_result', shown: true };
+            else if (request.type === 'get_app_identity') reply = { type: 'app_identity_result', label: 'SG AI Test', revision: '88bdb8c', variant: 'v2Staging', version: '1.2.0-v2-staging' };
+            else if (request.type === 'hello') reply = { type: 'hello_result', outing_slug: null, participant_id: null, active: false, state: 'stopped', last_published_at: null, pending_sample: false, stop_warning: null };
             else if (request.type === 'itinerary_dialog_state') reply = { type: 'itinerary_dialog_state_result', open: request.open };
             else if (request.type === 'get_local_route_capabilities') reply = { type: 'local_route_capabilities_result', enabled: true,
               engine: 'valhalla-mobile', engine_version: 'synthetic', installed_pack_count: 1, installed_pack_ids: [request.regional_reference.pack_id],
@@ -113,26 +130,196 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await page.waitForFunction(() => document.querySelector('#regional-status').dataset.state === 'regional_ready');
         const startupCalls = await page.evaluate(() => adventureNativeCalls.map(call => call.type));
         assert(!startupCalls.some(type => ['local_route', 'route_elevation', 'chatgpt_infer', 'adventure_speech_start'].includes(type)), 'Startup must not route, infer or listen');
+        if (width === 372) {
+          await page.waitForFunction(() => adventureAppState.state.routingProfile === 'trail_run'
+            && adventureAppState.state.config.poi_index_available);
+          const original = await page.evaluate(() => JSON.stringify(adventureAppState.currentAdventureContext()));
+          const nativeCount = await page.evaluate(() => adventureNativeCalls.length);
+          for (const language of ['fr', 'en']) {
+            await page.evaluate(async language => {
+              await (await import('/static/i18n.js')).setLanguage(language, { persist: false });
+              const checkbox = document.querySelector('#place-unknown-water');
+              checkbox.checked = true;
+              checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+            }, language);
+            await page.waitForFunction(() => ['success', 'error'].includes(adventureAppState.state.poiRequest.status));
+            assert.equal(await page.evaluate(() => adventureAppState.state.poiRequest.status), 'success', `${language}: real local POI query accepts canonical access and potability values`);
+            assert(await page.evaluate(() => adventureAppState.state.poiFeatures.some(feature => feature.category === 'fountain'
+              && feature.access_status === 'unknown' && feature.potability === 'unknown')), `${language}: unknown-access water remains discoverable`);
+          }
+          await page.evaluate(async () => {
+            const checkbox = document.querySelector('#place-unknown-water');
+            checkbox.checked = false; checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+            await (await import('/static/i18n.js')).setLanguage('fr', { persist: false });
+          });
+          assert.equal(await page.evaluate(() => JSON.stringify(adventureAppState.currentAdventureContext())), original);
+          assert(!await page.evaluate(count => adventureNativeCalls.slice(count).some(call => ['local_route', 'route_elevation', 'chatgpt_infer', 'adventure_speech_start'].includes(call.type)), nativeCount));
+        }
+        const screenshot = async name => {
+          if (!process.env.MOBILE_EVIDENCE_DIR) return;
+          await fs.mkdir(process.env.MOBILE_EVIDENCE_DIR, { recursive: true });
+          await page.screenshot({ path: path.join(process.env.MOBILE_EVIDENCE_DIR, `${name}-${width}-${locale}.png`) });
+        };
+        let mapTapIndex = 0;
+        const tapMap = async () => {
+          const point = await page.locator('.maplibregl-canvas').evaluate((canvas, index) => {
+            const bounds = canvas.getBoundingClientRect();
+            const fractions = [.2, .8, .4, .6];
+            const rotated = [...fractions.slice(index % 4), ...fractions.slice(0, index % 4)];
+            for (const fx of rotated) for (const fy of [.25, .5, .75, .1]) {
+              const x = bounds.width * fx, y = bounds.height * fy;
+              if (document.elementFromPoint(bounds.left + x, bounds.top + y) === canvas) return { x, y };
+            }
+            return null;
+          }, mapTapIndex++);
+          assert(point, 'There is an unobstructed map target, including in landscape');
+          await page.locator('.maplibregl-canvas').click({ position: point });
+        };
+        const unchanged = () => page.evaluate(() => JSON.stringify({ request: adventureAppState.state.request,
+          result: adventureAppState.state.generationResult, source: adventureAppState.state.generationSourceRequest,
+          selected: adventureAppState.state.selectedSignature, points: adventureAppState.currentAdventureContext() }));
+        const checkLayout = async () => {
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          const layout = await page.evaluate(() => {
+            const rect = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
+            return { overflow: document.documentElement.scrollWidth > innerWidth, header: rect('.topbar'),
+              ai: rect('#ask-chatgpt'), tools: rect('.header-tools > summary'),
+              dock: rect('#route-dock'), credits: rect('.maplibregl-ctrl-attrib'), nav: rect('.workspace-navigation') };
+          });
+          assert(!layout.overflow, JSON.stringify(layout));
+          assert(layout.ai.height >= 44 && layout.ai.right <= width && layout.ai.right <= layout.tools.left + 1, JSON.stringify(layout));
+          const overlaps = (a,b) => a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1;
+          assert(!overlaps(layout.dock, layout.credits) && (width > 840 || layout.credits.bottom <= layout.nav.top + 1), JSON.stringify(layout));
+          return layout;
+        };
+        assert(await page.locator('#ask-chatgpt').isVisible(), 'Ask ChatGPT is visible on startup without opening Plan');
+        const suppliedIcons = page.locator('#ask-chatgpt .ai-planner-icon, #plan-with-ai .ai-planner-icon, #adventure-title .ai-planner-icon');
+        assert.equal(await suppliedIcons.count(), 3, 'Map, Plan and the shared dialog use the supplied artwork');
+        for (const icon of await suppliedIcons.all()) {
+          await icon.evaluate(image => image.decode());
+          assert(await icon.evaluate(image => image.naturalWidth === 256 && image.naturalHeight === 194
+            && image.getAttribute('src') === '/static/brand/sugarglider-ai-planner.png' && image.alt === ''), 'Bundled optimized artwork loads without duplicating its text label');
+        }
+        const imageBounds = await page.locator('#ask-chatgpt').evaluate(button => {
+          const image = button.querySelector('img').getBoundingClientRect(), bounds = button.getBoundingClientRect();
+          return image.width >= 32 && image.left >= bounds.left && image.right <= bounds.right && image.top >= bounds.top && image.bottom <= bounds.bottom;
+        });
+        assert(imageBounds, 'The supplied Map icon remains recognizable and contained within the touch target');
+        assert.equal(await page.locator('#ask-chatgpt .ai-action-label').count(), 0, 'Map action is icon-only');
+        assert.equal(await page.locator('#ask-chatgpt').getAttribute('aria-label'), locale === 'fr-FR' ? 'Planifier une aventure avec ChatGPT' : 'Plan an adventure with ChatGPT');
+
+        const packCredits = async pack => {
+          // Pack attachment can briefly replace the attribution DOM. Capture
+          // the complete checked text atomically instead of reading it again
+          // in a second browser task during that transition.
+          const required = ['OpenStreetMap', 'ODbL', 'ESA WorldCover', 'Natural Earth', 'Protomaps', pack];
+          const snapshot = await page.waitForFunction(required => {
+            const text = document.querySelector('.maplibregl-ctrl-attrib-inner').textContent;
+            return required.every(name => text.includes(name)) && text;
+          }, required);
+          return snapshot.jsonValue();
+        };
+        await packCredits('Synthetic pack A');
+        const osm = page.locator('.maplibregl-ctrl-attrib a[href="https://www.openstreetmap.org/copyright"]');
+        assert(await osm.isVisible(), 'OSM licence link is available with the full active-pack credits');
+        // Verify activation through a local interception, without requesting the provider.
+        const links = [];
+        await context.route('https://www.openstreetmap.org/copyright', route => { links.push(route.request().url()); return route.fulfill({ body: 'Synthetic attribution link target', contentType: 'text/html' }); });
+        await screenshot('map-initial');
+        if (width <= 840) {
+          await page.waitForFunction(() => !document.querySelector('.maplibregl-ctrl-attrib').classList.contains('maplibregl-compact-show'));
+          await packCredits('Synthetic pack A');
+          await checkLayout(); await screenshot('map-settled');
+          const creditsButton = page.locator('.maplibregl-ctrl-attrib summary');
+          await creditsButton.focus(); await page.keyboard.press('Enter');
+          assert(await osm.isVisible(), 'Keyboard expands full licence credits');
+          await page.waitForTimeout(5200);
+          await packCredits('Synthetic pack A');
+          assert(await osm.isVisible(), 'Explicit keyboard expansion remains open');
+          await checkLayout(); await screenshot('map-expanded');
+        }
+        const popup = page.waitForEvent('popup'); await osm.click(); const linked = await popup;
+        await linked.waitForLoadState(); await linked.close(); assert.equal(links.length, 1);
+        if (width <= 840) { await page.locator('.maplibregl-ctrl-attrib summary').click(); }
+        const tools = page.locator('.header-tools');
+        await tools.evaluate(node => { node.open = true; });
+        await page.locator('#native-privacy').click();
+        assert.equal(await page.evaluate(() => adventureNativeCalls.filter(call => call.type === 'show_privacy').length), 1);
+        await tools.evaluate(node => { node.open = true; });
+        await page.locator('.app-status-details > summary').click();
+        await page.waitForFunction(() => document.querySelector('#app-build-identity').textContent.includes('SG AI Test · 88bdb8c · V2 Staging'));
+        await tools.evaluate(node => { node.open = false; });
+        // Switch actual verified OPFS regions, rather than replacing credit DOM.
+        await page.locator('#planning-region').evaluate(node => {
+          for (let parent = node.parentElement; parent; parent = parent.parentElement) if (parent.tagName === 'DETAILS') parent.open = true;
+        });
+        await page.locator('#planning-region').selectOption('second-fixture');
+        assert(!(await packCredits('Synthetic pack B')).includes('Synthetic pack A'), 'Previous pack credits do not remain associated with the new map');
+        await tools.evaluate(node => { node.open = false; });
+        assert(await osm.isVisible(), 'A new region reveals its complete credits again');
+        await screenshot('map-pack-switch');
+        await page.locator('#planning-region').evaluate(node => {
+          for (let parent = node.parentElement; parent; parent = parent.parentElement) if (parent.tagName === 'DETAILS') parent.open = true;
+        });
+        await page.locator('#planning-region').selectOption('adventure-fixture');
+        await packCredits('Synthetic pack A');
+        await tools.evaluate(node => { node.open = false; });
+        await page.evaluate(async () => { const { createRegionVersionStore } = await import('/static/region_versions.js'); await createRegionVersionStore().removeRegion('second-fixture'); });
+        const original = await unchanged(), count = await page.evaluate(() => adventureNativeCalls.length);
+        await page.locator('#ask-chatgpt .ai-planner-icon').click();
+        await page.waitForFunction(() => document.querySelector('#adventure-dialog').open && document.querySelector('#adventure-dialog').getAttribute('aria-busy') === 'false');
+        assert(await page.locator('#adventure-title .ai-planner-icon').isVisible(), 'The same illustration appears in the opened dialog heading');
+        await screenshot('dialog-disconnected');
+        await page.locator('#adventure-text').fill('My editable adventure');
+        await page.locator('#adventure-close').click();
+        assert.equal(await unchanged(), original, 'Opening and cancelling from Map preserves the complete editable plan');
+        assert(await page.locator('#ask-chatgpt').evaluate(node => node === document.activeElement), 'Cancel returns focus to the Map launcher');
+        assert(!await page.evaluate(count => adventureNativeCalls.slice(count).some(call => ['chatgpt_infer', 'local_route', 'adventure_speech_start'].includes(call.type)), count));
+        if (width === 372) {
+          await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
+          await page.waitForFunction(() => !document.querySelector('.maplibregl-ctrl-attrib').classList.contains('maplibregl-compact-show'));
+          await checkLayout(); await screenshot('map-large-text');
+          await page.locator('.maplibregl-ctrl-attrib summary').click();
+          await checkLayout();
+          await page.keyboard.press('Tab');
+          assert(await osm.evaluate(node => node === document.activeElement), 'Large-text credits retain keyboard access to the ODbL link');
+          await screenshot('map-large-text-expanded');
+          await page.locator('.maplibregl-ctrl-attrib summary').click();
+          await page.locator('#ask-chatgpt').click();
+          await screenshot('dialog-large-text');
+          const overflow = await page.locator('#adventure-dialog').evaluate(node => node.scrollWidth > node.clientWidth + 1);
+          assert(!overflow, 'Dialog has no horizontal overflow at 200% text size');
+          assert(await page.locator('.adventure-body').evaluate(node => node.clientHeight >= 100), 'Large-text header leaves a usable scrolling editor');
+          await page.locator('#adventure-text').scrollIntoViewIfNeeded();
+          await screenshot('dialog-large-text-editor');
+          await page.locator('#adventure-close').click();
+          await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+        }
+        const minimalCases = await checkMinimalMobileMap({ page, width, screenshot, checkLayout });
         const initialContext = await page.evaluate(() => adventureAppState.currentAdventureContext());
         assert.equal(initialContext.start,null);assert.equal(initialContext.end,null);
         const initialPlanView = page.locator('[data-shell-view="plan"]');if(await initialPlanView.isVisible())await initialPlanView.click();
-        await page.locator('#plan-with-ai').click();await page.locator('#adventure-connect').click();
+        await page.locator('#plan-with-ai').click();
+
+        await page.locator('#adventure-connect').click();
         await page.waitForFunction(()=>document.querySelector('#adventure-model').value==='synthetic-model');
         await page.locator('#adventure-text').fill('Describe the endpoints, or choose them while planning');
         await page.waitForFunction(()=>!document.querySelector('#adventure-generate').disabled);
-        assert((await page.locator('#adventure-start').textContent()).includes('from your description'),'Blank editor supports AI without serializing missing manual endpoints');
+        assert((await page.locator('#adventure-start').textContent()).includes(locale === 'fr-FR' ? 'selon votre description' : 'from your description'),'Blank editor supports AI without serializing missing manual endpoints');
+        await page.locator('#adventure-endpoints').evaluate(node => { node.open = true; });
         await page.locator('#adventure-choose-start').click();
         await page.waitForFunction(()=>adventureAppState.state.endpointSetMode==='start');
         await page.locator('#cancel-point-placement').click();
         await page.evaluate(()=>document.querySelector('#set-hard-start').click());
-        await page.locator('.maplibregl-canvas').click({position:{x:150,y:150}});
+        await tapMap();
         assert(!await page.locator('#adventure-dialog').evaluate(node=>node.open),'Cancelled AI map placement cannot reopen during a later ordinary edit');
         await page.evaluate(()=>document.querySelector('#plan-with-ai').click());
         await page.waitForFunction(()=>document.querySelector('#adventure-dialog').open&&!document.querySelector('#adventure-choose-start').disabled);
+        await page.locator('#adventure-endpoints').evaluate(node => { node.open = true; });
         await page.locator('#adventure-choose-start').click();
         await page.waitForFunction(()=>adventureAppState.state.endpointSetMode==='start');
-        await page.locator('.maplibregl-canvas').click({position:{x:250,y:150}});
-        await page.waitForFunction(()=>document.querySelector('#adventure-dialog').open&&document.querySelector('#adventure-start').textContent.includes('Start:'));
+        await tapMap();
+        await page.waitForFunction(french=>document.querySelector('#adventure-dialog').open&&document.querySelector('#adventure-start').textContent.includes(french ? 'Départ:' : 'Start:'),locale==='fr-FR');
         assert.equal(await page.locator('#adventure-text').inputValue(),'Describe the endpoints, or choose them while planning','Map selection resumes the same description');
         assert(await page.evaluate(()=>adventureAppState.currentAdventureContext().start!==null),'The ordinary map handler supplies the selected Start');
         assert.equal(await page.evaluate(()=>adventureModelCount),0,'Map selection does not infer automatically');
@@ -151,10 +338,51 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await page.waitForFunction(() => adventureAppState.state.request.status === 'success');
         const manual = await page.evaluate(async () => { const { state, currentPlanRequest } = await import('/static/state.js'); return JSON.stringify({ request: currentPlanRequest(), result: state.generationResult, source: state.generationSourceRequest, selected: state.selectedSignature }); });
         assert(JSON.parse(manual).result.candidates.length && JSON.parse(manual).selected, 'The prior manual route must actually be generated and selected');
+        // A language change is presentation only, even with an existing route.
+        const languageFingerprint = () => page.evaluate(async () => {
+          const { state, currentPlanRequest, selectedCandidate } = await import('/static/state.js');
+          const { exportCanonicalCandidate } = await import('/static/local_gpx_export.js');
+          const { currentViewportBounds, mapPresentationDiagnostics } = await import('/static/map.js');
+          return { canonical: JSON.stringify({ request: currentPlanRequest(), result: state.generationResult,
+            source: state.generationSourceRequest, selected: state.selectedSignature, editorPoints: state.points }),
+            locationStarts: localizationLocationStarts, gpx: await exportCanonicalCandidate(selectedCandidate()).blob.text(), bounds: currentViewportBounds(), camera: mapPresentationDiagnostics().camera,
+            routeCalls: adventureNativeCalls.filter(call => ['local_route','route_elevation','chatgpt_infer','adventure_speech_start'].includes(call.type)).length,
+            form: [...document.querySelectorAll('#route-form input, #route-form select, #route-form textarea')].map(node => [node.id,node.value,node.checked]) };
+        });
+        await view('map');
+        // Normal Generate fits the selected geometry with a 500 ms animation.
+        // Settle that independent camera operation before testing language.
+        await page.waitForTimeout(650);
+        await page.waitForFunction(async () => !(await import('/static/map.js')).mapPresentationDiagnostics().moving);
+        const originalLanguage = locale === 'fr-FR' ? 'fr' : 'en';
+        for (const language of [originalLanguage === 'fr' ? 'en' : 'fr', originalLanguage]) {
+          const beforeLanguage = await languageFingerprint();
+          await page.locator('.header-tools').evaluate(node => { node.open = true; });
+          await page.locator('#application-language').selectOption(language);
+          await page.waitForFunction(language => document.documentElement.lang === language, language);
+          await page.locator('.header-tools').evaluate(node => { node.open = false; });
+          await page.waitForTimeout(150);
+          const afterLanguage = await languageFingerprint();
+          assert.equal(afterLanguage.canonical, beforeLanguage.canonical, 'Language never changes canonical route state');
+          assert.equal(afterLanguage.gpx, beforeLanguage.gpx, 'Language never changes GPX bytes');
+          assert.equal(afterLanguage.locationStarts, beforeLanguage.locationStarts, 'Language never acquires location');
+          assert.equal(await page.evaluate(async () => (await import('/static/i18n.js')).getLanguage()), language);
+          assert((await page.locator('#request-status').textContent()).includes(language === 'fr' ? 'généré' : 'generated'), 'Existing generation feedback updates with the interface language');
+          assert.equal(afterLanguage.routeCalls, beforeLanguage.routeCalls, 'Language never routes, measures terrain, infers or records');
+          assert.deepEqual(afterLanguage.form, beforeLanguage.form, 'Language preserves every planner form value');
+          assert.deepEqual(afterLanguage.camera, beforeLanguage.camera, 'Language preserves camera: '+JSON.stringify({before:beforeLanguage.camera,after:afterLanguage.camera}));
+          assert.equal(await page.locator('#ask-chatgpt').getAttribute('aria-label'), language === 'fr' ? 'Planifier une aventure avec ChatGPT' : 'Plan an adventure with ChatGPT');
+          assert.equal(await page.locator('#dock-finish option[value="loop"]').textContent(), language === 'fr' ? 'Boucle' : 'Loop');
+          await screenshot('localized-map-'+language);
+        }
         await view('plan'); await page.locator('#plan-with-ai').click();
+        await page.locator('#adventure-account-settings').evaluate(node => { node.open = true; });
         await page.locator('#adventure-connect').click();
         await page.waitForFunction(() => document.querySelector('#adventure-model').value === 'synthetic-model');
+        await page.locator('#adventure-account-settings').evaluate(node => { node.open = false; });
+        await screenshot('dialog-connected');
         const beforeSpeech = await page.locator('#adventure-text').inputValue();
+        await page.locator('#adventure-speech-settings').evaluate(node => { node.open = true; });
         await page.locator('#adventure-language').selectOption('fr-FR');
         await page.locator('#adventure-microphone').click();
         await page.waitForFunction(before => document.querySelector('#adventure-text').value === before + '\nUne aventure historique avec des lieux intéressants', beforeSpeech);
@@ -177,8 +405,18 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         assert(adventure.grounding.places.some(place => place.match_method === 'exact_local_name'),'Real worker grounds name-only suggestions without a prior location-picker session');
         assert(adventure.result.candidates.some(c => c.reached_stops.length === 2));
         await view('routes'); await page.locator('.candidate-select').last().click();
-        await page.waitForFunction(() => document.querySelector('#adventure-storage-status').textContent.startsWith('Saved on this device'));
+        await page.waitForFunction(french => document.querySelector('#adventure-storage-status').textContent.startsWith(french ? 'Enregistrée sur cet appareil' : 'Saved on this device'),locale==='fr-FR');
+        assert.equal(await page.locator('#candidate-list .candidate-card').count(),3,'The adventure screenshot contains three actual alternatives');
+        await view('map'); await screenshot('minimal-ai-three-alternatives-map'); await view('routes'); await screenshot('minimal-ai-three-alternatives-routes');
         const exactAdventure = await page.evaluate(() => JSON.stringify(adventureAppState.state.adventureResult));
+        const adventureBeforeLanguage = await languageFingerprint();
+        await page.evaluate(async language => { const { setLanguage } = await import('/static/i18n.js'); await setLanguage(language); }, originalLanguage === 'fr' ? 'en' : 'fr');
+        await page.evaluate(async language => { const { setLanguage } = await import('/static/i18n.js'); await setLanguage(language); }, originalLanguage);
+        const adventureAfterLanguage = await languageFingerprint();
+        assert.equal(await page.evaluate(() => JSON.stringify(adventureAppState.state.adventureResult)), exactAdventure, 'Original model stories and adventure remain exact across language changes');
+        assert.equal(adventureAfterLanguage.gpx, adventureBeforeLanguage.gpx);
+        assert.equal(adventureAfterLanguage.routeCalls, adventureBeforeLanguage.routeCalls);
+
         await page.locator('#adventure-stories-open').click();
         assert(await page.locator('#adventure-stories').isVisible());
         await page.locator('#download-gpx').click(); await page.waitForFunction(() => adventureSavedGpx !== null);
@@ -196,12 +434,18 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await view('plan'); await page.locator('#plan-with-ai').click();
         await page.evaluate(() => { failAdventureModel = true; });
         await page.waitForFunction(() => !document.querySelector('#adventure-generate').disabled);
-        await page.locator('#adventure-generate').click(); await page.waitForFunction(() => document.querySelector('#adventure-error').textContent.includes('usage limit'));
+        await page.locator('#adventure-generate').click();
+        try { await page.waitForFunction(() => document.querySelector('#adventure-error').textContent.match(/usage limit|limite d’utilisation/u), null, { timeout: 30000 }); }
+        catch (failure) {
+          console.error('Failed-model UI state', await page.evaluate(() => ({language:document.documentElement.lang,error:document.querySelector('#adventure-error').textContent,progress:document.querySelector('#adventure-progress').textContent,busy:document.querySelector('#adventure-dialog').getAttribute('aria-busy'),calls:adventureNativeCalls.slice(-4).map(call=>call.type)})));
+          throw failure;
+        }
         assert.equal(await page.evaluate(async () => (await import('/static/state.js')).selectedCandidate().id), selected.id, 'Failed AI request must keep selected route');
         await page.locator('#adventure-close').click(); await view('routes'); await page.locator('#adventure-return-manual').click();
         const restored = await page.evaluate(async () => { const { state, currentPlanRequest } = await import('/static/state.js'); return JSON.stringify({ request: currentPlanRequest(), result: state.generationResult, source: state.generationSourceRequest, selected: state.selectedSignature }); });
         assert.equal(restored, manual, 'Returning to manual restores exact request/result/selection');
         await page.reload();
+        await page.waitForFunction(language => document.documentElement.lang === language, locale === "fr-FR" ? "fr" : "en");
         await page.evaluate(async () => { globalThis.adventureAppState = await import('/static/state.js'); });
         await page.waitForFunction(() => !document.querySelector('#restore-adventure').hidden);
         assert.equal(await page.evaluate(() => adventureAppState.state.adventureDisplay), false, 'Startup preserves the editable planner until explicit Reopen');
@@ -222,7 +466,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await page.waitForFunction(() => typeof releaseAdventureRecovery === 'function');
         await page.locator('#target-distance').fill('21');
         await page.evaluate(() => { globalThis.Worker = actualAdventureWorker; releaseAdventureRecovery(); });
-        await page.waitForFunction(() => document.querySelector('#adventure-recovery-status').textContent.includes('Your plan changed'));
+        await page.waitForFunction(french => document.querySelector('#adventure-recovery-status').textContent.includes(french ? 'Votre plan a changé' : 'Your plan changed'), locale==='fr-FR');
         assert.equal(await page.evaluate(() => adventureAppState.state.adventureDisplay), false, 'A stale recovery cannot replace newly edited intent');
         assert.equal(await page.locator('#target-distance').inputValue(), '21', 'Recovery preserves the intervening edit');
         await view('plan'); await page.locator('#restore-adventure').click();
@@ -234,6 +478,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         assert.deepEqual(await page.evaluate(() => adventureNativeCalls.filter(c => ['chatgpt_infer','local_route','route_elevation','adventure_speech_start'].includes(c.type))), [], 'Reopen/selection/export never reroutes or refetches terrain');
         await page.evaluate(async id => { const { createRegionVersionStore } = await import('/static/region_versions.js'); await createRegionVersionStore().removeRegion(id); }, fixture.manifest.region_id);
         await page.reload();
+        await page.waitForFunction(language => document.documentElement.lang === language, locale === "fr-FR" ? "fr" : "en");
         await page.evaluate(async () => { globalThis.adventureAppState = await import('/static/state.js'); });
         await page.waitForFunction(() => !document.querySelector('#restore-adventure').hidden);
         await view('plan'); await page.locator('#restore-adventure').click();
@@ -247,11 +492,18 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         assert.equal(await page.evaluate(async () => { const { store } = await (await import('/static/pwa_runtime.js')).pwaRuntime(); return (await store.get('public_runtime','latest-adventure')) ?? null; }), null, 'Application clear drains queued adventure writes before clearing the store');
         assert.equal(await page.evaluate(() => adventureAppState.state.adventureDisplay), true, 'Clearing durable data preserves the displayed valid result');
         await view('routes'); await page.locator('#forget-adventure').click();
-        await page.waitForFunction(() => document.querySelector('#adventure-storage-status').textContent.startsWith('Saved adventure forgotten'));
+        await page.waitForFunction(french => document.querySelector('#adventure-storage-status').textContent.startsWith(french ? 'Aventure enregistrée oubliée' : 'Saved adventure forgotten'),locale==='fr-FR');
         await page.locator('.candidate-select').first().click();
         assert.equal(await page.evaluate(async () => { const { store } = await (await import('/static/pwa_runtime.js')).pwaRuntime(); return (await store.get('public_runtime','latest-adventure')) ?? null; }), null, 'Selecting after Forget must not resurrect the saved adventure');
+        await view('map');
+        await page.locator('#ask-chatgpt').click();
+        await page.waitForFunction(() => !document.querySelector('#adventure-region-status').hidden);
+        assert(await page.locator('#adventure-generate').isDisabled(), 'An unavailable region explains readiness and prevents Generate');
+        assert.equal(await page.evaluate(() => adventureNativeCalls.filter(call => ['chatgpt_infer', 'local_route', 'adventure_speech_start'].includes(call.type)).length), 0);
+        await screenshot('dialog-region-unavailable');
+        await page.locator('#adventure-close').click();
         assert.deepEqual(errors, []); assert.deepEqual(external, []);
-        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, status: 'passed', cases: ['bounded_local_landmark_context_before_research','name_grounding_without_prior_location_picker','optional_endpoints_and_cancelled_map_roundtrip','no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
+        console.log(JSON.stringify({ name: 'adventure_bundled_app', width, height, locale, status: 'passed', cases: [...minimalCases,'french_default_on_english_device', 'icon_only_localized_accessible_map_action', 'remembered_english_survives_restart', 'language_preserves_canonical_request_result_selection_form_camera_and_gpx', 'language_does_not_acquire_location_route_infer_or_record', 'supplied_ai_artwork_map_plan_dialog_loaded_accessible_and_clickable','startup_map_ai_cta_shared_lifecycle_privacy_build_identity','initial_settled_keyboard_credits_and_active_region_switch','french_portrait_landscape_large_text','region_unavailable_visible_without_automatic_request','bounded_local_landmark_context_before_research','name_grounding_without_prior_location_picker','optional_endpoints_and_cancelled_map_roundtrip','no_automatic_inference_route_or_microphone', 'manual_route_preserved', 'account_voice_text_native_pipeline', 'measured_revision_and_real_regional_workers', 'ordinary_selection_and_binary_gpx', 'failed_ai_request_keeps_selection', 'exact_return_to_manual', 'restart_exact_result_selection_and_gpx', 'explicit_recovery_without_model_routing_or_terrain', 'missing_source_region_stays_unavailable', 'forget_prevents_selection_resurrection', 'application_clear_drains_adventure_writes', 'stale_recovery_cannot_replace_new_user_edit'] }));
       } finally { await context.close(); }
     }
   } finally { await browser.close(); }

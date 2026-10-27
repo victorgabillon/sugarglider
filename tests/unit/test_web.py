@@ -37,6 +37,7 @@ CANONICAL_BRAND_DIRECTORY = REPOSITORY_ROOT / "assets" / "brand"
 RUNTIME_BRAND_DIRECTORY = STATIC_DIRECTORY / "brand"
 FONT_DIRECTORY = STATIC_DIRECTORY / "fonts" / "Open Sans Semibold"
 BRAND_ASSET_FILENAMES = (
+    "sugarglider-ai-planner.png",
     "sugarglider-app-icon.png",
     "sugarglider-banner.png",
     "sugarglider-compact-icon.png",
@@ -800,10 +801,12 @@ def test_frontend_places_are_bounded_safe_and_separate_from_routing_state() -> N
     assert "document.createTextNode(value)" in map_code
     assert "Current operation and water quality are not guaranteed." in map_code
     assert (
-        'explanation.textContent = "Potability is not specified in the mapped data."'
-        in map_code
+        "setLocalizedText(explanation, () => "
+        't("Potability is not specified in the mapped data."))' in map_code
     )
-    assert 'explanation.textContent = "Mapped as non-potable."' in map_code
+    assert (
+        'setLocalizedText(explanation, () => t("Mapped as non-potable."))' in map_code
+    )
     assert "innerHTML" not in map_code[map_code.index("function poiPopupContent") :]
     assert "new Blob([svgMarkup(body)]" in map_code
     assert "image/svg+xml" in map_code
@@ -1006,7 +1009,7 @@ def test_best_effort_gui_explains_compromises_and_requires_regeneration() -> Non
     for label in ("Make exact", "Accept approximation", "Remove stop"):
         assert label in app
     assert 'class="compromise-summary"' in app
-    assert '["Reached", formatCount(candidate.reached_stops.length)]' in app
+    assert '[t("Reached"), formatCount(candidate.reached_stops.length)]' in app
     assert "candidate.approximated_stops.length" in app
     assert "+ constraintItinerary(candidate)" in app
     assert 'result.kind === "auto_tour" ?' not in app
@@ -1038,7 +1041,7 @@ def test_route_direction_arrows_and_graph_reverse_are_explicit() -> None:
     assert "applyCanonicalRequestState(response.transformed_request)" in app
     assert "state.generationResult = sourceResult" in app
     assert "directionLabel(candidate.traversal)" in app
-    assert 'aria-label="Route traversal direction"' in app
+    assert 'aria-label="${t("Route traversal direction")}"' in app
     assert "sourceCandidate.route.geometry.reverse" not in app
     assert '"symbol-placement": "line"' in map_code
     assert '"icon-keep-upright": false' in map_code
@@ -1205,7 +1208,10 @@ def test_route_spur_diagnostics_render_as_accessible_map_issues() -> None:
         "renderSpurs(candidate)"
     )
 
-    assert '<i class="line spur"></i>Detected excursion' in html
+    assert (
+        '<i class="line spur"></i><span data-i18n="Detected excursion">'
+        "Detected excursion</span>" in html
+    )
     assert ".spur-card" in styles
     assert ".spur-popup" in styles
     assert ".repair-summary" in styles
@@ -1327,9 +1333,10 @@ def test_generation_failures_are_visible_structured_and_accessible() -> None:
     assert "handleGenerationError(error)" in app
     assert "showNoCandidateError(result)" in app
     assert "No matching route found." in app
-    assert html.index("<summary>Technical details</summary>") < html.index(
-        'id="error-code"'
-    )
+    assert html.index(
+        '<summary><span data-i18n="Technical details">'
+        "Technical details</span></summary>"
+    ) < html.index('id="error-code"')
     assert "exactWaypointContext(error.metadata)" in app
     assert "required-point index" in app
     assert "snap.toFixed(1)" in app
@@ -1370,7 +1377,7 @@ def test_required_marker_labels_and_selection_are_coordinated() -> None:
     assert "element.className = `required-marker" in map_code
     assert "image.width = 40" in map_code and "image.height = 60" in map_code
     assert "image.draggable = false" in map_code
-    assert "element.dataset.accessibleLabel = `Required point" in map_code
+    assert "element.dataset.accessibleLabel = tr`Required point" in map_code
     assert (
         'element.setAttribute("aria-label", element.dataset.accessibleLabel)'
         in map_code

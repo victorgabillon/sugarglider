@@ -1,6 +1,7 @@
 // Exact bundled-origin/asset simulation; physical Android Intent acceptance is separate.
 const{chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright'),fs=require('fs'),path=require('path'),assert=require('assert/strict');
 const O=process.env.HANDOFF_EVIDENCE_DIR;if(!O)throw Error('Set HANDOFF_EVIDENCE_DIR outside Git');
+fs.mkdirSync(path.join(O,'runtime'),{recursive:true});
 const R=process.cwd(),S=path.join(R,'src/sugarglider/web/static'),origin='https://appassets.androidplatform.net';
 const draft=JSON.parse(fs.readFileSync('examples/itinerary-drafts/versailles-tourist-loop.json','utf8')),raw=JSON.stringify(draft,null,2);
 const sizes=[['phone360',360,800],['phone390',390,844],['phone412',412,915],['short',390,420],['text200',390,844]];

@@ -591,3 +591,28 @@ export async function writeSpeechProviderPreference(mode) {
     return true;
   } catch { return false; } finally { try { store?.close(); } catch { /* Optional storage. */ } }
 }
+
+// Optional UI preferences share the existing public runtime store. They carry
+// no account, transcript, route, capability or location data.
+export async function readUiPreference(key, allowed, fallback) {
+  let store;
+  try {
+    store = await openPwaStore();
+    const value = await store.get(PWA_STORES.publicRuntime, key);
+    return value?.schema_version === 1 && allowed.includes(value.value) ? value.value : fallback;
+  } catch { return fallback; } finally { try { store?.close(); } catch { /* Optional storage. */ } }
+}
+
+export async function writeUiPreference(key, value, allowed) {
+  if (!allowed.includes(value)) return false;
+  let store;
+  try {
+    store = await openPwaStore();
+    if (!store.durable) return false;
+    await store.put(PWA_STORES.publicRuntime, key, { schema_version: 1, value });
+    return true;
+  } catch { return false; } finally { try { store?.close(); } catch { /* Optional storage. */ } }
+}
+
+export const readLanguagePreference = () => readUiPreference("application-language", ["fr", "en"], "fr");
+export const writeLanguagePreference = value => writeUiPreference("application-language", value, ["fr", "en"]);

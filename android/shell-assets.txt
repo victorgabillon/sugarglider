@@ -27,6 +27,7 @@ brand/profile-badges/mask.png
 brand/profile-badges/olivier.png
 brand/profile-badges/orange.png
 brand/profile-badges/tomato.png
+brand/sugarglider-ai-planner.png
 brand/sugarglider-banner.png
 brand/sugarglider-compact-icon.png
 brand/sugarglider-flying-map.png
@@ -49,6 +50,7 @@ fonts/Open Sans Semibold/8192-8447.pbf
 fonts/Open Sans Semibold/LICENSE.txt
 format.js
 gpx.js
+i18n.js
 icons.js
 index.html
 itinerary_dialog.js
@@ -137,6 +139,7 @@ state.js
 styles.css
 terrain_attribution.js
 trail_profile.js
+translations.js
 vendor/maplibre-gl-6.4.1/LICENSE.txt
 vendor/maplibre-gl-6.4.1/maplibre-gl-shared.mjs
 vendor/maplibre-gl-6.4.1/maplibre-gl-worker.mjs

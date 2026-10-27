@@ -1,3 +1,4 @@
+import { t, tr } from "./i18n.js";
 import * as packagedMapLibre from "./vendor/maplibre-gl-6.4.1/maplibre-gl.mjs";
 import { offlineBasemapPresentationLayer } from "./offline_label_policy.js";
 import {
@@ -65,7 +66,7 @@ export function createOfflineMapRuntime({
   let networkAvailable = globalThis.navigator?.onLine !== false;
   let moveHandler = null;
   let removeHandler = null;
-  let status = Object.freeze({ state: "map_pack_initializing", message: "Checking offline map storage…" });
+  let status = Object.freeze({ state: "map_pack_initializing", message: t("Checking offline map storage…") });
 
   async function initialize() {
     if (initialized) return snapshot();
@@ -88,17 +89,17 @@ export function createOfflineMapRuntime({
     bindUi();
     bindNetworkHints();
     if (!capability.opfs_supported) {
-      setStatus("map_pack_storage_unavailable", "Offline map storage is unavailable in this browser.");
+      setStatus("map_pack_storage_unavailable", t("Offline map storage is unavailable in this browser."));
     } else if (!protocolAvailable) {
-      setStatus("map_pack_invalid", "The packaged PMTiles map runtime is unavailable.");
+      setStatus("map_pack_invalid", t("The packaged PMTiles map runtime is unavailable."));
     } else if (scan.invalid_pack_ids.length) {
-      setStatus("map_pack_invalid", "One or more stored map packs are invalid and will not be used.");
+      setStatus("map_pack_invalid", t("One or more stored map packs are invalid and will not be used."));
     } else if (scan.partial_pack_ids.length) {
-      setStatus("map_pack_partial", "One or more incomplete map-pack installs were ignored.");
+      setStatus("map_pack_partial", t("One or more incomplete map-pack installs were ignored."));
     } else if (scan.packs.length) {
-      setStatus("map_pack_ready", `${scan.packs.length} offline map pack${scan.packs.length === 1 ? " is" : "s are"} installed.`);
+      setStatus("map_pack_ready", tr`${scan.packs.length} offline map pack${scan.packs.length === 1 ? " is" : "s are"} installed.`);
     } else {
-      setStatus("no_map_packs_installed", "No offline map packs are installed.");
+      setStatus("no_map_packs_installed", t("No offline map packs are installed."));
     }
     render();
     return snapshot();
@@ -174,7 +175,7 @@ export function createOfflineMapRuntime({
       removeLocalBasemap(currentMap);
       if (offlineMode()) removeOnlineBasemap(currentMap);
       else ensureOnlineBasemap(currentMap, mapConfig);
-      setStatus("map_pack_invalid", "The packaged PMTiles map runtime is unavailable.");
+      setStatus("map_pack_invalid", t("The packaged PMTiles map runtime is unavailable."));
       render();
       return null;
     }
@@ -183,7 +184,7 @@ export function createOfflineMapRuntime({
         activePack?.pack_id === selected.pack_id
         && activePack?.build_id === selected.build_id
       ) {
-        setStatus("local_pack_active", `Offline map pack active: ${selected.display_name}.`);
+        setStatus("local_pack_active", tr`Offline map pack active: ${selected.display_name}.`);
         return selected;
       }
       try {
@@ -194,7 +195,7 @@ export function createOfflineMapRuntime({
         installLocalBasemap(currentMap, opened);
         activePack = opened.manifest;
         activeSource = opened.source;
-        setStatus("local_pack_active", `Offline map pack active: ${opened.manifest.display_name}.`);
+        setStatus("local_pack_active", tr`Offline map pack active: ${opened.manifest.display_name}.`);
         render();
         return opened.manifest;
       } catch {
@@ -205,7 +206,7 @@ export function createOfflineMapRuntime({
         clearProtocolArchives();
         if (offlineMode()) removeOnlineBasemap(currentMap);
         else ensureOnlineBasemap(currentMap, mapConfig);
-        setStatus("map_pack_invalid", `Installed map pack ${selected.pack_id} is invalid.`);
+        setStatus("map_pack_invalid", tr`Installed map pack ${selected.pack_id} is invalid.`);
         render();
         return null;
       }
@@ -216,10 +217,10 @@ export function createOfflineMapRuntime({
     clearProtocolArchives();
     if (offlineMode()) {
       removeOnlineBasemap(currentMap);
-      setStatus("no_covering_map_pack", "Offline: no installed map pack covers the current map center.");
+      setStatus("no_covering_map_pack", t("Offline: no installed map pack covers the current map center."));
     } else {
       ensureOnlineBasemap(currentMap, mapConfig);
-      setStatus("online_map_active", "Online raster map active; no covering local pack is installed.");
+      setStatus("online_map_active", t("Online raster map active; no covering local pack is installed."));
     }
     render();
     return null;
@@ -232,11 +233,11 @@ export function createOfflineMapRuntime({
     mapEpoch += 1;
     if (currentMap) await applyForCurrentCenter();
     else if (scan.invalid_pack_ids.length) {
-      setStatus("map_pack_invalid", "One or more stored map packs are invalid and will not be used.");
+      setStatus("map_pack_invalid", t("One or more stored map packs are invalid and will not be used."));
     } else if (scan.partial_pack_ids.length) {
-      setStatus("map_pack_partial", "One or more incomplete map-pack installs were ignored.");
+      setStatus("map_pack_partial", t("One or more incomplete map-pack installs were ignored."));
     } else if (!scan.packs.length) {
-      setStatus("no_map_packs_installed", "No offline map packs are installed.");
+      setStatus("no_map_packs_installed", t("No offline map packs are installed."));
     }
     render();
     return snapshot();
@@ -247,7 +248,7 @@ export function createOfflineMapRuntime({
     installController?.abort();
     installController = new AbortController();
     setBusy(true);
-    setStatus("map_pack_installing", "Downloading map pack…");
+    setStatus("map_pack_installing", t("Downloading map pack…"));
     try {
       const persistence = await store.requestPersistence();
       if (epoch !== installEpoch) return null;
@@ -257,7 +258,7 @@ export function createOfflineMapRuntime({
           if (epoch !== installEpoch) return;
           setStatus(
             "map_pack_installing",
-            `Downloading map pack: ${formatBytes(bytes_written)} of ${formatBytes(byte_size)}.`,
+            tr`Downloading map pack: ${formatBytes(bytes_written)} of ${formatBytes(byte_size)}.`,
           );
           render();
         },
@@ -266,7 +267,7 @@ export function createOfflineMapRuntime({
       scan = await store.scanInstalledPacks();
       setStatus(
         "map_pack_installed",
-        `${installed.display_name} installed${persistence === true ? " in persistent storage" : ""}.`,
+        `${installed.display_name} installed${persistence === true ? t(" in persistent storage") : ""}.`,
       );
       mapEpoch += 1;
       if (currentMap) await applyForCurrentCenter();
@@ -276,7 +277,7 @@ export function createOfflineMapRuntime({
       const cancelled = error?.code === "map_pack_download_cancelled";
       setStatus(
         cancelled ? "map_pack_install_cancelled" : (error?.code ?? "map_pack_install_failed"),
-        cancelled ? "Map-pack installation cancelled." : safeErrorMessage(error),
+        cancelled ? t("Map-pack installation cancelled.") : safeErrorMessage(error),
       );
       return null;
     } finally {
@@ -294,17 +295,17 @@ export function createOfflineMapRuntime({
     store.cancelActiveInstalls();
     installController = null;
     setBusy(false);
-    setStatus("map_pack_install_cancelled", "Map-pack installation cancelled.");
+    setStatus("map_pack_install_cancelled", t("Map-pack installation cancelled."));
     render();
   }
 
   async function remove(packId) {
-    if (!confirmRemoval(`Remove offline map pack ${packId}?`)) return false;
+    if (!confirmRemoval(tr`Remove offline map pack ${packId}?`)) return false;
     installEpoch += 1;
     try {
       await store.removePack(packId);
       scan = await store.scanInstalledPacks();
-      setStatus("map_pack_removed", `Offline map pack ${packId} removed.`);
+      setStatus("map_pack_removed", tr`Offline map pack ${packId} removed.`);
       mapEpoch += 1;
       if (currentMap) await applyForCurrentCenter();
       render();
@@ -327,7 +328,7 @@ export function createOfflineMapRuntime({
         // Upstream otherwise constructs a FetchSource for unknown keys. A
         // retired local source must fail locally after replacement/detachment.
         if (!request.url.startsWith("pmtiles://sugarglider-map-pack/") || !key || !protocol.get(key)) {
-          throw new Error("Local map archive is unavailable.");
+          throw new Error(t("Local map archive is unavailable."));
         }
         return protocol.tile(request, controller);
       });
@@ -369,8 +370,8 @@ export function createOfflineMapRuntime({
     try { onStatus(snapshot()); } catch { /* Presentation must not change map availability. */ }
     if (elements.support) {
       elements.support.textContent = capability?.opfs_supported
-        ? `OPFS random-access storage supported${capability.persisted === true ? " and persisted" : ""}.`
-        : "OPFS random-access storage unavailable.";
+        ? tr`OPFS random-access storage supported${capability.persisted === true ? t(" and persisted") : ""}.`
+        : t("OPFS random-access storage unavailable.");
     }
     if (elements.status) {
       elements.status.dataset.state = status.state;
@@ -378,8 +379,8 @@ export function createOfflineMapRuntime({
     }
     if (elements.active) {
       elements.active.textContent = activePack
-        ? `Active local pack: ${activePack.display_name} (${activePack.pack_id}). ${activePack.attribution}`
-        : "No local map pack is active.";
+        ? tr`Active local pack: ${activePack.display_name} (${activePack.pack_id}). ${activePack.attribution}`
+        : t("No local map pack is active.");
     }
     if (elements.form) {
       for (const control of elements.form.elements ?? []) {
@@ -400,7 +401,7 @@ export function createOfflineMapRuntime({
       const button = document.createElement("button");
       button.type = "button";
       button.className = "text-button danger";
-      button.textContent = "Remove";
+      button.textContent = t("Remove");
       button.addEventListener("click", () => {
         void remove(pack.pack_id);
       });
@@ -408,8 +409,8 @@ export function createOfflineMapRuntime({
       elements.list.append(item);
     }
     for (const [packIds, label] of [
-      [scan.invalid_pack_ids, "Invalid stored pack"],
-      [scan.partial_pack_ids, "Incomplete install"],
+      [scan.invalid_pack_ids, t("Invalid stored pack")],
+      [scan.partial_pack_ids, t("Incomplete install")],
     ]) {
       for (const packId of packIds) {
         const item = document.createElement("li");
@@ -418,7 +419,7 @@ export function createOfflineMapRuntime({
         const button = document.createElement("button");
         button.type = "button";
         button.className = "text-button danger";
-        button.textContent = "Remove";
+        button.textContent = t("Remove");
         button.addEventListener("click", () => {
           void remove(packId);
         });
@@ -549,7 +550,7 @@ function formatBytes(value) {
 function safeErrorMessage(error) {
   return typeof error?.message === "string" && error.message.length <= 240
     ? error.message
-    : "Map-pack operation failed.";
+    : t("Map-pack operation failed.");
 }
 
 function emptyScan() {

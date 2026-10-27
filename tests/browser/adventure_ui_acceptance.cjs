@@ -22,20 +22,20 @@ const server = http.createServer((request, response) => {
     const base = `http://127.0.0.1:${server.address().port}`;
     browser = await chromium.launch({ headless: true,
       ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
-    const context = await browser.newContext();
     const forbidden = [];
+    for (const name of ['pr91_route_elevation', 'localization', 'adventure_ui']) {
+    const context = await browser.newContext();
     await context.route('**/*', route => {
       if (new URL(route.request().url()).origin === base) return route.continue();
       forbidden.push(new URL(route.request().url()).origin); return route.abort();
     });
-    for (const name of ['pr91_route_elevation', 'adventure_ui']) {
       const page = await context.newPage();
       await page.goto(`${base}/tests/browser/${name}_harness.html`);
       await page.waitForFunction(() => ['passed', 'failed'].includes(document.querySelector('pre')?.dataset.status), { timeout: 60_000 });
       const result = await page.locator('pre').evaluate(node => ({ status: node.dataset.status, text: node.textContent }));
       if (result.status !== 'passed' || forbidden.length) throw Error(JSON.stringify({ result, forbidden }));
       console.log(JSON.stringify({ name, cases: JSON.parse(result.text), status: 'passed' }));
-      await page.close();
+      await context.close();
     }
   } finally {
     await browser?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve));

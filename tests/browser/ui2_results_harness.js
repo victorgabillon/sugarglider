@@ -1,3 +1,7 @@
+// This existing fixture exercises explicit English output. French defaults and
+// both-language state preservation are covered by localization_harness and the
+// full bundled-app acceptance, with strict canonical and GPX comparisons.
+import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
 import { routeChoiceMarkup, renderRouteChoices, resultsNotice } from '../../src/sugarglider/web/static/route_results.js';
 import { state, invalidateCandidates, currentDisplayedCandidates, selectedCandidate } from '../../src/sugarglider/web/static/state.js';
 import { exportCanonicalCandidate } from '../../src/sugarglider/web/static/local_gpx_export.js';
@@ -5,6 +9,7 @@ import { initializeAppShell } from '../../src/sugarglider/web/static/app_shell.j
 const assert = (condition, message) => { if (!condition) throw Error(message); };
 const same = (a, b, message) => assert(JSON.stringify(a) === JSON.stringify(b), message);
 export async function runResultsHarness() {
+  await setLanguage("en", { persist: false, document: null });
   const cases = [];
   const empty = { request: { status: 'idle' }, generationResult: null, resultsInvalidated: false };
   for (const [label, value, expected] of [

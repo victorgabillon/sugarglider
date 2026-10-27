@@ -1,6 +1,7 @@
+import { t, tr, getLanguage } from "./i18n.js";
 export const formatDistance = (metres) => `${(Number(metres) / 1000).toFixed(2)} km`;
 export const formatPercent = (share) => `${(Number(share) * 100).toFixed(1)}%`;
-export const formatCount = (value) => new Intl.NumberFormat().format(Number(value));
+export const formatCount = (value) => new Intl.NumberFormat(getLanguage()).format(Number(value));
 
 const labels = {
   direct_order: "Direct mandatory order",
@@ -78,8 +79,8 @@ const labels = {
   saved_route_snapshot: "Immutable saved snapshot loaded without rerouting.",
 };
 
-export const friendlyLabel = (value) => labels[value] ?? value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
-export const constructionLabel = (value) => labels[value] ?? friendlyLabel(value);
+export const friendlyLabel = (value) => labels[value] ? t(labels[value]) : value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+export const constructionLabel = (value) => labels[value] ? t(labels[value]) : friendlyLabel(value);
 
 export function metricRows(rows) {
   return `<dl class="metric-grid">${rows.map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value))}</dd>`).join("")}</dl>`;
@@ -92,7 +93,7 @@ export function escapeHtml(value) {
 }
 
 export function lowOverlapLabel(candidate) {
-  if (candidate.construction !== "alternative_leg_beam") return "Natural standard control";
-  if (candidate.rank === 1) return "Refined natural recommendation";
-  return "Refined comparison";
+  if (candidate.construction !== "alternative_leg_beam") return t("Natural standard control");
+  if (candidate.rank === 1) return t("Refined natural recommendation");
+  return t("Refined comparison");
 }

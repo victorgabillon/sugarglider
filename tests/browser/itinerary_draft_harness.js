@@ -1,3 +1,7 @@
+// This existing fixture exercises explicit English output. French defaults and
+// both-language state preservation are covered by localization_harness and the
+// full bundled-app acceptance, with strict canonical and GPX comparisons.
+import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
 import { parseItineraryDraft, itineraryDraftToCanonical, buildItineraryPrompt, ITINERARY_MAX_BYTES } from '../../src/sugarglider/web/static/itinerary_draft.js';
 import { initializeItineraryDialog } from '../../src/sugarglider/web/static/itinerary_dialog.js';
 import { state, currentPlanRequest, WAYPOINT_PRODUCT_DEFAULTS } from '../../src/sugarglider/web/static/state.js';
@@ -11,6 +15,7 @@ const sorted = x => JSON.stringify(x, (key,value) => value && typeof value==='ob
 const same=(a,b,message)=>assert(sorted(a)===sorted(b),message);
 const base={format:'sugarglider_itinerary_draft',version:1,name:'Versailles',activity:'trail_run',topology:'loop',target_distance_km:15,tolerance_km:2,start:{name:'Start',lat:48.798432,lon:2.122484},end:null,stops:[{name:'A',lat:48.790122,lon:2.118049,reason:'Trees'},{name:'B',lat:48.786583,lon:2.105706,reason:'Scenery'}],order:'as_given'};
 export async function runItineraryDraftHarness(){
+  await setLanguage("en", { persist: false, document: null });
  const cases=[]; const initial=structuredClone(state);
  function accepted(name,raw){const d=parseItineraryDraft(raw);assert(d.name===base.name,name);cases.push(name)}
  accepted('raw',JSON.stringify(base));accepted('fence',`\n\`\`\`json\n${JSON.stringify(base)}\n\`\`\`\n`);accepted('uppercase_fence',`\`\`\`JSON\n${JSON.stringify(base)}\n\`\`\``);

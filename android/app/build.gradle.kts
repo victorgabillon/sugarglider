@@ -8,6 +8,14 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Resolve the Android test image with Gradle, never over the network inside a test.
+val robolectricSdk by configurations.creating { isTransitive = false }
+val robolectricSdkDirectory = layout.buildDirectory.dir("robolectric-sdk")
+val prepareRobolectricSdk by tasks.registering(Sync::class) {
+    from(robolectricSdk)
+    into(robolectricSdkDirectory)
+}
+
 val sharedWebDirectory = rootProject.file("../src/sugarglider/web/static")
 val shellAssetList = rootProject.file("shell-assets.txt")
 val shellAssetPaths = shellAssetList.readLines().filter { it.isNotBlank() && !it.startsWith('#') }
@@ -19,6 +27,16 @@ val bundledShellDirectory = layout.buildDirectory.dir("generated/bundled-shell")
 // Opt-in, isolated storage for acceptance. Never reuses an installed app's UID.
 val stagingSuffix = providers.gradleProperty("sugargliderV2StagingSuffix").orElse(".v2staging").get()
 require(stagingSuffix == ".v2staging" || stagingSuffix.matches(Regex("\\.v2audit[a-z0-9]{1,16}")))
+val sourceCommit = providers.exec {
+    workingDir(rootProject.projectDir.parentFile)
+    commandLine("git", "rev-parse", "--short=7", "HEAD")
+}.standardOutput.asText.get().trim()
+val sourceDirty = providers.exec {
+    workingDir(rootProject.projectDir.parentFile)
+    commandLine("git", "status", "--porcelain", "--untracked-files=no")
+}.standardOutput.asText.get().isNotBlank()
+require(sourceCommit.matches(Regex("[a-f0-9]{7,40}")))
+val sourceRevision = sourceCommit + if (sourceDirty) "-dirty" else ""
 val bundleSharedWebShell by tasks.registering(Sync::class) {
     inputs.file(shellAssetList)
     from(sharedWebDirectory) { include(shellAssetPaths); into("web") }
@@ -91,6 +109,8 @@ android {
         else "io.github.victorgabillon.sugarglider.HeightResearchInstrumentation"
         buildConfigField("boolean", "ALLOW_HTTP", "false")
         buildConfigField("String", "PRIVACY_POLICY_URL", "\"$publicPrivacyPolicy\"")
+        buildConfigField("String", "SOURCE_REVISION", "\"$sourceRevision\"")
+        manifestPlaceholders["launcherCategory"] = "android.intent.category.LAUNCHER"
         ndk.abiFilters += "arm64-v8a"
     }
 
@@ -123,6 +143,12 @@ android {
             versionNameSuffix = "-v2-staging"
             buildConfigField("boolean", "ALLOW_HTTP", "false")
             matchingFallbacks += "debug"
+            // Audit clones stay explicitly launchable by instrumentation, but
+            // have no ordinary launcher entry. Normal AI Test remains visible.
+            if (stagingSuffix != ".v2staging") {
+                manifestPlaceholders["launcherCategory"] = "io.github.victorgabillon.sugarglider.AUDIT"
+            }
+            resValue("string", "app_name", if (stagingSuffix == ".v2staging") "SG AI Test" else "SG Audit ${stagingSuffix.removePrefix(".v2audit")}")
         }
         release {
             signingConfig = externalSigning?.let { signingConfigs.getByName("externalUpload") }
@@ -144,12 +170,21 @@ android {
         buildConfig = true
     }
 
+    // Both UI languages are available offline after installation.
+    bundle { language { enableSplit = false } }
+
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            it.dependsOn(prepareRobolectricSdk)
+            it.systemProperty("robolectric.offline", "true")
+            it.systemProperty("robolectric.dependency.dir", robolectricSdkDirectory.get().asFile.absolutePath)
+        }
     }
 
     sourceSets.getByName("androidTest").assets.srcDir(rootProject.file("../tests/fixtures/elevation"))
@@ -186,6 +221,8 @@ dependencies {
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.16.1")
+    robolectricSdk("org.robolectric:android-all-instrumented:16-robolectric-13921718-i7")
     testImplementation("com.squareup.moshi:moshi-kotlin:1.15.1")
     testImplementation("org.json:json:20250517")
 }

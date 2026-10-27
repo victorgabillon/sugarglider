@@ -44,11 +44,20 @@ def test_pr29_shell_keeps_primary_actions_outside_secondary_disclosures() -> Non
     assert 'id="save-route"' in tools
     assert 'id="request-file"' in tools
     assert 'id="export-plan"' in tools
-    assert "<summary>Advanced route preferences</summary>" in html
-    assert '<details class="map-tools"' in html
-    assert "<summary>Map options</summary>" in html
+    assert (
+        '<summary><span data-i18n="Advanced route preferences">'
+        "Advanced route preferences</span></summary>" in html
+    )
+    assert '<details class="map-tools"' in tools
+    assert (
+        '<summary><span data-i18n="Map display">Map display</span></summary>' in tools
+    )
+    assert html.count('<details class="map-tools"') == 1
     assert '<details class="metrics-disclosure">' in html
-    assert "<summary>Route details</summary>" in html
+    assert (
+        '<summary><span data-i18n="Route details">Route details</span></summary>'
+        in html
+    )
     application = (STATIC / "app.js").read_text()
     assert 'byId("save-route").classList.toggle("hidden"' in application
     results = (STATIC / "route_results.js").read_text()
@@ -83,12 +92,17 @@ def test_pr29_android_server_chrome_is_compact_and_keeps_change_guard() -> None:
         in open_server
     )
     assert "remove(PREFERENCE_SERVER_ORIGIN)" in open_server
-    assert "ViewCompat.setOnApplyWindowInsetsListener(serverChrome)" in open_server
+    assert "ViewCompat.setOnApplyWindowInsetsListener(root)" in open_server
     assert "WindowInsetsCompat.Type.systemBars()" in open_server
     assert "WindowInsetsCompat.Type.displayCutout()" in open_server
     assert "val chromeTopPadding = dp(8)" in open_server
     assert "val chromeEndPadding = dp(12)" in open_server
     assert "systemBars.top + chromeTopPadding" in open_server
+    assert "if (showServerChrome) 0 else systemBars.top" in open_server
+    assert (
+        "if (showServerChrome) root.addView(serverChrome, fullWidthWrap())"
+        in open_server
+    )
     # The entire page now owns lateral and bottom insets, so both the chrome
     # and map avoid cutouts without applying the right inset twice.
     assert "root.setPadding(\n                systemBars.left," in open_server
@@ -96,4 +110,4 @@ def test_pr29_android_server_chrome_is_compact_and_keeps_change_guard() -> None:
     assert "maxOf(systemBars.bottom," in open_server
     assert "WindowInsetsCompat.Type.ime()" in open_server
     assert "                chromeEndPadding," in open_server
-    assert "ViewCompat.requestApplyInsets(serverChrome)" in open_server
+    assert "ViewCompat.requestApplyInsets(root)" in open_server

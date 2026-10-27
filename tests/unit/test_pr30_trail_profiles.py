@@ -60,7 +60,12 @@ def test_profile_shell_is_local_versioned_and_never_starts_tracking() -> None:
         assert f"/static/brand/profile-badges/{key}.png" in html
         assert f'aria-label="{label} trail badge"' in html
         assert f'alt="{label} Sugarglider trail badge"' in html
-        assert f'<span aria-hidden="true">{label}</span>' in html
+        visible_label = (
+            f'<span data-i18n="{label}">{label}</span>'
+            if key in {"blue", "forest"}
+            else label
+        )
+        assert f'<span aria-hidden="true">{visible_label}</span>' in html
     assert "TRAIL_PROFILE_SCHEMA_VERSION = 1" in profile
     assert "display_name: value.display_name.trim()" in profile
     assert "avatar_key: value.avatar_key" in profile
@@ -151,7 +156,7 @@ def test_pr30_shell_cache_and_framework_free_harness_cover_new_assets() -> None:
     worker = (STATIC_DIRECTORY / "service-worker.js").read_text()
     harness = (ROOT / "tests/browser/pr30_trail_profiles_harness.js").read_text()
     html = (ROOT / "tests/browser/pr30_trail_profiles_harness.html").read_text()
-    assert "`${SHELL_CACHE_PREFIX}v115`" in worker
+    assert "`${SHELL_CACHE_PREFIX}v121`" in worker
     for name in BADGE_HASHES:
         assert f'"/static/brand/profile-badges/{name}"' in worker
     assert '"/static/avatar.js"' in worker

@@ -9,6 +9,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BridgeProtocolTest {
+    @Test fun appToolsAcceptOnlyTwoArgumentFreeOwnedRequests() {
+        val id = "web-${"a".repeat(32)}-1"
+        for (type in listOf("show_privacy", "get_app_identity")) {
+            val payload = JSONObject().put("schema_version", 1).put("request_id", id).put("type", type)
+            val request = BridgeProtocol.parse(payload.toString())!!
+            assertTrue(request is BridgeRequest.ShowPrivacy || request is BridgeRequest.GetAppIdentity)
+            assertTrue(BundledShellPolicy.acceptsRequest(request))
+            assertTrue(BundledShellPolicy.acceptsOrigin(request, BundledShellPolicy.ORIGIN))
+            assertFalse(BundledShellPolicy.acceptsOrigin(request, "https://sharing.example"))
+            assertFalse(V1ReleasePolicy.acceptsBridge(request, "https://sharing.example"))
+            for (field in listOf("url", "command", "method", "participant_token")) {
+                assertNull(BridgeProtocol.parse(JSONObject(payload.toString()).put(field, "arbitrary").toString()))
+            }
+            assertNull(BridgeProtocol.parse(JSONObject(payload.toString()).put("request_id", "unowned").toString()))
+        }
+    }
+
     @Test
     fun exactOriginMainFrameCurrentWebViewAccepted() {
         assertTrue(BridgeGate.accepts(TEST_ORIGIN, TEST_ORIGIN, true, 7, 7))

@@ -1,3 +1,7 @@
+// This existing fixture exercises explicit English output. French defaults and
+// both-language state preservation are covered by localization_harness and the
+// full bundled-app acceptance, with strict canonical and GPX comparisons.
+import { setLanguage } from "../../src/sugarglider/web/static/i18n.js";
 import {createLocalRegionData,eligibleLocalPoi} from '../../src/sugarglider/web/static/local_region_data.js';
 import {createLocalRegionClient} from '../../src/sugarglider/web/static/local_region_client.js';
 import {createRegionVersionStore} from '../../src/sugarglider/web/static/region_versions.js';
@@ -17,6 +21,7 @@ const until=async f=>{for(let i=0;i<240;i++){if(f())return;await new Promise(r=>
 const categories=['toilets','cafe','bakery','picnic_area'];
 function recount(d){d.features.sort((a,b)=>a.id.localeCompare(b.id));d.metadata.feature_count=d.features.length;for(const[k,v]of [['category_counts','category'],['access_counts','access_status'],['potability_counts','potability']]){d.metadata[k]={};for(const f of d.features)d.metadata[k][f[v]]=(d.metadata[k][f[v]]??0)+1}}
 export async function run(){
+  await setLanguage("en", { persist: false, document: null });
  const cases=[],fixture=await(await fetch('../fixtures/pr40_regional_data.json')).json(),legacy=createLocalRegionData(fixture.manifest,structuredClone(fixture));
  const query={bbox:{west:0,south:0,east:.02,north:.02},categories,groups:['practical','refreshment'],limit:200};
  const html=new DOMParser().parseFromString(await(await fetch('/static/index.html')).text(),'text/html');

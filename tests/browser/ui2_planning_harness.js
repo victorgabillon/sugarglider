@@ -1,5 +1,5 @@
 import { state, switchPlanningMode, currentPlanRequest, generationAvailability, readPlannerOptionsFromControls } from "../../src/sugarglider/web/static/state.js";
-import { pointVisibilityOffset, keepMapCoordinateVisible } from "../../src/sugarglider/web/static/map_viewport.js";
+import { pointVisibilityOffset, keepMapCoordinateVisible, unobstructedPointOffset } from "../../src/sugarglider/web/static/map_viewport.js";
 import { initializeAppShell } from "../../src/sugarglider/web/static/app_shell.js";
 const assert = (ok, message) => { if (!ok) throw Error(message); };
 const same = (a, b, message) => assert(JSON.stringify(a) === JSON.stringify(b), message);
@@ -14,6 +14,16 @@ export async function runPlanningHarness() {
     [{ x: 20, y: 20 }, 0, 0, null],
     [{ x: NaN, y: 20 }, 360, 240, null],
   ]) { same(pointVisibilityOffset(point, width, height), expected, 'bounded point correction'); cases.push('visibility_' + cases.length); }
+  same(unobstructedPointOffset({x:180,y:120},360,240,[]),null,'uncovered painted pin never pans');
+  const occupied=[{left:185,right:615,top:76,bottom:257},{left:664,right:792,top:8,bottom:56},{left:8,right:52,top:8,bottom:52}];
+  const originalPoint={x:400,y:150};
+  const shifted=unobstructedPointOffset(originalPoint,800,319,occupied);
+  same(shifted,[247,0],'landscape pin moves beside the editor rather than underneath it');
+  same(unobstructedPointOffset(originalPoint,800,319,occupied),shifted,'screen correction is deterministic');
+  same(originalPoint,{x:400,y:150},'viewport correction does not edit its input');
+  same(unobstructedPointOffset({x:180,y:230},360,240,[{left:8,right:300,top:180,bottom:240}]),[0,58],'painted pin clears bottom bar with margin');
+  same(unobstructedPointOffset({x:180,y:170},360,240,[{left:8,right:300,top:180,bottom:240}],{width:48,height:80,bottom:16}),[0,14],'bottom anchor offset clears the entire marker rather than its coordinate alone');
+  cases.push('painted_pin_clearance_actual_rectangles_landscape_and_portrait');
   const coordinate = [2.13, 48.806], calls = [];
   let projected = { x: 72, y: 295 };
   const resizedMap = {

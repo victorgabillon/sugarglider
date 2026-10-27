@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="referrer" content="no-referrer">
     <meta name="theme-color" content="#214b3b">
-    <title>Sugarglider — natural trail loop planner</title>
+    <title data-i18n="Sugarglider — natural trail loop planner">Sugarglider — natural trail loop planner</title>
     <link rel="icon" type="image/png" href="/static/brand/sugarglider-compact-icon.png">
     <link rel="manifest" href="/manifest.webmanifest">
     <!-- Official maplibre-gl@6.4.1 distribution, BSD-3-Clause: https://maplibre.org/ -->
@@ -15,56 +15,189 @@
     <script type="module" src="/static/app.js"></script>
   </head>
   <body>
-    <a class="skip-link" href="#planner">Skip to route planner</a>
+    <a class="skip-link" href="#planner"><span data-i18n="Skip to route planner">Skip to route planner</span></a>
 
     <header class="topbar">
-      <a class="brand" href="/" aria-label="Sugarglider home">
+      <a class="brand" href="/" aria-label="Sugarglider home" data-i18n-aria-label="Sugarglider home">
         <img src="/static/brand/sugarglider-compact-icon.png" width="52" height="52" alt="">
         <span class="brand-copy">
           <strong>Sugarglider</strong>
-          <span>Natural trail loops from the paths you choose.</span>
+          <span><span data-i18n="Natural trail loops from the paths you choose.">Natural trail loops from the paths you choose.</span></span>
         </span>
       </a>
-      <nav aria-label="File and generation actions">
-        <button class="button primary header-action-primary" id="generate-top" type="button" data-icon="generate" aria-describedby="request-status" disabled>Generate</button>
+      <nav aria-label="File and generation actions" data-i18n-aria-label="File and generation actions">
+        <button class="button primary header-ai-action ai-planner-action" id="ask-chatgpt" type="button" aria-label="Plan an adventure with ChatGPT" title="Plan an adventure with ChatGPT" hidden data-i18n-aria-label="Plan an adventure with ChatGPT" data-i18n-title="Plan an adventure with ChatGPT"><img class="ai-planner-icon" src="/static/brand/sugarglider-ai-planner.png" width="256" height="194" alt="" aria-hidden="true"></button>
+        <button class="button primary header-action-primary" id="generate-top" type="button" data-icon="generate" aria-describedby="request-status" disabled><span data-i18n="Generate">Generate</span></button>
         <details class="header-tools header-action-utility">
-          <summary>Tools</summary>
+          <summary><span data-i18n="Tools">Tools</span></summary>
           <div class="header-tools-menu">
-            <button class="button secondary header-action-important" id="save-route" type="button" disabled>Save route</button>
-            <button class="button secondary" id="import-gpx" type="button" data-icon="gpx">Import GPX</button>
+            <label class="application-language-setting" for="application-language">Langue / Language
+              <select id="application-language"><option value="fr">Français</option><option value="en">English</option></select>
+            </label>
+            <p id="language-storage-status" class="field-help" role="status" hidden></p>
+            <button class="button secondary header-action-important" id="save-route" type="button" disabled><span data-i18n="Save route">Save route</span></button>
+            <button class="button secondary" id="import-gpx" type="button" data-icon="gpx"><span data-i18n="Import GPX">Import GPX</span></button>
             <input class="visually-hidden" id="gpx-file" type="file" hidden accept="application/gpx+xml,.gpx">
 
             <details class="plan-file-tools">
-              <summary>Plan files and storage</summary>
-              <button class="button secondary" id="import-plan" type="button" data-icon="json">Import plan JSON</button>
+              <summary><span data-i18n="Plan files and storage">Plan files and storage</span></summary>
+              <button class="button secondary" id="import-plan" type="button" data-icon="json"><span data-i18n="Import plan JSON">Import plan JSON</span></button>
               <input class="visually-hidden" id="request-file" type="file" hidden accept="application/json,.json">
-              <button class="button secondary" id="export-plan" type="button" data-icon="json">Export plan JSON</button>
-              <button id="clear-offline-data" class="text-button" type="button">Clear saved offline data</button>
+              <button class="button secondary" id="export-plan" type="button" data-icon="json"><span data-i18n="Export plan JSON">Export plan JSON</span></button>
+              <button id="clear-offline-data" class="text-button" type="button"><span data-i18n="Clear saved offline data">Clear saved offline data</span></button>
             </details>
-            <button class="button secondary" id="edit-trail-profile" type="button">My profile</button>
-            <details class="app-status-details"><summary>App status</summary><p id="app-status-summary">Checking app status…</p></details>
+            <button class="button secondary" id="edit-trail-profile" type="button"><span data-i18n="My profile">My profile</span></button>
+            <button class="button secondary" id="native-privacy" type="button" hidden><span data-i18n="Privacy">Privacy</span></button>
+        <details class="map-tools" aria-label="Map display controls" data-i18n-aria-label="Map display controls">
+          <summary><span data-i18n="Map display">Map display</span></summary>
+          <div class="map-tool-options">
+            <div class="map-view-actions" role="group" aria-label="Map navigation" data-i18n-aria-label="Map navigation"><button id="map-zoom-in" class="button secondary" type="button" aria-label="Zoom in" data-i18n-aria-label="Zoom in">+</button><button id="map-zoom-out" class="button secondary" type="button" aria-label="Zoom out" data-i18n-aria-label="Zoom out">−</button><button id="map-reset-north" class="button secondary" type="button" data-i18n="Reset north">Reset north</button><button id="map-fit-points" class="button secondary" type="button" data-i18n="Fit points">Fit points</button></div>
+            <label data-icon="alternatives"><input id="show-all" type="checkbox" checked> <span data-i18n="Show alternatives">Show alternatives</span></label>
+            <label data-icon="nature"><input id="show-nature" type="checkbox"> <span data-i18n="Show nature">Show nature</span></label>
+            <label data-icon="direction"><input id="show-direction" type="checkbox" checked> <span data-i18n="Show direction arrows">Show direction arrows</span></label>
+            <label id="show-dropped-requested-radii-control" class="advanced-map-control" title="Advanced requested-stop display" data-i18n-title="Advanced requested-stop display"><input id="show-dropped-requested-radii" type="checkbox"> <span data-i18n="Dropped access-search areas">Dropped access-search areas</span></label>
+            <details class="legend">
+              <summary><span data-i18n="Map legend">Map legend</span></summary>
+              <div class="legend-items">
+                <span><i class="line selected"></i><span data-i18n="Selected route">Selected route</span></span>
+                <span><i class="line alternative"></i><span data-i18n="Alternative">Alternative</span></span>
+                <span><i class="line repeated"></i><span data-i18n="Repeated">Repeated</span></span>
+                <span><i class="line backtrack"></i><span data-i18n="Immediate out-and-back">Immediate out-and-back</span></span>
+                <span><i class="line spur"></i><span data-i18n="Detected excursion">Detected excursion</span></span>
+                <span><i class="marker mandatory">1</i><span data-i18n="Required mascot pin">Required mascot pin</span></span>
+                <span><i class="marker start">1</i><span data-i18n="Start/end">Start/end</span></span>
+                <span class="legend-group"><span data-i18n="Your plan">Your plan</span></span>
+                <span><i class="marker requested-pending"><span data-i18n="R1">R1</span></i><span data-i18n="Requested, pending">Requested, pending</span></span>
+                <span><i class="marker requested-selected"><span data-i18n="R1">R1</span></i><span data-i18n="Requested, reached">Requested, reached</span></span>
+                <span><i class="marker requested-pending"><span data-i18n="R1">R1</span></i><span data-i18n="Requested, approximated">Requested, approximated</span></span>
+                <span><i class="marker requested-dropped"><span data-i18n="R1">R1</span></i><span data-i18n="Requested, dropped">Requested, dropped</span></span>
+                <span><i class="marker access"></i><span data-i18n="Selected approach">Selected approach</span></span>
+                <span><i class="marker optional"></i><span data-i18n="Generated point">Generated point</span></span>
+                <span><i class="marker waypoint"></i><span data-i18n="GPX waypoint">GPX waypoint</span></span>
+                <span class="legend-group"><span data-i18n="Mapped OSM discovery">Mapped OSM discovery</span></span>
+                <span><i class="marker place-scenic">▲</i><span data-i18n="Scenic place">Scenic place</span></span>
+                <span><i class="marker place-water mascot-water"></i><span data-i18n="Verified water mascot pin">Verified water mascot pin</span></span>
+                <span><i class="marker visited-place"></i><span data-i18n="Visited place">Visited place</span></span>
+                <span><i class="marker place-unknown">?</i><span data-i18n="Unknown potability">Unknown potability</span></span>
+                <span><i class="line imported"></i><span data-i18n="Imported GPX">Imported GPX</span></span>
+                <span class="nature-legend"><i class="line woodland"></i><span data-i18n="Woodland">Woodland</span></span>
+                <span class="nature-legend"><i class="line open-natural"></i><span data-i18n="Open natural">Open natural</span></span>
+                <span class="nature-legend"><i class="line agriculture"></i><span data-i18n="Agriculture">Agriculture</span></span>
+                <span class="nature-legend"><i class="line urban"></i><span data-i18n="Urban/developed">Urban/developed</span></span>
+                <span class="nature-legend"><i class="line water"></i><span data-i18n="Water crossing">Water crossing</span></span>
+                <span class="nature-legend"><i class="line nature-unknown"></i><span data-i18n="Unknown land cover">Unknown land cover</span></span>
+              </div>
+            </details>
+            <details id="offline-maps" class="offline-maps" aria-labelledby="offline-maps-title">
+              <summary><strong id="offline-maps-title"><span data-i18n="Offline maps">Offline maps</span></strong></summary>
+              <div class="offline-maps-body">
+                <button type="button" class="text-button" data-source-information><span data-i18n="Map data sources and licences">Map data sources and licences</span></button>
+                <p id="offline-map-storage-support"><span data-i18n="Checking browser storage support…">Checking browser storage support…</span></p>
+                <p id="offline-map-pack-status" role="status" aria-live="polite"><span data-i18n="Checking installed map packs…">Checking installed map packs…</span></p>
+                <p id="offline-map-active"><span data-i18n="No local map pack is active.">No local map pack is active.</span></p>
+                <ul id="offline-map-pack-list" class="offline-map-pack-list"></ul>
+                <form id="offline-map-install-form" class="offline-map-install-form">
+                  <label for="offline-map-manifest-url"><span data-i18n="Pack manifest URL">Pack manifest URL</span></label>
+                  <input id="offline-map-manifest-url" type="url" inputmode="url" autocomplete="off" placeholder="https://example.org/marly/manifest.json" required data-i18n-placeholder="https://example.org/marly/manifest.json">
+                  <div class="button-row">
+                    <button id="offline-map-install" class="button secondary" type="submit" aria-busy="false"><span data-i18n="Install map pack">Install map pack</span></button>
+                    <button id="offline-map-cancel-install" class="text-button hidden" type="button"><span data-i18n="Cancel download">Cancel download</span></button>
+                  </div>
+                </form>
+                <p class="help"><span data-i18n="Installation is explicit. Regional PMTiles stay in this browser; remote raster tiles are never copied into offline storage.">Installation is explicit. Regional PMTiles stay in this browser; remote raster tiles are never copied into offline storage.</span></p>
+              </div>
+            </details>
+            <section id="local-routing-experiment" class="local-routing-experiment advanced-map-control hidden" aria-labelledby="local-routing-title">
+              <strong id="local-routing-title"><span data-i18n="Local routing experiment">Local routing experiment</span></strong>
+              <p><span data-i18n="Debug Android only. Uses experimental local Valhalla policies; these are not claimed equivalent to production GraphHopper profiles.">Debug Android only. Uses experimental local Valhalla policies; these are not claimed equivalent to production GraphHopper profiles.</span></p>
+              <label for="local-routing-profile"><span data-i18n="Public profile">Public profile</span></label>
+              <select id="local-routing-profile">
+                <option value="trail_run" data-i18n="Trail run">Trail run</option>
+                <option value="hike" selected data-i18n="Hike">Hike</option>
+                <option value="city_bike" data-i18n="City bike">City bike</option>
+                <option value="gravel_bike" data-i18n="Gravel bike">Gravel bike</option>
+                <option value="mountain_bike" data-i18n="Mountain bike">Mountain bike</option>
+                <option value="road_bike" data-i18n="Road bike">Road bike</option>
+              </select>
+              <button id="local-routing-smoke-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Run Marly offline smoke test">Run Marly offline smoke test</span></button>
+              <button id="local-routing-paris-smoke-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Run Paris offline smoke test">Run Paris offline smoke test</span></button>
+              <button id="local-routing-via-smoke-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Run Marly three-point via test">Run Marly three-point via test</span></button>
+              <button id="local-routing-cross-pack-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Test no common regional pack">Test no common regional pack</span></button>
+              <button id="local-routing-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Route ordered planner points locally">Route ordered planner points locally</span></button>
+              <p id="local-routing-status" role="status" aria-live="polite"></p>
+              <strong id="local-waypoint-route-title"><span data-i18n="Local Waypoint Route experiment">Local Waypoint Route experiment</span></strong>
+              <p><span data-i18n="Uses a read-only snapshot of the ordinary Waypoint Route planner&#x27;s topology, endpoints, profile, exact waypoints, order, seed and distance controls. At most 14 interior waypoints and 16 local-route calls. Exact endpoints and graph-derived loop closure stay within 25 m. Near endpoints allow up to 150 m with visible warnings above 25 m; exact interiors stay within 300 m. No GPS coincidence is promised.">Uses a read-only snapshot of the ordinary Waypoint Route planner's topology, endpoints, profile, exact waypoints, order, seed and distance controls. At most 14 interior waypoints and 16 local-route calls. Exact endpoints and graph-derived loop closure stay within 25 m. Near endpoints allow up to 150 m with visible warnings above 25 m; exact interiors stay within 300 m. No GPS coincidence is promised.</span></p>
+              <p><span data-i18n="Set nature and loop geometry off, and path selection to shortest. Approach/best-effort points and overrides are rejected. No POI/nature scoring, globally shortest path or GraphHopper parity claim; normal Generate remains server-backed.">Set nature and loop geometry off, and path selection to shortest. Approach/best-effort points and overrides are rejected. No POI/nature scoring, globally shortest path or GraphHopper parity claim; normal Generate remains server-backed.</span></p>
+              <button id="local-waypoint-route-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Generate experimental Local Waypoint Route from planner">Generate experimental Local Waypoint Route from planner</span></button>
+              <p id="local-waypoint-route-status" role="status" aria-live="polite"></p>
+              <ol id="local-waypoint-route-results" class="local-auto-tour-results"></ol>
+              <strong id="local-auto-tour-title"><span data-i18n="Local Auto Tour experiment">Local Auto Tour experiment</span></strong>
+              <fieldset>
+                <legend><span data-i18n="Development regional places and nature">Development regional places and nature</span></legend>
+                <p><span data-i18n="Install PR39 places/nature data for an already installed routing region. Map and routing files stay separate.">Install PR39 places/nature data for an already installed routing region. Map and routing files stay separate.</span></p>
+                <label for="local-region-data-url"><span data-i18n="Regional manifest URL">Regional manifest URL</span></label>
+                <input id="local-region-data-url" type="url" autocomplete="off" spellcheck="false">
+                <button id="local-region-data-install" type="button" class="button secondary"><span data-i18n="Install places and nature">Install places and nature</span></button>
+                <button id="local-region-data-cancel" type="button" class="button secondary" disabled><span data-i18n="Cancel installation">Cancel installation</span></button>
+                <p id="local-region-data-status" role="status" aria-live="polite"></p>
+                <ul id="local-region-data-regions"></ul>
+              </fieldset>
+              <label for="local-auto-tour-nature"><span data-i18n="Nature preference">Nature preference</span></label>
+              <select id="local-auto-tour-nature"><option value="off" data-i18n="Off">Off</option><option value="prefer" data-i18n="Prefer mapped nature below loop quality">Prefer mapped nature below loop quality</option></select>
+              <label><input id="local-auto-tour-scenic" type="checkbox"> <span data-i18n="Consider scenic places">Consider scenic places</span></label>
+              <label><input id="local-auto-tour-water" type="checkbox"> <span data-i18n="Consider mapped verified drinking water">Consider mapped verified drinking water</span></label>
+              <label for="local-auto-tour-requested-pois"><span data-i18n="Requested local OSM place IDs (comma-separated)">Requested local OSM place IDs (comma-separated)</span></label>
+              <input id="local-auto-tour-requested-pois" type="text" autocomplete="off" spellcheck="false">
+              <p><span data-i18n="POI alternatives retain the no-POI recommendation while exact repetition/backtracking evidence is unavailable. Mapped water does not guarantee current potability or operation.">POI alternatives retain the no-POI recommendation while exact repetition/backtracking evidence is unavailable. Mapped water does not guarantee current potability or operation.</span></p>
+              <p><span data-i18n="Loop-only and bounded, with optional installed places/nature. Exact edge repetition and GraphHopper parity remain unavailable.">Loop-only and bounded, with optional installed places/nature. Exact edge repetition and GraphHopper parity remain unavailable.</span></p>
+              <label for="local-auto-tour-target-km"><span data-i18n="Target distance (km)">Target distance (km)</span></label>
+              <input id="local-auto-tour-target-km" type="number" min="2" max="60" step="0.5" value="12" disabled>
+              <label for="local-auto-tour-tolerance-km"><span data-i18n="Tolerance (km)">Tolerance (km)</span></label>
+              <input id="local-auto-tour-tolerance-km" type="number" min="0.1" max="15" step="0.1" value="2.5" disabled>
+              <label for="local-auto-tour-candidate-count"><span data-i18n="Candidate count">Candidate count</span></label>
+              <select id="local-auto-tour-candidate-count" disabled>
+                <option value="1">1</option>
+                <option value="2" selected>2</option>
+                <option value="3">3</option>
+              </select>
+              <label for="local-auto-tour-seed"><span data-i18n="Deterministic seed">Deterministic seed</span></label>
+              <input id="local-auto-tour-seed" type="number" min="0" max="4294967295" step="1" value="35" disabled>
+              <label for="local-auto-tour-direction"><span data-i18n="Direction preference">Direction preference</span></label>
+              <select id="local-auto-tour-direction" disabled>
+                <option value="any" selected data-i18n="Any">Any</option>
+                <option value="clockwise" data-i18n="Clockwise">Clockwise</option>
+                <option value="counterclockwise" data-i18n="Counterclockwise">Counterclockwise</option>
+              </select>
+              <button id="local-auto-tour-smoke-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Run fixed Marly local Auto Tour">Run fixed Marly local Auto Tour</span></button>
+              <button id="local-auto-tour-button" class="button secondary" type="button" aria-busy="false" disabled><span data-i18n="Generate local Auto Tour from first planner point">Generate local Auto Tour from first planner point</span></button>
+              <p id="local-auto-tour-status" role="status" aria-live="polite"></p>
+              <ol id="local-auto-tour-results" class="local-auto-tour-results"></ol>
+            </section>
+          </div>
+        </details>
+            <details class="app-status-details"><summary><span data-i18n="App status">App status</span></summary><p id="app-build-identity" class="field-help" hidden></p><p id="app-status-summary"><span data-i18n="Checking app status…">Checking app status…</span></p></details>
             <details id="offline-regions" class="offline-regions hidden">
-              <summary><strong>Regions</strong><span>Maps, routing, places, nature and elevation on this device</span></summary>
+              <summary><strong><span data-i18n="Regions">Regions</span></strong><span><span data-i18n="Maps, routing, places, nature and elevation on this device">Maps, routing, places, nature and elevation on this device</span></span></summary>
               <div class="offline-regions-body">
-                <label for="planning-region">Region for this plan</label>
-                <select id="planning-region"><option value="">Choose an installed region</option></select>
-                <p id="regional-status" role="status" aria-live="polite">Checking regional data…</p>
-                <progress id="regional-progress" hidden aria-label="Region download"></progress>
-                <details id="regional-diagnostics" hidden><summary>Technical details</summary><code id="regional-error-code"></code></details>
-                <p id="regional-map-status" role="status">No offline map is selected.</p>
+                <label for="planning-region"><span data-i18n="Region for this plan">Region for this plan</span></label>
+                <select id="planning-region"><option value="" data-i18n="Choose an installed region">Choose an installed region</option></select>
+                <p id="regional-status" role="status" aria-live="polite"><span data-i18n="Checking regional data…">Checking regional data…</span></p>
+                <progress id="regional-progress" hidden aria-label="Region download" data-i18n-aria-label="Region download"></progress>
+                <details id="regional-diagnostics" hidden><summary><span data-i18n="Technical details">Technical details</span></summary><code id="regional-error-code"></code></details>
+                <p id="regional-map-status" role="status"><span data-i18n="No offline map is selected.">No offline map is selected.</span></p>
                 <div class="button-row">
-                  <button id="regional-refresh" type="button" class="button secondary">Check regions</button>
-                  <button id="regional-cancel" type="button" class="button secondary hidden">Cancel download</button>
+                  <button id="regional-refresh" type="button" class="button secondary"><span data-i18n="Check regions">Check regions</span></button>
+                  <button id="regional-cancel" type="button" class="button secondary hidden"><span data-i18n="Cancel download">Cancel download</span></button>
                 </div>
                 <ul id="regional-list" class="offline-region-list"></ul>
-                <p class="help">Keep the app open while downloading. The region is ready after all downloaded files have been checked. Updates keep the installed version until the replacement is ready.</p>
+                <p class="help"><span data-i18n="Keep the app open while downloading. The region is ready after all downloaded files have been checked. Updates keep the installed version until the replacement is ready.">Keep the app open while downloading. The region is ready after all downloaded files have been checked. Updates keep the installed version until the replacement is ready.</span></p>
               </div>
             </details>
             <details class="about-panel">
-              <summary data-icon="info">About Sugarglider</summary>
+              <summary data-icon="info"><span data-i18n="About Sugarglider">About Sugarglider</span></summary>
               <div class="about-content">
-                <img src="/static/brand/sugarglider-banner.png" width="1800" height="498" loading="lazy" alt="Sugarglider trail-planning mascot">
-                <p>Plan outdoor routes for running, hiking and cycling. Let Sugarglider suggest a route or connect your chosen points, then export your selected route as GPX.</p>
+                <img src="/static/brand/sugarglider-banner.png" width="1800" height="498" loading="lazy" alt="Sugarglider trail-planning mascot" data-i18n-alt="Sugarglider trail-planning mascot">
+                <p><span data-i18n="Plan outdoor routes for running, hiking and cycling. Let Sugarglider suggest a route or connect your chosen points, then export your selected route as GPX.">Plan outdoor routes for running, hiking and cycling. Let Sugarglider suggest a route or connect your chosen points, then export your selected route as GPX.</span></p>
               </div>
             </details>
           </div>
@@ -75,178 +208,185 @@
     <dialog id="trail-profile-dialog" class="trail-profile-dialog" aria-labelledby="trail-profile-title">
       <form id="trail-profile-form" class="trail-profile-form">
         <div>
-          <p class="eyebrow">Local trail profile</p>
-          <h2 id="trail-profile-title">Welcome to Sugarglider</h2>
-          <p class="profile-privacy">This nickname and badge stay in this browser and do not create a Sugarglider account. In an outing, both are visible to anyone with the public link. Connecting ChatGPT is a separate optional action.</p>
+          <p class="eyebrow"><span data-i18n="Local trail profile">Local trail profile</span></p>
+          <h2 id="trail-profile-title"><span data-i18n="Welcome to Sugarglider">Welcome to Sugarglider</span></h2>
+          <p class="profile-privacy"><span data-i18n="This nickname and badge stay in this browser and do not create a Sugarglider account. In an outing, both are visible to anyone with the public link. Connecting ChatGPT is a separate optional action.">This nickname and badge stay in this browser and do not create a Sugarglider account. In an outing, both are visible to anyone with the public link. Connecting ChatGPT is a separate optional action.</span></p>
         </div>
-        <label for="trail-profile-name">What should we call you?</label>
+        <label for="trail-profile-name"><span data-i18n="What should we call you?">What should we call you?</span></label>
         <input id="trail-profile-name" maxlength="80" autocomplete="nickname" required>
         <fieldset class="profile-badge-picker">
-          <legend>Choose your trail badge</legend>
+          <legend><span data-i18n="Choose your trail badge">Choose your trail badge</span></legend>
           <div class="profile-badge-grid">
-            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="blue" aria-label="Lake trail badge" checked><img src="/static/brand/profile-badges/blue.png" width="512" height="512" alt="Lake Sugarglider trail badge"><span aria-hidden="true">Lake</span></label>
-            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="forest" aria-label="Forest trail badge"><img src="/static/brand/profile-badges/forest.png" width="512" height="512" alt="Forest Sugarglider trail badge"><span aria-hidden="true">Forest</span></label>
-            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="orange" aria-label="Vico trail badge"><img src="/static/brand/profile-badges/orange.png" width="512" height="512" alt="Vico Sugarglider trail badge"><span aria-hidden="true">Vico</span></label>
-            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="tomato" aria-label="Jime trail badge"><img src="/static/brand/profile-badges/tomato.png" width="512" height="512" alt="Jime Sugarglider trail badge"><span aria-hidden="true">Jime</span></label>
-            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="mask" aria-label="Lezca trail badge"><img src="/static/brand/profile-badges/mask.png" width="512" height="512" alt="Lezca Sugarglider trail badge"><span aria-hidden="true">Lezca</span></label>
-            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="olivier" aria-label="Olivier trail badge"><img src="/static/brand/profile-badges/olivier.png" width="512" height="512" alt="Olivier Sugarglider trail badge"><span aria-hidden="true">Olivier</span></label>
+            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="blue" aria-label="Lake trail badge" checked data-i18n-aria-label="Lake trail badge"><img src="/static/brand/profile-badges/blue.png" width="512" height="512" alt="Lake Sugarglider trail badge" data-i18n-alt="Lake Sugarglider trail badge"><span aria-hidden="true"><span data-i18n="Lake">Lake</span></span></label>
+            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="forest" aria-label="Forest trail badge" data-i18n-aria-label="Forest trail badge"><img src="/static/brand/profile-badges/forest.png" width="512" height="512" alt="Forest Sugarglider trail badge" data-i18n-alt="Forest Sugarglider trail badge"><span aria-hidden="true"><span data-i18n="Forest">Forest</span></span></label>
+            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="orange" aria-label="Vico trail badge" data-i18n-aria-label="Vico trail badge"><img src="/static/brand/profile-badges/orange.png" width="512" height="512" alt="Vico Sugarglider trail badge" data-i18n-alt="Vico Sugarglider trail badge"><span aria-hidden="true">Vico</span></label>
+            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="tomato" aria-label="Jime trail badge" data-i18n-aria-label="Jime trail badge"><img src="/static/brand/profile-badges/tomato.png" width="512" height="512" alt="Jime Sugarglider trail badge" data-i18n-alt="Jime Sugarglider trail badge"><span aria-hidden="true">Jime</span></label>
+            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="mask" aria-label="Lezca trail badge" data-i18n-aria-label="Lezca trail badge"><img src="/static/brand/profile-badges/mask.png" width="512" height="512" alt="Lezca Sugarglider trail badge" data-i18n-alt="Lezca Sugarglider trail badge"><span aria-hidden="true">Lezca</span></label>
+            <label class="profile-badge-card"><input type="radio" name="trail-profile-avatar" value="olivier" aria-label="Olivier trail badge" data-i18n-aria-label="Olivier trail badge"><img src="/static/brand/profile-badges/olivier.png" width="512" height="512" alt="Olivier Sugarglider trail badge" data-i18n-alt="Olivier Sugarglider trail badge"><span aria-hidden="true">Olivier</span></label>
           </div>
         </fieldset>
         <p id="trail-profile-storage-status" class="status" role="status" aria-live="polite"></p>
         <div class="button-row profile-dialog-actions">
-          <button id="cancel-trail-profile" class="button secondary" type="button">Cancel</button>
-          <button id="save-trail-profile" class="button primary" type="submit">Continue</button>
+          <button id="cancel-trail-profile" class="button secondary" type="button"><span data-i18n="Cancel">Cancel</span></button>
+          <button id="save-trail-profile" class="button primary" type="submit"><span data-i18n="Continue">Continue</span></button>
         </div>
       </form>
     </dialog>
 
     <dialog id="location-search-dialog" class="location-search-dialog" aria-labelledby="location-search-title" aria-describedby="location-search-privacy">
-      <header><h2 id="location-search-title">Search place or address</h2><button id="location-search-close" type="button" class="button secondary">Close</button></header>
+      <header><h2 id="location-search-title"><span data-i18n="Search place or address">Search place or address</span></h2><button id="location-search-close" type="button" class="button secondary"><span data-i18n="Close">Close</span></button></header>
       <div class="location-search-body">
         <form id="location-search-form">
-          <label for="location-search-query">Place or address</label>
-          <div class="location-search-input"><input id="location-search-query" name="location" type="search" minlength="3" maxlength="200" autocomplete="off" enterkeyhint="search" aria-describedby="location-search-privacy location-search-coverage"><button id="location-search-submit" type="submit" class="button primary">Search</button></div>
+          <label for="location-search-query"><span data-i18n="Place or address">Place or address</span></label>
+          <div class="location-search-input"><input id="location-search-query" name="location" type="search" minlength="3" maxlength="200" autocomplete="off" enterkeyhint="search" aria-describedby="location-search-privacy location-search-coverage"><button id="location-search-submit" type="submit" class="button primary"><span data-i18n="Search">Search</span></button></div>
         </form>
-        <p id="location-search-privacy" class="field-help">Online address search sends this search text to the geocoding provider. Search only runs when you press Search or Enter.</p>
+        <p id="location-search-privacy" class="field-help"><span data-i18n="Online address search sends this search text to the geocoding provider. Search only runs when you press Search or Enter.">Online address search sends this search text to the geocoding provider. Search only runs when you press Search or Enter.</span></p>
         <p id="location-search-coverage" class="field-help"></p>
         <p id="location-search-status" role="status" aria-live="polite" aria-atomic="true"></p>
         <p id="location-search-error" class="validation" role="alert" aria-atomic="true"></p>
         <div id="location-search-results" aria-busy="false">
-          <section aria-labelledby="location-search-local-title"><h3 id="location-search-local-title">On this device</h3><p id="location-search-local-message" class="field-help"></p><ul id="location-search-local"></ul></section>
-          <section aria-labelledby="location-search-online-title"><h3 id="location-search-online-title">Online results</h3><p id="location-search-online-message" class="field-help"></p><ul id="location-search-online"></ul></section>
+          <section aria-labelledby="location-search-local-title"><h3 id="location-search-local-title"><span data-i18n="On this device">On this device</span></h3><p id="location-search-local-message" class="field-help"></p><ul id="location-search-local"></ul></section>
+          <section aria-labelledby="location-search-online-title"><h3 id="location-search-online-title"><span data-i18n="Online results">Online results</span></h3><p id="location-search-online-message" class="field-help"></p><ul id="location-search-online"></ul></section>
         </div>
         <p class="location-search-credit field-help"><a id="location-search-attribution" target="_blank" rel="noopener noreferrer"></a><span id="location-search-retrieved"></span></p>
       </div>
     </dialog>
 
     <dialog id="adventure-dialog" class="adventure-dialog" aria-labelledby="adventure-title" aria-describedby="adventure-privacy">
-      <header><div><p class="eyebrow">Your next adventure</p><h2 id="adventure-title">✨ Describe your adventure</h2></div><button id="adventure-close" class="button secondary" type="button">Close</button></header>
+      <header><h2 id="adventure-title"><img class="ai-planner-icon" src="/static/brand/sugarglider-ai-planner.png" width="256" height="194" alt="" aria-hidden="true"><span class="ai-action-label"><span data-i18n="Ask ChatGPT">Ask ChatGPT</span></span></h2><button id="adventure-close" class="button secondary" type="button"><span data-i18n="Close">Close</span></button></header>
       <div class="adventure-body">
-        <p id="adventure-privacy" class="field-help">When you Generate, your description, chosen Start/End, required points and up to 24 nearby mapped places (names, IDs and coordinates) are sent to OpenAI using your connected ChatGPT account. Research is online. Route calculations, complete regional packs and GPX stay on this device. Your ChatGPT plan limits apply. If the extra request is enabled, measured route summaries and reached mapped place names/OSM IDs may be sent to research stories or improve suggestions. The latest completed adventure, including selected places and stories, is kept locally for restart recovery; you can forget it or clear saved offline data.</p>
-        <section aria-label="ChatGPT account">
-          <p id="adventure-account-status" role="status" aria-live="polite">Connect your ChatGPT account to begin.</p>
-          <label>ChatGPT account<select id="adventure-account"><option value="">No account connected</option></select></label>
-          <div class="button-row"><button id="adventure-connect" class="button secondary" type="button">Sign in with ChatGPT</button><button id="adventure-add-account" class="text-button" type="button" hidden>Add account</button><button id="adventure-sign-out" class="text-button" type="button" hidden>Sign out</button></div>
-        </section>
-        <section id="adventure-input">
-          <label for="adventure-text">What would you like to do?</label>
-          <textarea id="adventure-text" rows="5" maxlength="8000" placeholder="A 35 km trail run in the woods around Marly, with historical places and viewpoints…"></textarea>
-          <label>Speech language<select id="adventure-language"><option value="">Device language</option><option value="fr-FR">Français</option><option value="en-GB">English (UK)</option><option value="en-US">English (US)</option></select></label>
-          <label>Speech recognition<select id="adventure-speech-service"><option value="">On this device if available</option><option value="platform">Android speech service (may send audio)</option></select></label>
-          <div class="button-row"><button id="adventure-microphone" class="button secondary" type="button" aria-pressed="false">🎤 Speak</button><button id="adventure-finish-speech" class="button secondary" type="button" hidden>Done speaking</button><button id="adventure-stop-speech" class="text-button" type="button" hidden>Cancel microphone</button></div>
-          <p id="adventure-speech-status" class="field-help" role="status" aria-live="polite">Choose the language you will speak. Speak adds to your text; check it before Generate. Recording lasts at most one minute. If Android finishes early, tap Speak to continue.</p>
-          <details><summary>Advanced settings</summary>
-            <label>Model<select id="adventure-model"><option value="">Connect an eligible account to load models</option></select></label>
-            <button id="adventure-refresh-models" class="text-button" type="button">Refresh available models</button>
-            <label class="adventure-check"><input id="adventure-research" type="checkbox" checked> Research places and sources online</label>
-            <label class="adventure-check"><input id="adventure-structured" type="checkbox" checked> Use structured answers when supported by this model</label>
-            <label class="adventure-check"><input id="adventure-refine" type="checkbox" checked> Allow one extra model request for reached-place stories or route suggestions</label>
-            <p class="field-help">Asphalt, exact retracing, technical difficulty and current access cannot yet be verified. Elevation is measured after routing; a climbing target is not guaranteed.</p>
+        <p id="adventure-privacy" class="field-help"><span data-i18n="Generate sends your text and selected geographic context to ChatGPT online. Route calculations and GPX stay on this device. Nothing is sent until you ask.">Generate sends your text and selected geographic context to ChatGPT online. Route calculations and GPX stay on this device. Nothing is sent until you ask.</span></p>
+        <section class="adventure-account-section" aria-label="ChatGPT account" data-i18n-aria-label="ChatGPT account">
+          <p id="adventure-account-status" role="status" aria-live="polite"><span data-i18n="Connect your ChatGPT account to begin.">Connect your ChatGPT account to begin.</span></p>
+          <button id="adventure-connect" class="button secondary" type="button"><span data-i18n="Sign in with ChatGPT">Sign in with ChatGPT</span></button>
+          <details id="adventure-account-settings"><summary><span data-i18n="ChatGPT account">ChatGPT account</span></summary>
+            <label><span data-i18n="ChatGPT account">ChatGPT account</span><select id="adventure-account"><option value="" data-i18n="No account connected">No account connected</option></select></label>
+            <div class="button-row"><button id="adventure-add-account" class="text-button" type="button" hidden><span data-i18n="Add account">Add account</span></button><button id="adventure-sign-out" class="text-button" type="button" hidden><span data-i18n="Sign out">Sign out</span></button></div>
           </details>
         </section>
-        <section aria-label="Start and End">
-          <p id="adventure-start" class="field-help"></p>
-          <label class="adventure-check"><input id="adventure-keep-start" type="checkbox" checked> Keep my chosen Start</label>
-          <label class="adventure-check"><input id="adventure-keep-end" type="checkbox" checked> Keep my chosen End</label>
-          <p class="field-help">Start and End are optional here: describe them by text or speech, or choose them on the map. Suggested locations are reviewed before routing. A loop returns to its Start.</p>
-          <div class="button-row"><button id="adventure-choose-start" class="text-button" type="button">Choose Start on map</button><button id="adventure-choose-end" class="text-button" type="button">Choose End on map</button></div>
+        <p id="adventure-region-status" class="validation" role="status" hidden></p>
+        <section id="adventure-input">
+          <label for="adventure-text"><span data-i18n="What would you like to do?">What would you like to do?</span></label>
+          <textarea id="adventure-text" rows="4" maxlength="8000" placeholder="A 35 km trail run in the woods around Marly, with historical places and viewpoints…" data-i18n-placeholder="A 35 km trail run in the woods around Marly, with historical places and viewpoints…"></textarea>
+          <div class="button-row adventure-speech-actions"><button id="adventure-microphone" class="button secondary" type="button" aria-pressed="false"><span data-i18n="🎤 Speak my adventure">🎤 Speak my adventure</span></button><button id="adventure-finish-speech" class="button secondary" type="button" hidden><span data-i18n="Done speaking">Done speaking</span></button><button id="adventure-stop-speech" class="text-button" type="button" hidden><span data-i18n="Cancel microphone">Cancel microphone</span></button></div>
+          <p id="adventure-speech-status" class="field-help" role="status" aria-live="polite"><span data-i18n="Speak adds editable text. Check it before Generate. Recording lasts at most one minute.">Speak adds editable text. Check it before Generate. Recording lasts at most one minute.</span></p>
+          <details id="adventure-speech-settings"><summary><span data-i18n="Speech language and service">Speech language and service</span></summary>
+          <label><span data-i18n="Speech language">Speech language</span><select id="adventure-language"><option value="" data-i18n="Device language">Device language</option><option value="fr-FR">Français</option><option value="en-GB" data-i18n="English (UK)">English (UK)</option><option value="en-US" data-i18n="English (US)">English (US)</option></select></label>
+          <label><span data-i18n="Speech recognition">Speech recognition</span><select id="adventure-speech-service"><option value="" data-i18n="On this device if available">On this device if available</option><option value="platform" data-i18n="Android speech service (may send audio)">Android speech service (may send audio)</option></select></label>
+          </details>
+          <details id="adventure-advanced"><summary><span data-i18n="Advanced settings">Advanced settings</span></summary>
+            <label><span data-i18n="Model">Model</span><select id="adventure-model"><option value="" data-i18n="Connect an eligible account to load models">Connect an eligible account to load models</option></select></label>
+            <button id="adventure-refresh-models" class="text-button" type="button"><span data-i18n="Refresh available models">Refresh available models</span></button>
+            <label class="adventure-check"><input id="adventure-research" type="checkbox" checked> <span data-i18n="Research places and sources online">Research places and sources online</span></label>
+            <label class="adventure-check"><input id="adventure-structured" type="checkbox" checked> <span data-i18n="Use structured answers when supported by this model">Use structured answers when supported by this model</span></label>
+            <label class="adventure-check"><input id="adventure-refine" type="checkbox" checked> <span data-i18n="Allow one extra model request for reached-place stories or route suggestions">Allow one extra model request for reached-place stories or route suggestions</span></label>
+            <p class="field-help"><span data-i18n="Asphalt, exact retracing, technical difficulty and current access cannot yet be verified. Elevation is measured after routing; a climbing target is not guaranteed.">Asphalt, exact retracing, technical difficulty and current access cannot yet be verified. Elevation is measured after routing; a climbing target is not guaranteed.</span></p>
+          </details>
         </section>
-        <section id="adventure-review" hidden aria-labelledby="adventure-review-title"><h3 id="adventure-review-title">Confirm required places</h3><p id="adventure-interpretation"></p><div id="adventure-required"></div><div id="adventure-limitations"></div><button id="adventure-confirm" class="button primary" type="button">Keep these requirements and calculate</button></section>
+        <details id="adventure-endpoints"><summary><span data-i18n="Start and End">Start and End</span></summary>
+          <p id="adventure-start" class="field-help"></p>
+          <label class="adventure-check"><input id="adventure-keep-start" type="checkbox" checked> <span data-i18n="Keep my chosen Start">Keep my chosen Start</span></label>
+          <label class="adventure-check"><input id="adventure-keep-end" type="checkbox" checked> <span data-i18n="Keep my chosen End">Keep my chosen End</span></label>
+          <p class="field-help"><span data-i18n="Start and End are optional here: describe them by text or speech, or choose them on the map. Suggested locations are reviewed before routing. A loop returns to its Start.">Start and End are optional here: describe them by text or speech, or choose them on the map. Suggested locations are reviewed before routing. A loop returns to its Start.</span></p>
+          <div class="button-row"><button id="adventure-choose-start" class="text-button" type="button"><span data-i18n="Choose Start on map">Choose Start on map</span></button><button id="adventure-choose-end" class="text-button" type="button"><span data-i18n="Choose End on map">Choose End on map</span></button></div>
+        </details>
+        <details id="adventure-privacy-details"><summary><span data-i18n="What is sent and saved?">What is sent and saved?</span></summary><p id="adventure-privacy-full" class="field-help"><span data-i18n="When you Generate, your description, chosen Start/End, required points and up to 24 nearby mapped places (names, IDs and coordinates) are sent to OpenAI using your connected ChatGPT account. Research is online. Route calculations, complete regional packs and GPX stay on this device. Your ChatGPT plan limits apply. If the extra request is enabled, measured route summaries and reached mapped place names/OSM IDs may be sent to research stories or improve suggestions. The latest completed adventure, including selected places and stories, is kept locally for restart recovery; you can forget it or clear saved offline data.">When you Generate, your description, chosen Start/End, required points and up to 24 nearby mapped places (names, IDs and coordinates) are sent to OpenAI using your connected ChatGPT account. Research is online. Route calculations, complete regional packs and GPX stay on this device. Your ChatGPT plan limits apply. If the extra request is enabled, measured route summaries and reached mapped place names/OSM IDs may be sent to research stories or improve suggestions. The latest completed adventure, including selected places and stories, is kept locally for restart recovery; you can forget it or clear saved offline data.</span></p></details>
+        <section id="adventure-review" hidden aria-labelledby="adventure-review-title"><h3 id="adventure-review-title"><span data-i18n="Confirm required places">Confirm required places</span></h3><p id="adventure-interpretation"></p><div id="adventure-required"></div><div id="adventure-limitations"></div><button id="adventure-confirm" class="button primary" type="button"><span data-i18n="Keep these requirements and calculate">Keep these requirements and calculate</span></button></section>
         <p id="adventure-progress" role="status" aria-live="polite"></p>
         <p id="adventure-error" class="validation" role="alert" aria-live="assertive"></p>
       </div>
-      <footer><button id="adventure-cancel" class="button secondary" type="button" hidden>Cancel planning</button><button id="adventure-generate" class="button primary" type="button">Generate adventure</button></footer>
+      <footer><button id="adventure-cancel" class="button secondary" type="button" hidden><span data-i18n="Cancel planning">Cancel planning</span></button><button id="adventure-generate" class="button primary" type="button"><span data-i18n="Generate adventure">Generate adventure</span></button></footer>
     </dialog>
 
     <dialog id="itinerary-dialog" class="itinerary-dialog" aria-labelledby="itinerary-title" aria-describedby="itinerary-introduction">
-      <div class="itinerary-header"><h2 id="itinerary-title">Import itinerary</h2></div>
+      <div class="itinerary-header"><h2 id="itinerary-title"><span data-i18n="Import itinerary">Import itinerary</span></h2></div>
       <div class="itinerary-body">
-        <p id="itinerary-introduction">This importer reads itinerary JSON locally. Paste JSON generated elsewhere, or choose a JSON file. Plan with AI connects to ChatGPT separately in the Android app.</p>
+        <p id="itinerary-introduction"><span data-i18n="This importer reads itinerary JSON locally. Paste JSON generated elsewhere, or choose a JSON file. Plan with AI connects to ChatGPT separately in the Android app.">This importer reads itinerary JSON locally. Paste JSON generated elsewhere, or choose a JSON file. Plan with AI connects to ChatGPT separately in the Android app.</span></p>
         <p id="itinerary-source" class="field-help" role="status" hidden></p>
         <section id="itinerary-input-stage">
-          <label for="itinerary-text">Itinerary draft JSON</label>
-          <p id="itinerary-text-help" class="field-help">One version 1 JSON object, optionally in a JSON code fence. Maximum 64 KiB.</p>
+          <label for="itinerary-text"><span data-i18n="Itinerary draft JSON">Itinerary draft JSON</span></label>
+          <p id="itinerary-text-help" class="field-help"><span data-i18n="One version 1 JSON object, optionally in a JSON code fence. Maximum 64 KiB.">One version 1 JSON object, optionally in a JSON code fence. Maximum 64 KiB.</span></p>
           <textarea id="itinerary-text" rows="9" aria-describedby="itinerary-text-help" spellcheck="false"></textarea>
-          <button id="itinerary-choose-file" class="button secondary" type="button">Choose JSON file</button>
-          <label for="itinerary-file" class="visually-hidden">Choose itinerary JSON file</label><input id="itinerary-file" type="file" hidden accept="application/json,.json">
-          <details class="itinerary-prompt-helper"><summary>Create prompt for an assistant</summary>
-            <p class="field-help">Build a prompt locally, then inspect or edit it. Copying may include your chosen Start coordinates. Nothing is sent automatically.</p>
-            <button id="itinerary-create-prompt" class="button secondary" type="button">Create prompt</button>
-            <div id="itinerary-prompt-area" hidden><label for="itinerary-prompt">Editable assistant prompt</label><textarea id="itinerary-prompt" rows="8" spellcheck="false"></textarea><button id="itinerary-copy-prompt" class="button secondary" type="button">Copy prompt</button><p id="itinerary-copy-status" class="field-help" role="status"></p></div>
+          <button id="itinerary-choose-file" class="button secondary" type="button"><span data-i18n="Choose JSON file">Choose JSON file</span></button>
+          <label for="itinerary-file" class="visually-hidden"><span data-i18n="Choose itinerary JSON file">Choose itinerary JSON file</span></label><input id="itinerary-file" type="file" hidden accept="application/json,.json">
+          <details class="itinerary-prompt-helper"><summary><span data-i18n="Create prompt for an assistant">Create prompt for an assistant</span></summary>
+            <p class="field-help"><span data-i18n="Build a prompt locally, then inspect or edit it. Copying may include your chosen Start coordinates. Nothing is sent automatically.">Build a prompt locally, then inspect or edit it. Copying may include your chosen Start coordinates. Nothing is sent automatically.</span></p>
+            <button id="itinerary-create-prompt" class="button secondary" type="button"><span data-i18n="Create prompt">Create prompt</span></button>
+            <div id="itinerary-prompt-area" hidden><label for="itinerary-prompt"><span data-i18n="Editable assistant prompt">Editable assistant prompt</span></label><textarea id="itinerary-prompt" rows="8" spellcheck="false"></textarea><button id="itinerary-copy-prompt" class="button secondary" type="button"><span data-i18n="Copy prompt">Copy prompt</span></button><p id="itinerary-copy-status" class="field-help" role="status"></p></div>
           </details>
         </section>
-        <section id="itinerary-review-stage" hidden aria-label="Review itinerary"><div id="itinerary-preview"></div><p class="itinerary-warning">Coordinates came from an external source and are not verified by Sugarglider. Review the locations on the map before relying on the route.</p><p id="itinerary-capability" class="field-help"></p></section>
+        <section id="itinerary-review-stage" hidden aria-label="Review itinerary" data-i18n-aria-label="Review itinerary"><div id="itinerary-preview"></div><p class="itinerary-warning"><span data-i18n="Coordinates came from an external source and are not verified by Sugarglider. Review the locations on the map before relying on the route.">Coordinates came from an external source and are not verified by Sugarglider. Review the locations on the map before relying on the route.</span></p><p id="itinerary-capability" class="field-help"></p></section>
         <p id="itinerary-error" class="validation" role="alert" aria-live="assertive" aria-atomic="true"></p>
       </div>
-      <div class="itinerary-actions"><button id="itinerary-cancel" class="button secondary" type="button">Cancel</button><button id="itinerary-back" class="button secondary" type="button" hidden>Back</button><button id="itinerary-review" class="button primary" type="button">Review itinerary</button><button id="itinerary-confirm" class="button primary" type="button" hidden>Import itinerary</button></div>
+      <div class="itinerary-actions"><button id="itinerary-cancel" class="button secondary" type="button"><span data-i18n="Cancel">Cancel</span></button><button id="itinerary-back" class="button secondary" type="button" hidden><span data-i18n="Back">Back</span></button><button id="itinerary-review" class="button primary" type="button"><span data-i18n="Review itinerary">Review itinerary</span></button><button id="itinerary-confirm" class="button primary" type="button" hidden><span data-i18n="Import itinerary">Import itinerary</span></button></div>
     </dialog>
 
     <section id="error-banner" class="notice error hidden" role="alert" aria-live="assertive" aria-atomic="true" aria-labelledby="error-title">
       <div class="notice-mark" aria-hidden="true">!</div>
       <div class="notice-copy">
-        <h2 id="error-title">Something needs attention</h2>
+        <h2 id="error-title"><span data-i18n="Something needs attention">Something needs attention</span></h2>
         <p id="error-message"></p>
         <p id="error-context" class="error-context hidden"></p>
         <p id="error-suggestion" class="error-suggestion hidden"></p>
-        <div id="exact-error-actions" class="button-row hidden" aria-label="Exact waypoint actions">
-          <button id="error-use-nearest" class="button secondary" type="button">Use nearest reachable point</button>
-          <button id="error-best-effort" class="button secondary" type="button">Allow best effort</button>
-          <button id="error-requested-place" class="button secondary" type="button">Convert to requested place</button>
-          <button id="error-move-waypoint" class="button secondary" type="button">Move this stop</button>
-          <button id="error-remove-waypoint" class="button secondary" type="button">Remove this stop</button>
+        <div id="exact-error-actions" class="button-row hidden" aria-label="Exact waypoint actions" data-i18n-aria-label="Exact waypoint actions">
+          <button id="error-use-nearest" class="button secondary" type="button"><span data-i18n="Use nearest reachable point">Use nearest reachable point</span></button>
+          <button id="error-best-effort" class="button secondary" type="button"><span data-i18n="Allow best effort">Allow best effort</span></button>
+          <button id="error-requested-place" class="button secondary" type="button"><span data-i18n="Convert to requested place">Convert to requested place</span></button>
+          <button id="error-move-waypoint" class="button secondary" type="button"><span data-i18n="Move this stop">Move this stop</span></button>
+          <button id="error-remove-waypoint" class="button secondary" type="button"><span data-i18n="Remove this stop">Remove this stop</span></button>
         </div>
-        <details><summary>Technical details</summary><p id="error-code" class="error-code hidden"></p><pre id="error-details"></pre></details>
+        <details><summary><span data-i18n="Technical details">Technical details</span></summary><p id="error-code" class="error-code hidden"></p><pre id="error-details"></pre></details>
       </div>
-      <button id="dismiss-error" class="icon-button" type="button" data-icon="close" aria-label="Dismiss error" title="Dismiss error"></button>
+      <button id="dismiss-error" class="icon-button" type="button" data-icon="close" aria-label="Dismiss error" title="Dismiss error" data-i18n-aria-label="Dismiss error" data-i18n-title="Dismiss error"></button>
     </section>
     <section id="map-error" class="notice warning hidden" role="status" aria-labelledby="map-error-title">
       <div class="notice-mark" aria-hidden="true">!</div>
-      <div class="notice-copy"><h2 id="map-error-title">Map display warning</h2><p id="map-error-message"></p></div>
+      <div class="notice-copy"><h2 id="map-error-title"><span data-i18n="Map display warning">Map display warning</span></h2><p id="map-error-message"></p></div>
     </section>
     <section id="pwa-status-panel" class="notice pwa-status hidden" role="status" aria-live="polite" aria-atomic="true">
       <div class="notice-mark" aria-hidden="true">↻</div>
       <div class="notice-copy">
-        <h2 id="pwa-network-status">Online</h2>
-        <p id="pwa-status-message">App ready.</p>
+        <h2 id="pwa-network-status"><span data-i18n="Online">Online</span></h2>
+        <p id="pwa-status-message"><span data-i18n="App ready.">App ready.</span></p>
         <div class="button-row">
-          <button id="retry-connection" class="button secondary hidden" type="button">Retry connection</button>
-          <button id="reload-pwa-update" class="button primary hidden" type="button">Reload to update</button>
+          <button id="retry-connection" class="button secondary hidden" type="button"><span data-i18n="Retry connection">Retry connection</span></button>
+          <button id="reload-pwa-update" class="button primary hidden" type="button"><span data-i18n="Reload to update">Reload to update</span></button>
         </div>
       </div>
     </section>
     <section id="saved-route-panel" class="notice saved-route hidden" role="status" aria-labelledby="saved-route-title">
       <div class="notice-mark" aria-hidden="true">↗</div>
       <div class="notice-copy">
-        <h2 id="saved-route-title">Route saved</h2>
-        <p id="saved-route-message">Your selected route is stored at this unlisted link.</p>
+        <h2 id="saved-route-title"><span data-i18n="Route saved">Route saved</span></h2>
+        <p id="saved-route-message"><span data-i18n="Your selected route is stored at this unlisted link.">Your selected route is stored at this unlisted link.</span></p>
         <div class="saved-route-link-row">
-          <label for="saved-route-link">Your route link</label>
+          <label for="saved-route-link"><span data-i18n="Your route link">Your route link</span></label>
           <input id="saved-route-link" readonly>
-          <button id="copy-saved-route-link" class="button secondary" type="button">Copy link</button>
+          <button id="copy-saved-route-link" class="button secondary" type="button"><span data-i18n="Copy link">Copy link</span></button>
         </div>
         <div class="saved-route-next-step">
-          <h3>Ready to go together?</h3>
-          <p>Create an outing so each participant can bring an independent route.</p>
-          <button id="show-create-outing" class="button primary hidden" type="button">Create outing</button>
+          <h3><span data-i18n="Ready to go together?">Ready to go together?</span></h3>
+          <p><span data-i18n="Create an outing so each participant can bring an independent route.">Create an outing so each participant can bring an independent route.</span></p>
+          <button id="show-create-outing" class="button primary hidden" type="button"><span data-i18n="Create outing">Create outing</span></button>
         </div>
         <form id="create-outing-form" class="outing-form hidden">
-          <label>Outing title<input id="outing-title" maxlength="120" required></label>
-          <label>Your display name<input id="outing-creator-name" maxlength="80" required></label>
-          <button id="create-outing" class="button primary" type="submit">Create outing</button>
+          <label><span data-i18n="Outing title">Outing title</span><input id="outing-title" maxlength="120" required></label>
+          <label><span data-i18n="Your display name">Your display name</span><input id="outing-creator-name" maxlength="80" required></label>
+          <button id="create-outing" class="button primary" type="submit"><span data-i18n="Create outing">Create outing</span></button>
         </form>
         <details class="action-disclosure">
-          <summary>More actions</summary>
+          <summary><span data-i18n="More actions">More actions</span></summary>
           <div class="button-row">
-            <button id="share-saved-route" class="button secondary" type="button">Share route</button>
-            <button id="use-saved-route" class="button secondary hidden" type="button">Use as a new plan</button>
-            <button id="save-saved-route-offline" class="button secondary hidden" type="button">Save for offline use</button>
-            <button id="remove-saved-route-offline" class="text-button hidden" type="button">Remove offline copy</button>
-            <button id="delete-saved-route" class="text-button danger hidden" type="button">Delete saved route</button>
-            <button id="dismiss-saved-route" class="text-button hidden" type="button">Dismiss</button>
+            <button id="share-saved-route" class="button secondary" type="button"><span data-i18n="Share route">Share route</span></button>
+            <button id="use-saved-route" class="button secondary hidden" type="button"><span data-i18n="Use as a new plan">Use as a new plan</span></button>
+            <button id="save-saved-route-offline" class="button secondary hidden" type="button"><span data-i18n="Save for offline use">Save for offline use</span></button>
+            <button id="remove-saved-route-offline" class="text-button hidden" type="button"><span data-i18n="Remove offline copy">Remove offline copy</span></button>
+            <button id="delete-saved-route" class="text-button danger hidden" type="button"><span data-i18n="Delete saved route">Delete saved route</span></button>
+            <button id="dismiss-saved-route" class="text-button hidden" type="button"><span data-i18n="Dismiss">Dismiss</span></button>
           </div>
           <details class="storage-details">
-            <summary>How offline storage works</summary>
-            <p class="help">This browser keeps at most eight explicit offline copies. Saving another copy may replace the oldest one, and the browser may still evict stored data.</p>
+            <summary><span data-i18n="How offline storage works">How offline storage works</span></summary>
+            <p class="help"><span data-i18n="This browser keeps at most eight explicit offline copies. Saving another copy may replace the oldest one, and the browser may still evict stored data.">This browser keeps at most eight explicit offline copies. Saving another copy may replace the oldest one, and the browser may still evict stored data.</span></p>
           </details>
         </details>
       </div>
@@ -254,483 +394,366 @@
     <section id="outing-receipt-panel" class="notice saved-route hidden" role="status" aria-labelledby="outing-receipt-title">
       <div class="notice-mark" aria-hidden="true">◎</div>
       <div class="notice-copy">
-        <h2 id="outing-receipt-title">Outing created</h2>
-        <p>Invite participants to bring their own saved routes.</p>
+        <h2 id="outing-receipt-title"><span data-i18n="Outing created">Outing created</span></h2>
+        <p><span data-i18n="Invite participants to bring their own saved routes.">Invite participants to bring their own saved routes.</span></p>
         <div class="saved-route-link-row">
-          <label for="outing-invite-link">Invitation link</label>
-          <input id="outing-invite-link" aria-label="Outing invitation link" readonly>
-          <button id="copy-outing-invite-link" class="button secondary" type="button">Copy invitation</button>
+          <label for="outing-invite-link"><span data-i18n="Invitation link">Invitation link</span></label>
+          <input id="outing-invite-link" aria-label="Outing invitation link" readonly data-i18n-aria-label="Outing invitation link">
+          <button id="copy-outing-invite-link" class="button secondary" type="button"><span data-i18n="Copy invitation">Copy invitation</span></button>
         </div>
         <div class="button-row">
-          <button id="open-outing-live-here" class="button primary hidden" type="button">Open live outing</button>
+          <button id="open-outing-live-here" class="button primary hidden" type="button"><span data-i18n="Open live outing">Open live outing</span></button>
         </div>
-        <p class="receipt-privacy">Invitation recipients can join; the public link is view-only.</p>
+        <p class="receipt-privacy"><span data-i18n="Invitation recipients can join; the public link is view-only.">Invitation recipients can join; the public link is view-only.</span></p>
         <details class="action-disclosure">
-          <summary>More sharing options</summary>
+          <summary><span data-i18n="More sharing options">More sharing options</span></summary>
           <div class="button-row">
-            <button id="share-outing-invite" class="button secondary" type="button">Share invitation</button>
+            <button id="share-outing-invite" class="button secondary" type="button"><span data-i18n="Share invitation">Share invitation</span></button>
           </div>
           <div class="saved-route-link-row">
-            <label for="outing-public-link">View-only public link</label>
-            <input id="outing-public-link" aria-label="Public outing link" readonly>
-            <button id="open-outing" class="button secondary" type="button">Open public view</button>
-            <button id="copy-outing-public-link" class="button secondary" type="button">Copy public link</button>
+            <label for="outing-public-link"><span data-i18n="View-only public link">View-only public link</span></label>
+            <input id="outing-public-link" aria-label="Public outing link" readonly data-i18n-aria-label="Public outing link">
+            <button id="open-outing" class="button secondary" type="button"><span data-i18n="Open public view">Open public view</span></button>
+            <button id="copy-outing-public-link" class="button secondary" type="button"><span data-i18n="Copy public link">Copy public link</span></button>
           </div>
           <div class="button-row">
-            <button id="delete-outing" class="text-button danger" type="button">Delete outing</button>
-            <button id="dismiss-outing" class="text-button" type="button">Dismiss</button>
+            <button id="delete-outing" class="text-button danger" type="button"><span data-i18n="Delete outing">Delete outing</span></button>
+            <button id="dismiss-outing" class="text-button" type="button"><span data-i18n="Dismiss">Dismiss</span></button>
           </div>
           <details class="privacy-details">
-            <summary>Privacy details</summary>
-            <p class="context-note">Opening here keeps your participant capability only in this tab's memory so you can explicitly start sharing. Reloading intentionally returns to viewer-only mode. The invitation permits joining until the outing expires or is full.</p>
+            <summary><span data-i18n="Privacy details">Privacy details</span></summary>
+            <p class="context-note"><span data-i18n="Opening here keeps your participant capability only in this tab&#x27;s memory so you can explicitly start sharing. Reloading intentionally returns to viewer-only mode. The invitation permits joining until the outing expires or is full.">Opening here keeps your participant capability only in this tab's memory so you can explicitly start sharing. Reloading intentionally returns to viewer-only mode. The invitation permits joining until the outing expires or is full.</span></p>
           </details>
         </details>
       </div>
     </section>
     <main id="planner" class="planner">
-      <nav class="workspace-navigation" aria-label="Workspace" hidden>
-        <button type="button" data-shell-view="map" aria-controls="map" aria-pressed="false">Map</button>
-        <button type="button" data-shell-view="plan" aria-controls="planning-panel" aria-pressed="false">Plan</button>
-        <button type="button" data-shell-view="routes" aria-controls="results-panel" aria-pressed="false">Routes</button>
+      <nav class="workspace-navigation" aria-label="Workspace" hidden data-i18n-aria-label="Workspace">
+        <button type="button" data-shell-view="map" aria-controls="map" aria-pressed="false"><span data-i18n="Map">Map</span></button>
+        <button type="button" data-shell-view="plan" aria-controls="planning-panel" aria-pressed="false"><span data-i18n="Plan">Plan</span></button>
+        <button type="button" data-shell-view="routes" aria-controls="results-panel" aria-pressed="false"><span data-i18n="Routes">Routes</span></button>
       </nav>
       <aside class="panel controls" id="planning-panel" aria-labelledby="controls-title">
         <div class="panel-heading">
-          <div><h1 id="controls-title" tabindex="-1">Plan</h1></div>
-          <button id="clear-results" class="text-button" type="button">Clear results</button>
+          <div><h1 id="controls-title" tabindex="-1"><span data-i18n="Plan">Plan</span></h1></div>
+          <button id="clear-results" class="text-button" type="button"><span data-i18n="Clear results">Clear results</span></button>
         </div>
 
-        <div class="plan-readiness"><p id="planning-readiness" class="field-help" role="status">Checking routing availability…</p><button id="plan-regions" class="text-button hidden" type="button">Regions</button></div>
-        <div id="adventure-launch" class="adventure-launch" hidden><button id="plan-with-ai" class="button primary wide" type="button">✨ Plan with AI</button><p class="field-help">Describe a run, hike or ride. ChatGPT suggests places; Sugarglider checks real offline routes.</p><button id="restore-adventure" class="button secondary wide" type="button" hidden>Reopen saved adventure</button><p id="adventure-recovery-status" class="field-help" role="status"></p></div>
-        <div class="itinerary-launch"><button id="import-itinerary" class="button secondary" type="button">Import itinerary</button><p class="field-help">Paste named places from an external assistant or a JSON file.</p></div>
+        <div class="plan-readiness"><p id="planning-readiness" class="field-help" role="status"><span data-i18n="Checking routing availability…">Checking routing availability…</span></p><button id="plan-regions" class="text-button hidden" type="button"><span data-i18n="Regions">Regions</span></button></div>
+        <div id="adventure-launch" class="adventure-launch" hidden><button id="plan-with-ai" class="button primary wide ai-planner-action" type="button"><img class="ai-planner-icon" src="/static/brand/sugarglider-ai-planner.png" width="256" height="194" alt="" aria-hidden="true"><span class="ai-action-label"><span data-i18n="Ask ChatGPT">Ask ChatGPT</span></span></button><p class="field-help" id="adventure-launch-help"><span data-i18n="Describe a run, hike or ride. ChatGPT suggests places; Sugarglider checks real offline routes.">Describe a run, hike or ride. ChatGPT suggests places; Sugarglider checks real offline routes.</span></p><button id="restore-adventure" class="button secondary wide" type="button" hidden><span data-i18n="Reopen saved adventure">Reopen saved adventure</span></button><p id="adventure-recovery-status" class="field-help" role="status"></p></div>
+        <div class="itinerary-launch"><button id="import-itinerary" class="button secondary" type="button"><span data-i18n="Import itinerary">Import itinerary</span></button><p class="field-help"><span data-i18n="Paste named places from an external assistant or a JSON file.">Paste named places from an external assistant or a JSON file.</span></p></div>
         <form id="route-form" novalidate>
-          <label class="plan-activity">Activity<select id="profile" aria-describedby="profile-description"></select></label>
-          <label class="plan-distance">Distance (km)<input id="target-distance" type="number" min="1" max="200" step="0.1" value="20" required></label>
-          <section class="route-intent" aria-label="Interpreted route" aria-live="polite">
-            <strong id="route-intent-summary">Tap the map to choose Start</strong>
-            <p id="route-intent-help" class="field-help">Then generate a route, or keep tapping to add stops.</p>
-            <button id="undo-point-edit-plan" class="button secondary" type="button" hidden>Undo</button>
+          <label class="plan-activity"><span data-i18n="Activity">Activity</span><select id="profile" aria-describedby="profile-description"></select></label>
+          <label class="plan-distance"><span data-i18n="Distance (km)">Distance (km)</span><input id="target-distance" type="number" min="1" max="200" step="0.1" value="20" required></label>
+          <section class="route-intent" aria-label="Interpreted route" aria-live="polite" data-i18n-aria-label="Interpreted route">
+            <strong id="route-intent-summary"><span data-i18n="Tap the map to choose Start">Tap the map to choose Start</span></strong>
+            <p id="route-intent-help" class="field-help"><span data-i18n="Then generate a route, or keep tapping to add stops.">Then generate a route, or keep tapping to add stops.</span></p>
+            <button id="undo-point-edit-plan" class="button secondary" type="button" hidden><span data-i18n="Undo">Undo</span></button>
           </section>
           <div id="connect-shape" class="hidden"></div>
-          <section class="endpoint-controls" aria-label="Route endpoints">
+          <section class="endpoint-controls" aria-label="Route endpoints" data-i18n-aria-label="Route endpoints">
               <fieldset class="endpoint-control" id="hard-start-control">
-                <legend>Start</legend>
-                <p id="plan-start-summary" class="field-help" role="status">Choose Start on the map</p>
-                <div class="button-row"><button id="set-hard-start" class="button secondary" type="button">Choose on map</button><button id="clear-hard-start" class="text-button" type="button">Clear</button></div>
-                <details class="start-details"><summary>Edit Start coordinates</summary>
-                <label class="check-control"><input id="hard-start-enabled" type="checkbox"> Use this Start</label>
-                <label>Snap policy<select id="hard-start-snap-policy"><option value="near">Near this point</option><option value="exact">Exact point</option></select></label>
-                <label>Name<input id="hard-start-name" maxlength="200" placeholder="Hard start"></label>
+                <legend><span data-i18n="Start">Start</span></legend>
+                <p id="plan-start-summary" class="field-help" role="status"><span data-i18n="Choose Start on the map">Choose Start on the map</span></p>
+                <div class="button-row"><button id="set-hard-start" class="button secondary" type="button"><span data-i18n="Choose on map">Choose on map</span></button><button id="clear-hard-start" class="text-button" type="button"><span data-i18n="Clear">Clear</span></button></div>
+                <details class="start-details"><summary><span data-i18n="Edit Start coordinates">Edit Start coordinates</span></summary>
+                <label class="check-control"><input id="hard-start-enabled" type="checkbox"> <span data-i18n="Use this Start">Use this Start</span></label>
+                <label><span data-i18n="Snap policy">Snap policy</span><select id="hard-start-snap-policy"><option value="near" data-i18n="Near this point">Near this point</option><option value="exact" data-i18n="Exact point">Exact point</option></select></label>
+                <label><span data-i18n="Name">Name</span><input id="hard-start-name" maxlength="200" placeholder="Hard start" data-i18n-placeholder="Hard start"></label>
                 <div class="field-pair">
-                  <label>Latitude<input id="hard-start-lat" type="number" min="-90" max="90" step="0.000001" placeholder="Optional"></label>
-                  <label>Longitude<input id="hard-start-lon" type="number" min="-180" max="180" step="0.000001" placeholder="Optional"></label>
+                  <label><span data-i18n="Latitude">Latitude</span><input id="hard-start-lat" type="number" min="-90" max="90" step="0.000001" placeholder="Optional" data-i18n-placeholder="Optional"></label>
+                  <label><span data-i18n="Longitude">Longitude</span><input id="hard-start-lon" type="number" min="-180" max="180" step="0.000001" placeholder="Optional" data-i18n-placeholder="Optional"></label>
                 </div>
                 </details>
               </fieldset>
           </section>
         <div id="connect-end" class="hidden"></div>
         <div class="generate-actions">
-          <button id="generate" class="button primary wide" type="button" data-icon="generate" aria-describedby="request-status" disabled>Generate</button>
-          <button id="cancel" class="button danger hidden" type="button" data-icon="cancel">Cancel</button>
+          <button id="generate" class="button primary wide" type="button" data-icon="generate" aria-describedby="request-status" disabled><span data-i18n="Generate">Generate</span></button>
+          <button id="cancel" class="button danger hidden" type="button" data-icon="cancel"><span data-i18n="Cancel">Cancel</span></button>
         </div>
 
         <section id="generation-state" class="generation-state hidden" aria-labelledby="generation-title" aria-live="polite">
           <img src="/static/brand/sugarglider-compact-icon.png" width="48" height="48" alt="">
-          <div><h2 id="generation-title">Planning your loop…</h2><p>Checking the requested points and route alternatives. This may take a little while for low-overlap or nature-aware searches.</p></div>
+          <div><h2 id="generation-title"><span data-i18n="Planning your loop…">Planning your loop…</span></h2><p><span data-i18n="Checking the requested points and route alternatives. This may take a little while for low-overlap or nature-aware searches.">Checking the requested points and route alternatives. This may take a little while for low-overlap or nature-aware searches.</span></p></div>
         </section>
-        <p id="request-status" class="status" aria-live="polite">Click the map to choose your start point.</p>
+        <p id="request-status" class="status" aria-live="polite"><span data-i18n="Click the map to choose your start point.">Click the map to choose your start point.</span></p>
           <details class="control-section" id="planning-preferences">
-            <summary>More planning options</summary>
+            <summary><span data-i18n="More planning options">More planning options</span></summary>
             <fieldset class="planning-mode" aria-describedby="planning-strategy-note">
-              <legend>Planning strategy</legend>
-              <label><input type="radio" name="planning-mode" value="automatic" checked><span><strong>Automatic</strong><small>Plan from the points on your map.</small></span></label>
-              <label><input type="radio" name="planning-mode" value="auto_tour"><span><strong>Suggest a route</strong><small>Keep discovery preferences and advanced anchors.</small></span></label>
-              <label><input type="radio" name="planning-mode" value="waypoint_route"><span><strong>Connect my points</strong><small>Keep an explicit route through points.</small></span></label>
+              <legend><span data-i18n="Planning strategy">Planning strategy</span></legend>
+              <label><input type="radio" name="planning-mode" value="automatic" checked><span><strong><span data-i18n="Automatic">Automatic</span></strong><small><span data-i18n="Plan from the points on your map.">Plan from the points on your map.</span></small></span></label>
+              <label><input type="radio" name="planning-mode" value="auto_tour"><span><strong><span data-i18n="Suggest a route">Suggest a route</span></strong><small><span data-i18n="Keep discovery preferences and advanced anchors.">Keep discovery preferences and advanced anchors.</span></small></span></label>
+              <label><input type="radio" name="planning-mode" value="waypoint_route"><span><strong><span data-i18n="Connect my points">Connect my points</span></strong><small><span data-i18n="Keep an explicit route through points.">Keep an explicit route through points.</span></small></span></label>
             </fieldset>
             <p id="planning-strategy-note" class="field-help"></p>
-            <p id="profile-description" class="field-help" role="status">Loading routing profiles…</p>
+            <p id="profile-description" class="field-help" role="status"><span data-i18n="Loading routing profiles…">Loading routing profiles…</span></p>
             <p id="plan-capabilities" class="field-help"></p>
-            <label>Route name<input id="route-name" name="name" value="Sugarglider route" maxlength="120" required></label>
+            <label><span data-i18n="Route name">Route name</span><input id="route-name" name="name" value="Sugarglider route" maxlength="120" required></label>
             <div class="field-pair">
-              <label>Tolerance <span>km</span><input id="tolerance" type="number" min="0.1" max="10" step="0.1" value="2" required></label>
-              <label>Route options<select id="candidate-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+              <label><span data-i18n="Tolerance">Tolerance</span> <span>km</span><input id="tolerance" type="number" min="0.1" max="10" step="0.1" value="2" required></label>
+              <label><span data-i18n="Route options">Route options</span><select id="candidate-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
             </div>
-            <label>Distance priority<select id="distance-priority"><option value="flexible" selected>Flexible — places and coherence first</option><option value="balanced">Balanced</option><option value="strict">Strict — tolerance first</option></select></label>
-            <label>Maximum distance (optional) <span>km</span><input id="maximum-distance" type="number" min="0.1" max="200" step="0.1" placeholder="Server safety maximum"></label>
-            <p class="field-help">Flexible and balanced tolerance allow compromises. An explicit maximum is binding for balanced and strict requests; strict also requires a maximum. Unsupported settings are reported without changing your choices.</p>
-            <div id="endpoint-options-anchor"><label id="route-shape-field">Finish<select id="route-topology"><option value="loop">Loop</option><option value="point_to_point">Finish elsewhere</option></select></label>
-              <p id="loop-end-explanation" class="field-help endpoint-explanation" role="status">End is the start for loop routes.</p>
+            <label><span data-i18n="Distance priority">Distance priority</span><select id="distance-priority"><option value="flexible" selected data-i18n="Flexible — places and coherence first">Flexible — places and coherence first</option><option value="balanced" data-i18n="Balanced">Balanced</option><option value="strict" data-i18n="Strict — tolerance first">Strict — tolerance first</option></select></label>
+            <label><span data-i18n="Maximum distance (optional)">Maximum distance (optional)</span> <span>km</span><input id="maximum-distance" type="number" min="0.1" max="200" step="0.1" placeholder="Server safety maximum" data-i18n-placeholder="Server safety maximum"></label>
+            <p class="field-help"><span data-i18n="Flexible and balanced tolerance allow compromises. An explicit maximum is binding for balanced and strict requests; strict also requires a maximum. Unsupported settings are reported without changing your choices.">Flexible and balanced tolerance allow compromises. An explicit maximum is binding for balanced and strict requests; strict also requires a maximum. Unsupported settings are reported without changing your choices.</span></p>
+            <div id="endpoint-options-anchor"><label id="route-shape-field"><span data-i18n="Finish">Finish</span><select id="route-topology"><option value="loop" data-i18n="Loop">Loop</option><option value="point_to_point" data-i18n="Finish elsewhere">Finish elsewhere</option></select></label>
+              <p id="loop-end-explanation" class="field-help endpoint-explanation" role="status"><span data-i18n="End is the start for loop routes.">End is the start for loop routes.</span></p>
               <fieldset class="endpoint-control hidden" id="hard-end-control" aria-hidden="true" hidden disabled>
-                <legend>End</legend>
-                <p id="plan-end-summary" class="field-help">Choose End on the map</p>
-                <details class="end-details"><summary>Edit End coordinates</summary>
-                <label><input id="hard-end-enabled" type="checkbox"> Use this End</label>
-                <label>Snap policy<select id="hard-end-snap-policy"><option value="near">Near this point</option><option value="exact">Exact point</option></select></label>
-                <label>Name<input id="hard-end-name" maxlength="200" placeholder="Hard end"></label>
+                <legend><span data-i18n="End">End</span></legend>
+                <p id="plan-end-summary" class="field-help"><span data-i18n="Choose End on the map">Choose End on the map</span></p>
+                <details class="end-details"><summary><span data-i18n="Edit End coordinates">Edit End coordinates</span></summary>
+                <label><input id="hard-end-enabled" type="checkbox"> <span data-i18n="Use this End">Use this End</span></label>
+                <label><span data-i18n="Snap policy">Snap policy</span><select id="hard-end-snap-policy"><option value="near" data-i18n="Near this point">Near this point</option><option value="exact" data-i18n="Exact point">Exact point</option></select></label>
+                <label><span data-i18n="Name">Name</span><input id="hard-end-name" maxlength="200" placeholder="Hard end" data-i18n-placeholder="Hard end"></label>
                 <div class="field-pair">
-                  <label>Latitude<input id="hard-end-lat" type="number" min="-90" max="90" step="0.000001" placeholder="Optional"></label>
-                  <label>Longitude<input id="hard-end-lon" type="number" min="-180" max="180" step="0.000001" placeholder="Optional"></label>
+                  <label><span data-i18n="Latitude">Latitude</span><input id="hard-end-lat" type="number" min="-90" max="90" step="0.000001" placeholder="Optional" data-i18n-placeholder="Optional"></label>
+                  <label><span data-i18n="Longitude">Longitude</span><input id="hard-end-lon" type="number" min="-180" max="180" step="0.000001" placeholder="Optional" data-i18n-placeholder="Optional"></label>
                 </div>
                 </details>
-                <div class="button-row"><button id="set-hard-end" class="button secondary" type="button">Set on map</button><button id="clear-hard-end" class="text-button" type="button">Clear</button></div>
+                <div class="button-row"><button id="set-hard-end" class="button secondary" type="button"><span data-i18n="Set on map">Set on map</span></button><button id="clear-hard-end" class="text-button" type="button"><span data-i18n="Clear">Clear</span></button></div>
               </fieldset></div>
-            <section id="auto-tour-fields" class="mode-fields" aria-label="Route discovery preferences">
-              <p class="auto-tour-explanation">Shape the suggested route with optional preferences. Mapped places and nature depend on available regional data.</p>
-              <label>Direction<select id="direction-preference"><option value="any">Any</option><option value="clockwise">Clockwise</option><option value="counterclockwise">Counter-clockwise</option></select></label>
+            <section id="auto-tour-fields" class="mode-fields" aria-label="Route discovery preferences" data-i18n-aria-label="Route discovery preferences">
+              <p class="auto-tour-explanation"><span data-i18n="Shape the suggested route with optional preferences. Mapped places and nature depend on available regional data.">Shape the suggested route with optional preferences. Mapped places and nature depend on available regional data.</span></p>
+              <label><span data-i18n="Direction">Direction</span><select id="direction-preference"><option value="any" data-i18n="Any">Any</option><option value="clockwise" data-i18n="Clockwise">Clockwise</option><option value="counterclockwise" data-i18n="Counter-clockwise">Counter-clockwise</option></select></label>
               <details class="places-advanced">
-                <summary>Discovery limits</summary>
-                <label>Free POI out-and-back distance (total) <span>m</span><input id="free-poi-spur" type="number" min="0" max="1000" step="25" value="200"></label>
-                <p class="field-help">One verified physical POI excursion gets a 200 m allowance—approximately 100 m out and 100 m back on the same path.</p>
+                <summary><span data-i18n="Discovery limits">Discovery limits</span></summary>
+                <label><span data-i18n="Free POI out-and-back distance (total)">Free POI out-and-back distance (total)</span> <span>m</span><input id="free-poi-spur" type="number" min="0" max="1000" step="25" value="200"></label>
+                <p class="field-help"><span data-i18n="One verified physical POI excursion gets a 200 m allowance—approximately 100 m out and 100 m back on the same path.">One verified physical POI excursion gets a 200 m allowance—approximately 100 m out and 100 m back on the same path.</span></p>
               </details>
               <div class="field-pair">
-                <label>Scenic places<select id="scenic-preference"><option value="prefer">Prefer</option><option value="off">Off</option></select></label>
-                <label>Verified drinking water<select id="water-preference"><option value="prefer">Prefer</option><option value="off">Off</option></select></label>
+                <label><span data-i18n="Scenic places">Scenic places</span><select id="scenic-preference"><option value="prefer" data-i18n="Prefer">Prefer</option><option value="off" data-i18n="Off">Off</option></select></label>
+                <label><span data-i18n="Verified drinking water">Verified drinking water</span><select id="water-preference"><option value="prefer" data-i18n="Prefer">Prefer</option><option value="off" data-i18n="Off">Off</option></select></label>
               </div>
             </section>
             <details class="places-advanced route-advanced">
-              <summary>Advanced route preferences</summary>
-              <div id="advanced-order-anchor"><label id="waypoint-order-field">Visit order<select id="point-order-mode"><option value="fixed">As tapped</option><option value="optimize" data-optimized="true">Optimize stops</option></select></label></div>
-              <label>Path selection<select id="path-selection-mode"><option value="shortest">Natural shortest paths</option><option value="low_overlap">Low-overlap alternatives</option></select></label>
-              <label>Loop shape<select id="loop-geometry-preference"><option value="off">Off</option><option value="prefer">Prefer balanced loops</option></select></label>
-              <p class="field-help">Prefers compact, directionally balanced loops with fewer close parallel corridors. Distance, backtracking and repetition remain more important.</p>
-              <label>Nature preference<select id="nature-preference"><option value="off">Off</option><option value="prefer">Prefer mapped nature</option></select></label>
+              <summary><span data-i18n="Advanced route preferences">Advanced route preferences</span></summary>
+              <div id="advanced-order-anchor"><label id="waypoint-order-field"><span data-i18n="Visit order">Visit order</span><select id="point-order-mode"><option value="fixed" data-i18n="As tapped">As tapped</option><option value="optimize" data-optimized="true" data-i18n="Optimize stops">Optimize stops</option></select></label></div>
+              <label><span data-i18n="Path selection">Path selection</span><select id="path-selection-mode"><option value="shortest" data-i18n="Natural shortest paths">Natural shortest paths</option><option value="low_overlap" data-i18n="Low-overlap alternatives">Low-overlap alternatives</option></select></label>
+              <label><span data-i18n="Loop shape">Loop shape</span><select id="loop-geometry-preference"><option value="off" data-i18n="Off">Off</option><option value="prefer" data-i18n="Prefer balanced loops">Prefer balanced loops</option></select></label>
+              <p class="field-help"><span data-i18n="Prefers compact, directionally balanced loops with fewer close parallel corridors. Distance, backtracking and repetition remain more important.">Prefers compact, directionally balanced loops with fewer close parallel corridors. Distance, backtracking and repetition remain more important.</span></p>
+              <label><span data-i18n="Nature preference">Nature preference</span><select id="nature-preference"><option value="off" data-i18n="Off">Off</option><option value="prefer" data-i18n="Prefer mapped nature">Prefer mapped nature</option></select></label>
               <p id="nature-availability" class="field-help" role="status"></p>
             </details>
             <input id="seed" type="hidden" value="0">
-            <button id="copy-request" class="text-button" type="button" data-icon="copy">Copy request JSON</button>
+            <button id="copy-request" class="text-button" type="button" data-icon="copy"><span data-i18n="Copy request JSON">Copy request JSON</span></button>
           </details>
         </form>
 
         <details class="control-section places-controls">
-          <summary><span>Places</span><span id="places-count"></span></summary>
-          <p id="places-status" class="field-help places-status" role="status" aria-live="polite">Checking the local places index…</p>
+          <summary><span><span data-i18n="Places">Places</span></span><span id="places-count"></span></summary>
+          <p id="places-status" class="field-help places-status" role="status" aria-live="polite"><span data-i18n="Checking the local places index…">Checking the local places index…</span></p>
           <form id="places-filters">
-            <label class="check-control"><input id="place-ice-cream" type="checkbox" checked> Ice cream</label>
-            <label class="check-control"><input id="place-toilets" type="checkbox" checked> Toilets</label>
-            <label class="check-control"><input id="place-picnic-areas" type="checkbox" checked> Picnic areas</label>
-            <label class="check-control"><input id="place-cafes" type="checkbox"> Cafés</label>
-            <label class="check-control"><input id="place-bakeries" type="checkbox"> Bakeries</label>
-            <label class="check-control"><input id="place-scenic" type="checkbox" checked> Scenic places</label>
-            <label class="check-control"><input id="place-verified-water" type="checkbox" checked> Verified drinking water</label>
-            <label class="check-control"><input id="place-unknown-water" type="checkbox"> Fountains/taps — potability unknown</label>
-            <label class="check-control"><input id="place-broad" type="checkbox"> Broad tourist attractions</label>
-            <label class="check-control"><input id="place-restricted" type="checkbox"> Restricted access</label>
+            <label class="check-control"><input id="place-ice-cream" type="checkbox" checked> <span data-i18n="Ice cream">Ice cream</span></label>
+            <label class="check-control"><input id="place-toilets" type="checkbox" checked> <span data-i18n="Toilets">Toilets</span></label>
+            <label class="check-control"><input id="place-picnic-areas" type="checkbox" checked> <span data-i18n="Picnic areas">Picnic areas</span></label>
+            <label class="check-control"><input id="place-cafes" type="checkbox"> <span data-i18n="Cafés">Cafés</span></label>
+            <label class="check-control"><input id="place-bakeries" type="checkbox"> <span data-i18n="Bakeries">Bakeries</span></label>
+            <label class="check-control"><input id="place-scenic" type="checkbox" checked> <span data-i18n="Scenic places">Scenic places</span></label>
+            <label class="check-control"><input id="place-verified-water" type="checkbox" checked> <span data-i18n="Verified drinking water">Verified drinking water</span></label>
+            <label class="check-control"><input id="place-unknown-water" type="checkbox"> <span data-i18n="Fountains/taps — potability unknown">Fountains/taps — potability unknown</span></label>
+            <label class="check-control"><input id="place-broad" type="checkbox"> <span data-i18n="Broad tourist attractions">Broad tourist attractions</span></label>
+            <label class="check-control"><input id="place-restricted" type="checkbox"> <span data-i18n="Restricted access">Restricted access</span></label>
             <details class="places-advanced">
-              <summary>Advanced debugging</summary>
-              <label class="check-control warning-control"><input id="place-private" type="checkbox"> Private places</label>
-              <label class="check-control warning-control"><input id="place-non-potable" type="checkbox"> Explicitly non-potable water</label>
+              <summary><span data-i18n="Advanced debugging">Advanced debugging</span></summary>
+              <label class="check-control warning-control"><input id="place-private" type="checkbox"> <span data-i18n="Private places">Private places</span></label>
+              <label class="check-control warning-control"><input id="place-non-potable" type="checkbox"> <span data-i18n="Explicitly non-potable water">Explicitly non-potable water</span></label>
             </details>
           </form>
-          <p id="places-explanation" class="field-help">Browse mapped places and optionally prefer eligible places for a suggested route. Simply selecting a place never changes the route; shown places never alter mandatory points, generation, ranking, or GPX output.</p>
+          <p id="places-explanation" class="field-help"><span data-i18n="Browse mapped places and optionally prefer eligible places for a suggested route. Simply selecting a place never changes the route; shown places never alter mandatory points, generation, ranking, or GPX output.">Browse mapped places and optionally prefer eligible places for a suggested route. Simply selecting a place never changes the route; shown places never alter mandatory points, generation, ranking, or GPX output.</span></p>
         </details>
 
         <details class="control-section poi-editor" id="planning-points">
-          <summary><span id="point-editor-title">Start and hard anchors</span><span id="poi-count">0 / 7</span></summary>
-          <section id="preferred-pois" class="preferred-pois" aria-label="Preferred places">
-            <div class="section-heading"><strong>Preferred places</strong><span id="preferred-poi-count">0 / 8</span></div>
-            <p id="preferred-poi-empty" class="field-help">Choose “Prefer for suggested route” from an eligible place popup.</p>
+          <summary><span id="point-editor-title"><span data-i18n="Start and hard anchors">Start and hard anchors</span></span><span id="poi-count">0 / 7</span></summary>
+          <section id="preferred-pois" class="preferred-pois" aria-label="Preferred places" data-i18n-aria-label="Preferred places">
+            <div class="section-heading"><strong><span data-i18n="Preferred places">Preferred places</span></strong><span id="preferred-poi-count">0 / 8</span></div>
+            <p id="preferred-poi-empty" class="field-help"><span data-i18n="Choose “Prefer for suggested route” from an eligible place popup.">Choose “Prefer for suggested route” from an eligible place popup.</span></p>
             <ul id="preferred-poi-list"></ul>
           </section>
-          <section id="requested-places" class="preferred-pois" aria-label="Requested places and approaches">
-            <div class="section-heading"><strong>Requested places and approaches</strong><span id="requested-place-count">0 / 30</span></div>
-            <p id="requested-place-empty" class="field-help">For suggested routes, imported places after Start appear here with their original constraints.</p>
+          <section id="requested-places" class="preferred-pois" aria-label="Requested places and approaches" data-i18n-aria-label="Requested places and approaches">
+            <div class="section-heading"><strong><span data-i18n="Requested places and approaches">Requested places and approaches</span></strong><span id="requested-place-count">0 / 30</span></div>
+            <p id="requested-place-empty" class="field-help"><span data-i18n="For suggested routes, imported places after Start appear here with their original constraints.">For suggested routes, imported places after Start appear here with their original constraints.</span></p>
             <ul id="requested-place-list"></ul>
           </section>
           <div id="connect-order"></div>
           <p id="poi-validation" class="validation" role="status"></p>
-          <div id="poi-list" class="poi-list" role="list" aria-label="Ordered required points"></div>
+          <div id="poi-list" class="poi-list" role="list" aria-label="Ordered required points" data-i18n-aria-label="Ordered required points"></div>
           <div class="button-row">
-            <button id="add-point-mode" class="button secondary" type="button" data-icon="add" aria-pressed="false">Add on map</button>
-            <button id="fit-points" class="button secondary" type="button" data-icon="fit">Fit points</button>
-            <button id="clear-points" class="text-button danger" type="button" data-icon="clear">Clear all</button>
+            <button id="add-point-mode" class="button secondary" type="button" data-icon="add" aria-pressed="false"><span data-i18n="Add on map">Add on map</span></button>
+            <button id="fit-points" class="button secondary" type="button" data-icon="fit"><span data-i18n="Fit points">Fit points</span></button>
+            <button id="clear-points" class="text-button danger" type="button" data-icon="clear"><span data-i18n="Clear all">Clear all</span></button>
           </div>
         </details>
 
         <section id="gpx-summary" class="import-summary hidden" aria-labelledby="gpx-title">
-          <div class="section-heading"><h2 id="gpx-title">Imported GPX</h2><button id="clear-gpx" class="text-button" type="button">Clear</button></div>
+          <div class="section-heading"><h2 id="gpx-title"><span data-i18n="Imported GPX">Imported GPX</span></h2><button id="clear-gpx" class="text-button" type="button"><span data-i18n="Clear">Clear</span></button></div>
           <p id="gpx-details"></p>
         </section>
 
       </aside>
 
       <section class="map-panel" aria-labelledby="map-title">
-        <h2 id="map-title" class="visually-hidden">Interactive route map</h2>
-        <div id="map" role="application" aria-label="Interactive trail route map"></div>
-        <section id="route-dock" class="route-dock" aria-label="Edit route">
-          <div class="route-dock-controls">
-            <button id="undo-point-edit" type="button" aria-label="Undo route edit" disabled><span aria-hidden="true">↶</span><span class="visually-hidden">Undo</span></button>
-            <button id="redo-point-edit" type="button" aria-label="Redo route edit" disabled><span aria-hidden="true">↷</span><span class="visually-hidden">Redo</span></button>
-            <label><span class="visually-hidden">Finish</span><span class="dock-choice"><span id="dock-finish-label" aria-hidden="true">Loop</span><select id="dock-finish" aria-label="Finish"><option value="loop">Loop</option><option value="point_to_point">Finish elsewhere</option></select></span></label>
-            <label><span class="visually-hidden">Order</span><span class="dock-choice"><span id="dock-order-label" aria-hidden="true">As tapped</span><select id="dock-order" aria-label="Order"><option value="fixed">As tapped</option><option value="optimize">Optimize stops</option></select></span></label>
+        <h2 id="map-title" class="visually-hidden"><span data-i18n="Interactive route map">Interactive route map</span></h2>
+        <div id="map" role="application" aria-label="Interactive trail route map" data-i18n-aria-label="Interactive trail route map"></div>
+        <section id="route-dock" class="route-dock" aria-label="Edit route" data-i18n-aria-label="Edit route">
+          <div class="route-dock-summary">
+            <button id="route-editor-toggle" type="button" aria-expanded="false" aria-controls="route-editor-body" aria-describedby="route-collapsed-summary" aria-label="Edit route" data-i18n-aria-label="Edit route"><span id="route-collapsed-summary"></span><span aria-hidden="true">⌃</span></button>
+            <button id="generate-map" class="button primary" type="button" aria-describedby="request-status" hidden><span data-i18n="Generate">Generate</span></button>
           </div>
-          <section id="endpoint-adjustments-map" class="endpoint-adjustments" aria-label="Endpoint adjustments" hidden></section>
-          <div id="route-point-strip" class="route-point-strip" role="group" aria-label="Route points"></div>
-          <p id="route-dock-hint" class="visually-hidden" aria-live="polite">Tap the map to choose Start</p>
+          <section id="endpoint-adjustments-map" class="endpoint-adjustments" aria-label="Endpoint adjustments" hidden data-i18n-aria-label="Endpoint adjustments"></section>
+          <div id="route-editor-body" hidden>
+            <div class="route-editor-heading"><strong data-i18n="Edit route">Edit route</strong><button id="route-editor-close" type="button" aria-label="Close route editor" data-i18n-aria-label="Close route editor" data-i18n="Done">Done</button></div>
+          <section id="route-quick-editor" class="route-quick-editor" aria-label="Selected route point" hidden data-i18n-aria-label="Selected route point"></section>
+          <div class="route-dock-controls">
+            <button id="undo-point-edit" type="button" aria-label="Undo route edit" disabled data-i18n-aria-label="Undo route edit"><span aria-hidden="true">↶</span><span class="visually-hidden"><span data-i18n="Undo">Undo</span></span></button>
+            <button id="redo-point-edit" type="button" aria-label="Redo route edit" disabled data-i18n-aria-label="Redo route edit"><span aria-hidden="true">↷</span><span class="visually-hidden"><span data-i18n="Redo">Redo</span></span></button>
+            <label><span class="visually-hidden"><span data-i18n="Finish">Finish</span></span><span class="dock-choice"><span id="dock-finish-label" aria-hidden="true"><span data-i18n="Loop">Loop</span></span><select id="dock-finish" aria-label="Finish" data-i18n-aria-label="Finish"><option value="loop" data-i18n="Loop">Loop</option><option value="point_to_point" data-i18n="Finish elsewhere">Finish elsewhere</option></select></span></label>
+            <label><span class="visually-hidden"><span data-i18n="Order">Order</span></span><span class="dock-choice"><span id="dock-order-label" aria-hidden="true"><span data-i18n="As tapped">As tapped</span></span><select id="dock-order" aria-label="Order" data-i18n-aria-label="Order"><option value="fixed" data-i18n="As tapped">As tapped</option><option value="optimize" data-i18n="Optimize stops">Optimize stops</option></select></span></label>
+          </div>
+
+          <div class="route-dock-actions"><div id="route-point-strip" class="route-point-strip" role="group" aria-label="Route points" data-i18n-aria-label="Route points"></div></div>
+          <p id="route-dock-hint" class="visually-hidden" aria-live="polite"><span data-i18n="Tap the map to choose Start">Tap the map to choose Start</span></p>
           <p id="route-strip-help" class="visually-hidden"></p>
-          <div id="route-add-menu" class="route-dock-popover" popover="auto" role="dialog" aria-label="Add point"><button type="button" data-dock-action="search-location">Search place or address</button><button type="button" data-dock-action="choose-map">Choose on map</button></div>
-          <div id="route-drag-trash" class="route-drag-trash" role="region" aria-label="Remove stop drop target" hidden>Remove</div>
+          <div id="route-add-menu" class="route-dock-popover" popover="auto" role="dialog" aria-label="Add point" data-i18n-aria-label="Add point"><button type="button" data-dock-action="search-location"><span data-i18n="Search place or address">Search place or address</span></button><button type="button" data-dock-action="choose-map"><span data-i18n="Choose on map">Choose on map</span></button></div>
+          <div id="route-drag-trash" class="route-drag-trash" role="region" aria-label="Remove stop drop target" hidden data-i18n-aria-label="Remove stop drop target"><span data-i18n="Remove">Remove</span></div>
           <p id="route-drag-status" class="visually-hidden" role="status" aria-live="polite"></p>
-          <section id="map-route-intent" class="visually-hidden" aria-label="Route summary" aria-live="polite"><strong id="map-route-summary"></strong><p id="map-route-help"></p></section>
-          <section id="route-quick-editor" class="route-quick-editor" aria-label="Selected route point" hidden></section>
-          <div id="map-edit-notice" class="map-edit-notice hidden" role="status"><p id="map-edit-guidance"></p><button id="cancel-point-placement" class="button secondary" type="button">Cancel</button></div>
+          <section id="map-route-intent" class="visually-hidden" aria-label="Route summary" aria-live="polite" data-i18n-aria-label="Route summary"><strong id="map-route-summary"></strong><p id="map-route-help"></p></section>
+          </div>
+          <div id="map-edit-notice" class="map-edit-notice hidden" role="status"><p id="map-edit-guidance"></p><button id="cancel-point-placement" class="button secondary" type="button"><span data-i18n="Cancel">Cancel</span></button></div>
         </section>
-        <button id="planner-location-control" class="planner-location-control hidden" type="button" aria-label="Show my location" aria-pressed="false" aria-busy="false" aria-describedby="planner-location-status" title="Show my location">
+        <button id="planner-location-control" class="planner-location-control hidden" type="button" aria-label="Show my location" aria-pressed="false" aria-busy="false" aria-describedby="planner-location-status" title="Show my location" data-i18n-aria-label="Show my location" data-i18n-title="Show my location">
           <img src="/static/brand/gps-recenter-default.png" width="40" height="40" alt="">
         </button>
         <p id="planner-location-status" class="visually-hidden" role="status" aria-live="polite"></p>
         <section id="planner-empty" class="map-empty-state" aria-labelledby="empty-title">
           <img src="/static/brand/sugarglider-flying-map.png" width="1024" height="1024" loading="lazy" alt="">
-          <div><h2 id="empty-title">Start on the map</h2><p>Tap or click the map to choose your starting point.</p></div>
+          <div><h2 id="empty-title"><span data-i18n="Start on the map">Start on the map</span></h2><p><span data-i18n="Tap or click the map to choose your starting point.">Tap or click the map to choose your starting point.</span></p></div>
         </section>
-        <details class="map-tools" aria-label="Map display controls">
-          <summary>Map options</summary>
-          <div class="map-tool-options">
-            <label data-icon="alternatives"><input id="show-all" type="checkbox" checked> Show alternatives</label>
-            <label data-icon="nature"><input id="show-nature" type="checkbox"> Show nature</label>
-            <label data-icon="direction"><input id="show-direction" type="checkbox" checked> Show direction arrows</label>
-            <label id="show-dropped-requested-radii-control" class="advanced-map-control" title="Advanced requested-stop display"><input id="show-dropped-requested-radii" type="checkbox"> Dropped access-search areas</label>
-            <details class="legend">
-              <summary>Map legend</summary>
-              <div class="legend-items">
-                <span><i class="line selected"></i>Selected route</span>
-                <span><i class="line alternative"></i>Alternative</span>
-                <span><i class="line repeated"></i>Repeated</span>
-                <span><i class="line backtrack"></i>Immediate out-and-back</span>
-                <span><i class="line spur"></i>Detected excursion</span>
-                <span><i class="marker mandatory">1</i>Required mascot pin</span>
-                <span><i class="marker start">1</i>Start/end</span>
-                <span class="legend-group">Your plan</span>
-                <span><i class="marker requested-pending">R1</i>Requested, pending</span>
-                <span><i class="marker requested-selected">R1</i>Requested, reached</span>
-                <span><i class="marker requested-pending">R1</i>Requested, approximated</span>
-                <span><i class="marker requested-dropped">R1</i>Requested, dropped</span>
-                <span><i class="marker access"></i>Selected approach</span>
-                <span><i class="marker optional"></i>Generated point</span>
-                <span><i class="marker waypoint"></i>GPX waypoint</span>
-                <span class="legend-group">Mapped OSM discovery</span>
-                <span><i class="marker place-scenic">▲</i>Scenic place</span>
-                <span><i class="marker place-water mascot-water"></i>Verified water mascot pin</span>
-                <span><i class="marker visited-place"></i>Visited place</span>
-                <span><i class="marker place-unknown">?</i>Unknown potability</span>
-                <span><i class="line imported"></i>Imported GPX</span>
-                <span class="nature-legend"><i class="line woodland"></i>Woodland</span>
-                <span class="nature-legend"><i class="line open-natural"></i>Open natural</span>
-                <span class="nature-legend"><i class="line agriculture"></i>Agriculture</span>
-                <span class="nature-legend"><i class="line urban"></i>Urban/developed</span>
-                <span class="nature-legend"><i class="line water"></i>Water crossing</span>
-                <span class="nature-legend"><i class="line nature-unknown"></i>Unknown land cover</span>
-              </div>
-            </details>
-            <details id="offline-maps" class="offline-maps" aria-labelledby="offline-maps-title">
-              <summary><strong id="offline-maps-title">Offline maps</strong></summary>
-              <div class="offline-maps-body">
-                <button type="button" class="text-button" data-source-information>Map data sources and licences</button>
-                <p id="offline-map-storage-support">Checking browser storage support…</p>
-                <p id="offline-map-pack-status" role="status" aria-live="polite">Checking installed map packs…</p>
-                <p id="offline-map-active">No local map pack is active.</p>
-                <ul id="offline-map-pack-list" class="offline-map-pack-list"></ul>
-                <form id="offline-map-install-form" class="offline-map-install-form">
-                  <label for="offline-map-manifest-url">Pack manifest URL</label>
-                  <input id="offline-map-manifest-url" type="url" inputmode="url" autocomplete="off" placeholder="https://example.org/marly/manifest.json" required>
-                  <div class="button-row">
-                    <button id="offline-map-install" class="button secondary" type="submit" aria-busy="false">Install map pack</button>
-                    <button id="offline-map-cancel-install" class="text-button hidden" type="button">Cancel download</button>
-                  </div>
-                </form>
-                <p class="help">Installation is explicit. Regional PMTiles stay in this browser; remote raster tiles are never copied into offline storage.</p>
-              </div>
-            </details>
-            <section id="local-routing-experiment" class="local-routing-experiment advanced-map-control hidden" aria-labelledby="local-routing-title">
-              <strong id="local-routing-title">Local routing experiment</strong>
-              <p>Debug Android only. Uses experimental local Valhalla policies; these are not claimed equivalent to production GraphHopper profiles.</p>
-              <label for="local-routing-profile">Public profile</label>
-              <select id="local-routing-profile">
-                <option value="trail_run">Trail run</option>
-                <option value="hike" selected>Hike</option>
-                <option value="city_bike">City bike</option>
-                <option value="gravel_bike">Gravel bike</option>
-                <option value="mountain_bike">Mountain bike</option>
-                <option value="road_bike">Road bike</option>
-              </select>
-              <button id="local-routing-smoke-button" class="button secondary" type="button" aria-busy="false" disabled>Run Marly offline smoke test</button>
-              <button id="local-routing-paris-smoke-button" class="button secondary" type="button" aria-busy="false" disabled>Run Paris offline smoke test</button>
-              <button id="local-routing-via-smoke-button" class="button secondary" type="button" aria-busy="false" disabled>Run Marly three-point via test</button>
-              <button id="local-routing-cross-pack-button" class="button secondary" type="button" aria-busy="false" disabled>Test no common regional pack</button>
-              <button id="local-routing-button" class="button secondary" type="button" aria-busy="false" disabled>Route ordered planner points locally</button>
-              <p id="local-routing-status" role="status" aria-live="polite"></p>
-              <strong id="local-waypoint-route-title">Local Waypoint Route experiment</strong>
-              <p>Uses a read-only snapshot of the ordinary Waypoint Route planner's topology, endpoints, profile, exact waypoints, order, seed and distance controls. At most 14 interior waypoints and 16 local-route calls. Exact endpoints and graph-derived loop closure stay within 25 m. Near endpoints allow up to 150 m with visible warnings above 25 m; exact interiors stay within 300 m. No GPS coincidence is promised.</p>
-              <p>Set nature and loop geometry off, and path selection to shortest. Approach/best-effort points and overrides are rejected. No POI/nature scoring, globally shortest path or GraphHopper parity claim; normal Generate remains server-backed.</p>
-              <button id="local-waypoint-route-button" class="button secondary" type="button" aria-busy="false" disabled>Generate experimental Local Waypoint Route from planner</button>
-              <p id="local-waypoint-route-status" role="status" aria-live="polite"></p>
-              <ol id="local-waypoint-route-results" class="local-auto-tour-results"></ol>
-              <strong id="local-auto-tour-title">Local Auto Tour experiment</strong>
-              <fieldset>
-                <legend>Development regional places and nature</legend>
-                <p>Install PR39 places/nature data for an already installed routing region. Map and routing files stay separate.</p>
-                <label for="local-region-data-url">Regional manifest URL</label>
-                <input id="local-region-data-url" type="url" autocomplete="off" spellcheck="false">
-                <button id="local-region-data-install" type="button" class="button secondary">Install places and nature</button>
-                <button id="local-region-data-cancel" type="button" class="button secondary" disabled>Cancel installation</button>
-                <p id="local-region-data-status" role="status" aria-live="polite"></p>
-                <ul id="local-region-data-regions"></ul>
-              </fieldset>
-              <label for="local-auto-tour-nature">Nature preference</label>
-              <select id="local-auto-tour-nature"><option value="off">Off</option><option value="prefer">Prefer mapped nature below loop quality</option></select>
-              <label><input id="local-auto-tour-scenic" type="checkbox"> Consider scenic places</label>
-              <label><input id="local-auto-tour-water" type="checkbox"> Consider mapped verified drinking water</label>
-              <label for="local-auto-tour-requested-pois">Requested local OSM place IDs (comma-separated)</label>
-              <input id="local-auto-tour-requested-pois" type="text" autocomplete="off" spellcheck="false">
-              <p>POI alternatives retain the no-POI recommendation while exact repetition/backtracking evidence is unavailable. Mapped water does not guarantee current potability or operation.</p>
-              <p>Loop-only and bounded, with optional installed places/nature. Exact edge repetition and GraphHopper parity remain unavailable.</p>
-              <label for="local-auto-tour-target-km">Target distance (km)</label>
-              <input id="local-auto-tour-target-km" type="number" min="2" max="60" step="0.5" value="12" disabled>
-              <label for="local-auto-tour-tolerance-km">Tolerance (km)</label>
-              <input id="local-auto-tour-tolerance-km" type="number" min="0.1" max="15" step="0.1" value="2.5" disabled>
-              <label for="local-auto-tour-candidate-count">Candidate count</label>
-              <select id="local-auto-tour-candidate-count" disabled>
-                <option value="1">1</option>
-                <option value="2" selected>2</option>
-                <option value="3">3</option>
-              </select>
-              <label for="local-auto-tour-seed">Deterministic seed</label>
-              <input id="local-auto-tour-seed" type="number" min="0" max="4294967295" step="1" value="35" disabled>
-              <label for="local-auto-tour-direction">Direction preference</label>
-              <select id="local-auto-tour-direction" disabled>
-                <option value="any" selected>Any</option>
-                <option value="clockwise">Clockwise</option>
-                <option value="counterclockwise">Counterclockwise</option>
-              </select>
-              <button id="local-auto-tour-smoke-button" class="button secondary" type="button" aria-busy="false" disabled>Run fixed Marly local Auto Tour</button>
-              <button id="local-auto-tour-button" class="button secondary" type="button" aria-busy="false" disabled>Generate local Auto Tour from first planner point</button>
-              <p id="local-auto-tour-status" role="status" aria-live="polite"></p>
-              <ol id="local-auto-tour-results" class="local-auto-tour-results"></ol>
-            </section>
-          </div>
-        </details>
+
 
       </section>
 
       <section id="outing-view-panel" class="notice outing-view hidden" aria-labelledby="outing-view-title">
         <div class="notice-copy">
           <h1 id="outing-view-title"></h1>
-          <p class="eyebrow">Shared outing</p>
+          <p class="eyebrow"><span data-i18n="Shared outing">Shared outing</span></p>
           <p id="outing-view-summary"></p>
           <details class="outing-secondary-actions">
-            <summary>Outing and offline details</summary>
+            <summary><span data-i18n="Outing and offline details">Outing and offline details</span></summary>
             <div class="button-row">
-              <button id="save-outing-offline" class="button secondary hidden" type="button">Save for offline use</button>
-              <button id="remove-outing-offline" class="text-button hidden" type="button">Remove offline copy</button>
+              <button id="save-outing-offline" class="button secondary hidden" type="button"><span data-i18n="Save for offline use">Save for offline use</span></button>
+              <button id="remove-outing-offline" class="text-button hidden" type="button"><span data-i18n="Remove offline copy">Remove offline copy</span></button>
             </div>
-            <p class="help">This browser keeps at most eight explicit offline copies. Saving another copy may replace the oldest one, and the browser may still evict stored data.</p>
-            <p class="context-note">This outing is unlisted, not access-controlled. Anyone with the public link can see participant display names, planned routes, and currently shared positions. Use a nickname when appropriate.</p>
+            <p class="help"><span data-i18n="This browser keeps at most eight explicit offline copies. Saving another copy may replace the oldest one, and the browser may still evict stored data.">This browser keeps at most eight explicit offline copies. Saving another copy may replace the oldest one, and the browser may still evict stored data.</span></p>
+            <p class="context-note"><span data-i18n="This outing is unlisted, not access-controlled. Anyone with the public link can see participant display names, planned routes, and currently shared positions. Use a nickname when appropriate.">This outing is unlisted, not access-controlled. Anyone with the public link can see participant display names, planned routes, and currently shared positions. Use a nickname when appropriate.</span></p>
           </details>
-          <p id="offline-map-status" class="context-note hidden">The basemap is unavailable offline. Stored route geometry is shown on a neutral background.</p>
+          <p id="offline-map-status" class="context-note hidden"><span data-i18n="The basemap is unavailable offline. Stored route geometry is shown on a neutral background.">The basemap is unavailable offline. Stored route geometry is shown on a neutral background.</span></p>
           <section id="outing-live-panel" class="outing-live-panel hidden" aria-labelledby="outing-live-title">
             <div class="section-heading">
-              <h2 id="outing-live-title">Live positions</h2>
-              <strong id="outing-live-connection" aria-live="polite">Connecting</strong>
+              <h2 id="outing-live-title"><span data-i18n="Live positions">Live positions</span></h2>
+              <strong id="outing-live-connection" aria-live="polite"><span data-i18n="Connecting">Connecting</span></strong>
             </div>
-            <p id="outing-live-summary">No current positions.</p>
+            <p id="outing-live-summary"><span data-i18n="No current positions.">No current positions.</span></p>
             <div id="outing-live-own-controls" class="outing-live-own-controls hidden">
-              <h3>Your location</h3>
-              <p id="outing-live-tracking-status" class="status" aria-live="polite">Not currently sharing</p>
+              <h3><span data-i18n="Your location">Your location</span></h3>
+              <p id="outing-live-tracking-status" class="status" aria-live="polite"><span data-i18n="Not currently sharing">Not currently sharing</span></p>
               <div class="button-row">
-                <button id="start-outing-live-sharing" class="button primary" type="button">Start sharing</button>
-                <button id="stop-outing-live-sharing" class="button danger hidden" type="button">Stop sharing</button>
+                <button id="start-outing-live-sharing" class="button primary" type="button"><span data-i18n="Start sharing">Start sharing</span></button>
+                <button id="stop-outing-live-sharing" class="button danger hidden" type="button"><span data-i18n="Stop sharing">Stop sharing</span></button>
               </div>
             </div>
             <details class="sharing-details">
-              <summary>How location sharing works</summary>
-              <p id="outing-live-sharing-disclosure" class="context-note">Sharing starts only after pressing Start and uses foreground browser location. No historical activity track is retained. Press Stop for reliable removal. If this tab closes or is suspended first, the last position may remain visible until server expiry.</p>
+              <summary><span data-i18n="How location sharing works">How location sharing works</span></summary>
+              <p id="outing-live-sharing-disclosure" class="context-note"><span data-i18n="Sharing starts only after pressing Start and uses foreground browser location. No historical activity track is retained. Press Stop for reliable removal. If this tab closes or is suspended first, the last position may remain visible until server expiry.">Sharing starts only after pressing Start and uses foreground browser location. No historical activity track is retained. Press Stop for reliable removal. If this tab closes or is suspended first, the last position may remain visible until server expiry.</span></p>
             </details>
           </section>
           <div id="outing-participant-cards" class="outing-participant-cards"></div>
           <form id="join-outing-form" class="outing-form hidden">
-            <h2>Join with your independent route</h2>
+            <h2><span data-i18n="Join with your independent route">Join with your independent route</span></h2>
             <div id="outing-join-profile-summary" class="outing-join-profile-summary">
               <img id="outing-join-profile-avatar" class="hidden" width="512" height="512" alt="">
-              <span><small>Joining as</small><strong id="outing-join-profile-name">No trail profile set</strong></span>
-              <button id="setup-join-profile" class="button secondary" type="button">Set up trail profile</button>
+              <span><small><span data-i18n="Joining as">Joining as</span></small><strong id="outing-join-profile-name"><span data-i18n="No trail profile set">No trail profile set</span></strong></span>
+              <button id="setup-join-profile" class="button secondary" type="button"><span data-i18n="Set up trail profile">Set up trail profile</span></button>
             </div>
-            <label>Display name<input id="outing-join-name" maxlength="80" required></label>
-            <label>Saved-route link or slug<input id="outing-join-route" required></label>
-            <p><a href="/" target="_blank" rel="noopener">Plan and save my route in a new tab</a></p>
-            <button id="join-outing" class="button primary" type="submit">Join outing</button>
+            <label><span data-i18n="Display name">Display name</span><input id="outing-join-name" maxlength="80" required></label>
+            <label><span data-i18n="Saved-route link or slug">Saved-route link or slug</span><input id="outing-join-route" required></label>
+            <p><a href="/" target="_blank" rel="noopener"><span data-i18n="Plan and save my route in a new tab">Plan and save my route in a new tab</span></a></p>
+            <button id="join-outing" class="button primary" type="submit"><span data-i18n="Join outing">Join outing</span></button>
           </form>
           <div id="outing-participant-actions" class="button-row hidden">
-            <button id="download-my-outing-gpx" class="button secondary" type="button">Download my GPX</button>
-            <button type="button" class="text-button" data-source-information>GPX sources, licences and database offer</button>
-            <button id="leave-outing" class="text-button" type="button">Leave outing</button>
+            <button id="download-my-outing-gpx" class="button secondary" type="button"><span data-i18n="Download my GPX">Download my GPX</span></button>
+            <button type="button" class="text-button" data-source-information><span data-i18n="GPX sources, licences and database offer">GPX sources, licences and database offer</span></button>
+            <button id="leave-outing" class="text-button" type="button"><span data-i18n="Leave outing">Leave outing</span></button>
           </div>
           <div id="outing-remember-actions" class="remember-actions hidden">
             <div class="button-row">
-              <button id="remember-outing-participant" class="button secondary" type="button">Remember this participant on this device</button>
-              <button id="forget-outing-participant" class="text-button hidden" type="button">Forget this participant from this device</button>
+              <button id="remember-outing-participant" class="button secondary" type="button"><span data-i18n="Remember this participant on this device">Remember this participant on this device</span></button>
+              <button id="forget-outing-participant" class="text-button hidden" type="button"><span data-i18n="Forget this participant from this device">Forget this participant from this device</span></button>
             </div>
-            <p class="context-note">Anyone with access to this browser profile may act as this outing participant. This is device persistence, not account authentication. Remembering never starts location sharing. Forget or clear site data to remove it; it also expires with the outing.</p>
-            <p id="outing-outbox-status" class="status hidden">One unsent current-position sample is stored on this device. Press Start to resume.</p>
+            <p class="context-note"><span data-i18n="Anyone with access to this browser profile may act as this outing participant. This is device persistence, not account authentication. Remembering never starts location sharing. Forget or clear site data to remove it; it also expires with the outing.">Anyone with access to this browser profile may act as this outing participant. This is device persistence, not account authentication. Remembering never starts location sharing. Forget or clear site data to remove it; it also expires with the outing.</span></p>
+            <p id="outing-outbox-status" class="status hidden"><span data-i18n="One unsent current-position sample is stored on this device. Press Start to resume.">One unsent current-position sample is stored on this device. Press Start to resume.</span></p>
           </div>
           <div id="outing-owner-actions" class="button-row hidden">
-            <button id="delete-outing-owner-view" class="text-button danger" type="button">Delete outing</button>
+            <button id="delete-outing-owner-view" class="text-button danger" type="button"><span data-i18n="Delete outing">Delete outing</span></button>
           </div>
         </div>
       </section>
 
       <div class="results-panel" id="results-panel">
-        <section id="adventure-result" class="adventure-result" hidden aria-label="AI adventure"><h2 id="adventure-result-title"></h2><p id="adventure-result-summary"></p><p id="adventure-result-limitations" class="field-help"></p><div class="button-row"><button id="adventure-stories-open" class="button secondary" type="button">Places and stories</button><button id="adventure-return-manual" class="text-button" type="button">Return to my manual plan</button></div><p id="adventure-storage-status" class="field-help" role="status"></p><button id="forget-adventure" class="text-button" type="button">Forget saved adventure</button><div id="adventure-stories" hidden></div></section>
+        <section id="adventure-result" class="adventure-result" hidden aria-label="AI adventure" data-i18n-aria-label="AI adventure"><h2 id="adventure-result-title"></h2><p id="adventure-result-summary"></p><p id="adventure-result-limitations" class="field-help"></p><div class="button-row"><button id="adventure-stories-open" class="button secondary" type="button"><span data-i18n="Places and stories">Places and stories</span></button><button id="adventure-return-manual" class="text-button" type="button"><span data-i18n="Return to my manual plan">Return to my manual plan</span></button></div><p id="adventure-storage-status" class="field-help" role="status"></p><button id="forget-adventure" class="text-button" type="button"><span data-i18n="Forget saved adventure">Forget saved adventure</span></button><div id="adventure-stories" hidden></div></section>
         <section class="candidate-strip" aria-labelledby="candidates-title">
-          <div class="section-heading"><div><p class="eyebrow">Routes</p><h2 id="candidates-title" tabindex="-1">Routes</h2></div></div>
+          <div class="section-heading"><div><p class="eyebrow"><span data-i18n="Routes">Routes</span></p><h2 id="candidates-title" tabindex="-1"><span data-i18n="Routes">Routes</span></h2></div></div>
           <p id="search-summary" class="context-note" aria-live="polite"></p>
-          <section id="endpoint-adjustments-routes" class="endpoint-adjustments" aria-label="Endpoint adjustments" hidden></section>
+          <section id="endpoint-adjustments-routes" class="endpoint-adjustments" aria-label="Endpoint adjustments" hidden data-i18n-aria-label="Endpoint adjustments"></section>
           <div id="candidate-list" class="candidate-list"></div>
-          <button id="results-back-to-plan" class="button primary" type="button">Return to Plan</button>
+          <button id="results-back-to-plan" class="button primary" type="button"><span data-i18n="Return to Plan">Return to Plan</span></button>
         </section>
 
         <aside id="selected-route-panel" class="panel metrics hidden" aria-labelledby="metrics-title">
-          <div class="panel-heading"><div><h2 id="metrics-title">Selected route</h2><p id="selected-route-context" class="context-note"></p></div></div>
+          <div class="panel-heading"><div><h2 id="metrics-title"><span data-i18n="Selected route">Selected route</span></h2><p id="selected-route-context" class="context-note"></p></div></div>
           <div id="metrics-empty" class="metrics-empty hidden"></div>
           <div class="export-primary">
-            <button id="download-gpx" class="button primary wide" type="button" data-icon="download" disabled>Export GPX</button>
+            <button id="download-gpx" class="button primary wide" type="button" data-icon="download" disabled><span data-i18n="Export GPX">Export GPX</span></button>
             <p id="export-status" class="context-note" role="status"></p>
-            <p class="context-note">Route data © OpenStreetMap contributors. <button type="button" class="text-button" data-source-information>Sources, licences and complete database offer</button></p>
+            <p class="context-note"><span data-i18n="Route data © OpenStreetMap contributors.">Route data © OpenStreetMap contributors.</span> <button type="button" class="text-button" data-source-information><span data-i18n="Sources, licences and complete database offer">Sources, licences and complete database offer</span></button></p>
           </div>
           <section id="route-elevation" class="route-elevation" aria-labelledby="route-elevation-title" hidden>
-            <div class="elevation-heading"><h3 id="route-elevation-title">Elevation</h3><span class="elevation-coverage" data-elevation-coverage></span></div>
+            <div class="elevation-heading"><h3 id="route-elevation-title"><span data-i18n="Elevation">Elevation</span></h3><span class="elevation-coverage" data-elevation-coverage></span></div>
             <dl class="elevation-summary" data-elevation-summary hidden>
-              <div><dt>Distance</dt><dd data-elevation-distance></dd></div>
-              <div><dt>Observed altitude</dt><dd data-elevation-altitude></dd></div>
-              <div class="elevation-total"><dt>D+ <span>Ascent</span></dt><dd data-elevation-ascent></dd></div>
-              <div class="elevation-total"><dt>D− <span>Descent</span></dt><dd data-elevation-descent></dd></div>
+              <div><dt><span data-i18n="Distance">Distance</span></dt><dd data-elevation-distance></dd></div>
+              <div><dt><span data-i18n="Observed altitude">Observed altitude</span></dt><dd data-elevation-altitude></dd></div>
+              <div class="elevation-total"><dt><span data-i18n="D+">D+</span> <span><span data-i18n="Ascent">Ascent</span></span></dt><dd data-elevation-ascent></dd></div>
+              <div class="elevation-total"><dt><span data-i18n="D−">D−</span> <span><span data-i18n="Descent">Descent</span></span></dt><dd data-elevation-descent></dd></div>
             </dl>
             <p id="route-elevation-status" class="context-note" role="status" aria-live="polite" hidden></p>
             <p class="context-note" data-elevation-observed hidden></p>
             <div class="elevation-chart" data-elevation-chart hidden></div>
             <div data-elevation-note hidden>
-              <p id="elevation-position-readout" class="elevation-readout" aria-live="off">Touch the profile or use arrow keys to inspect a position.</p>
-              <p id="elevation-chart-help" class="elevation-help">Drag across the profile, or use ← → keys. Gaps have no elevation. Heights are filtered estimates.</p>
+              <p id="elevation-position-readout" class="elevation-readout" aria-live="off"><span data-i18n="Touch the profile or use arrow keys to inspect a position.">Touch the profile or use arrow keys to inspect a position.</span></p>
+              <p id="elevation-chart-help" class="elevation-help"><span data-i18n="Drag across the profile, or use ← → keys. Gaps have no elevation. Heights are filtered estimates.">Drag across the profile, or use ← → keys. Gaps have no elevation. Heights are filtered estimates.</span></p>
             </div>
             <div class="elevation-actions">
-              <button id="cancel-route-elevation" class="button secondary" type="button" hidden>Cancel elevation</button>
-              <button id="retry-route-elevation" class="button secondary" type="button" hidden>Retry elevation</button>
-              <button id="show-elevation-on-map" class="button secondary" type="button" hidden>Show on map</button>
-              <button id="clear-elevation-position" class="text-button" type="button" hidden>Clear position</button>
+              <button id="cancel-route-elevation" class="button secondary" type="button" hidden><span data-i18n="Cancel elevation">Cancel elevation</span></button>
+              <button id="retry-route-elevation" class="button secondary" type="button" hidden><span data-i18n="Retry elevation">Retry elevation</span></button>
+              <button id="show-elevation-on-map" class="button secondary" type="button" hidden><span data-i18n="Show on map">Show on map</span></button>
+              <button id="clear-elevation-position" class="text-button" type="button" hidden><span data-i18n="Clear position">Clear position</span></button>
             </div>
           </section>
           <details class="metrics-disclosure">
-            <summary>Route details</summary>
+            <summary><span data-i18n="Route details">Route details</span></summary>
             <div id="metrics-content" class="hidden"></div>
           </details>
           <details class="route-other-actions">
-            <summary>More route actions</summary>
+            <summary><span data-i18n="More route actions">More route actions</span></summary>
             <div class="export-actions">
-              <button id="reverse-route" class="button secondary wide" type="button" disabled>Reverse direction</button>
-              <button id="save-route-selected" class="button secondary wide" type="button" disabled>Save selected route</button>
+              <button id="reverse-route" class="button secondary wide" type="button" disabled><span data-i18n="Reverse direction">Reverse direction</span></button>
+              <button id="save-route-selected" class="button secondary wide" type="button" disabled><span data-i18n="Save selected route">Save selected route</span></button>
             </div>
           </details>
         </aside>
       </div>
     </main>
 
-    <footer>Routes use OpenStreetMap data. Map attribution remains visible on the map. <button type="button" class="text-button" data-source-information>Data sources and licences</button></footer>
+    <footer><span data-i18n="Routes use OpenStreetMap data. Map attribution remains visible on the map.">Routes use OpenStreetMap data. Map attribution remains visible on the map.</span> <button type="button" class="text-button" data-source-information><span data-i18n="Data sources and licences">Data sources and licences</span></button></footer>
   </body>
 </html>

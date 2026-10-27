@@ -13,6 +13,17 @@ export function initializeAppShell({ document = globalThis.document, resizeMap =
   let resizeFrame = null;
   let previousSize = null;
   const listeners = new window.AbortController();
+  const header = document.querySelector(".topbar");
+  const headerHome = header && document.createComment("Map toolbar returns here outside the mobile Map workspace");
+  header?.before(headerHome);
+  function placeToolbar() {
+    const overlay = mobile.matches && current === "map" && !document.body.classList.contains("outing-mode");
+    document.body.classList.toggle("mobile-map-view", overlay);
+    if (header && headerHome) {
+      if (overlay && header.parentElement !== mapPanel) mapPanel.prepend(header);
+      else if (!overlay && header.previousSibling !== headerHome) headerHome.after(header);
+    }
+  }
   function resized() {
     if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
     resizeFrame = window.requestAnimationFrame(() => {
@@ -27,6 +38,7 @@ export function initializeAppShell({ document = globalThis.document, resizeMap =
     if (!["map", "plan", "routes"].includes(view) || document.body.classList.contains("outing-mode")) return;
     const focusMap = view === "map";
     current = !mobile.matches && focusMap ? (current === "routes" ? "routes" : "plan") : view;
+    placeToolbar();
     const hiddenFocus = (current !== "plan" && controls.contains(document.activeElement))
       || (current !== "routes" && results.contains(document.activeElement));
     planner.dataset.view = current;
@@ -65,7 +77,7 @@ export function initializeAppShell({ document = globalThis.document, resizeMap =
   const tools = document.querySelector(".header-tools");
   tools?.addEventListener("click", (event) => {
     const button = event.target.closest("button");
-    if (!button || button.closest("#offline-regions")) return;
+    if (!button || button.closest("#offline-regions, .map-tools")) return;
     tools.open = false;
     if (tools.contains(document.activeElement)) tools.querySelector("summary")?.focus();
   }, { signal: listeners.signal });
@@ -74,8 +86,12 @@ export function initializeAppShell({ document = globalThis.document, resizeMap =
   const observer = new window.ResizeObserver(resized);
   observer.observe(mapPanel);
   // Existing outing pages retain their independent, tested layout and capabilities.
+  let outingMode = document.body.classList.contains("outing-mode");
   const modeObserver = new window.MutationObserver(() => {
-    if (document.body.classList.contains("outing-mode")) { controls.hidden = false; results.hidden = false; }
+    const next = document.body.classList.contains("outing-mode");
+    if (next === outingMode) return;
+    outingMode = next;
+    if (outingMode) { placeToolbar(); controls.hidden = false; results.hidden = false; }
     else show(current);
   });
   modeObserver.observe(document.body, { attributes: true, attributeFilter: ["class"] });
@@ -87,5 +103,7 @@ export function initializeAppShell({ document = globalThis.document, resizeMap =
     if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
     controls.hidden = false; results.hidden = false; navigation.hidden = true;
     document.body.classList.remove("ui-shell");
+    document.body.classList.remove("mobile-map-view");
+    if (headerHome) { headerHome.after(header); headerHome.remove(); }
   } };
 }

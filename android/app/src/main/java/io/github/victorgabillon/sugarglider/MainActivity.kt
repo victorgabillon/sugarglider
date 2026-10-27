@@ -35,7 +35,6 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
@@ -96,9 +95,9 @@ class MainActivity : Activity() {
         dispatch = { work -> runOnUiThread(work) },
         openContent = { uri -> contentResolver.openInputStream(Uri.parse(uri)) },
         reject = { reason ->
-            if (!isFinishing && !isDestroyed) AlertDialog.Builder(this)
-                .setTitle("Could not open shared itinerary").setMessage(reason.message)
-                .setPositiveButton("OK", null).show()
+            if (!isFinishing && !isDestroyed) AlertDialog.Builder(ApplicationLanguage.context(this))
+                .setTitle(ApplicationLanguage.text(this@MainActivity, R.string.ui_could_not_open_shared_itinerary)).setMessage(reason.message)
+                .setPositiveButton(ApplicationLanguage.text(this@MainActivity, R.string.ui_ok), null).show()
         },
         deliver = ::deliverExternalItinerary,
     )
@@ -159,10 +158,10 @@ class MainActivity : Activity() {
         externalItineraryReceiver.flush()
         if (interruptedGpxSave) {
             interruptedGpxSave = false
-            AlertDialog.Builder(this)
-                .setTitle("Check your GPX file")
-                .setMessage("The app restarted during a GPX save. If you selected a file, check it before saving again.")
-                .setPositiveButton("OK", null)
+            AlertDialog.Builder(ApplicationLanguage.context(this))
+                .setTitle(ApplicationLanguage.text(this@MainActivity, R.string.ui_check_your_gpx_file))
+                .setMessage(ApplicationLanguage.text(this@MainActivity, R.string.ui_the_app_restarted_during_a_gpx_save_if_you_selected_a_file_check))
+                .setPositiveButton(ApplicationLanguage.text(this@MainActivity, R.string.ui_ok), null)
                 .show()
         }
     }
@@ -259,11 +258,11 @@ class MainActivity : Activity() {
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) !=
             PackageManager.PERMISSION_GRANTED
         ) {
-            AlertDialog.Builder(this)
-                .setTitle("Precise location required")
+            AlertDialog.Builder(ApplicationLanguage.context(this))
+                .setTitle(ApplicationLanguage.text(this@MainActivity, R.string.ui_precise_location_required))
                 .setMessage(
-                    "Trail sharing requires precise location. Approximate-only permission leaves sharing stopped.",
-                ).setPositiveButton("OK", null)
+                    ApplicationLanguage.text(this@MainActivity, R.string.ui_trail_sharing_requires_precise_location_approximate_only_permiss),
+                ).setPositiveButton(ApplicationLanguage.text(this@MainActivity, R.string.ui_ok), null)
                 .show()
             finishPendingStart(operation, "approximate_location")
             return
@@ -273,11 +272,11 @@ class MainActivity : Activity() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
-            AlertDialog.Builder(this)
-                .setTitle("Notifications required")
+            AlertDialog.Builder(ApplicationLanguage.context(this))
+                .setTitle(ApplicationLanguage.text(this@MainActivity, R.string.ui_notifications_required))
                 .setMessage(
-                    "A visible persistent notification is required while screen-off sharing is active.",
-                ).setPositiveButton("OK", null)
+                    ApplicationLanguage.text(this@MainActivity, R.string.ui_a_visible_persistent_notification_is_required_while_screen_off_s),
+                ).setPositiveButton(ApplicationLanguage.text(this@MainActivity, R.string.ui_ok), null)
                 .show()
             finishPendingStart(operation, "notification_permission_denied")
             return
@@ -305,12 +304,12 @@ class MainActivity : Activity() {
             setBackgroundColor(getColor(R.color.brand_cream))
         }
         root.addView(TextView(this).apply {
-            setText(R.string.configure_title)
+            setText(ApplicationLanguage.text(this@MainActivity, R.string.configure_title))
             textSize = 28f
             setTextColor(getColor(R.color.brand_green))
         })
         root.addView(TextView(this).apply {
-            setText(R.string.configure_description)
+            setText(ApplicationLanguage.text(this@MainActivity, R.string.configure_description))
             textSize = 16f
             setPadding(0, dp(12), 0, dp(12))
         })
@@ -325,7 +324,7 @@ class MainActivity : Activity() {
             visibility = View.GONE
         }
         val open = Button(this).apply {
-            setText(R.string.configure_open)
+            setText(ApplicationLanguage.text(this@MainActivity, R.string.configure_open))
             setOnClickListener {
                 val origin = ServerOrigin.parse(input.text.toString(), BuildConfig.ALLOW_HTTP)
                 if (origin == null || BundledShellPolicy.ownsHost(origin.normalized)) {
@@ -349,7 +348,7 @@ class MainActivity : Activity() {
         root.addView(error, fullWidthWrap())
         root.addView(open, fullWidthWrap())
         root.addView(Button(this).apply {
-            setText(R.string.open_planner)
+            setText(ApplicationLanguage.text(this@MainActivity, R.string.open_planner))
             setOnClickListener { openPlanner() }
         }, fullWidthWrap())
         setContentView(root)
@@ -405,8 +404,9 @@ class MainActivity : Activity() {
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(getColor(R.color.brand_cream))
+            setBackgroundColor(getColor(R.color.brand_green))
         }
+        val showServerChrome = origin != BundledShellPolicy.ORIGIN || V1ReleasePolicy.sharingEnabled
         val chromeStartPadding = dp(4)
         val chromeTopPadding = dp(8)
         val chromeEndPadding = dp(12)
@@ -422,18 +422,18 @@ class MainActivity : Activity() {
             )
             setBackgroundColor(getColor(R.color.brand_green))
         }
-        ViewCompat.setOnApplyWindowInsetsListener(serverChrome) { view, insets ->
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val systemBars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or
                     WindowInsetsCompat.Type.displayCutout(),
             )
             root.setPadding(
                 systemBars.left,
-                0,
+                if (showServerChrome) 0 else systemBars.top,
                 systemBars.right,
                 maxOf(systemBars.bottom, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom),
             )
-            view.setPadding(
+            serverChrome.setPadding(
                 chromeStartPadding,
                 systemBars.top + chromeTopPadding,
                 chromeEndPadding,
@@ -443,7 +443,7 @@ class MainActivity : Activity() {
         }
         if (V1ReleasePolicy.sharingEnabled) serverChrome.addView(Button(this).apply {
             setText(if (origin == BundledShellPolicy.ORIGIN) R.string.open_sharing else R.string.planner_and_sharing)
-            contentDescription = getString(R.string.configure_server_description)
+            contentDescription = ApplicationLanguage.text(this@MainActivity, R.string.configure_server_description)
             setTextColor(Color.WHITE)
             textSize = 13f
             isAllCaps = false
@@ -454,7 +454,7 @@ class MainActivity : Activity() {
             setOnClickListener { showServerMenu(origin) }
         })
         serverChrome.addView(Button(this).apply {
-            setText(R.string.privacy_title)
+            setText(ApplicationLanguage.text(this@MainActivity, R.string.privacy_title))
             setTextColor(Color.WHITE)
             textSize = 13f
             isAllCaps = false
@@ -464,7 +464,9 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener { showPrivacyDetails() }
         })
-        root.addView(serverChrome, fullWidthWrap())
+        // The bundled planner owns its Tools menu. Remote/sharing pages retain
+        // native navigation; both modes still apply system, cutout and IME insets.
+        if (showServerChrome) root.addView(serverChrome, fullWidthWrap())
         val created = WebView(this)
         webView = created
         created.settings.apply {
@@ -490,32 +492,19 @@ class MainActivity : Activity() {
             ),
         )
         setContentView(root)
-        ViewCompat.requestApplyInsets(serverChrome)
+        ViewCompat.requestApplyInsets(root)
         loadConfiguredPage()
     }
 
     private fun showPrivacyDetails() {
-        val content = TextView(this).apply {
-            setText(R.string.privacy_description)
-            textSize = 16f
-            setPadding(dp(20), dp(12), dp(20), dp(12))
-        }
-        val scroll = ScrollView(this).apply { addView(content) }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(R.string.privacy_title)
-            .setView(scroll)
-            .setPositiveButton(R.string.privacy_close, null)
-        if (BuildConfig.PRIVACY_POLICY_URL.isNotEmpty()) {
-            dialog.setNeutralButton(R.string.privacy_online) { _, _ ->
-                openExternal(BuildConfig.PRIVACY_POLICY_URL.toUri())
-            }
-        }
-        dialog.show()
+        PrivacyDetailsDialog.show(this, if (BuildConfig.PRIVACY_POLICY_URL.isEmpty()) null else {
+            { openExternal(BuildConfig.PRIVACY_POLICY_URL.toUri()) }
+        })
     }
 
     private fun showServerMenu(origin: String) {
         if (origin == BundledShellPolicy.ORIGIN) { openSharingServer(); return }
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(ApplicationLanguage.context(this))
             .setTitle(R.string.configure_server_title)
             .setMessage(origin)
             .setNegativeButton(android.R.string.cancel, null)
@@ -526,11 +515,11 @@ class MainActivity : Activity() {
 
     private fun requestServerChange() {
         if (!ServerChangePolicy.allowed(application.statusRepository.current())) {
-            AlertDialog.Builder(this)
-                .setTitle("Stop sharing first")
+            AlertDialog.Builder(ApplicationLanguage.context(this))
+                .setTitle(ApplicationLanguage.text(this@MainActivity, R.string.ui_stop_sharing_first))
                 .setMessage(
-                    "Stop Android background sharing before changing server. Participant authority is never transferred to another origin.",
-                ).setPositiveButton("OK", null)
+                    ApplicationLanguage.text(this@MainActivity, R.string.ui_stop_android_background_sharing_before_changing_server_participa),
+                ).setPositiveButton(ApplicationLanguage.text(this@MainActivity, R.string.ui_ok), null)
                 .show()
             return
         }
@@ -621,10 +610,10 @@ class MainActivity : Activity() {
             text = if (pendingDocument) {
                 getString(
                     R.string.page_recovery_with_gpx,
-                    getString(R.string.page_recovery_description),
-                    getString(R.string.page_recovery_gpx),
+                    ApplicationLanguage.text(this@MainActivity, R.string.page_recovery_description),
+                    ApplicationLanguage.text(this@MainActivity, R.string.page_recovery_gpx),
                 )
-            } else getString(R.string.page_recovery_description)
+            } else ApplicationLanguage.text(this@MainActivity, R.string.page_recovery_description)
             textSize = 16f
             setTextColor(getColor(R.color.brand_green))
             setPadding(0, 0, 0, dp(16))
@@ -633,21 +622,21 @@ class MainActivity : Activity() {
         fun ownsRecovery(): Boolean = webView == null && configuredOrigin == origin &&
             bridgeNavigationEpoch == epoch && !isFinishing && !isDestroyed
         root.addView(Button(this).apply {
-            setText(R.string.page_recovery_open)
+            setText(ApplicationLanguage.text(this@MainActivity, R.string.page_recovery_open))
             setOnClickListener {
                 if (ownsRecovery()) openServer(origin)
             }
         }, fullWidthWrap())
         if (application.statusRepository.current().isNativeBusy()) {
             root.addView(Button(this).apply {
-                setText(R.string.notification_stop)
+                setText(ApplicationLanguage.text(this@MainActivity, R.string.notification_stop))
                 setOnClickListener {
                     if (ownsRecovery() && activityVisible) {
                         startService(
                             Intent(this@MainActivity, LocationSharingService::class.java)
                                 .setAction(LocationSharingService.ACTION_STOP),
                         )
-                        message.setText(R.string.page_recovery_stopping)
+                        message.setText(ApplicationLanguage.text(this@MainActivity, R.string.page_recovery_stopping))
                     }
                 }
             }, fullWidthWrap())
@@ -806,6 +795,24 @@ class MainActivity : Activity() {
                 return@addWebMessageListener
             }
             when (request) {
+                is BridgeRequest.SetUiLanguage -> {
+                    val selected = ApplicationLanguage.select(this, request.language)
+                    completeBridgePayload(request, payload, channel, org.json.JSONObject()
+                        .put("schema_version", 1).put("request_id", request.requestId)
+                        .put("type", "set_ui_language_result").put("language", ApplicationLanguage.current(this))
+                        .put("selected", selected).toString())
+                }
+                is BridgeRequest.ShowPrivacy -> {
+                    if (activityVisible) showPrivacyDetails()
+                    completeBridgePayload(request, payload, channel, org.json.JSONObject()
+                        .put("schema_version", 1).put("request_id", request.requestId)
+                        .put("type", "show_privacy_result").put("shown", activityVisible).toString())
+                }
+                is BridgeRequest.GetAppIdentity -> completeBridgePayload(request, payload, channel,
+                    org.json.JSONObject().put("schema_version", 1).put("request_id", request.requestId)
+                        .put("type", "app_identity_result").put("label", ApplicationLanguage.text(this@MainActivity, R.string.app_name))
+                        .put("revision", BuildConfig.SOURCE_REVISION).put("variant", BuildConfig.BUILD_TYPE)
+                        .put("version", BuildConfig.VERSION_NAME).toString())
                 is BridgeRequest.AdventureSpeech -> {
                     val finish: (String, AdventureSpeechMode, String?) -> Unit = { status, mode, text ->
                         completeBridgePayload(request, payload, channel, AdventureSpeechPolicy.reply(request.requestId, status, mode, text))
@@ -1135,12 +1142,12 @@ class MainActivity : Activity() {
         }
         val operation = PendingStart(request, payload, channel)
         pendingStart = operation
-        val disclosure = AlertDialog.Builder(this)
-            .setTitle("Share precise location with the screen off?")
+        val disclosure = AlertDialog.Builder(ApplicationLanguage.context(this))
+            .setTitle(ApplicationLanguage.text(this@MainActivity, R.string.ui_share_precise_location_with_the_screen_off))
             .setMessage(DISCLOSURE)
-            .setNegativeButton("Cancel") { _, _ ->
+            .setNegativeButton(ApplicationLanguage.text(this@MainActivity, R.string.ui_cancel)) { _, _ ->
                 finishPendingStart(operation, "permission_denied")
-            }.setPositiveButton("Continue") { _, _ -> requestTrackingPermissions(operation) }
+            }.setPositiveButton(ApplicationLanguage.text(this@MainActivity, R.string.ui_continue)) { _, _ -> requestTrackingPermissions(operation) }
             .setNeutralButton(R.string.privacy_title, null)
             .setOnCancelListener { finishPendingStart(operation, "permission_denied") }
             .create()
@@ -1191,11 +1198,11 @@ class MainActivity : Activity() {
             ),
         )
         if (decision is StartDecision.Rejected && decision.code == "location_disabled") {
-            AlertDialog.Builder(this)
-                .setTitle("Turn on location services")
-                .setMessage("Device location services must be enabled before sharing can start.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Location settings") { _, _ ->
+            AlertDialog.Builder(ApplicationLanguage.context(this))
+                .setTitle(ApplicationLanguage.text(this@MainActivity, R.string.ui_turn_on_location_services))
+                .setMessage(ApplicationLanguage.text(this@MainActivity, R.string.ui_device_location_services_must_be_enabled_before_sharing_can_star))
+                .setNegativeButton(ApplicationLanguage.text(this@MainActivity, R.string.ui_cancel), null)
+                .setPositiveButton(ApplicationLanguage.text(this@MainActivity, R.string.ui_location_settings)) { _, _ ->
                     startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
                 }.show()
             finishPendingStart(operation, "location_disabled")
@@ -1465,11 +1472,11 @@ class MainActivity : Activity() {
     ) {
         if (outingLeaveDialog?.isShowing == true) return
         val message = if (decision.backgroundSharingContinues) {
-            getString(R.string.outing_back_sharing_continues)
+            ApplicationLanguage.text(this@MainActivity, R.string.outing_back_sharing_continues)
         } else {
-            getString(R.string.outing_back_returns_to_previous)
+            ApplicationLanguage.text(this@MainActivity, R.string.outing_back_returns_to_previous)
         }
-        val dialog = AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(ApplicationLanguage.context(this))
             .setTitle(R.string.outing_back_title)
             .setMessage(message)
             .setPositiveButton(R.string.outing_back_stay, null)

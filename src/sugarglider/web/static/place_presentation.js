@@ -1,3 +1,4 @@
+import { t, tr } from "./i18n.js";
 // Presentation only. These entries never assign routing eligibility or rewards.
 export const ICE_CREAM_ART_URL = "/static/brand/sugarglider-ice-cream-pin.png";
 const category = (label, icon, priority = 20, minZoom = 0, labelZoom = 13, richImage = null) =>
@@ -28,7 +29,7 @@ export function isPriorityPlace(feature) {
 
 export function placePresentation(feature) {
   const presentation = PLACE_PRESENTATIONS[feature.category];
-  if (!presentation) return category("Mapped place", "poi-attraction");
+  if (!presentation) return category(t("Mapped place"), "poi-attraction");
   if (feature.potability === "non_potable") return { ...presentation, icon: "poi-water-nonpotable" };
   if (feature.potability === "unknown") return { ...presentation, icon: "poi-water-unknown" };
   if (feature.potability === "verified") return { ...presentation, icon: "poi-water-verified",
@@ -47,7 +48,7 @@ export function createPassThroughAction(feature, { onPassThrough, canPassThrough
   const button = document.createElement("button");
   button.type = "button";
   button.className = "button primary place-pass-through";
-  button.textContent = "Pass through here";
+  button.textContent = t("Pass through here");
   button.hidden = !canPassThrough(feature);
   button.addEventListener("click", () => {
     if (button.disabled || !canPassThrough(feature)) return;
@@ -62,7 +63,7 @@ export function createPlaceDetails(feature, { onCenter = null, onPassThrough = n
   const presentation = placePresentation(feature);
   const content = document.createElement("section");
   content.className = "place-details";
-  content.setAttribute("aria-label", `${presentation.label}: ${feature.display_name}`);
+  content.setAttribute("aria-label", `${t(presentation.label)}: ${feature.display_name}`);
   const header = document.createElement("div"); header.className = "place-details-heading";
   if (presentation.richImage) {
     const artwork = document.createElement("img");
@@ -71,7 +72,7 @@ export function createPlaceDetails(feature, { onCenter = null, onPassThrough = n
     header.append(artwork);
   }
   const identity = document.createElement("div");
-  const label = document.createElement("p"); label.className = "place-category"; label.textContent = presentation.label;
+  const label = document.createElement("p"); label.className = "place-category"; label.textContent = t(presentation.label);
   const name = document.createElement("h3"); name.textContent = feature.display_name;
   identity.append(label, name); header.append(identity); content.append(header);
   const address = placeAddress(feature);
@@ -79,18 +80,18 @@ export function createPlaceDetails(feature, { onCenter = null, onPassThrough = n
   location.textContent = address || `${feature.coordinate.lat.toFixed(5)}, ${feature.coordinate.lon.toFixed(5)}`;
   content.append(location);
   const tags = Object.fromEntries(feature.tags ?? []);
-  for (const [label, value] of [["Mapped hours", tags.opening_hours], ["Seasonal", tags.seasonal],
-    ["Access", ["private", "restricted"].includes(feature.access_status) ? feature.access_status : null]]) {
+  for (const [label, value] of [[t("Mapped hours"), tags.opening_hours], [t("Seasonal"), tags.seasonal],
+    [t("Access"), ["private", "restricted"].includes(feature.access_status) ? feature.access_status : null]]) {
     if (!value) continue;
     const row = document.createElement("p"); row.textContent = `${label}: ${value}`; content.append(row);
   }
   if (onPassThrough) content.append(createPassThroughAction(feature, { onPassThrough, canPassThrough }));
   if (onCenter) {
     const center = document.createElement("button"); center.type = "button";
-    center.className = "button secondary place-center"; center.textContent = "Center on map";
+    center.className = "button secondary place-center"; center.textContent = t("Center on map");
     center.addEventListener("click", () => onCenter(feature)); content.append(center);
   }
   const credit = document.createElement("p"); credit.className = "place-data-note";
-  credit.textContent = "OpenStreetMap · Opening times may have changed."; content.append(credit);
+  credit.textContent = t("OpenStreetMap · Opening times may have changed."); content.append(credit);
   return content;
 }

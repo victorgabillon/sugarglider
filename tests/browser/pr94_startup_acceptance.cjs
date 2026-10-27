@@ -68,7 +68,7 @@ async function runBundledStartupRegression(browser, root, { offlineConfig = fals
       }, { ...baseRequest, routing_profile: profile });
       await page.waitForFunction(async expected => {
         const { state } = await import('/static/state.js');
-        if (document.querySelector('#error-details').textContent.includes('unknown routing profile')) throw Error('Known profile rejected while regional verification is pending');
+        if (document.querySelector('#error-details').textContent.includes('unknown routing profile') || document.querySelector('#error-details').textContent.includes('activité inconnue')) throw Error('Known profile rejected while regional verification is pending');
         return state.planningMode === 'waypoint_route' && state.routingProfile === expected && state.waypointEndpoints.start?.lat === 48.871281;
       }, profile, { timeout: 1500 }).catch(async error => {
         const diagnostic = await page.evaluate(async () => { const { state } = await import('/static/state.js'); return { catalog: state.routingProfileCatalog, mode: state.planningMode, profile: state.routingProfile, error: document.querySelector('#error-details').textContent }; });
@@ -91,12 +91,12 @@ async function runBundledStartupRegression(browser, root, { offlineConfig = fals
       const input = document.querySelector('#request-file'); input.files = transfer.files;
       input.dispatchEvent(new Event('change', { bubbles: true }));
     }, { ...baseRequest, routing_profile: 'walking' });
-    await page.waitForFunction(() => document.querySelector('#error-details').textContent.includes('unknown routing profile'));
+    await page.waitForFunction(() => document.querySelector('#error-details').textContent.includes('unknown routing profile') || document.querySelector('#error-details').textContent.includes('activité inconnue'));
     const after = await page.evaluate(async () => JSON.stringify((await import('/static/state.js')).currentPlanRequest()));
     if (before !== after) throw Error('Unknown profile changed the imported request');
     cases.push('unknown_alias_rejected_without_draft_mutation');
     releaseCatalog();
-    await page.waitForFunction(() => document.querySelector('#regional-status').textContent.includes('Download a region'));
+    await page.waitForFunction(() => document.querySelector('#regional-status').textContent.includes('Download a region') || document.querySelector('#regional-status').textContent.includes('Téléchargez une région'));
     const stateAfter = await page.evaluate(async () => {
       const { state } = await import('/static/state.js');
       return { profile: state.routingProfile, available: state.routingProfileCatalog.profiles.some(row => row.available),

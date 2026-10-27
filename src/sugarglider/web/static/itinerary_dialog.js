@@ -1,3 +1,4 @@
+import { t, tr, setLocalizedText } from "./i18n.js";
 import { parseItineraryDraft, itineraryDraftToCanonical, buildItineraryPrompt, ITINERARY_MAX_BYTES } from "./itinerary_draft.js";
 import { PUBLIC_PROFILE_METADATA } from "./public_profile_metadata.js";
 
@@ -25,7 +26,7 @@ export function initializeItineraryDialog({ root, launcher, maximumStops, capabi
     element("prompt-area").hidden = true; element("prompt").value = ""; element("copy-status").textContent = "";
     root.querySelector(".itinerary-prompt-helper").open = false;
     element("source").hidden = !sourceKind;
-    element("source").textContent = sourceKind === "opened_json_file" ? "Opened JSON document" : sourceKind ? "Shared from another app" : "";
+    setLocalizedText(element("source"), () => sourceKind === "opened_json_file" ? t("Opened JSON document") : sourceKind ? t("Shared from another app") : "");
     if (!root.open) root.showModal(); element("text").focus();
     if (sourceKind) { element("text").setSelectionRange(0, 0); element("text").scrollTop = 0; }
     notifyOpen(); return true;
@@ -39,7 +40,7 @@ export function initializeItineraryDialog({ root, launcher, maximumStops, capabi
     const file = element("file").files[0]; if (!file) return;
     const operation = ++fileOperation;
     try {
-      if (file.size > ITINERARY_MAX_BYTES) throw new Error("Itinerary JSON must be at most 64 KiB.");
+      if (file.size > ITINERARY_MAX_BYTES) throw new Error(t("Itinerary JSON must be at most 64 KiB."));
       const raw = await file.text();
       if (!root.open || operation !== fileOperation) return;
       element("text").value = raw; error(""); element("text").focus();
@@ -51,18 +52,18 @@ export function initializeItineraryDialog({ root, launcher, maximumStops, capabi
       const request = itineraryDraftToCanonical(draft);
       const preview = element("preview"); preview.replaceChildren();
       paragraph(preview, draft.name, "h3");
-      paragraph(preview, `${PUBLIC_PROFILE_METADATA[draft.activity].display_name} · ${draft.topology === "loop" ? "Loop" : "Point to point"} · ${draft.target_distance_km} km (±${draft.tolerance_km} km)`);
-      paragraph(preview, `Order: ${draft.order === "optimize" ? "Optimize stops" : "As given"}`);
-      paragraph(preview, "Start", "h4"); paragraph(preview, `${draft.start.name} (${draft.start.lat}, ${draft.start.lon})`);
+      paragraph(preview, `${PUBLIC_PROFILE_METADATA[draft.activity].display_name} · ${draft.topology === "loop" ? t("Loop") : t("Point to point")} · ${draft.target_distance_km} km (±${draft.tolerance_km} km)`);
+      paragraph(preview, tr`Order: ${draft.order === "optimize" ? t("Optimize stops") : t("As given")}`);
+      paragraph(preview, t("Start"), "h4"); paragraph(preview, `${draft.start.name} (${draft.start.lat}, ${draft.start.lon})`);
       paragraph(preview, "Stops", "h4");
       const list = document.createElement("ol"); preview.append(list);
       for (const point of draft.stops) {
         const item = document.createElement("li"); list.append(item);
         paragraph(item, `${point.name} (${point.lat}, ${point.lon})`, "strong");
-        if (point.reason) paragraph(item, `Suggested because: ${point.reason}`);
+        if (point.reason) paragraph(item, tr`Suggested because: ${point.reason}`);
       }
-      if (!draft.stops.length) paragraph(preview, "No interior stops.");
-      if (draft.end) { paragraph(preview, "End", "h4"); paragraph(preview, `${draft.end.name} (${draft.end.lat}, ${draft.end.lon})`); }
+      if (!draft.stops.length) paragraph(preview, t("No interior stops."));
+      if (draft.end) { paragraph(preview, t("End"), "h4"); paragraph(preview, `${draft.end.name} (${draft.end.lat}, ${draft.end.lon})`); }
       element("capability").textContent = capability(request);
       reviewed = { draft, request }; error(""); stage(true); element("confirm").focus({ preventScroll: true });
     } catch (failure) { reviewed = null; error(failure.message); }
@@ -70,7 +71,7 @@ export function initializeItineraryDialog({ root, launcher, maximumStops, capabi
   element("back").addEventListener("click", () => { reviewed = null; stage(false); error(""); element("text").focus(); });
   element("confirm").addEventListener("click", () => {
     if (!reviewed) return;
-    if (!canImport()) { error("This plan cannot be replaced right now. Cancel and try again when it is editable."); return; }
+    if (!canImport()) { error(t("This plan cannot be replaced right now. Cancel and try again when it is editable.")); return; }
     try { onImport(reviewed.request, reviewed.draft); close(); }
     catch (failure) { error(failure.message); }
   });
@@ -82,8 +83,8 @@ export function initializeItineraryDialog({ root, launcher, maximumStops, capabi
     const operation = fileOperation;
     try {
       await copyText(element("prompt").value);
-      if (root.open && operation === fileOperation) element("copy-status").textContent = "Prompt copied. Paste it into an assistant of your choice.";
-    } catch { if (root.open && operation === fileOperation) element("copy-status").textContent = "Copy unavailable. Select the prompt text and copy it manually."; }
+      if (root.open && operation === fileOperation) setLocalizedText(element("copy-status"), () => t("Prompt copied. Paste it into an assistant of your choice."));
+    } catch { if (root.open && operation === fileOperation) setLocalizedText(element("copy-status"), () => t("Copy unavailable. Select the prompt text and copy it manually.")); }
   });
   return Object.freeze({
     openWithText(rawText, { sourceKind = "shared_text" } = {}) {
