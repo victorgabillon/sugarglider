@@ -183,9 +183,18 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         assert.equal(await page.locator('#ask-chatgpt .ai-action-label').count(), 0, 'Map action is icon-only');
         assert.equal(await page.locator('#ask-chatgpt').getAttribute('aria-label'), locale === 'fr-FR' ? 'Planifier une aventure avec ChatGPT' : 'Plan an adventure with ChatGPT');
 
-        await page.waitForFunction(() => document.querySelector('.maplibregl-ctrl-attrib-inner').textContent.includes('Synthetic pack A'));
-        const creditText = await page.locator('.maplibregl-ctrl-attrib-inner').textContent();
-        for (const name of ['OpenStreetMap', 'ODbL', 'ESA WorldCover', 'Natural Earth', 'Protomaps', 'Synthetic pack A']) assert(creditText.includes(name), JSON.stringify({ name, creditText, width }));
+        const packCredits = async pack => {
+          // Pack attachment can briefly replace the attribution DOM. Capture
+          // the complete checked text atomically instead of reading it again
+          // in a second browser task during that transition.
+          const required = ['OpenStreetMap', 'ODbL', 'ESA WorldCover', 'Natural Earth', 'Protomaps', pack];
+          const snapshot = await page.waitForFunction(required => {
+            const text = document.querySelector('.maplibregl-ctrl-attrib-inner').textContent;
+            return required.every(name => text.includes(name)) && text;
+          }, required);
+          return snapshot.jsonValue();
+        };
+        await packCredits('Synthetic pack A');
         const osm = page.locator('.maplibregl-ctrl-attrib a[href="https://www.openstreetmap.org/copyright"]');
         assert(await osm.isVisible(), 'OSM licence link is available with the full active-pack credits');
         // Verify activation through a local interception, without requesting the provider.
@@ -194,11 +203,13 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         await screenshot('map-initial');
         if (width <= 840) {
           await page.waitForFunction(() => !document.querySelector('.maplibregl-ctrl-attrib').classList.contains('maplibregl-compact-show'));
+          await packCredits('Synthetic pack A');
           await checkLayout(); await screenshot('map-settled');
           const creditsButton = page.locator('.maplibregl-ctrl-attrib summary');
           await creditsButton.focus(); await page.keyboard.press('Enter');
           assert(await osm.isVisible(), 'Keyboard expands full licence credits');
           await page.waitForTimeout(5200);
+          await packCredits('Synthetic pack A');
           assert(await osm.isVisible(), 'Explicit keyboard expansion remains open');
           await checkLayout(); await screenshot('map-expanded');
         }
@@ -218,8 +229,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           for (let parent = node.parentElement; parent; parent = parent.parentElement) if (parent.tagName === 'DETAILS') parent.open = true;
         });
         await page.locator('#planning-region').selectOption('second-fixture');
-        await page.waitForFunction(() => document.querySelector('.maplibregl-ctrl-attrib-inner').textContent.includes('Synthetic pack B'));
-        assert(!await page.locator('.maplibregl-ctrl-attrib-inner').textContent().then(text => text.includes('Synthetic pack A')), 'Previous pack credits do not remain associated with the new map');
+        assert(!(await packCredits('Synthetic pack B')).includes('Synthetic pack A'), 'Previous pack credits do not remain associated with the new map');
         await tools.evaluate(node => { node.open = false; });
         assert(await osm.isVisible(), 'A new region reveals its complete credits again');
         await screenshot('map-pack-switch');
@@ -227,7 +237,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           for (let parent = node.parentElement; parent; parent = parent.parentElement) if (parent.tagName === 'DETAILS') parent.open = true;
         });
         await page.locator('#planning-region').selectOption('adventure-fixture');
-        await page.waitForFunction(() => document.querySelector('.maplibregl-ctrl-attrib-inner').textContent.includes('Synthetic pack A'));
+        await packCredits('Synthetic pack A');
         await tools.evaluate(node => { node.open = false; });
         await page.evaluate(async () => { const { createRegionVersionStore } = await import('/static/region_versions.js'); await createRegionVersionStore().removeRegion('second-fixture'); });
         const original = await unchanged(), count = await page.evaluate(() => adventureNativeCalls.length);
