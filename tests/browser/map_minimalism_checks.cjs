@@ -57,6 +57,24 @@ exports.checkMinimalMobileMap = async ({ page, width, screenshot, checkLayout })
   await page.locator('.header-tools > summary').click();
   await page.locator('.header-tools .map-tools > summary').click();
   await checkTools();
+  if (width === 372) {
+    // The real Fairphone WebView reports a 37 px top inset even though Android
+    // already positions the WebView below its status bar.
+    const insets = await page.context().newCDPSession(page);
+    try {
+      await insets.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 37, left: 0, right: 0, bottom: 0 } });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert((await page.locator('.topbar').boundingBox()).y >= 37, 'The native safe-area inset is actually applied');
+      await checkTools(); await screenshot('minimal-tools-native-insets');
+      await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
+      await checkTools(); await screenshot('minimal-tools-native-insets-large-text');
+    } finally {
+      await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+      await insets.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 0, left: 0, right: 0, bottom: 0 } });
+      await insets.detach();
+    }
+    cases.push('tools_native_safe_area_and_large_text_clear_bottom_navigation');
+  }
   await screenshot('minimal-tools-map-display');
   const count = await page.evaluate(() => adventureNativeCalls.length);
   assert(await page.locator('#show-nature').isDisabled(), 'Unavailable nature coloring stays explicitly disabled in the bundled planner');

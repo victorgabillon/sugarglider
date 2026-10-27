@@ -1255,7 +1255,7 @@ body.outing-mode .route-dock { display: none; }
   .ui-shell.mobile-map-view .topbar nav { margin: 0; gap: 6px; pointer-events: auto; }
   .ui-shell.mobile-map-view .header-tools > summary { min-width: 48px; min-height: 48px; justify-content: center; padding: .5rem; color: white; background: var(--primary-action); border-color: #9bb1a5; box-shadow: var(--shadow-small); }
   .ui-shell.mobile-map-view .header-ai-action { box-shadow: var(--shadow-small); }
-  .ui-shell.mobile-map-view .header-tools-menu { left: auto; right: 0; max-height: calc(100dvh - 10rem); max-height: calc(100cqh - max(80px, 3rem)); width: min(22rem, calc(100vw - 16px)); }
+  .ui-shell.mobile-map-view .header-tools-menu { left: auto; right: 0; max-height: calc(100dvh - 10rem); max-height: calc(100cqh - max(80px, 3rem) - env(safe-area-inset-top, 0px)); width: min(22rem, calc(100vw - 16px)); }
   .ui-shell.mobile-map-view .map-panel:not(:has(.maplibregl-ctrl-zoom-in)) .planner-location-control { top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); right: auto; bottom: auto; width: 44px; height: 44px; }
   .ui-shell:not(.outing-mode) .route-dock { display: flex; flex-direction: column; gap: 4px; max-height: calc(100% - 76px - var(--route-attribution-clearance, 62px)); }
   .ui-shell:not(.outing-mode) .route-dock.hidden { display: none; }

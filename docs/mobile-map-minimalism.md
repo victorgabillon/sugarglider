@@ -4,6 +4,9 @@ The mobile Map workspace overlays the supplied AI action and Tools toolbar on
 its map. Branding remains in Plan, Routes, About, the launcher and desktop. The
 same toolbar DOM returns to its original location when leaving mobile Map;
 Android window insets remain owned by the existing native layout.
+The floating Tools menu also subtracts the WebView's reported top safe-area
+inset from its height budget. The Fairphone reports 37 CSS pixels here; browser
+acceptance reproduces that inset at normal and 200% text sizes.
 
 On mobile touch devices (at most 840 CSS pixels with a coarse pointer and touch
 support), MapLibre gestures remain enabled and the permanent NavigationControl
