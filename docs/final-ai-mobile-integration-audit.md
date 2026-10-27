@@ -23,12 +23,20 @@ full route/editor backups and detailed machine receipts remain outside Git under
 - Merged tree: `e625149ebd8bab6c23569414b5ca8691dd2b7b0c`, exactly equal to the
   reviewed GUI head's tree. The merge parents are the verified main baseline and
   final GUI head; forest and GUI ancestry are both retained.
-- This audit's follow-up documentation commit records completed remote receipts.
-  It changes only this report; runtime `src`, `android` and `assets` trees still
-  exactly match both the reviewed GUI and prepared cda0572 artifact source. The
-  current documentation revision is identified by this file's Git history.
-  The installed device now matches the consolidated cda0572 artifact after separate
-  explicit approval and fresh preservation checks.
+- Reconciled main source base: `36c023aa30318443aac1ba9bc6025448ceb82980`,
+  after the parallel session merged [PR #114](https://github.com/victorgabillon/sugarglider/pull/114).
+  Its private Puy-l’Évêque coverage configuration and bounded terrain conversion
+  changes are retained. They do not change bundled web, Android or brand trees;
+  those trees still exactly match reviewed GUI source and installed cda0572.
+  The broader Python `src` tree includes PR #114 and is not claimed identical to
+  the APK's build source. No new regional pack was installed or published here.
+- [Documentation PR #112](https://github.com/victorgabillon/sugarglider/pull/112)
+  changes only this report relative to that main source base. The report's final
+  merge revision is identified by its Git history; its merge and CI receipts are
+  retained outside Git to avoid a self-referential commit hash.
+- The installed device matches the consolidated cda0572 artifact after separate
+  explicit approval and fresh preservation checks. This records acceptance of
+  PR #111's GUI, not physical acceptance of later parallel changes.
 
 The audit inspected **54 registered worktrees**, 51 existing and three stale
 registrations, **70 local branches**, all 152 local/remote refs, untracked files,
@@ -58,6 +66,16 @@ brand, PR32–36 and release-code changes. No completed AI, forest or mobile fea
 was found missing from the consolidated implementation. No worktree, stash,
 untracked file or private evidence was deleted. Full ref, worktree and commit-graph
 inventories are retained in the external audit receipts.
+
+During final receipt preparation, the original checkout independently moved onto
+`fix/named-start-mobile-toolbar` for [PR #115](https://github.com/victorgabillon/sugarglider/pull/115).
+That is active follow-on work on named adventure starts and compact toolbars,
+opened after the GUI code merge; it is not missing completed baseline work.
+At reconciliation it remains open. Its checkout, branch, edits and processes were
+left untouched. It is outside the installed cda0572 acceptance boundary and remains
+owned by its parallel session. All other existing worktree heads/statuses and the
+stash match their initial audit, including the untouched forest checkout. No new
+worktree was created for this audit; the report branch uses the existing GUI checkout.
 
 ## Feature completeness
 
@@ -204,8 +222,9 @@ historical branches likewise require no cleanup to finish this integration.
 
 ## Final validation and consolidated artifact
 
-All final local, GitHub PR and post-merge checks passed. The exact remote
-receipts are in the merge record below. Exact local results:
+The consolidated GUI's local, GitHub PR and post-code-merge checks passed. The
+exact remote receipts are in the merge record below. Local results for cda0572
+and its implementation lineage:
 
 | Check | Result |
 |---|---|
@@ -221,6 +240,13 @@ receipts are in the merge record below. Exact local results:
 | POI locale regression | French worker query and unknown-access map action fail before/pass after; English/private-access controls retained |
 | Shell identity | v121 fingerprint expectations and complete allowlists pass |
 | APK/ELF | All three APK ZIP/page-alignment/native-byte checks pass; staging ELF LOAD alignment ≥16 KiB |
+
+After incorporating main's independent PR #114 into the documentation branch,
+a fresh `make check` also passed: Ruff checked 320 formatted files, strict mypy
+checked **304 files**, and Python reported **1,627 passed, 16 deselected**, with
+the same nine NumPy warnings. This later count includes PR #114's additional
+Python tests; it does not replace the exact cda0572 validation counts above.
+Its log is `make-check-main-reconciled.log` in the external audit root.
 
 The comprehensive native/application checks ran on the implementation commit.
 740bd2b synchronizes two strict cache fingerprints; final Python, full-app and
@@ -279,10 +305,14 @@ pull requests, so the completed receipt follows through a documentation-only PR.
 | Elevation browser regressions | [40483591530](https://github.com/victorgabillon/sugarglider/actions/runs/40483591530) | success |
 | Social deployment | [40483591582](https://github.com/victorgabillon/sugarglider/actions/runs/40483591582) | success |
 
-Full head-check receipts, both merge parents, exact merged tree, runtime tree
-equivalence, source and device receipts are retained in the external audit root.
-The final source worktree is clean. No source rewrite or duplicate forest merge
-was used to reach this state.
+Full head-check receipts, both code-merge parents, exact code-merge tree,
+web/native/brand tree equivalence through main `36c023a`, source and device
+receipts are retained in the external audit root. The documentation branch
+incorporates PR #114 before merging and preserves its changes. PR #112's final
+head and post-merge receipts are recorded separately outside Git; documentation
+changes trigger three workflows because Social deployment excludes this path.
+The owned source worktree is clean at handoff. No source rewrite or duplicate
+forest merge was used to reach this state.
 
 ## Outstanding acceptance and limits
 
