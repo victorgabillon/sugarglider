@@ -176,6 +176,7 @@ export function createRegionScreen({ elements, versions, product, withRegion,
   async function inspectSelection() {
     let row;
     const request = planningRequest();
+    coverageKey = JSON.stringify([selectedRegionId(), request]);
     try { row = selectCommittedRegion(rows, selectedRegionId(), request); }
     catch (error) {
       readyBuild = null; onReady(null, error.code, null);
@@ -184,6 +185,7 @@ export function createRegionScreen({ elements, versions, product, withRegion,
     }
     // The sole-region default is implicit; it must not undo an explicit clear.
     if (selectedRegionId() !== row.region_id) selectRegion(row.region_id, { remember: false });
+    coverageKey = JSON.stringify([selectedRegionId(), request]);
     onReady(null, "regional_checking", null);
     message(regionFailureMessage("regional_checking"), "regional_checking");
     try {
@@ -239,7 +241,10 @@ export function createRegionScreen({ elements, versions, product, withRegion,
         // Checking the retained region must not conceal a failed/cancelled update.
         if (failure) message(failure.text, failure.code);
         pending = false; render();
-        if (coverageDirty) { coverageDirty = false; void act(async () => {}); }
+        if (coverageDirty) {
+          coverageDirty = false; coverageKey = null;
+          refreshCoverage();
+        }
       }
     }
   }

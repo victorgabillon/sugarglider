@@ -41,6 +41,12 @@ indexes and native capabilities. No route fallback, weakened constraint or
 integrity bypass was added. The combined regression tests cover the menu race
 and independent adventure context from an uncovered manual draft.
 
+Bundled startup acceptance also verifies that readiness publication does not
+enqueue the same native check again. Automatic map verification requires the
+chosen region's leased directory; unscoped calls retain the explicit-selection
+guard. The dedicated startup suite covers map integrity, update interruption,
+optional storage failure and ten remembered-selection reload cycles.
+
 The shared shell advances to v128 and includes both the calculation operation
 module and the Nature partition reader. Cache-generation assertions and exact
 asset fingerprints cover the combined files. Partition integrity cases now run

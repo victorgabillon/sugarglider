@@ -72,7 +72,11 @@ export async function runPlannerMapStoreHarness() {
     equal(regional.selectedMapBounds(), fixture.manifest.bounds, "routing selection remains independent");
     for (const pack of scan.packs) assert((await composed.openPackSource(pack.pack_id)).source, "shared regional bounded reader");
     const marly = before.find(row => row.region_id === "marly").manifest;
-    await versions.withCommittedRegions(async () => rejects(() => regional.verifyMap(marly), "regional_version_changed"));
+    await versions.withCommittedRegions(async () => {
+      await rejects(() => regional.verifyMap(marly), "regional_version_changed");
+      const directory = await versions.committedDirectory(marly.region_id, marly.build_id);
+      equal(await regional.verifyMap(marly, directory), true, "automatic selection verifies its leased directory");
+    });
     cases.push("all_committed_maps_read_under_existing_lease_without_weakening_planning_selection");
 
     await rejects(() => composed.installPack("https://evil.example/manifest.json"), "map_pack_untrusted");

@@ -401,7 +401,7 @@ def test_shared_shell_generation_tracks_v128_cached_assets() -> None:
         ),
         "app.js": ("3b39a4cb8134f655a5989e400f961f1de1214bb105dceb70d7a4853f9272043d"),
         "region_screen.js": (
-            "4bdd028c3524a4ff3f06357a0609a6b94f5f388ef205335bc35eff0c2d80e5e3"
+            "7225f798da76ae28cfe20aa8ad860d2bcd8d56e223fdb8fa1910153d865fce0e"
         ),
         "data_notices.js": (
             "5ccbfa08a5d4cbf952968f38bf9bdc8ba66156f333befc8219447fe76040528d"
