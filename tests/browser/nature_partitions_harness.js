@@ -1,7 +1,8 @@
 import { createLocalRegionData } from "../../src/sugarglider/web/static/local_region_data.js";
 import { createLocalRegionStore, loadLocalRegionData } from "../../src/sugarglider/web/static/local_region_store.js";
 import { createLocalRegionClient } from "../../src/sugarglider/web/static/local_region_client.js";
-import { createPartitionedRegionData, decodeNatureDirectory, decodeNaturePartition } from "../../src/sugarglider/web/static/nature_partitions.js";
+import { createPartitionedRegionData, decodeNatureDirectory, decodeNaturePartition,
+  NATURE_CACHE_MAX_PARTITIONS, NATURE_CACHE_MAX_POSITIONS } from "../../src/sugarglider/web/static/nature_partitions.js";
 import { parseRegionalManifest, regionalBuildIdentity, sha256Bytes } from "../../src/sugarglider/web/static/regional_manifest.js";
 import { selectCommittedRegion } from "../../src/sugarglider/web/static/regional_planning.js";
 import { NATURE_PERFORMANCE_CASES, naturePerformanceFixture } from "./nature_performance_fixtures.js";
@@ -65,20 +66,47 @@ export async function runNaturePartitionsHarness() {
   equal(await oneData.analyzeNature(one.route), firstAnalysis, "failed analysis cannot poison the following operation");
   scenarios.push("cached_partition_reverified_and_exact_after_failure");
 
-  for (const cachePositions of [1_500_000, Math.max(...directory.partitions.map(part => part.position_count))]) {
+  for (const cachePositions of [NATURE_CACHE_MAX_POSITIONS, Math.max(...directory.partitions.map(part => part.position_count))]) {
     const bounded = createPartitionedRegionData(manifest, null, directory,
       async descriptor => artifact.files.get(descriptor.path), { cachePositions });
     beginRegionalProfile(true);
     const analyses = await Promise.all([bounded.analyzeNature(f.route), bounded.analyzeNature(f.route)]);
     const profile = finishRegionalProfile();
     equal(analyses[0], analyses[1], "concurrent callers retain deterministic interval arithmetic");
-    assert(profile.counters.resident_partitions <= 4 && profile.counters.resident_positions <= cachePositions,
+    assert(profile.counters.resident_partitions <= NATURE_CACHE_MAX_PARTITIONS && profile.counters.resident_positions <= cachePositions,
       "both count and geometry-position limits remain bounded");
     equal(analyses[0], await createPartitionedRegionData(manifest, null, directory,
       async descriptor => artifact.files.get(descriptor.path), { cachePartitions: 1 }).analyzeNature(f.route),
     "bounded LRU eviction never changes the global operation budget or result");
   }
   scenarios.push("bounded_cache_eviction_and_concurrent_result_equivalence");
+
+  // The physical 25 km portfolio revisits five partitions in directory order.
+  // A four-entry LRU churns on that cycle even though its count remains bounded.
+  const fiveArtifact = await partitionFixture(f, [
+    ...f.nature.features.slice(0, 4).map(feature => [feature]), f.nature.features.slice(4),
+  ]);
+  const fiveDirectory = await decodeNatureDirectory(fiveArtifact.files.get("nature/partitions.json"), fiveArtifact.manifest);
+  const cycleResults = [];
+  for (const cachePartitions of [4, NATURE_CACHE_MAX_PARTITIONS]) {
+    const cycle = createPartitionedRegionData(fiveArtifact.manifest, null, fiveDirectory,
+      async descriptor => fiveArtifact.files.get(descriptor.path), { cachePartitions });
+    beginRegionalProfile(true);
+    const coldResult = await cycle.analyzeNature(f.route);
+    const coldProfile = finishRegionalProfile();
+    beginRegionalProfile(true);
+    const warmResult = await cycle.analyzeNature(f.route);
+    const warmProfile = finishRegionalProfile();
+    equal(coldResult, warmResult, "five-partition reuse preserves exact intervals, precedence and operation accounting");
+    assert(coldProfile.counters.prepared_partitions === 5, "five intersecting partitions are fully prepared");
+    assert(cachePartitions === 4 ? warmProfile.counters.prepared_partitions === 5
+      : !warmProfile.counters.prepared_partitions && warmProfile.counters.cache_hits === 5
+        && warmProfile.stages.hash_verification.calls === 5,
+    "the default retains the measured five-partition working set and still hashes every backing file");
+    cycleResults.push(warmResult);
+  }
+  equal(cycleResults[0], cycleResults[1], "cache capacity cannot change Nature results");
+  scenarios.push("five_partition_portfolio_reuses_preparation_without_changing_results");
   enableRegionalProfiling();
   const captureGeneration = regionalProfilingGeneration();
   recordWorkerProfile({ ...warm, user_description: "must not escape", token: "secret", stages: {
@@ -199,10 +227,10 @@ export async function runNaturePartitionsHarness() {
   return scenarios;
 }
 
-async function partitionFixture(fixture) {
+async function partitionFixture(fixture, partitionGroups = null) {
   const manifest = structuredClone(fixture.manifest), files = new Map(), partitions = [];
-  const groups = fixture.nature.features.length > 64 ? [fixture.nature.features.slice(0, 128), fixture.nature.features.slice(128)]
-    : fixture.nature.features.map(feature => [feature]);
+  const groups = partitionGroups ?? (fixture.nature.features.length > 64 ? [fixture.nature.features.slice(0, 128), fixture.nature.features.slice(128)]
+    : fixture.nature.features.map(feature => [feature]));
   const descriptors = [];
   for (const features of groups.filter(group => group.length)) {
     const index = partitions.length, path = `nature/part-${String(index).padStart(3, "0")}.json.gz`;

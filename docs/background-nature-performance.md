@@ -1,39 +1,80 @@
 # Background Nature profiling and bounded preparation reuse
 
-The accepted Île-de-France installation remains unchanged. This change addresses
-one measured computation cost and adds evidence to separate it from Android
-scheduling. Fairphone acceptance of the replacement APK is still required;
-desktop replay cannot establish completion during Home or secure lock.
+The accepted geographical installation remains unchanged. Physical testing of
+83d27e7 confirms an 8 km improvement, but its four-entry cache does not satisfy
+the 25 km background gate. The five-entry follow-up below still requires its own
+exact-artifact authorization and physical acceptance. Issue #117 stays open.
 
-## Confirmed computation cost
+## Measured working set
 
-Eight distinct retained native candidate lines from the deterministic 25 km
-acceptance request intersect two to five Nature partitions each. The original
-one-entry cache prepares 28 partitions. In a Node replay, 28 ms was spent reading
-files, compared with approximately 5.1 s in projection/topology validation,
-1.9 s in JSON parsing and 1.4 s rebuilding spatial indexes. Geometry intersection
-took about 0.6 s. Total Nature wall time was 10.9 s.
+The original host replay used eight frozen candidate lines from a 25 km proposal
+with seed 35. It was not the exact physical seed-0 portfolio. Four entries reduced
+its preparations from 28 to nine, and Nature wall time from 10.9 s to 4.2 s.
+This established a computation bottleneck, but underestimated the device fixture's
+working set.
 
-A deterministic LRU of at most four prepared partitions reduces preparations
-to nine and this replay to 4.2 s. Every returned Nature field, including exact
-category distances, score and operation count, matches the control. Separate
-explicit-GC Node runs measured maximum retained JS heap of 47.8 MiB for one
-partition and 154.6 MiB for four. Whole-process peak RSS was approximately
-505 MiB and 465 MiB respectively: allocation/GC peaks are distinct from retained
-heap, and neither measurement is an Android memory result.
+The exact physical 8 km fixture visits three partitions containing 1,206,838
+positions. A four-entry / 1,500,000-position LRU prepares three rather than 26
+partitions. The exact physical 25 km fixture visits five partitions containing
+1,741,637 positions. The same LRU reads 47 partitions and prepares 34: its count
+and position bounds both force repeated eviction during the five-partition cycle.
+These are observed worker request sequences, including woodland proposal queries;
+no route coordinates, descriptions or authority are included in profiling.
 
-The cache additionally caps retained geometry at 1,500,000 positions. It evicts
-before preparing an incoming partition and serializes visits, including direct
-concurrent callers. A cache hit still reads and hashes its backing bytes against
-the immutable manifest; it skips decompression, parsing, topology validation and
-tree reconstruction only for the same fully validated bytes. No source document
-is retained. Region replacement and worker closure release the session.
+The follow-up retains at most **five prepared partitions and 2,000,000 positions**.
+Replay of that exact access sequence prepares five partitions and records 42 hits.
+A three-run Node VM preparation/cache replay measured median wall 75.31 s versus
+11.65 s and all-thread CPU 82.32 s versus 13.08 s for four versus five entries.
+Maximum retained heap after explicit GC was 153.6 versus 178.2 MiB; maximum sampled
+process RSS was 789.3 versus 584.1 MiB. These are host preparation measurements,
+not Nature-result timings, OPFS measurements, Android memory peaks or proof of
+background completion. The shared engine, source bytes and access sequence were
+identical; only cache bounds differed.
 
-All intersecting partitions still contribute exact intervals to one accumulator
-with one unchanged operation budget. Class precedence, interval union, distance
-normalization, polygon mathematics and fail-closed exhaustion are unchanged.
-There is no averaging, partial score, route-result cache, new routing call,
-geographical rebuild or extra copy of the installed dataset.
+Eviction happens before incoming preparation, and visits are serialized, including
+direct concurrent callers. Every hit still reads and hashes backing bytes against
+the immutable manifest. Only decompression, parsing, validation and reconstruction
+of previously validated identical bytes are reused. No source document is retained,
+and region replacement or worker closure releases the session.
+
+All intersecting partitions contribute exact intervals to one accumulator under
+one unchanged operation budget. Polygon precedence, interval union, authoritative
+distance normalization and fail-closed exhaustion are unchanged. Increasing cache
+capacity cannot add routing calls, alter geometry or permit a partial Nature score.
+
+## Physical evidence for the four-entry artifact
+
+The installed WebView is 155.0.8059.43. Matched synthetic tests on 83d27e7 retain
+the original seed, selected GPX bytes and native/model counts. Returned Nature
+metrics agree across matched runs.
+The two early attempts that failed before routing/Nature are excluded.
+
+| Fixture / scenario | Nature | Whole operation | Second model hidden | Complete before return |
+| --- | ---: | ---: | --- | --- |
+| 8 km foreground, two runs | 3.40–3.55 s | 20.95–21.79 s | — | — |
+| 8 km Home 180 s, two runs | 12.45–12.69 s | 32.27–32.63 s | yes | yes |
+| 8 km Home 60 s | 12.63 s | 31.63 s | yes | yes |
+| 8 km Settings switch 180 s | 13.20 s | 33.35 s | yes | yes |
+| 25 km foreground, two runs | 21.31–23.45 s | 47.07–51.93 s | — | — |
+| 25 km Home 180 s | 165.76 s | 204.15 s | no | no |
+| 25 km Home 60 s | 45.91 s | 85.55 s | no | no |
+| 25 km Settings switch 180 s | 165.83 s | 204.50 s | no | no |
+
+A separate Home 25 km repetition with scheduler tracing reproduced the delay;
+it is diagnostic evidence, excluded from performance statistics. In the first
+Home case one synchronous validation span lasted 121.30 s. From approximately
+60 to 170 s, the active Nature worker advanced only about 0.10 CPU seconds and
+was sleeping at the latter sample. Android reported the renderer unfrozen and
+in the foreground scheduling group at the sampled points. The wake lock and
+calculation service remained owned. Queue and delivery measurements do not
+account for the pause. This supports suspension within execution rather than
+continuously expensive validation; it does not identify a particular Chromium
+feature, GC mechanism or Android policy. Kernel wait-channel names were not
+available to the shell. No hidden WebView evaluations, priority overrides or
+unsupported flags were used.
+
+Five-entry physical timing, secure-lock completion and the complete preservation
+checks remain required before claiming the product blocker is fixed.
 
 ## Timing evidence
 
@@ -119,7 +160,7 @@ does not identify the Fairphone's much larger observed delay.
 `make check` and `tests/browser/nature_performance_acceptance.cjs` cover synthetic
 geometry, cached/uncached exact equivalence, corruption after reuse, eviction,
 shared operation exhaustion, concurrent visits, production OPFS worker profiling,
-privacy limits, worker cancellation and region replacement. The existing full
+privacy limits, the five-partition cyclic working set, worker cancellation and region replacement. The existing full
 adventure browser and Android checks cover model/native call budgets, exact GPX,
 context consent, cancellation, account and microphone boundaries and recovery.
 
@@ -131,7 +172,7 @@ node --experimental-default-type=module --expose-gc \
   scripts/benchmark_nature_partitions.mjs \
   --region /private/verified-region --routes /private/frozen-candidates.json \
   --cache-partitions 1 --repetitions 3 --output /private/control.json
-# Repeat with --cache-partitions 4 and a different output path.
+# Repeat with --cache-partitions 5 and a different output path.
 ```
 
 Use Node 22 or newer. Compare result hashes across cache sizes, then wall time,
