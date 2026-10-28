@@ -73,7 +73,8 @@ async function startup(browser, scenario) {
       globalThis.sugargliderNative = { onmessage: null, postMessage(payload) {
         const request = JSON.parse(payload); preferenceNative.push(request);
         let reply;
-        if (request.type === 'hello') reply = { type: 'hello_result', outing_slug: null, participant_id: null,
+        if (request.type === 'calculation_recovery') reply = { type: 'calculation_result', operation_id: null, state: 'idle', recovery: null };
+        else if (request.type === 'hello') reply = { type: 'hello_result', outing_slug: null, participant_id: null,
           active: false, state: 'stopped', last_published_at: null, pending_sample: false, stop_warning: null };
         else if (request.type === 'get_local_route_capabilities') {
           const id = request.regional_reference.pack_id;
@@ -202,7 +203,7 @@ async function startup(browser, scenario) {
     }
     assert.equal(result.status, scenario.failure ?? (scenario.expected ? 'regional_ready' : 'regional_selection_required'));
     if (scenario.expected && !scenario.corruptMap) assert.equal(result.map.packs[0].pack_id, installed[scenario.expected].components.map.component_id);
-    assert.ok(result.native.every(request => ['hello', 'get_local_route_capabilities', 'itinerary_dialog_state', 'set_ui_language'].includes(request.type)), `Restoration generated a route/download: ${JSON.stringify(result.native)}`);
+    assert.ok(result.native.every(request => ['hello', 'get_local_route_capabilities', 'itinerary_dialog_state', 'set_ui_language', 'calculation_recovery'].includes(request.type)), `Restoration generated a route/download: ${JSON.stringify(result.native)}`);
     assert.ok(result.native.filter(request => request.type === 'set_ui_language').every(request => ['fr','en'].includes(request.language)), 'Only a validated UI preference may be synchronized at startup');
     if (scenario.expected) assert.ok(result.native.filter(request => request.type === 'get_local_route_capabilities')
       .every(request => request.regional_reference.build_id === installed[scenario.expected].build_id));

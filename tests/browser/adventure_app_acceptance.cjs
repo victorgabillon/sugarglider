@@ -87,7 +87,8 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
               adventureSavedGpx = new TextDecoder().decode(new Uint8Array(payload, 4 + length));
             } else request = JSON.parse(payload);
             adventureNativeCalls.push(request); let reply;
-            if (request.type === 'set_ui_language') reply = { type: 'set_ui_language_result', language: request.language, selected: true };
+            if (request.type.startsWith('calculation_')) reply = { type:'calculation_result',operation_id:request.operation_id??null,state:request.type==='calculation_begin'?'running':request.type==='calculation_forget'?'completed':request.state??'idle',recovery:null };
+            else if (request.type === 'set_ui_language') reply = { type: 'set_ui_language_result', language: request.language, selected: true };
             else if (request.type === 'show_privacy') reply = { type: 'show_privacy_result', shown: true };
             else if (request.type === 'get_app_identity') reply = { type: 'app_identity_result', label: 'SG AI Test', revision: '88bdb8c', variant: 'v2Staging', version: '1.2.0-v2-staging' };
             else if (request.type === 'hello') reply = { type: 'hello_result', outing_slug: null, participant_id: null, active: false, state: 'stopped', last_published_at: null, pending_sample: false, stop_warning: null };
@@ -315,6 +316,17 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
           const overflow = await page.locator('#adventure-dialog').evaluate(node => node.scrollWidth > node.clientWidth + 1);
           assert(!overflow, 'Dialog has no horizontal overflow at 200% text size');
           assert(await page.locator('.adventure-body').evaluate(node => node.clientHeight >= 100), 'Large-text header leaves a usable scrolling editor');
+          for (const language of ['fr', 'en']) {
+            await page.evaluate(async language => (await import('/static/i18n.js')).setLanguage(language, { persist: false }), language);
+            await page.locator('#adventure-include-pins').focus();
+            const readable = await page.locator('#adventure-include-pins').evaluate(input => {
+              const body = input.closest('.adventure-body'), label = input.labels[0];
+              const text = label.querySelector('span').getBoundingClientRect(), bounds = label.getBoundingClientRect();
+              return body.scrollWidth <= body.clientWidth + 1 && text.left >= bounds.left && text.right <= bounds.right + 1;
+            });
+            assert(readable, `${language}: the complete pin label remains inside the scrolling body at 200% text`);
+          }
+          await page.evaluate(async () => (await import('/static/i18n.js')).setLanguage('fr', { persist: false }));
           await page.locator('#adventure-text').scrollIntoViewIfNeeded();
           await screenshot('dialog-large-text-editor');
           await page.locator('#adventure-close').click();
@@ -473,6 +485,7 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
             await page.locator('#ask-chatgpt').click();
             await page.locator('#adventure-endpoints').evaluate(node => { node.open = true; });
             assert.equal(await page.locator('#adventure-include-pins').isChecked(),false);
+            assert(await page.locator('#adventure-include-pins').isDisabled(), 'Saved-adventure display cannot disclose hidden manual pins or reuse snapshot pins');
             await page.locator('#adventure-text').fill('Un tour autour de ' + name);
             await page.waitForFunction(() => !document.querySelector('#adventure-generate').disabled);
             await page.locator('#adventure-generate').click();

@@ -13,7 +13,11 @@ ANDROID = "{http://schemas.android.com/apk/res/android}"
 def test_no_sharing_component_or_deep_link_in_any_packaged_manifest() -> None:
     for path in (ROOT / "android/app/src").glob("*/AndroidManifest.xml"):
         manifest = ET.parse(path).getroot()
-        assert not manifest.findall(".//service")
+        for service in manifest.findall(".//service"):
+            assert path.parent.name == "main"
+            assert service.get(ANDROID + "name") == ".CalculationService"
+            assert service.get(ANDROID + "foregroundServiceType") == "dataSync"
+            assert service.get(ANDROID + "exported") == "false"
         assert not manifest.findall(".//receiver")
         activity = manifest.find("application/activity")
         if activity is not None:
@@ -25,10 +29,8 @@ def test_no_sharing_component_or_deep_link_in_any_packaged_manifest() -> None:
             assert set(data.attrib) <= {ANDROID + "scheme", ANDROID + "mimeType"}
         for permission in manifest.findall("uses-permission"):
             assert permission.get(ANDROID + "name") not in {
-                "android.permission.FOREGROUND_SERVICE",
                 "android.permission.FOREGROUND_SERVICE_LOCATION",
                 "android.permission.ACCESS_BACKGROUND_LOCATION",
-                "android.permission.POST_NOTIFICATIONS",
             }
 
 

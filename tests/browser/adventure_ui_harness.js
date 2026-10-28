@@ -42,6 +42,24 @@ export async function runAdventureUiHarness() {
   await setLanguage("en", { persist: false, document: null });
   const cases = [];
   for (const language of ["fr", "en"]) {
+    const r=await setup(), f=await frame(360,640,2);let forgotten=0;
+    await setLanguage(language,{persist:false,document:f.doc});
+    const receipt={operation_id:"a".repeat(32),prompt:"Original user request",state:"interrupted",kind:"adventure",schema_version:1};
+    const operations={cancel(){},recovery:async()=>receipt,forget:async id=>{assert(id===receipt.operation_id,"forget is bound to the interrupted identity");forgotten++;return true;},run(){throw Error("Recovery must never execute work");}};
+    const dialog=initializeAdventureDialog({root:f.root,launcher:f.doc.getElementById("plan-with-ai"),planner:r.planner,operations,
+      model:accounts(r.model),speech:{cancel(){}},elevation:{clear(){}},getContext:async()=>r.input.context,onChooseStart(){},onChooseEnd(){},onResult(){}});
+    try{
+      f.byId("text").value="A newer unsent draft";await dialog.open();await until(()=>!f.byId("restore-request").disabled&&!f.byId("restore-request").hidden,"recovery choice");
+      assert(f.byId("text").value==="A newer unsent draft"&&r.calls.length===0&&r.nativeCalls.length===0,"recovery cannot replace new text or rerun work");
+      assert(f.byId("progress").textContent.includes(language==="fr"?"Rien ne redémarre automatiquement":"Nothing restarts automatically"),"explicit retry warning localized");
+      f.byId("restore-request").click();assert(f.byId("text").value===receipt.prompt,"explicitly restore original description");
+      f.byId("forget-request").click();await until(()=>forgotten===1&&f.byId("restore-request").hidden,"forget receipt");
+      assert(!f.byId("text").value&&r.calls.length===0&&r.nativeCalls.length===0,"forget removes recovered text without inference or routing");
+      cases.push(`interrupted_request_explicit_restore_forget_${language}`);
+    }finally{dialog.clear();r.planner.invalidate();f.element.remove();}
+  }
+
+  for (const language of ["fr", "en"]) {
     const r = await setup(), f = await frame(); await setLanguage(language, { persist: false, document: f.doc });
     r.input.context.start = null; r.proposal.intent.start = { name: "Ambiguous local start", lat: null, lon: null };
     const getData = r.region.getRegionData;
@@ -266,6 +284,11 @@ export async function runAdventureUiHarness() {
       assert(!byId("generate").disabled, "one explicit Generate action available");
       assert(f.root.querySelector(".adventure-body").clientHeight >= 100, "Header and footer leave a usable scroll area at large text");
       assert(f.root.scrollWidth <= f.root.clientWidth + 1 && f.doc.documentElement.scrollWidth <= width + 1, `no horizontal overflow ${width}/${scale}`);
+      const body = f.root.querySelector(".adventure-body"), pinLabel = byId("include-pins").labels[0];
+      const labelBounds = pinLabel.getBoundingClientRect(), textBounds = pinLabel.querySelector("span").getBoundingClientRect();
+      assert(body.scrollWidth <= body.clientWidth + 1, `dialog content must not scroll sideways ${width}/${scale}`);
+      assert(textBounds.left >= labelBounds.left && textBounds.right <= labelBounds.right + 1,
+        `pin label text stays inside its control ${width}/${scale}`);
       byId("generate").click(); await until(() => !byId("review").hidden, "review text endpoints"); byId("confirm").click(); await until(() => output !== null && !f.root.open, "normal proposal-to-GPX UI");
       assert(r.calls.length === 2 && busy[0] && busy.at(-1) === false, "one bounded AI operation");
       const interesting = output.chosen.result.candidates.find(candidate => candidate.reached_stops.length > 0);

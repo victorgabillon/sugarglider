@@ -13,7 +13,7 @@ export function createAdventureController({ model, planner, confirmProposal = nu
     generation++;
     if (active) { active.abort.abort(); model.cancel(); planner.invalidate(); }
   }
-  function run({ prompt, modelId, context, research = false, structured = true, refine = true, contextPreparationMs = 0, responseLanguage = null }, signal) {
+  function run({ prompt, modelId, context, research = false, structured = true, refine = true, contextPreparationMs = 0, responseLanguage = null, operationId = null }, signal) {
     if (active) return Promise.reject(new AdventureIntentError("adventure_busy", "The previous adventure is still finishing."));
     if (typeof prompt !== "string" || prompt.trim().length < 3 || prompt.length > 8000
       || typeof modelId !== "string" || !modelId || !context?.reference) {
@@ -49,7 +49,7 @@ export function createAdventureController({ model, planner, confirmProposal = nu
         const encoded = JSON.stringify(payload);
         timings.input_preparation_ms += performance.now() - preparing;
         const response = await model.infer({ model: modelId, instructions,
-          input: encoded, research: doResearch, output_schema: structured ? schema : null }, abort.signal);
+          input: encoded, ...(operationId ? { operation_id: operationId } : {}), research: doResearch, output_schema: structured ? schema : null }, abort.signal);
         current();
         record.status = "completed"; record.usage = usage(response.usage);
         record.elapsed_ms = Number.isFinite(response.elapsed_ms) && response.elapsed_ms >= 0 ? response.elapsed_ms : null;

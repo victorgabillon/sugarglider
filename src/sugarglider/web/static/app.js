@@ -1,3 +1,4 @@
+import { calculationOperations } from "./calculation_operation.js";
 import { t, tr, getLanguage, initializeLocalization, onLanguageChange, setLocalizedText } from "./i18n.js";
 import { createSelectedRouteElevation } from "./route_elevation.js";
 import { initializeAdventureDialog } from "./adventure_dialog.js";
@@ -199,7 +200,7 @@ async function adventureContext({ includeMapPins = false, signal } = {}) {
   if (!localPlanner || regionPlanningError) throw new Error(regionFailureMessage(regionPlanningError ?? "regional_required"));
   // Snapshot only the editable manual pins, and only after explicit opt-in.
   // Displayed adventure requests, selected geometry and camera/GPS are never context.
-  const context = includeMapPins ? currentAdventureContext() : { suggested_profile: state.routingProfile };
+  const context = includeMapPins && !state.adventureDisplay ? currentAdventureContext() : { suggested_profile: state.routingProfile };
   if ((context.contextualPins?.length ?? 0) > 16 || (context.hardWaypoints?.length ?? 0) > 14) {
     throw new Error(t("This adventure can preserve up to 14 exact intermediate points. Review your required points first."));
   }
@@ -207,7 +208,7 @@ async function adventureContext({ includeMapPins = false, signal } = {}) {
     signal?.throwIfAborted();
     const row = selectCommittedRegion(rows, selectedRegionId), reference = await regionalRoutingReference(row.manifest);
     signal?.throwIfAborted();
-    return { ...context, reference };
+    return { ...context, reference, pinContextAvailable: !state.adventureDisplay };
   });
 }
 async function displayExactAdventure(output, selectedId, requestId) {
@@ -357,12 +358,18 @@ function initializeAdventure() {
       if (!adventurePlanning || state.request.id !== requestId) throw new DOMException(t("Adventure cancelled."), "AbortError");
       if (!manualAdventureSnapshot) manualAdventureSnapshot = pendingAdventureSnapshot;
       forgottenAdventureOutput = null;
+      byId("adventure-interruption-status").textContent = "";
       await displayExactAdventure(output, output.chosen.result.candidates[0].id, requestId);
       setLocalizedText(byId("request-status"), () => t("Your AI adventure is ready. Route calculations used the selected offline region."));
     },
     onChooseStart: () => { returnToManualPlan(); clearPointPlacement(); byId("set-hard-start").click(); adventureMapEndpoint = "start"; appShell?.show("map"); },
     onChooseEnd: () => { returnToManualPlan(); clearPointPlacement(); changeMapTopology("point_to_point", "near"); updateControlsFromOptions(); byId("set-hard-end").click(); adventureMapEndpoint = "end"; appShell?.show("map"); },
   });
+  void calculationOperations.recovery().then(receipt => {
+    if (receipt && !adventurePlanning && !state.adventureDisplay) {
+      setLocalizedText(byId("adventure-interruption-status"), () => t("An adventure was interrupted. Open Ask ChatGPT to review your original description and explicitly retry. Nothing restarts automatically."));
+    }
+  }).catch(() => {});
   window.addEventListener("pagehide", () => adventureDialog?.clear(), { once: true });
 }
 localGpxExporter.prepare();
@@ -2312,7 +2319,7 @@ async function generate() {
   appShell?.reveal("#generation-state");
   try {
     const result = localPlanner
-      ? await localPlanner.generate(request, state.abortController.signal)
+      ? await calculationOperations.run({ kind: "offline" }, signal => localPlanner.generate(request, signal), state.abortController.signal)
       : await generatePlan(request, state.abortController.signal);
     if (state.request.id !== id) return;
     state.resultsInvalidated = false;

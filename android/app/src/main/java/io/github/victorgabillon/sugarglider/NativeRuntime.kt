@@ -154,6 +154,10 @@ internal class NativeStatusRepository {
 }
 
 class SugargliderApplication : Application() {
+    internal val calculationJournal by lazy { CalculationJournal(this) }
+    internal val calculations by lazy { CalculationOperation { calculationJournal.save(it) } }
+    internal val chatGpt by lazy { ChatGptConnection(AndroidChatGptAccounts(this)) }
+    internal val chatGptExecutor = Executors.newSingleThreadExecutor()
     internal lateinit var secureStore: AndroidSecureStateStore
         private set
     internal val statusRepository = NativeStatusRepository()

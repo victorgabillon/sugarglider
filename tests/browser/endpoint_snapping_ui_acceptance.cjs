@@ -13,7 +13,8 @@ async function run(browser,touch){
    globalThis.sugargliderNative={onmessage:null,postMessage(payload){
     const input=JSON.parse(payload);snapNativeCalls.push(input);
     const deliver=reply=>queueMicrotask(()=>this.onmessage?.({data:JSON.stringify({schema_version:1,request_id:input.request_id,...reply})}));
-    if(input.type==='set_ui_language')deliver({type:'set_ui_language_result',language:input.language,selected:true});
+    if(input.type.startsWith('calculation_'))deliver({type:'calculation_result',operation_id:input.operation_id??null,state:input.type==='calculation_begin'?'running':input.state??'idle',recovery:null});
+    else if(input.type==='set_ui_language')deliver({type:'set_ui_language_result',language:input.language,selected:true});
     else if(input.type==='hello')deliver({type:'hello_result',outing_slug:null,participant_id:null,active:false,state:'stopped',last_published_at:null,pending_sample:false,stop_warning:null});
     else if(input.type==='get_local_route_capabilities')deliver({type:'local_route_capabilities_result',enabled:true,engine:'valhalla-mobile',engine_version:'synthetic',installed_pack_count:1,installed_pack_ids:[input.regional_reference.pack_id],supported_profile_ids:profiles,pack_capabilities:[{pack_id:input.regional_reference.pack_id,access_modes:['foot','bicycle']}]});
     else if(input.type==='local_route'){
