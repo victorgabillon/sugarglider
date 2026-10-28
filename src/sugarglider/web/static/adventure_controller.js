@@ -1,3 +1,4 @@
+import { recordRegionalEvent } from "./regional_performance.js";
 import { ADVENTURE_INSTRUCTIONS, ADVENTURE_SCHEMA, ADVENTURE_STORY_SCHEMA, parseAdventureStories, parseAdventureProposal, adventureWishCapabilities } from "./adventure_proposal.js";
 import { groundAdventurePlaces, adventureStoryEvidence, resolveAdventureEndpoint, adventureEndpointFailure, ADVENTURE_CONTEXT_PLACE_LIMIT } from "./adventure_grounding.js";
 import { AdventureIntentError, buildAdventureIntent, requestedAdventureAlternatives } from "./adventure_intent.js";
@@ -48,6 +49,7 @@ export function createAdventureController({ model, planner, confirmProposal = nu
           : `${localizedInstructions}\nReturn one JSON object satisfying this schema. Local validation remains mandatory:\n${JSON.stringify(schema)}`;
         const encoded = JSON.stringify(payload);
         timings.input_preparation_ms += performance.now() - preparing;
+        if (phase !== "initial") recordRegionalEvent("refinement_model_started");
         const response = await model.infer({ model: modelId, instructions,
           input: encoded, ...(operationId ? { operation_id: operationId } : {}), research: doResearch, output_schema: structured ? schema : null }, abort.signal);
         current();

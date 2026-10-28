@@ -1,6 +1,7 @@
 import { createLocalRegionStore, loadLocalRegionData } from "./local_region_store.js";
 import { createVersionedRegionComponents } from "./region_components.js";
 import { createLocalPlacesSession } from "./local_region_data.js";
+import { beginRegionalProfile, finishRegionalProfile, regionalClock } from "./regional_performance.js";
 
 const store = createLocalRegionStore();
 let data = null, placesData = null;
@@ -11,8 +12,10 @@ let queue = Promise.resolve();
 self.onmessage = ({ data: message }) => {
   if (message.type === "cancel_install") { installGeneration += 1; pendingInstall?.abort(); return; }
   const ownedInstallGeneration = installGeneration;
+  const received = regionalClock();
   // Parsing/indexing/analysis is serialized in a worker and never blocks the map.
   queue = queue.then(async () => {
+    beginRegionalProfile(message.profile === true, received);
     try {
       let result;
       switch (message.type) {
@@ -92,11 +95,13 @@ self.onmessage = ({ data: message }) => {
           break;
         default: throw new Error("invalid_regional_operation");
       }
-      self.postMessage({ id: message.id, result });
+      const profile = finishRegionalProfile();
+      self.postMessage({ id: message.id, result, ...(profile ? { profile } : {}) });
     } catch (error) {
       // Never return URLs, local paths, coordinates or arbitrary exception text.
       const code = error.name === "AbortError" ? "regional_install_cancelled" : error.code ?? "regional_data_unavailable";
-      self.postMessage({ id: message.id, error: code });
+      const profile = finishRegionalProfile();
+      self.postMessage({ id: message.id, error: code, ...(profile ? { profile } : {}) });
     }
   });
 };

@@ -2,6 +2,7 @@
 // One active request owns search, native drain and canonical publication under
 // a committed-region lease. Identical requests join it; failure remains local
 // and visible rather than silently changing mode or calling the server planner.
+import { recordRegionalEvent } from "./regional_performance.js";
 import { endpointSnapPolicy } from "./endpoint_snapping.js";
 import { createLocalAutoTourEngine, validateLocalAutoTourRequest } from "./local_auto_tour.js";
 import { createLocalWaypointRouteEngine, validateLocalWaypointRouteRequest } from "./local_waypoint_route.js";
@@ -140,7 +141,11 @@ export function createLocalPlanner({ bridge, getRegionData = async () => null, w
         } } : null;
         const context = createLocalPlanningContext({ profile, route: async input => {
           const started = performance.now();
-          try { return await route(input); } finally { timings.native_routing_ms += performance.now() - started; }
+          try { return await route(input); } finally {
+            const elapsed = performance.now() - started;
+            timings.native_routing_ms += elapsed;
+            recordRegionalEvent("native_route_complete", elapsed);
+          }
         }, totalLimit: 16,
           phaseLimits: { initial: 8, refinement: 8 } });
         let rounds = 0, fixedIntent = null, roundActive = null, sessionOpen = true;

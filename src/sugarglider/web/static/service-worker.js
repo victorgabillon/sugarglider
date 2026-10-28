@@ -6,7 +6,7 @@ import {
 } from "/static/service_worker_policy.js";
 
 const SHELL_CACHE_PREFIX = "sugarglider-shell-";
-const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v128`;
+const SHELL_CACHE = `${SHELL_CACHE_PREFIX}v129`;
 const ROOT_SHELL = "/";
 const shellCache = createCurrentCacheAccess(caches, SHELL_CACHE);
 
@@ -131,6 +131,7 @@ const CORE_ASSETS = Object.freeze([
   "/static/vendor/noble-hashes-2.4.0/utils.js",
   "/static/local_region_data.js",
   "/static/nature_partitions.js",
+  "/static/regional_performance.js",
   "/static/local_region_store.js",
   "/static/local_region_worker.js",
   "/static/local_region_client.js",

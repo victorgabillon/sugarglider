@@ -47,6 +47,11 @@ const server = http.createServer((request, response) => {
     if (sourceRelease.retained || JSON.stringify(sourceRelease.analysis) !== JSON.stringify(analysis)) throw Error('Active analysis retained source geometry or changed after release');
     console.log(JSON.stringify({ source_geometry_released_while_analysis_active: true }));
     console.log(JSON.stringify({ nature_index_released: true, name_search_unchanged: true, name: 'offline_nature_performance', cases: JSON.parse(result.text), status: 'passed' }));
+    await page.goto(`${base}/tests/browser/nature_partitions_harness.html`);
+    await page.waitForFunction(() => ['passed', 'failed'].includes(document.querySelector('pre')?.dataset.status), { timeout: 30_000 });
+    const partitions = await page.locator('pre').evaluate(node => ({ status: node.dataset.status, text: node.textContent }));
+    if (partitions.status !== 'passed' || forbidden.length) throw Error(JSON.stringify({ partitions, forbidden }));
+    console.log(JSON.stringify({ name: 'partitioned_nature_cache', cases: JSON.parse(partitions.text), status: 'passed' }));
   } finally {
     await browser?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
   }

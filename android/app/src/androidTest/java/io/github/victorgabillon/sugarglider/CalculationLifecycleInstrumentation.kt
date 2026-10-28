@@ -31,12 +31,21 @@ class CalculationLifecycleInstrumentation : Instrumentation() {
     override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); this.arguments = arguments ?: Bundle(); start() }
     override fun onStart() {
         val result = Bundle()
+        val profileNature = arguments.getString("nature_profile") == "true"
         var exitCode = 1
         val calls = AtomicInteger()
         var phase = "fixture"
         fun mark(name: String) {
             phase = name
-            sendStatus(0, Bundle().apply { putString("phase", name); putInt("fake_native_model_calls", calls.get()); putLong("elapsed_realtime_ms", SystemClock.elapsedRealtime()) })
+            sendStatus(0, Bundle().apply {
+                putString("phase", name); putInt("fake_native_model_calls", calls.get())
+                putLong("elapsed_realtime_ms", SystemClock.elapsedRealtime())
+                if (profileNature) {
+                    putLong("wall_clock_ms", System.currentTimeMillis())
+                    putLong("main_process_cpu_ms", android.os.Process.getElapsedCpuTime())
+                    putLong("main_process_pss_kib", android.os.Debug.getPss())
+                }
+            })
         }
         var restore: (() -> Unit)? = null
         var page: WebView? = null
@@ -53,7 +62,7 @@ class CalculationLifecycleInstrumentation : Instrumentation() {
             require(!fixture.getBoolean("live_inference_allowed"))
             require(fixture.getBoolean("confirm_proposed_endpoints"))
             val transition = arguments.getString("transition", "foreground")
-            require(transition in setOf("foreground", "home_60", "home_180", "lock_180", "cancel_notification", "cancel_ui", "sign_out", "network_failure", "recreate"))
+            require(transition in setOf("foreground", "home_60", "home_180", "app_switch_180", "lock_180", "cancel_notification", "cancel_ui", "sign_out", "network_failure", "recreate"))
             val delay = fixture.getLong("model_delay_ms").also { require(it in 0..90_000) }
             val proposals = fixture.getJSONArray("proposals").also { require(it.length() == 2) }
             val prompt = fixture.getString("prompt").also { require(it.length in 3..8000) }
@@ -69,6 +78,10 @@ class CalculationLifecycleInstrumentation : Instrumentation() {
                             putString("phase", "fake_model_started")
                             putInt("fake_native_model_calls", index + 1)
                             putLong("elapsed_realtime_ms", SystemClock.elapsedRealtime())
+                            if (profileNature) {
+                                putLong("wall_clock_ms", System.currentTimeMillis())
+                                putLong("main_process_cpu_ms", android.os.Process.getElapsedCpuTime())
+                            }
                         })
                         val completion = JSONObject().put("type", "response.completed").put("response", JSONObject().put("status", "completed")
                             .put("output", JSONArray().put(JSONObject().put("type", "message").put("role", "assistant").put("status", "completed")
@@ -100,6 +113,14 @@ class CalculationLifecycleInstrumentation : Instrumentation() {
             runOnMainSync { web = webField.get(activity) as WebView }; page = web
             mark("regional_ready")
             waitUntil(120_000) { evaluate(web, "document.querySelector('#regional-status')?.dataset.state === 'regional_ready'") == "true" }
+            if (profileNature) {
+                evaluate(web, "import('https://appassets.androidplatform.net/static/regional_performance.js').then(m=>{m.enableRegionalProfiling();globalThis.__natureProfilingReady=true;})")
+                waitUntil(10_000) { evaluate(web, "globalThis.__natureProfilingReady===true") == "true" }
+                runOnMainSync {
+                    result.putInt("renderer_requested_priority", web.rendererRequestedPriority)
+                    result.putBoolean("renderer_waived_when_hidden", web.rendererPriorityWaivedWhenNotVisible)
+                }
+            }
             // A test cannot silently grant notification permission or install data.
             check(targetContext.getSystemService(android.app.NotificationManager::class.java).areNotificationsEnabled())
             mark("backup")
@@ -152,8 +173,11 @@ class CalculationLifecycleInstrumentation : Instrumentation() {
             if (transition?.startsWith("home_") == true) runOnMainSync {
                 activity.startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
+            if (transition == "app_switch_180") runOnMainSync {
+                activity.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS))
+            }
             if (transition == "lock_180") shell("input keyevent KEYCODE_SLEEP")
-            val backgroundDuration = when (transition) { "home_60" -> 60_000L; "home_180", "lock_180" -> 180_000L; else -> 0L }
+            val backgroundDuration = when (transition) { "home_60" -> 60_000L; "home_180", "app_switch_180", "lock_180" -> 180_000L; else -> 0L }
             // No WebView evaluations while hidden: they could accidentally wake
             // its renderer and invalidate the background-continuation evidence.
             while (SystemClock.elapsedRealtime() - began < backgroundDuration) SystemClock.sleep(250)
@@ -207,6 +231,11 @@ class CalculationLifecycleInstrumentation : Instrumentation() {
             result.putInt("fake_native_model_calls", calls.get())
             result.putString("transition", transition)
             result.putBoolean("live_inference", false)
+            if (profileNature && transition != "recreate") {
+                evaluate(web, "import('https://appassets.androidplatform.net/static/regional_performance.js').then(m=>{globalThis.__natureProfileResult=JSON.stringify(m.regionalPerformanceSnapshot());})")
+                waitUntil(10_000) { evaluate(web, "typeof globalThis.__natureProfileResult==='string'") == "true" }
+                result.putString("nature_profile", evaluate(web, "globalThis.__natureProfileResult"))
+            }
 
             exitCode = 0
         } catch (error: Exception) {
@@ -220,6 +249,7 @@ class CalculationLifecycleInstrumentation : Instrumentation() {
         } finally {
             runCatching { ownedApp?.let { app -> runOnMainSync { app.calculations.activeId?.let { app.calculations.cancel(it) } } } }
             page?.let { web -> runCatching {
+                if (profileNature) evaluate(web, "import('https://appassets.androidplatform.net/static/regional_performance.js').then(m=>m.enableRegionalProfiling(false))")
                 evaluate(web, "globalThis.__calculationReview?.disconnect();document.querySelector('#adventure-close')?.click();document.querySelector('#adventure-return-manual')?.click();(async()=>{const {pwaRuntime}=await import('https://appassets.androidplatform.net/static/pwa_runtime.js');const repository=(await pwaRuntime()).adventures;if(globalThis.__calculationSavedBefore)await repository.save(__calculationSavedBefore.output,__calculationSavedBefore.selected_id);else if(globalThis.__calculationBackupReady)await repository.clear();if(typeof globalThis.__calculationEditorBefore==='string')document.querySelector('#adventure-text').value=__calculationEditorBefore;globalThis.__calculationCleanupReady=true;})()")
                 waitUntil(10_000) { evaluate(web, "globalThis.__calculationCleanupReady===true") == "true" }
             }.onFailure {
