@@ -128,6 +128,7 @@ regional_integrity.js
 regional_manifest.js
 regional_map_store.js
 regional_native.js
+regional_performance.js
 regional_planning.js
 regional_routing_reference.js
 route_dock.js

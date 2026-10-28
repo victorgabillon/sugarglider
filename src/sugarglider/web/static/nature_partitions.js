@@ -1,9 +1,12 @@
 import { RegionalDataError, freezeData, requireData, requireFields, verifyRegionalBytes, validBounds } from "./regional_manifest.js";
 import { createLocalRegionData, decodeRegionalIndex, prepareLocalNaturePartition,
   createNatureIntervalAccumulator, createWoodlandAccumulator, unavailableNature } from "./local_region_data.js";
+import { regionalCount, regionalMeasure, regionalMeasureAsync } from "./regional_performance.js";
 
 export const NATURE_PARTITION_MAX_BYTES = 16 * 1024 * 1024;
 export const NATURE_PARTITION_MAX_POSITIONS = 500_000;
+export const NATURE_CACHE_MAX_PARTITIONS = 4;
+export const NATURE_CACHE_MAX_POSITIONS = 1_500_000;
 export const isPartitionedNature = manifest => manifest.components.nature.files[0].format === "nature-partitions-v1-json";
 
 export async function decodeNatureDirectory(bytes, manifest) {
@@ -35,52 +38,90 @@ export async function decodeNatureDirectory(bytes, manifest) {
 
 export async function decodeNaturePartition(bytes, descriptor, part, directory, manifest) {
   const document = await decodeRegionalIndex(bytes, descriptor, NATURE_PARTITION_MAX_BYTES);
-  requireData(document?.metadata?.feature_count === part.feature_count
-    && document.metadata.reference_latitude === directory.reference_latitude
-    && Array.isArray(document.features));
-  let positions = 0;
-  const bounds = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const feature of document.features) {
-    const geometry = feature.geometry;
-    requireData(geometry && ["Polygon", "MultiPolygon"].includes(geometry.type) && Array.isArray(geometry.coordinates));
-    const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
-    for (const polygon of polygons) {
-      requireData(Array.isArray(polygon));
-      for (const ring of polygon) {
-        requireData(Array.isArray(ring));
-        positions += ring.length;
-        requireData(positions <= NATURE_PARTITION_MAX_POSITIONS, "regional_index_too_large");
-        for (const point of ring) {
-          requireData(Array.isArray(point) && point.length === 2 && point.every(Number.isFinite));
-          bounds[0] = Math.min(bounds[0], point[0]); bounds[1] = Math.min(bounds[1], point[1]);
-          bounds[2] = Math.max(bounds[2], point[0]); bounds[3] = Math.max(bounds[3], point[1]);
+  regionalMeasure("partition_validation", () => {
+    requireData(document?.metadata?.feature_count === part.feature_count
+      && document.metadata.reference_latitude === directory.reference_latitude
+      && Array.isArray(document.features));
+    let positions = 0;
+    const bounds = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const feature of document.features) {
+      const geometry = feature.geometry;
+      requireData(geometry && ["Polygon", "MultiPolygon"].includes(geometry.type) && Array.isArray(geometry.coordinates));
+      const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+      for (const polygon of polygons) {
+        requireData(Array.isArray(polygon));
+        for (const ring of polygon) {
+          requireData(Array.isArray(ring));
+          positions += ring.length;
+          requireData(positions <= NATURE_PARTITION_MAX_POSITIONS, "regional_index_too_large");
+          for (const point of ring) {
+            requireData(Array.isArray(point) && point.length === 2 && point.every(Number.isFinite));
+            bounds[0] = Math.min(bounds[0], point[0]); bounds[1] = Math.min(bounds[1], point[1]);
+            bounds[2] = Math.max(bounds[2], point[0]); bounds[3] = Math.max(bounds[3], point[1]);
+          }
         }
       }
     }
-  }
-  requireData(positions === part.position_count && bounds.every((value, index) => value === part.bounds[index]));
+    requireData(positions === part.position_count && bounds.every((value, index) => value === part.bounds[index]));
+  });
   // This shared preparation validates source identity, sorted feature IDs,
   // classifications, rings, holes and polygon topology under the existing caps.
   const tree = prepareLocalNaturePartition(manifest, document);
   return { tree, featureIds: document.features.map(feature => feature.feature_id) };
 }
 
-export function createPartitionedRegionData(manifest, pois, directory, readPartition) {
+export function createPartitionedRegionData(manifest, pois, directory, readPartition, {
+  cachePartitions = NATURE_CACHE_MAX_PARTITIONS, cachePositions = NATURE_CACHE_MAX_POSITIONS,
+} = {}) {
+  requireData(Number.isSafeInteger(cachePartitions) && cachePartitions >= 1 && cachePartitions <= NATURE_CACHE_MAX_PARTITIONS
+    && Number.isSafeInteger(cachePositions) && cachePositions > 0
+    && cachePositions >= Math.max(...directory.partitions.map(part => part.position_count))
+    && cachePositions <= NATURE_CACHE_MAX_POSITIONS);
+  // Session-owned immutable identity; neither an updated descriptor nor a
+  // caller-mutated pruning directory may reuse an older prepared index.
+  manifest = freezeData(structuredClone(manifest));
+  directory = freezeData(structuredClone(directory));
   const base = createLocalRegionData(manifest, { pois, natureInfo: directory });
-  let cached = null;
-  async function visit(bounds, accumulator) {
+  const cache = new Map();
+  let positions = 0, queue = Promise.resolve();
+  function visit(bounds, accumulator) {
+    const result = queue.then(() => visitSerial(bounds, accumulator));
+    queue = result.catch(() => {});
+    return result;
+  }
+  async function visitSerial(bounds, accumulator) {
     for (let index = 0; index < directory.partitions.length; index++) {
       const part = directory.partitions[index];
       if (!overlaps(bounds, part.bounds)) continue;
       const descriptor = manifest.components.nature.files[index + 1];
-      if (cached?.path !== part.path) {
-        cached = null;
-        const prepared = await decodeNaturePartition(await readPartition(descriptor), descriptor, part, directory, manifest);
-        cached = { path: part.path, tree: prepared.tree };
+      regionalCount("partition_reads");
+      const bytes = await regionalMeasureAsync("partition_read", () => readPartition(descriptor));
+      let prepared = cache.get(part.path);
+      if (prepared) {
+        // A cache hit never hides replacement, invalidation or corrupted OPFS
+        // bytes. Only exact bytes previously fully validated may reuse a tree.
+        await regionalMeasureAsync("hash_verification", () => verifyRegionalBytes(bytes, descriptor));
+        cache.delete(part.path);
+        cache.set(part.path, prepared);
+        regionalCount("cache_hits");
+      } else {
+        // Evict before preparation, bounding old + incoming expanded geometry.
+        while (cache.size >= cachePartitions || positions + part.position_count > cachePositions) {
+          const oldest = cache.keys().next().value;
+          positions -= cache.get(oldest).positions;
+          cache.delete(oldest);
+        }
+        const decoded = await decodeNaturePartition(bytes, descriptor, part, directory, manifest);
+        regionalCount("prepared_partitions");
+        prepared = { tree: decoded.tree, positions: part.position_count };
+        cache.set(part.path, prepared);
+        positions += part.position_count;
       }
-      accumulator.add(cached.tree);
+      regionalCount("resident_partitions", cache.size, true);
+      regionalCount("resident_positions", positions, true);
+      regionalMeasure("nature_intersection", () => accumulator.add(prepared.tree));
     }
-    return accumulator.finish();
+    return regionalMeasure("nature_scoring", () => accumulator.finish());
   }
   async function analyzeNature(candidate) {
     if (candidate.pack_id !== base.identity.routing_pack_id) return unavailableNature(candidate.distance_m, "nature_routing_pack_mismatch");

@@ -1,9 +1,12 @@
 import { createLocalRegionData } from "../../src/sugarglider/web/static/local_region_data.js";
 import { createLocalRegionStore, loadLocalRegionData } from "../../src/sugarglider/web/static/local_region_store.js";
+import { createLocalRegionClient } from "../../src/sugarglider/web/static/local_region_client.js";
 import { createPartitionedRegionData, decodeNatureDirectory, decodeNaturePartition } from "../../src/sugarglider/web/static/nature_partitions.js";
 import { parseRegionalManifest, regionalBuildIdentity, sha256Bytes } from "../../src/sugarglider/web/static/regional_manifest.js";
 import { selectCommittedRegion } from "../../src/sugarglider/web/static/regional_planning.js";
 import { NATURE_PERFORMANCE_CASES, naturePerformanceFixture } from "./nature_performance_fixtures.js";
+import { beginRegionalProfile, finishRegionalProfile, enableRegionalProfiling,
+  recordWorkerProfile, regionalPerformanceSnapshot } from "../../src/sugarglider/web/static/regional_performance.js";
 
 const assert = (value, message) => { if (!value) throw Error(message); };
 const metrics = ["available", "method", "woodland", "open_natural", "agriculture", "water_crossing", "urban",
@@ -39,6 +42,53 @@ export async function runNaturePartitionsHarness() {
   const f = naturePerformanceFixture(base, "priority_overlays"), artifact = await partitionFixture(f);
   const manifest = await parseRegionalManifest(JSON.stringify(artifact.manifest));
   const directory = await decodeNatureDirectory(artifact.files.get("nature/partitions.json"), manifest);
+  // One immutable session reuses preparation, but never trusts a cached tree
+  // after its backing bytes change. Every failure discards the entire score.
+  const one = naturePerformanceFixture(base, "holes"), oneArtifact = await partitionFixture(one);
+  const oneDirectory = await decodeNatureDirectory(oneArtifact.files.get("nature/partitions.json"), oneArtifact.manifest);
+  const oneData = createPartitionedRegionData(oneArtifact.manifest, null, oneDirectory,
+    async descriptor => oneArtifact.files.get(descriptor.path));
+  beginRegionalProfile(true);
+  const firstAnalysis = await oneData.analyzeNature(one.route), cold = finishRegionalProfile();
+  beginRegionalProfile(true);
+  equal(await oneData.analyzeNature(one.route), firstAnalysis, "cached preparation preserves every metric and operation count");
+  const warm = finishRegionalProfile();
+  assert(cold.counters.prepared_partitions === 1 && warm.counters.cache_hits === 1
+    && !warm.counters.prepared_partitions && warm.stages.hash_verification.calls === 1,
+    "warm analysis skips preparation but checks exact immutable bytes");
+  const originalByte = oneArtifact.files.get(oneDirectory.partitions[0].path)[10];
+  oneArtifact.files.get(oneDirectory.partitions[0].path)[10] ^= 1;
+  const cachedCorruption = await oneData.analyzeNature(one.route);
+  assert(!cachedCorruption.available && cachedCorruption.nature_score === null
+    && cachedCorruption.unknown_landcover.distance_m === one.route.distance_m, "corruption after a cache hit cannot return a stale score");
+  oneArtifact.files.get(oneDirectory.partitions[0].path)[10] = originalByte;
+  equal(await oneData.analyzeNature(one.route), firstAnalysis, "failed analysis cannot poison the following operation");
+  scenarios.push("cached_partition_reverified_and_exact_after_failure");
+
+  for (const cachePositions of [1_500_000, Math.max(...directory.partitions.map(part => part.position_count))]) {
+    const bounded = createPartitionedRegionData(manifest, null, directory,
+      async descriptor => artifact.files.get(descriptor.path), { cachePositions });
+    beginRegionalProfile(true);
+    const analyses = await Promise.all([bounded.analyzeNature(f.route), bounded.analyzeNature(f.route)]);
+    const profile = finishRegionalProfile();
+    equal(analyses[0], analyses[1], "concurrent callers retain deterministic interval arithmetic");
+    assert(profile.counters.resident_partitions <= 4 && profile.counters.resident_positions <= cachePositions,
+      "both count and geometry-position limits remain bounded");
+    equal(analyses[0], await createPartitionedRegionData(manifest, null, directory,
+      async descriptor => artifact.files.get(descriptor.path), { cachePartitions: 1 }).analyzeNature(f.route),
+    "bounded LRU eviction never changes the global operation budget or result");
+  }
+  scenarios.push("bounded_cache_eviction_and_concurrent_result_equivalence");
+  enableRegionalProfiling();
+  recordWorkerProfile({ ...warm, user_description: "must not escape", token: "secret", stages: {
+    ...warm.stages, coordinates: { calls: 1, wall_ms: 1 } } }, warm.received_ms);
+  for (let index = 0; index < 140; index++) recordWorkerProfile(warm, warm.received_ms);
+  const snapshot = regionalPerformanceSnapshot();
+  assert(snapshot.records.length === 128 && snapshot.dropped === 13
+    && !JSON.stringify(snapshot).includes("secret") && !JSON.stringify(snapshot).includes("coordinates")
+    && !JSON.stringify(snapshot).includes("must not escape"), "profiling has fixed fields and bounded retention");
+  enableRegionalProfiling(false);
+  scenarios.push("performance_evidence_is_bounded_and_has_no_private_payloads");
   const corrupted = new Uint8Array(artifact.files.get(directory.partitions[0].path)); corrupted[10] ^= 1;
   const data = createPartitionedRegionData(manifest, null, directory, async descriptor => descriptor.path === directory.partitions[0].path ? corrupted : artifact.files.get(descriptor.path));
   const unavailable = await data.analyzeNature(f.route);
@@ -72,6 +122,18 @@ export async function runNaturePartitionsHarness() {
   await store.install(`${location.origin}/fixture/manifest.json`);
   const opened = await store.open(manifest.region_id), installed = await loadLocalRegionData(opened);
   assert((await installed.analyzeNature(f.route)).available, "real OPFS partitioned install and query");
+  enableRegionalProfiling();
+  const client = createLocalRegionClient();
+  try {
+    const workerSession = await client.load(manifest.region_id);
+    equal(await workerSession.analyzeNature(f.route), await installed.analyzeNature(f.route),
+      "production worker/client profiling preserves canonical Nature output");
+    const captured = regionalPerformanceSnapshot().records;
+    assert(captured.some(record => record.stages?.nature_intersection?.calls > 0
+      && Number.isFinite(record.queue_wait_ms) && Number.isFinite(record.delivery_ms)),
+    "production transport captures worker queue, kernel and delivery timing");
+  } finally { client.close(); enableRegionalProfiling(false); }
+  scenarios.push("real_worker_profiling_and_opfs_result_equivalence");
   const next = structuredClone(manifest); next.display_name += " next"; next.build_id = await regionalBuildIdentity(next);
   const failing = createLocalRegionStore({ locks, pageLocation: location, fetchResource: async url => {
     const path = new URL(url).pathname.replace("/fixture/", "");

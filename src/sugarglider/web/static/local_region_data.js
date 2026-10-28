@@ -3,6 +3,7 @@ import {
   containsPosition, freezeData, requireData, requireFields, verifyRegionalBytes,
 } from "./regional_manifest.js";
 import { validateLocationQuery, normalizeLocationText, LOCATION_RESULT_LIMIT } from "./location_search.js";
+import { regionalMeasure, regionalMeasureAsync } from "./regional_performance.js";
 
 const EARTH_RADIUS_M = 6_371_008.8;
 const MAX_FEATURES = 250_000;
@@ -27,21 +28,24 @@ const PROVENANCE = Object.freeze(["feature_geometry", "way_boundary_node", "rela
 
 export async function decodeRegionalIndex(bytes, descriptor, maximum = REGIONAL_INDEX_MAX_EXPANDED_BYTES) {
   requireData(Number.isSafeInteger(maximum) && maximum > 0 && maximum <= REGIONAL_INDEX_MAX_EXPANDED_BYTES);
-  await verifyRegionalBytes(bytes, descriptor);
+  await regionalMeasureAsync("hash_verification", () => verifyRegionalBytes(bytes, descriptor));
   let reader;
   try {
     reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip")).getReader();
     const decoder = new TextDecoder("utf-8", { fatal: true });
     let size = 0;
     let text = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      requireData(size <= maximum, "regional_index_too_large");
-      text += decoder.decode(value, { stream: true });
-    }
-    return JSON.parse(text + decoder.decode());
+    await regionalMeasureAsync("decompression", async () => {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        requireData(size <= maximum, "regional_index_too_large");
+        text += decoder.decode(value, { stream: true });
+      }
+      text += decoder.decode();
+    });
+    return regionalMeasure("json_parse", () => JSON.parse(text));
   } catch (error) {
     await reader?.cancel().catch(() => {});
     if (error instanceof RegionalDataError) throw error;
@@ -654,15 +658,14 @@ function collectNatureIntervals(a, b, tree, work) {
   return Object.fromEntries(Object.entries(intervals).map(([key, spans]) => [key, unionIntervals(spans)]));
 }
 
-// A partition owns one projected index. Callers release it before reading the
-// next file; no full-region projected or geographic polygon array is retained.
+// A prepared partition owns only projected geometry. The caller's bounded
+// session cache owns its lifetime; no geographic source document is retained.
 export function prepareLocalNaturePartition(manifest, document) {
-  validateNatureDocument(document, manifest);
-  const items = [];
-  for (const item of projectedNatureItems(document, regionalProjection(manifest, document))) {
-    items.push({ ...item, polygons: item.polygons.map(prepareNaturePolygon) });
-  }
-  return spatialTree(items);
+  regionalMeasure("partition_validation", () => validateNatureDocument(document, manifest));
+  const items = regionalMeasure("topology_projection", () =>
+    [...projectedNatureItems(document, regionalProjection(manifest, document))]);
+  return regionalMeasure("spatial_index", () => spatialTree(items.map(item =>
+    ({ ...item, polygons: item.polygons.map(prepareNaturePolygon) }))));
 }
 
 export function createNatureIntervalAccumulator(manifest, candidate, identity, referenceLatitude) {
