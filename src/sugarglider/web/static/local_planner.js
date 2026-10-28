@@ -16,7 +16,7 @@ export class LocalPlannerError extends Error {
     super({
       local_routing_unavailable: "On-device routing is unavailable in this app build.",
       routing_pack_unavailable: "Download a supported offline region before planning a route.",
-      no_covering_routing_pack: "The selected offline region does not cover all requested points. Choose another installed region or move the points.",
+      no_covering_routing_pack: "No single installed routing region covers all requested points. Map coverage is separate. Install suitable complete routing coverage or review the points.",
       regional_required: "Download an offline region before planning a route.",
       regional_selection_required: "Choose an installed offline region before planning a route.",
       regional_install_incomplete: "This region is not fully installed. Open Offline regions to finish or remove the incomplete installation.",
@@ -99,12 +99,12 @@ export function createLocalPlanner({ bridge, getRegionData = async () => null, w
         requireCurrent(ownedGeneration);
         return result;
       } finally { if (requestRegion === region) requestRegion = null; }
-    });
+    }, request);
   }
   // A complete adventure owns one region lease, cache and 16-call budget across
   // initial search and at most one revision. The caller may research/ground places
   // inside this lease; it never receives the raw native routing adapter.
-  function planAdventure(profile, run, signal) {
+  function planAdventure(profile, run, signal, coverageRequest = null) {
     if (signal?.aborted) return Promise.reject(new DOMException("Planning cancelled.", "AbortError"));
     if (active) return Promise.reject(new LocalPlannerError("local_generation_busy"));
     if (!Object.hasOwn(PUBLIC_PROFILE_METADATA, profile) || typeof run !== "function") {
@@ -185,7 +185,7 @@ export function createLocalPlanner({ bridge, getRegionData = async () => null, w
           natureResults.clear();
         }
       } finally { if (requestRegion === region) requestRegion = null; }
-    }).catch(error => { throw error instanceof RegionalDataError ? new LocalPlannerError(error.code) : error; })
+    }, coverageRequest).catch(error => { throw error instanceof RegionalDataError ? new LocalPlannerError(error.code) : error; })
       .finally(() => {
         signal?.removeEventListener("abort", abort);
         if (active?.generation === ownedGeneration) active = null;

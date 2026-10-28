@@ -243,7 +243,7 @@ export function createAdventureController({ model, planner, confirmProposal = nu
         timings.total_ms = performance.now() - started + timings.context_preparation_ms;
         return deepFreeze({ timings, selected_round: rounds.indexOf(chosen), rounds, chosen, refinement_improved: improved,
           refinement_error: refinementError, model_calls: calls, routing_diagnostics: session.diagnostics() });
-      }, abort.signal);
+      }, abort.signal, { start: input.start, end: input.end, waypoints: input.hardWaypoints });
       current();
       return output;
     })().finally(() => { signal?.removeEventListener("abort", abortFromCaller); if (active?.generation === owned) active = null; });

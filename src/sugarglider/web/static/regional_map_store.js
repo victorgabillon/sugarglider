@@ -32,7 +32,6 @@ export function createRegionalMapStore({ versions, selectedRegionId,
   // Planning already owns the version lease. Share the map runtime's opened
   // component without acquiring another lease or maintaining a verification table.
   async function verifyMap(manifest, directory) {
-    requireData(manifest.region_id === selectedRegionId(), "regional_version_changed");
     await openSelected({ manifest }, directory);
     return true;
   }

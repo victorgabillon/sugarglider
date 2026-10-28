@@ -17,6 +17,11 @@ def main() -> int:
     parser.add_argument("--pbf", type=Path)
     parser.add_argument("--source-url")
     parser.add_argument("--elevation-sources", type=Path)
+    parser.add_argument(
+        "--partition-nature",
+        action="store_true",
+        help="Keep one routing graph and build bounded lossless Nature partitions",
+    )
     values = parser.parse_args()
     root = Path(__file__).resolve().parents[3]
     try:
@@ -35,6 +40,7 @@ def main() -> int:
                 values.pbf,
                 source_url=values.source_url,
                 elevation_sources=values.elevation_sources,
+                partition_nature=values.partition_nature,
             )
         else:
             directory = contained_path(root, f"data/offline-regions/{spec.region_id}")

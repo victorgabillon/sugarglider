@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Continuous-region bounded Nature partitions</title>
+<pre id="result">running</pre>
+<script type="module">
+  import { runNaturePartitionsHarness } from "./nature_partitions_harness.js";
+  const result = document.querySelector("pre");
+  const fail = error => { result.dataset.status = "failed"; result.textContent = error?.stack ?? String(error); };
+  window.addEventListener("error", event => fail(event.error ?? event.message));
+  window.addEventListener("unhandledrejection", event => fail(event.reason));
+  try { const rows = await runNaturePartitionsHarness(); result.dataset.status = "passed"; result.textContent = JSON.stringify(rows); }
+  catch (error) { fail(error); }
+</script></html>

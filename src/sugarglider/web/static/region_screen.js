@@ -9,6 +9,7 @@ const PHASES = { checking: "Checking the download", map: "Downloading the map", 
 export function regionFailureMessage(code) {
   return {
     regional_required: t("Download a region to plan and view maps offline."),
+    no_covering_routing_pack: t("No single installed routing region covers these points. Map display and routing coverage are separate."),
     regional_selection_required: t("Choose one installed region for this plan."),
     regional_checking: t("Checking the selected region…"),
     regional_operation_busy: t("Another region operation is still finishing. Try again shortly."),
@@ -36,13 +37,13 @@ export function regionFailureMessage(code) {
 
 export function createRegionScreen({ elements, versions, product, withRegion,
   selectedRegionId, selectRegion, onReady = () => {}, onMapChange = async () => {},
-  viewRegion = () => {},
+  viewRegion = () => {}, planningRequest = () => null,
   isPlanning = () => false, loadCatalog = loadRegionCatalog,
   confirmRemoval = (message) => globalThis.confirm(message), lifecycleTarget = globalThis,
 } = {}) {
   let catalog = [], rows = [], pending = false, closed = false, readyBuild = null, cancelling = false;
   const { container, selector, list, status, cancel, refresh: refreshButton, mapStatus, progress, diagnostics, diagnosticCode } = elements;
-  let focusKey = null;
+  let focusKey = null, coverageKey = null, coverageDirty = false;
 
   function message(text, code = "") {
     if (closed) return;
@@ -174,18 +175,19 @@ export function createRegionScreen({ elements, versions, product, withRegion,
 
   async function inspectSelection() {
     let row;
-    try { row = selectCommittedRegion(rows, selectedRegionId()); }
+    const request = planningRequest();
+    try { row = selectCommittedRegion(rows, selectedRegionId(), request); }
     catch (error) {
       readyBuild = null; onReady(null, error.code, null);
       message(regionFailureMessage(error.code), error.code);
       renderRows(); await onMapChange(); return;
     }
     // The sole-region default is implicit; it must not undo an explicit clear.
-    if (selectedRegionId() === null) selectRegion(row.region_id, { remember: false });
+    if (selectedRegionId() !== row.region_id) selectRegion(row.region_id, { remember: false });
     onReady(null, "regional_checking", null);
     message(regionFailureMessage("regional_checking"), "regional_checking");
     try {
-      const checked = await withRegion(async (region) => ({ capabilities: region.capabilities ?? await region.bridge.capabilities(), reference: region.reference }));
+      const checked = await withRegion(async (region) => ({ capabilities: region.capabilities ?? await region.bridge.capabilities(), reference: region.reference }), request);
       if (closed) return;
       readyBuild = checked.reference.build_id;
       onReady(checked.capabilities, null, checked.reference);
@@ -237,8 +239,26 @@ export function createRegionScreen({ elements, versions, product, withRegion,
         // Checking the retained region must not conceal a failed/cancelled update.
         if (failure) message(failure.text, failure.code);
         pending = false; render();
+        if (coverageDirty) { coverageDirty = false; void act(async () => {}); }
       }
     }
+  }
+
+  function refreshCoverage() {
+    if (closed || isPlanning()) return;
+    const request = planningRequest();
+    const key = JSON.stringify([selectedRegionId(), request]);
+    if (key === coverageKey) return;
+    coverageKey = key;
+    if (pending) { coverageDirty = true; return; }
+    // Point edits within the same already verified build do not replace an
+    // open editor/menu. Every actual planning request still verifies its lease,
+    // native data and web components; explicit refresh/install also rechecks.
+    try {
+      const row = selectCommittedRegion(rows, selectedRegionId(), request);
+      if (readyBuild === row.manifest.build_id && selectedRegionId() === row.region_id) return;
+    } catch { /* Refresh below publishes the explicit coverage failure. */ }
+    void act(async () => {});
   }
 
   selector.addEventListener("change", () => {
@@ -255,7 +275,7 @@ export function createRegionScreen({ elements, versions, product, withRegion,
   return Object.freeze({
     initialize: async () => { container.classList.remove("hidden"); await act(async () => refresh({ catalogToo: true }), { refreshAfter: false });
       if (!rows.some((row) => row.status === "committed")) container.open = true; },
-    refresh, render,
+    refresh, render, refreshCoverage,
     mapState: (snapshot) => {
       if (closed || !mapStatus) return;
       setLocalizedText(mapStatus, () => ({

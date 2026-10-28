@@ -1,10 +1,26 @@
 import { createVersionedRegionComponents } from "./region_components.js";
-import { RegionalDataError, requireData, safeRegionalId } from "./regional_manifest.js";
+import { RegionalDataError, requireData, safeRegionalId, containsPosition } from "./regional_manifest.js";
 import { regionalRoutingReference } from "./regional_routing_reference.js";
 
-export function selectCommittedRegion(snapshot, selected) {
+export function selectCommittedRegion(snapshot, selected, request = null) {
   requireData(selected === null || safeRegionalId(selected), "invalid_region_id");
   const available = snapshot.filter((row) => row.status === "committed");
+  if (request?.start) {
+    const points = [request.start, ...(request.end ? [request.end] : []),
+      ...(request.waypoints ?? request.hard_waypoints ?? [])
+        .filter(point => (point.constraint_strength ?? "exact") === "exact")
+        .map(point => point.coordinate ?? point)];
+    requireData(points.every(point => Number.isFinite(point?.lon) && Number.isFinite(point?.lat)), "invalid_request");
+    const covering = available.filter(row => points.every(point => containsPosition(row.manifest.bounds, [point.lon, point.lat])));
+    // A covering user preference remains stable. Otherwise choose one complete
+    // graph deterministically, before the first route call; never retry graphs.
+    const preferred = covering.find(row => row.region_id === selected);
+    if (preferred) return preferred;
+    covering.sort((a, b) => area(a.manifest.bounds) - area(b.manifest.bounds)
+      || (a.region_id < b.region_id ? -1 : a.region_id > b.region_id ? 1 : 0));
+    if (covering.length) return covering[0];
+    throw new RegionalDataError(available.length ? "no_covering_routing_pack" : "regional_required");
+  }
   let row = selected === null ? null : snapshot.find((item) => item.region_id === selected);
   if (selected === null && available.length === 1) [row] = available;
   if (!row) throw new RegionalDataError(selected === null && available.length > 1
@@ -21,9 +37,9 @@ export function createRegionalPlanningContext({
   components = createVersionedRegionComponents,
   verifyMap = async (manifest, directory) => (await components({ manifest, directory })).verifyMap(),
 } = {}) {
-  return async function withRegion(run) {
+  return async function withRegion(run, request = null) {
     return versions.withCommittedRegions(async (snapshot) => {
-      const row = selectCommittedRegion(snapshot, selectedRegionId());
+      const row = selectCommittedRegion(snapshot, selectedRegionId(), request);
       const manifest = row.manifest;
       const reference = await regionalRoutingReference(manifest);
       const directory = await versions.committedDirectory(manifest.region_id, manifest.build_id);
@@ -46,3 +62,5 @@ export function createRegionalPlanningContext({
     });
   };
 }
+
+const area = bounds => (bounds[2] - bounds[0]) * (bounds[3] - bounds[1]);

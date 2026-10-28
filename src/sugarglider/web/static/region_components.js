@@ -24,15 +24,24 @@ export async function createVersionedRegionComponents({
   };
   const maps = new MapPackStore({ storageManager: scopedStorage, fetchRequest: fetchResource, pageLocation,
     probeSuffix: `region-${manifest.region_id}-${manifest.build_id}` });
+  // Reuse an independently installed map only when both exact component files
+  // verify. It remains an independent installation, with explicit missing-data
+  // behavior if removed. Routing and indexes still own the complete-region lease.
+  const independentMaps = new MapPackStore({ storageManager: storage, fetchRequest: fetchResource, pageLocation });
+  async function mapRecord() {
+    try { return { store: maps, pack: await maps.getPack(manifest.components.map.component_id) }; }
+    catch (error) { if (error.code !== "map_pack_not_found") throw error; }
+    return { store: independentMaps, pack: await independentMaps.getPack(manifest.components.map.component_id) };
+  }
   const indexes = createLocalRegionStore({ storage: scopedStorage, locks, fetchResource, pageLocation });
 
   async function openMap({ signal, onProgress } = {}) {
-    const pack = await maps.getPack(manifest.components.map.component_id);
+    const { store, pack } = await mapRecord();
     requireMapIdentity(pack.manifest, manifest);
     const manifestFile = await pack.manifestHandle.getFile(), archiveFile = await pack.archiveHandle.getFile();
     await verifyRegionalFile(manifestFile, manifest.components.map.files[0], { signal });
     await verifyRegionalFile(archiveFile, manifest.components.map.files[1], { signal, onProgress });
-    const opened = await maps.openPackSource(pack.manifest.pack_id, { archiveFile });
+    const opened = await store.openPackSource(pack.manifest.pack_id, { archiveFile });
     requireData(JSON.stringify(opened.manifest) === JSON.stringify(pack.manifest), "regional_identity_mismatch");
     signal?.throwIfAborted();
     // Reuse only this opened, fully verified snapshot. Fresh metadata detects
@@ -61,6 +70,11 @@ export async function createVersionedRegionComponents({
       return;
     }
     requireData(!existing.invalid_pack_ids.includes(manifest.components.map.component_id), "regional_corrupt_remove_and_reinstall");
+    try {
+      await independentMaps.getPack(manifest.components.map.component_id);
+      await verifyMap({ signal });
+      return;
+    } catch (error) { if (error.code !== "map_pack_not_found") throw error; }
     await maps.installPack(new URL(manifest.components.map.files[0].path, url).href,
       { signal, onProgress, regionalManifest: manifest });
   }
@@ -75,7 +89,9 @@ export async function createVersionedRegionComponents({
     const opened = await indexes.open(manifest.region_id);
     requireData(opened.manifest.build_id === manifest.build_id, "regional_identity_mismatch");
     for (const kind of ["pois", "nature"]) {
-      await verifyRegionalFile(opened.files[kind], manifest.components[kind].files[0]);
+      for (const descriptor of manifest.components[kind].files) {
+        await verifyRegionalFile(opened.files[descriptor.path] ?? opened.files[kind], descriptor);
+      }
     }
     return true;
   }

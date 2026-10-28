@@ -2,6 +2,7 @@
 
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -72,6 +73,7 @@ def build_components(
     runner: CommandRunner = run_command,
     *,
     elevation_sources: Path | None = None,
+    partition_nature: bool = False,
 ) -> None:
     if elevation_sources is None:
         raise ValueError("V2 build requires explicit verified elevation source pins")
@@ -109,6 +111,9 @@ def build_components(
     # A fresh process per index releases those heaps before the next phase and
     # final verification, while inheriting the caller's resource limits.
     for component in ("pois", "nature"):
+        index_directory = directory / (
+            "nature-source" if component == "nature" and partition_nature else component
+        )
         runner(
             (
                 sys.executable,
@@ -117,12 +122,29 @@ def build_components(
                 "--osm-pbf",
                 str(source),
                 "--output",
-                str(directory / component / "index.json.gz"),
+                str(index_directory / "index.json.gz"),
                 "--bounds",
                 *(str(value) for value in spec.bounds),
             ),
             environment,
         )
+        if component == "nature" and partition_nature:
+            runner(
+                (
+                    sys.executable,
+                    "-m",
+                    "sugarglider.offline_regions.nature_partitions",
+                    "--source",
+                    str(index_directory / "index.json.gz"),
+                    "--output",
+                    str(directory / "nature"),
+                    "--source-sha256",
+                    file_sha256(source),
+                ),
+                environment,
+            )
+            # Only this fresh build's temporary monolithic index is removed.
+            shutil.rmtree(index_directory)
 
 
 type ComponentBuilder = Callable[[Path, RegionSpec, Path, Path], None]
@@ -146,6 +168,23 @@ def describe_components(directory: Path, spec: RegionSpec) -> Components:
             *((path, "skadi-hgt-gzip-v1") for path in elevation_paths(spec.bounds)),
         ),
     )
+    if (directory / "nature/partitions.json").is_file():
+        from sugarglider.offline_regions.nature_partitions import NaturePartitions
+
+        parts = NaturePartitions.model_validate_json(
+            (directory / "nature/partitions.json").read_bytes()
+        )
+        layouts = (
+            *layouts[:3],
+            (
+                ("nature/partitions.json", "nature-partitions-v1-json"),
+                *(
+                    (part.path, "nature-index-v1-gzip-json")
+                    for part in parts.partitions
+                ),
+            ),
+            layouts[4],
+        )
     components: list[Component] = []
     for identity, layout in zip(spec.component_ids, layouts, strict=True):
         files = tuple(
@@ -195,6 +234,7 @@ def build_region(
     source_url: str | None = None,
     builder: ComponentBuilder = build_components,
     elevation_sources: Path | None = None,
+    partition_nature: bool = False,
 ) -> Path:
     """Publish a new regional directory only after every component verifies.
 
@@ -224,7 +264,12 @@ def build_region(
             staging.mkdir()
             if builder is build_components:
                 build_components(
-                    root, spec, source, staging, elevation_sources=elevation_sources
+                    root,
+                    spec,
+                    source,
+                    staging,
+                    elevation_sources=elevation_sources,
+                    partition_nature=partition_nature,
                 )
             else:
                 builder(root, spec, source, staging)

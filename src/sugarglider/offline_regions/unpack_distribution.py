@@ -29,6 +29,7 @@ REGIONAL_FILES = {
     "routing/valhalla_tiles.tar",
     "pois/index.json.gz",
     "nature/index.json.gz",
+    "nature/partitions.json",
     "elevation/manifest.json",
 }
 ROOT_FILES = {".nojekyll", "README.txt", "index.html", "catalog.json"}
@@ -227,7 +228,12 @@ def unpack_distribution(
                     r"(regions/[a-z0-9][a-z0-9_-]{0,63}/[a-f0-9]{64})/(.+)", name
                 )
                 if match is None or (
-                    match[2] not in REGIONAL_FILES
+                    (
+                        match[2] not in REGIONAL_FILES
+                        and not re.fullmatch(
+                            r"nature/part-(?:0[0-5][0-9]|06[0-3])\.json\.gz", match[2]
+                        )
+                    )
                     and not re.fullmatch(
                         r"elevation/skadi/[NS][0-9]{2}/[NS][0-9]{2}[EW][0-9]{3}\.hgt\.gz",
                         match[2],
