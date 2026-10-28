@@ -207,6 +207,8 @@ async function startup(browser, scenario) {
     assert.ok(result.native.filter(request => request.type === 'set_ui_language').every(request => ['fr','en'].includes(request.language)), 'Only a validated UI preference may be synchronized at startup');
     if (scenario.expected) assert.ok(result.native.filter(request => request.type === 'get_local_route_capabilities')
       .every(request => request.regional_reference.build_id === installed[scenario.expected].build_id));
+    if (scenario.holdNative) assert.equal(result.native.filter(request => request.type === 'get_local_route_capabilities').length,
+      1, 'Publishing readiness must not enqueue the same native check again');
     assert.equal(requests.some(url => /\.(pmtiles|gz|tar)$/u.test(url) || /\/v[12]\/.*(plan|route)/u.test(url)), false, 'Startup downloaded a region or generated a route');
     if (scenario.switchAndClear) {
       phase = 'select beta and commit';

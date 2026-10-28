@@ -180,6 +180,7 @@ type FileFormat = Literal[
     "valhalla-3.9.1-elevation-tar",
     "poi-index-v2-gzip-json",
     "nature-index-v1-gzip-json",
+    "nature-partitions-v1-json",
     "elevation-manifest-v1",
     "skadi-hgt-gzip-v1",
 ]
@@ -194,7 +195,7 @@ class FileDescriptor(StrictModel):
 
 class Component(StrictModel):
     component_id: Identifier
-    files: Annotated[tuple[FileDescriptor, ...], Field(min_length=1, max_length=17)]
+    files: Annotated[tuple[FileDescriptor, ...], Field(min_length=1, max_length=65)]
 
 
 class Components(StrictModel):
@@ -219,18 +220,35 @@ class Components(StrictModel):
                 )
                 if file.byte_size > maximum:
                     raise ValueError("regional file exceeds component budget")
-        expected = (
+        expected: tuple[tuple[str, ...], ...] = (
             ("map/manifest.json", "map/basemap.pmtiles"),
             ("routing/manifest.json", "routing/valhalla_tiles.tar"),
             ("pois/index.json.gz",),
             ("nature/index.json.gz",),
         )
-        formats = (
+        formats: tuple[tuple[str, ...], ...] = (
             ("map-manifest-v1", "pmtiles-v3-mvt"),
             ("routing-manifest-v2", "valhalla-3.9.1-elevation-tar"),
             ("poi-index-v2-gzip-json",),
             ("nature-index-v1-gzip-json",),
         )
+        if self.nature.files[0].format == "nature-partitions-v1-json":
+            from sugarglider.offline_regions.nature_partitions import partition_path
+
+            count = len(self.nature.files) - 1
+            if not 1 <= count <= 64 or self.nature.files[0].byte_size > 32_768:
+                raise ValueError("invalid Nature partition directory")
+            expected = (
+                *expected[:3],
+                ("nature/partitions.json", *(partition_path(i) for i in range(count))),
+            )
+            formats = (
+                *formats[:3],
+                (
+                    "nature-partitions-v1-json",
+                    *("nature-index-v1-gzip-json" for _ in range(count)),
+                ),
+            )
         for component, paths, types in zip(
             self.ordered[:4], expected, formats, strict=True
         ):
@@ -241,7 +259,7 @@ class Components(StrictModel):
                 raise ValueError("incorrect component paths/formats")
         elevation = self.elevation.files
         if (
-            len(elevation) < 2
+            not 2 <= len(elevation) <= 17
             or (elevation[0].path, elevation[0].format)
             != ("elevation/manifest.json", "elevation-manifest-v1")
             or any(file.format != "skadi-hgt-gzip-v1" for file in elevation[1:])

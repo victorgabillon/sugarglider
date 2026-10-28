@@ -25,7 +25,8 @@ const APPROACH_KINDS = Object.freeze(["exact_feature", "drinking_water_source", 
 const APPROACH_SOURCES = Object.freeze(["osm_feature", "osm_entrance", "osm_gate", "osm_path_intersection", "osm_spatial_boundary_inference", "imported_coordinate", "user_override"]);
 const PROVENANCE = Object.freeze(["feature_geometry", "way_boundary_node", "relation_boundary_node", "shared_path_boundary_node", "spatial_boundary_inferred", "imported_coordinate", "user_override"]);
 
-export async function decodeRegionalIndex(bytes, descriptor) {
+export async function decodeRegionalIndex(bytes, descriptor, maximum = REGIONAL_INDEX_MAX_EXPANDED_BYTES) {
+  requireData(Number.isSafeInteger(maximum) && maximum > 0 && maximum <= REGIONAL_INDEX_MAX_EXPANDED_BYTES);
   await verifyRegionalBytes(bytes, descriptor);
   let reader;
   try {
@@ -37,7 +38,7 @@ export async function decodeRegionalIndex(bytes, descriptor) {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      requireData(size <= REGIONAL_INDEX_MAX_EXPANDED_BYTES, "regional_index_too_large");
+      requireData(size <= maximum, "regional_index_too_large");
       text += decoder.decode(value, { stream: true });
     }
     return JSON.parse(text + decoder.decode());
@@ -48,7 +49,7 @@ export async function decodeRegionalIndex(bytes, descriptor) {
   } finally { reader?.releaseLock(); }
 }
 
-export function createLocalRegionData(manifest, { pois = null, nature = null } = {}) {
+export function createLocalRegionData(manifest, { pois = null, nature = null, natureInfo = null } = {}) {
   if (pois !== null) validatePoiDocument(pois, manifest);
   if (nature !== null) validateNatureDocument(nature, manifest);
   const natureAvailable = nature !== null;
@@ -72,10 +73,10 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
     routing_sha256: manifest.components.routing.files[1].sha256,
     bounds: [...manifest.bounds],
     poi_component_id: pois === null ? null : manifest.components.pois.component_id,
-    nature_component_id: nature === null ? null : manifest.components.nature.component_id,
+    nature_component_id: nature === null && natureInfo === null ? null : manifest.components.nature.component_id,
     poi_count: poiFeatures.length,
     poi_classifier_version: pois?.metadata.classifier_version ?? null,
-    nature_count: natureItems.length,
+    nature_count: natureInfo?.feature_count ?? natureItems.length,
   });
 
   function queryPois({ center, radius_m, limit = 64, requested_ids = [] }) {
@@ -170,39 +171,9 @@ export function createLocalRegionData(manifest, { pois = null, nature = null } =
       for (let index = 0; index < lengths.length; index += 1) {
         if (lengths[index] === 0) continue;
         const a = points[index]; const b = points[index + 1];
-        const edgeBounds = boundsOf([a, b]);
-        const nearby = queryTree(natureTree, expandBounds(edgeBounds, 100), [], work);
-        const intervals = Object.fromEntries([...PRIMARY_CLASSES, "park_or_protected", "near_water"].map((key) => [key, []]));
         const coverage = rectangleIntervals(a, b, projectedBounds);
         if (intervalLength(coverage) < 1 - 1e-10) outside = true;
-        for (const item of nearby) {
-          const water = item.feature.primary_class === "water";
-          // Water interiors serve both the primary class and proximity overlay.
-          // The latter also needs interiors when only the expanded query matched.
-          const intersects = overlaps(item.bounds, edgeBounds);
-          const spans = intersects || water ? polygonIntervals(a, b, item.polygons, work) : [];
-          if (intersects) {
-            if (item.feature.primary_class !== null) intervals[item.feature.primary_class].push(...spans);
-            if (item.feature.park_or_protected) intervals.park_or_protected.push(...spans);
-          }
-          if (water) {
-            intervals.near_water.push(...spans);
-            const waterBounds = expandBounds(edgeBounds, 100 + BOUNDARY_BOUNDS_PADDING_M);
-            for (const polygon of item.polygons) {
-              spend(work);
-              if (!overlaps(polygon.bounds, waterBounds)) continue;
-              for (const ring of polygon.rings) {
-                for (const { first, end } of ringRanges(ring.points, ring.blocks, waterBounds, work)) {
-                  for (let vertex = first; vertex < end; vertex += 1) {
-                    spend(work);
-                    intervals.near_water.push(...capsuleIntervals(a, b, ring.points[vertex - 1], ring.points[vertex], 100));
-                  }
-                }
-              }
-            }
-          }
-        }
-        const merged = Object.fromEntries(Object.entries(intervals).map(([key, spans]) => [key, unionIntervals(spans)]));
+        const merged = collectNatureIntervals(a, b, natureTree, work);
         const cuts = [...new Set([0, 1, ...coverage.flat(), ...Object.values(merged).flat(2)])].sort((left, right) => left - right);
         const normalizedDistance = candidate.distance_m * lengths[index] / totalLength;
         for (let cut = 1; cut < cuts.length; cut += 1) {
@@ -648,3 +619,136 @@ function geographicDistance(a, b) {
 }
 function compareText(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
 function spend(work) { requireData(work.remaining > 0, "nature_analysis_budget_exhausted"); work.remaining -= 1; }
+
+function collectNatureIntervals(a, b, tree, work) {
+  const edgeBounds = boundsOf([a, b]);
+  const nearby = queryTree(tree, expandBounds(edgeBounds, 100), [], work);
+  const intervals = Object.fromEntries([...PRIMARY_CLASSES, "park_or_protected", "near_water"].map((key) => [key, []]));
+  for (const item of nearby) {
+    const water = item.feature.primary_class === "water";
+    // Water interiors serve both the primary class and proximity overlay.
+    // The latter also needs interiors when only the expanded query matched.
+    const intersects = overlaps(item.bounds, edgeBounds);
+    const spans = intersects || water ? polygonIntervals(a, b, item.polygons, work) : [];
+    if (intersects) {
+      if (item.feature.primary_class !== null) intervals[item.feature.primary_class].push(...spans);
+      if (item.feature.park_or_protected) intervals.park_or_protected.push(...spans);
+    }
+    if (water) {
+      intervals.near_water.push(...spans);
+      const waterBounds = expandBounds(edgeBounds, 100 + BOUNDARY_BOUNDS_PADDING_M);
+      for (const polygon of item.polygons) {
+        spend(work);
+        if (!overlaps(polygon.bounds, waterBounds)) continue;
+        for (const ring of polygon.rings) {
+          for (const { first, end } of ringRanges(ring.points, ring.blocks, waterBounds, work)) {
+            for (let vertex = first; vertex < end; vertex += 1) {
+              spend(work);
+              intervals.near_water.push(...capsuleIntervals(a, b, ring.points[vertex - 1], ring.points[vertex], 100));
+            }
+          }
+        }
+      }
+    }
+  }
+  return Object.fromEntries(Object.entries(intervals).map(([key, spans]) => [key, unionIntervals(spans)]));
+}
+
+// A partition owns one projected index. Callers release it before reading the
+// next file; no full-region projected or geographic polygon array is retained.
+export function prepareLocalNaturePartition(manifest, document) {
+  validateNatureDocument(document, manifest);
+  const items = [];
+  for (const item of projectedNatureItems(document, regionalProjection(manifest, document))) {
+    items.push({ ...item, polygons: item.polygons.map(prepareNaturePolygon) });
+  }
+  return spatialTree(items);
+}
+
+export function createNatureIntervalAccumulator(manifest, candidate, identity, referenceLatitude) {
+  requireData(Number.isFinite(candidate.distance_m) && candidate.distance_m > 0
+    && Array.isArray(candidate.geometry) && candidate.geometry.length >= 2 && candidate.geometry.length <= 20_000
+    && candidate.geometry.every(validPosition), "invalid_routed_geometry");
+  const project = regionalProjection(manifest, { metadata: { reference_latitude: referenceLatitude } });
+  const points = candidate.geometry.map(project);
+  const projectedBounds = [...project(manifest.bounds.slice(0, 2)), ...project(manifest.bounds.slice(2))];
+  const lengths = candidate.geometry.slice(1).map((point, index) => geographicDistance(candidate.geometry[index], point));
+  const totalLength = lengths.reduce((sum, length) => sum + length, 0);
+  requireData(totalLength > 0, "nature_degenerate_geometry");
+  const keys = [...PRIMARY_CLASSES, "park_or_protected", "near_water"];
+  const intervals = lengths.map(() => Object.fromEntries(keys.map(key => [key, []])));
+  const work = { remaining: MAX_ANALYSIS_OPERATIONS };
+  let retained = 0;
+  function add(tree) {
+    for (let index = 0; index < lengths.length; index++) {
+      if (lengths[index] === 0) continue;
+      const incoming = collectNatureIntervals(points[index], points[index + 1], tree, work);
+      for (const key of keys) {
+        const previous = intervals[index][key];
+        const merged = unionIntervals([...previous, ...incoming[key]]);
+        retained += merged.length - previous.length;
+        requireData(retained <= 100_000, "nature_interval_limit");
+        intervals[index][key] = merged;
+      }
+    }
+  }
+  function finish() {
+    const distances = Object.fromEntries([...PRIMARY_CLASSES, "unknown", "park_or_protected", "near_water"].map(key => [key, 0]));
+    let outside = false;
+    for (let index = 0; index < lengths.length; index++) {
+      if (lengths[index] === 0) continue;
+      const coverage = rectangleIntervals(points[index], points[index + 1], projectedBounds);
+      if (intervalLength(coverage) < 1 - 1e-10) outside = true;
+      const merged = intervals[index];
+      const cuts = [...new Set([0, 1, ...coverage.flat(), ...Object.values(merged).flat(2)])].sort((a, b) => a - b);
+      const distance = candidate.distance_m * lengths[index] / totalLength;
+      for (let cut = 1; cut < cuts.length; cut++) {
+        spend(work);
+        const middle = (cuts[cut - 1] + cuts[cut]) / 2;
+        const covered = inIntervals(middle, coverage);
+        const category = covered ? PRIMARY_CLASSES.find(key => inIntervals(middle, merged[key])) ?? "unknown" : "unknown";
+        const part = distance * (cuts[cut] - cuts[cut - 1]);
+        distances[category] += part;
+        if (covered && inIntervals(middle, merged.park_or_protected)) distances.park_or_protected += part;
+        if (covered && inIntervals(middle, merged.near_water)) distances.near_water += part;
+      }
+    }
+    distances.unknown = Math.max(0, candidate.distance_m - PRIMARY_CLASSES.reduce((sum, key) => sum + distances[key], 0));
+    const metric = value => ({ distance_m: value, share: value / candidate.distance_m });
+    const breakdown = Object.fromEntries(Object.entries(LOCAL_NATURE_WEIGHTS).map(([key, weight]) => [key, 50 * weight * distances[key] / candidate.distance_m]));
+    return freezeData({ available: true, identity, method: "normalized_routed_edge_polygon_intervals",
+      woodland: metric(distances.woodland), open_natural: metric(distances.open_natural), agriculture: metric(distances.agriculture),
+      water_crossing: metric(distances.water), urban: metric(distances.urban), unknown_landcover: metric(distances.unknown),
+      park_or_protected: metric(distances.park_or_protected), near_water: metric(distances.near_water),
+      nature_score: Math.max(0, Math.min(100, 50 + Object.values(breakdown).reduce((sum, value) => sum + value, 0))),
+      score_components: breakdown, operation_count: MAX_ANALYSIS_OPERATIONS - work.remaining,
+      operation_budget: MAX_ANALYSIS_OPERATIONS, warnings: outside ? ["nature_index_route_partly_outside"] : [] });
+  }
+  return { add, finish, operations: () => MAX_ANALYSIS_OPERATIONS - work.remaining };
+}
+
+export function createWoodlandAccumulator(manifest, { points }, identity, referenceLatitude) {
+  requireData(Array.isArray(points) && points.length <= 128 && points.every(validCoordinate), "invalid_local_nature_query");
+  const project = regionalProjection(manifest, { metadata: { reference_latitude: referenceLatitude } });
+  const classes = points.map(() => new Set());
+  const work = { remaining: 2_000_000 };
+  function add(tree) {
+    points.forEach((point, index) => {
+      if (!containsPosition(manifest.bounds, [point.lon, point.lat])) return;
+      const p = project([point.lon, point.lat]);
+      for (const item of queryTree(tree, [...p, ...p], [], work)) {
+        if (item.polygons.some(polygon => {
+          spend(work);
+          const [outer, ...holes] = polygon.rings;
+          return inRing(p, outer.points, work, outer.blocks) >= 0
+            && holes.every(ring => inRing(p, ring.points, work, ring.blocks) <= 0);
+        })) classes[index].add(item.feature.primary_class);
+      }
+    });
+  }
+  return { add, finish: () => freezeData({ available: true, identity,
+    woodland: classes.map(values => {
+      const category = PRIMARY_CLASSES.find(key => values.has(key));
+      return category === undefined ? null : category === "woodland";
+    }), operation_count: 2_000_000 - work.remaining }) };
+}

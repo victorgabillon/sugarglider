@@ -197,7 +197,11 @@ function returnToManualPlan({ refresh = true } = {}) {
   if (refresh) { render(); appShell?.show("plan"); }
 }
 async function adventureContext({ includeMapPins = false, signal } = {}) {
-  if (!localPlanner || regionPlanningError) throw new Error(regionFailureMessage(regionPlanningError ?? "regional_required"));
+  // Manual-plan coverage is not a constraint on an independent adventure.
+  // Other readiness/integrity failures still block model submission.
+  if (!localPlanner || regionPlanningError && regionPlanningError !== "no_covering_routing_pack") {
+    throw new Error(regionFailureMessage(regionPlanningError ?? "regional_required"));
+  }
   // Snapshot only the editable manual pins, and only after explicit opt-in.
   // Displayed adventure requests, selected geometry and camera/GPS are never context.
   const context = includeMapPins && !state.adventureDisplay ? currentAdventureContext() : { suggested_profile: state.routingProfile };
@@ -206,7 +210,10 @@ async function adventureContext({ includeMapPins = false, signal } = {}) {
   }
   return regionVersions.withCommittedRegions(async rows => {
     signal?.throwIfAborted();
-    const row = selectCommittedRegion(rows, selectedRegionId), reference = await regionalRoutingReference(row.manifest);
+    const center = context.start ?? context.end;
+    const row = selectCommittedRegion(rows, selectedRegionId, center ? { start: center,
+      end: context.end ?? null, waypoints: context.hardWaypoints ?? [] } : null);
+    const reference = await regionalRoutingReference(row.manifest);
     signal?.throwIfAborted();
     return { ...context, reference, pinContextAvailable: !state.adventureDisplay };
   });
@@ -2209,6 +2216,7 @@ function render() {
   selectedRouteElevation?.sync(isImmutableSnapshotDisplay() || adventurePlanning ? null : selectedCandidate(),state.generationResult,selectedRegionId);
   renderElevation(state.selectedElevation);
   regionScreen?.render();
+  if (!isImmutableSnapshotDisplay() && !state.adventureDisplay) regionScreen?.refreshCoverage();
   renderModeControls();
   renderPoiEditor();
   renderCandidatesPanel();
@@ -3492,10 +3500,21 @@ async function retryCurrentConnection() {
   }
 }
 
+function planningCoverageRequest() {
+  if (isImmutableSnapshotDisplay() || state.adventureDisplay) return null;
+  const endpoints = activeEndpoints();
+  if (!endpoints.start || !validPoint(endpoints.start)) return null;
+  const coordinate = point => ({ lat: point.lat, lon: point.lon });
+  return { start: coordinate(endpoints.start), end: endpoints.routeTopology === "point_to_point" && endpoints.end && validPoint(endpoints.end) ? coordinate(endpoints.end) : null,
+    waypoints: state.points.filter(point => validPoint(point) && !["approach", "best_effort"].includes(point.constraintStrength))
+      .map(point => ({ coordinate: coordinate(point), constraint_strength: "exact" })) };
+}
+
 async function initializeRegionScreen() {
   const product = createRegionProduct({ versions: regionVersions, native: nativeRegions,
     installerClient: createRegionInstallerClient() });
   regionScreen = createRegionScreen({ versions: regionVersions, product, withRegion: withPlanningRegion,
+    planningRequest: planningCoverageRequest,
     selectedRegionId: () => selectedRegionId,
     selectRegion: (id, { remember = true } = {}) => {
       if (remember) void regionPreference?.remember(id);

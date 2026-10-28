@@ -88,6 +88,7 @@ self.onmessage = ({ data: message }) => {
             : message.type === "search_pois" ? data.searchPois(message.value.query)
             : message.type === "query_woodland_points" ? data.queryWoodlandPoints(message.value.query)
             : data.analyzeNature(message.value.candidate);
+          result = await result;
           break;
         default: throw new Error("invalid_regional_operation");
       }

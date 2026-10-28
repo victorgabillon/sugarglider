@@ -224,12 +224,23 @@ def validate_components(directory: Path, manifest: RegionalManifest) -> None:
     pois = PoiIndexDocument.model_validate_json(
         gzip.decompress((directory / "pois/index.json.gz").read_bytes())
     )
-    nature = NatureIndexDocument.model_validate_json(
-        gzip.decompress((directory / "nature/index.json.gz").read_bytes())
-    )
+    if manifest.components.nature.files[0].format == "nature-partitions-v1-json":
+        from sugarglider.offline_regions.nature_partitions import (
+            verify_nature_partitions,
+        )
+
+        verify_nature_partitions(directory, manifest)
+        nature_metadata = None
+    else:
+        nature = NatureIndexDocument.model_validate_json(
+            gzip.decompress((directory / "nature/index.json.gz").read_bytes())
+        )
+        nature_metadata = nature.metadata
     if pois.metadata.classifier_version != manifest.tools.poi_classifier:
         raise ValueError("POI classifier does not match regional toolchain")
-    for metadata in (pois.metadata, nature.metadata):
+    for metadata in (pois.metadata, nature_metadata):
+        if metadata is None:
+            continue
         if metadata.bounding_box != manifest.bounds or (
             metadata.source_basename != manifest.source.basename
             or metadata.source_size_bytes != manifest.source.byte_size

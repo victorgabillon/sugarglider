@@ -106,7 +106,7 @@ export async function runRegionPreferenceHarness() {
 
   // Exercise the production screen's actual event handlers, including operation
   // completion/failure boundaries. No routing or private data is involved.
-  let selected = null, installing, installed, removeFailure = false;
+  let selected = null, installing, installed, removeFailure = false, coverage = null, inspections = 0;
   rows = [];
   const screenStore = memory(), screenPreference = createRegionPreference(screenStore);
   const manifest = id => ({ region_id: id, display_name: id, build_id: id.repeat(64).slice(0, 64) });
@@ -123,9 +123,9 @@ export async function runRegionPreferenceHarness() {
   container.innerHTML = '<select></select><ul></ul><p></p><button data-refresh>Refresh</button><button data-cancel>Cancel</button>';
   document.body.append(container);
   const elements = { container, selector: container.querySelector('select'), list: container.querySelector('ul'), status: container.querySelector('p'), refresh: container.querySelector('[data-refresh]'), cancel: container.querySelector('[data-cancel]') };
-  const screen = createRegionScreen({ elements, versions, product, selectedRegionId: () => selected,
+  const screen = createRegionScreen({ elements, versions, product, selectedRegionId: () => selected, planningRequest: () => coverage,
     selectRegion: (id, { remember = true } = {}) => { selected = id; if (remember) void screenPreference.remember(id); },
-    withRegion: async run => { const entry = selectCommittedRegion(rows, selected); return run({ capabilities: { enabled: true }, reference: entry.manifest }); },
+    withRegion: async (run, request) => { inspections++; const entry = selectCommittedRegion(rows, selected, request); return run({ capabilities: { enabled: true }, reference: entry.manifest }); },
     loadCatalog: async () => ['alpha', 'beta', 'gamma'].map(id => ({ ...manifest(id), description: 'Synthetic', download_bytes: 10, manifest_url: `https://packs.example/${id}/manifest.json` })),
     confirmRemoval: () => true, lifecycleTarget: null });
   const settled = () => until(() => !elements.refresh.disabled);
@@ -175,6 +175,23 @@ export async function runRegionPreferenceHarness() {
     rows.push(row('alpha')); await screen.refresh(); await choose('alpha');
     equal(selected, 'alpha', 'Write failure never blocks switching in current session');
     cases.push('screen_switch_survives_preference_write_failure');
+    rows = rows.map(entry => ({ ...entry, manifest: { ...entry.manifest,
+      bounds: entry.region_id === 'alpha' ? [0, 0, 1, 1] : [2, 2, 3, 3] } }));
+    coverage = { start: { lat: 2.5, lon: 2.5 } };
+    screen.refreshCoverage(); await settled();
+    equal(selected, 'beta', 'Start selects its covering complete region');
+    equal(elements.status.dataset.state, 'regional_ready', 'Automatic choice has verified readiness');
+    cases.push('start_automatically_selects_and_verifies_covering_complete_region');
+    selected = null; coverage = { start: { lat: .5, lon: .5 } };
+    screen.refreshCoverage(); await settled();
+    equal(selected, 'alpha', 'An unambiguous Start does not require manual selection');
+    cases.push('start_resolves_multiple_regions_without_manual_choice');
+    const verified = inspections;
+    coverage = { start: { lat: .55, lon: .55 } };
+    screen.refreshCoverage(); await settled();
+    equal(inspections, verified, 'Moving within a verified build must not asynchronously replace an open point editor');
+    equal(elements.status.dataset.state, 'regional_ready', 'Same-region point edits preserve verified readiness');
+    cases.push('same_build_point_edits_preserve_editor_and_verified_readiness');
   } finally { container.remove(); }
   return cases;
 }

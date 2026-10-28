@@ -28,7 +28,7 @@ const server = http.createServer((request, response) => {
       if (new URL(route.request().url()).origin === base) return route.continue();
       forbidden.push(new URL(route.request().url()).origin); return route.abort();
     });
-    for (const name of ['itinerary_draft', 'adventure_proposal', 'adventure_controller', 'calculation_operation']) {
+    for (const name of ['itinerary_draft', 'adventure_proposal', 'nature_partitions', 'adventure_controller', 'calculation_operation']) {
       const page = await context.newPage();
       await page.goto(`${base}/tests/browser/${name}_harness.html`);
       await page.waitForFunction(() => ['passed', 'failed'].includes(document.querySelector('pre')?.dataset.status), { timeout: 60_000 });

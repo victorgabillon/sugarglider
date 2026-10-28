@@ -51,7 +51,13 @@ export async function parseRegionalManifest(text) {
     ? ["1", "2", "3"].includes(value.tools[key]) : value.tools[key] === expected)
     && ["python_version", "osmium_version", "shapely_version"].every((key) => boundedText(value.tools[key], 80)),
   "unsupported_regional_toolchain");
-  const files = { ...FILES, elevation: [["elevation/manifest.json", "elevation-manifest-v1"],
+  const natureFiles = value.components?.nature?.files;
+  const partitioned = natureFiles?.[0]?.format === "nature-partitions-v1-json";
+  if (partitioned) requireData(natureFiles.length >= 2 && natureFiles.length <= 65
+    && natureFiles[0].byte_size <= REGIONAL_MANIFEST_MAX_BYTES, "invalid_regional_component");
+  const nature = partitioned ? [["nature/partitions.json", "nature-partitions-v1-json"],
+    ...natureFiles.slice(1).map((_, index) => [`nature/part-${String(index).padStart(3, "0")}.json.gz`, "nature-index-v1-gzip-json"])] : FILES.nature;
+  const files = { ...FILES, nature, elevation: [["elevation/manifest.json", "elevation-manifest-v1"],
     ...regionalElevationPaths(value.bounds).map((path) => [path, "skadi-hgt-gzip-v1"])] };
   requireFields(value.components, Object.keys(files));
   const ids = new Set();

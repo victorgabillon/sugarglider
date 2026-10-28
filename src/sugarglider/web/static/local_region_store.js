@@ -5,6 +5,8 @@ import {
 } from "./regional_manifest.js";
 import { createLocalRegionData, decodeRegionalIndex, validateLocalRegionDocuments } from "./local_region_data.js";
 
+import { isPartitionedNature, decodeNatureDirectory, decodeNaturePartition, createPartitionedRegionData } from "./nature_partitions.js";
+
 const DIRECTORY = "sugarglider-region-components";
 const LOCK = "sugarglider-region-components-mutation";
 const MAX_REGIONS = 8;
@@ -57,9 +59,13 @@ export function createLocalRegionStore({
       requireData(manifest.region_id === regionId && manifest.build_id === pointer.build_id, "regional_install_incomplete");
       const files = {};
       for (const kind of ["pois", "nature"]) {
-        const file = await (await (await version.getDirectoryHandle(kind)).getFileHandle("index.json.gz")).getFile();
-        requireData(file.size === manifest.components[kind].files[0].byte_size, "regional_size_mismatch");
-        files[kind] = file;
+        const component = await version.getDirectoryHandle(kind);
+        for (const [index, descriptor] of manifest.components[kind].files.entries()) {
+          const file = await (await component.getFileHandle(descriptor.path.split("/").at(-1))).getFile();
+          requireData(file.size === descriptor.byte_size, "regional_size_mismatch");
+          files[descriptor.path] = file;
+          if (index === 0) files[kind] = file;
+        }
       }
       return { manifest, files };
     } catch (error) {
@@ -79,7 +85,7 @@ export function createLocalRegionStore({
       ));
       const existing = await list();
       requireData(existing.some((item) => item.region_id === manifest.region_id) || existing.length < MAX_REGIONS, "regional_storage_limit");
-      const required = ["pois", "nature"].reduce((sum, kind) => sum + manifest.components[kind].files[0].byte_size, 0);
+      const required = ["pois", "nature"].flatMap(kind => manifest.components[kind].files).reduce((sum, file) => sum + file.byte_size, 0);
       // Quota estimates are advisory; write failures still fail before activation.
       try {
         const estimate = await storage.estimate?.();
@@ -102,13 +108,26 @@ export function createLocalRegionStore({
         const documents = {};
         for (const kind of ["pois", "nature"]) {
           signal?.throwIfAborted();
-          const descriptor = manifest.components[kind].files[0];
-          onProgress({ component: kind, status: "downloading", byte_size: descriptor.byte_size });
-          const bytes = await download(new URL(descriptor.path, url), descriptor.byte_size, signal, true);
-          await verifyRegionalBytes(bytes, descriptor);
-          documents[kind] = await decodeRegionalIndex(bytes, descriptor);
           const component = await version.getDirectoryHandle(kind, { create: true });
-          await writeFile(component, "index.json.gz", bytes);
+          let partitionDirectory = null;
+          const seen = new Set();
+          for (const [index, descriptor] of manifest.components[kind].files.entries()) {
+            signal?.throwIfAborted();
+            onProgress({ component: kind, status: "downloading", byte_size: descriptor.byte_size });
+            const bytes = await download(new URL(descriptor.path, url), descriptor.byte_size, signal, true);
+            await verifyRegionalBytes(bytes, descriptor);
+            if (kind === "nature" && isPartitionedNature(manifest)) {
+              if (index === 0) partitionDirectory = await decodeNatureDirectory(bytes, manifest);
+              else {
+                const prepared = await decodeNaturePartition(bytes, descriptor, partitionDirectory.partitions[index - 1], partitionDirectory, manifest);
+                for (const id of prepared.featureIds) {
+                  requireData(!seen.has(id), "invalid_regional_index");
+                  seen.add(id);
+                }
+              }
+            } else documents[kind] = await decodeRegionalIndex(bytes, descriptor);
+            await writeFile(component, descriptor.path.split("/").at(-1), bytes);
+          }
         }
         // Full structural validation before the completion marker and active switch.
         validateLocalRegionDocuments(manifest, documents);
@@ -173,6 +192,11 @@ export function createLocalRegionStore({
 }
 
 export async function loadLocalRegionData({ manifest, files }) {
+  if (isPartitionedNature(manifest)) {
+    const pois = await decodeRegionalIndex(await files.pois.arrayBuffer(), manifest.components.pois.files[0]);
+    const directory = await decodeNatureDirectory(await files.nature.arrayBuffer(), manifest);
+    return createPartitionedRegionData(manifest, pois, directory, descriptor => files[descriptor.path].arrayBuffer());
+  }
   const documents = {};
   for (const kind of ["pois", "nature"]) {
     documents[kind] = await decodeRegionalIndex(await files[kind].arrayBuffer(), manifest.components[kind].files[0]);

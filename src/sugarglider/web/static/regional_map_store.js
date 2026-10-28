@@ -3,8 +3,8 @@ import { createVersionedRegionComponents } from "./region_components.js";
 import { selectCommittedRegion } from "./regional_planning.js";
 import { RegionalDataError, freezeData, requireData } from "./regional_manifest.js";
 
-// Maps may display any committed region. Planning still verifies only its
-// explicitly selected version, under the unchanged version lease.
+// Maps may display any committed region. Planning verifies its one selected
+// version, including automatic coverage selection, under the version lease.
 export function createRegionalMapStore({ versions, selectedRegionId,
   components = createVersionedRegionComponents,
   probe = createMapPackStore(),
@@ -32,7 +32,9 @@ export function createRegionalMapStore({ versions, selectedRegionId,
   // Planning already owns the version lease. Share the map runtime's opened
   // component without acquiring another lease or maintaining a verification table.
   async function verifyMap(manifest, directory) {
-    requireData(manifest.region_id === selectedRegionId(), "regional_version_changed");
+    // Automatic selection passes its leased committed directory. Calls without
+    // that scope must still match the explicit selection.
+    requireData(directory || manifest.region_id === selectedRegionId(), "regional_version_changed");
     await openSelected({ manifest }, directory);
     return true;
   }

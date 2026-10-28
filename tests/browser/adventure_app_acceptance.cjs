@@ -361,6 +361,31 @@ const profiles = ['trail_run', 'hike', 'city_bike', 'gravel_bike', 'mountain_bik
         assert(await page.evaluate(()=>adventureAppState.currentAdventureContext().start!==null),'The ordinary map handler supplies the selected Start');
         assert.equal(await page.evaluate(()=>adventureModelCount),0,'Map selection does not infer automatically');
         await page.locator('#adventure-close').click();
+        if (width === 372) {
+          const workBefore = await page.evaluate(() => adventureNativeCalls.filter(call => ['local_route', 'chatgpt_infer'].includes(call.type)).length);
+          await page.evaluate(async () => {
+            const { state } = adventureAppState;
+            const keys = ['planningMode', 'planningStrategy', 'points', 'waypointPoints', 'waypointEndpoints', 'autoTour', 'options', 'autoTourOptions', 'waypointOptions'];
+            globalThis.manualCoverageBefore = structuredClone(Object.fromEntries(keys.map(key => [key, state[key]])));
+            state.planningMode = 'waypoint_route'; state.planningStrategy = 'manual'; state.points = [];
+            state.waypointEndpoints = { start: { lat: .5, lon: .5, name: 'Uncovered old manual start' }, end: null, routeTopology: 'loop' };
+            await (await import('/static/i18n.js')).setLanguage('en', { persist: false });
+          });
+          await page.waitForFunction(() => document.querySelector('#regional-status').dataset.state === 'no_covering_routing_pack');
+          await page.evaluate(() => document.querySelector('#plan-with-ai').click());
+          await page.waitForFunction(() => !document.querySelector('#adventure-generate').disabled);
+          assert(!await page.locator('#adventure-include-pins').isChecked(), 'Uncovered old manual pins remain excluded by default');
+          await page.locator('#adventure-include-pins').check();
+          await page.waitForFunction(() => document.querySelector('#adventure-error').textContent.length > 0);
+          assert(await page.locator('#adventure-generate').isDisabled(), 'Opting into uncovered pins requires explicit coverage review');
+          await page.locator('#adventure-close').click();
+          await page.evaluate(async () => {
+            Object.assign(adventureAppState.state, manualCoverageBefore);
+            await (await import('/static/i18n.js')).setLanguage('fr', { persist: false });
+          });
+          assert.equal(await page.evaluate(() => adventureNativeCalls.filter(call => ['local_route', 'chatgpt_infer'].includes(call.type)).length), workBefore,
+            'Independent context preparation and coverage review never infer or route');
+        }
         const request = { schema_version: 1, kind: 'waypoint_route', name: 'Synthetic manual route', topology: 'point_to_point',
           start: fixture.initial.intent.start, end: fixture.initial.intent.end, routing_profile: 'trail_run', candidate_count: 3, seed: 0,
           endpoint_snap_policy: { start: 'near', end: 'near' }, distance_objective: { target_m: 2200, tolerance_m: 700, maximum_m: null, priority: 'balanced' },

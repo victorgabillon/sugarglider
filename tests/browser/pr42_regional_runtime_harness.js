@@ -171,6 +171,11 @@ export async function runPr42RegionalRuntimeHarness() {
   // Real canonical publication worker; native geometry remains a synthetic fixture.
   const planner = createLocalPlanner({ withRegion, lifecycleTarget: null });
   const source = request("waypoint_route");
+  // This fixture's complete coverage is [0, 0, .02, .02]. Use coordinates
+  // inside that region now that the planning boundary checks geography.
+  source.start = { ...source.start, lat: .002, lon: .002 };
+  source.end = { ...source.end, lat: .018, lon: .018 };
+  source.waypoints[0].coordinate = { ...source.waypoints[0].coordinate, lat: .01, lon: .01 };
   const result = await planner.generate(source);
   const provenance = { region_id: reference.region_id, build_id: reference.build_id, routing_pack_id: reference.pack_id };
   equal(result.search_diagnostics.details.local_planning.regional_version, provenance, "canonical search provenance");

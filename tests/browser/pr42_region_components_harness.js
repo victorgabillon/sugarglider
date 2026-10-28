@@ -2,6 +2,7 @@ import { createRegionVersionStore } from "../../src/sugarglider/web/static/regio
 import { createVersionedRegionComponents } from "../../src/sugarglider/web/static/region_components.js";
 import { regionalBuildIdentity, sha256Bytes } from "../../src/sugarglider/web/static/regional_manifest.js";
 import { manifest as mapManifest, tinyPmtiles } from "./pr36_offline_maps_harness.js";
+import { MapPackStore } from "../../src/sugarglider/web/static/map_pack_store.js";
 import { createLocalRegionClient } from "../../src/sugarglider/web/static/local_region_client.js";
 
 export async function runPr42RegionComponentsHarness() {
@@ -160,6 +161,28 @@ export async function runPr42RegionComponentsHarness() {
     await versions.removeEmptyRegion(original.manifest.region_id);
     equal(await versions.list(), [], "explicit owned cleanup");
     cases.push("explicit_web_component_removal_clears_only_owned_region");
+    available = true; current = await distribution(fixture, "Independent map reuse");
+    const independent = new MapPackStore({ storageManager: storage, fetchRequest: fetchResource,
+      pageLocation: { href: "https://app.example/" } });
+    await independent.installPack("https://packs.example/map/manifest.json", { regionalManifest: current.manifest });
+    const reused = await versions.stage(JSON.stringify(current.manifest));
+    const count = requests.length;
+    await versions.withStagedVersion(reused, async ({ manifest, directory }) => {
+      const scoped = await components(manifest, directory);
+      await scoped.installMap("https://packs.example/manifest.json");
+      await scoped.verifyMap();
+      const opened = await scoped.openMap();
+      assert((await opened.source.getBytes(0, 8)).data.byteLength === 8, "shared bounded reader");
+      equal(requests.length, count, "an exact installed independent map is never downloaded twice");
+      assert(!(await fileNames(directory)).some(path => path.endsWith("basemap.pmtiles")), "no duplicate regional OPFS archive");
+      const pack = await independent.getPack(manifest.components.map.component_id);
+      const handle = pack.archiveHandle, writer = await handle.createWritable();
+      const bytes = current.files.get("map/basemap.pmtiles").slice(); bytes[bytes.length - 1] ^= 1;
+      await writer.write(bytes); await writer.close();
+      await rejects(() => opened.checkUnchanged(), "regional_checksum_mismatch");
+      await rejects(() => scoped.verifyMap(), "regional_checksum_mismatch");
+    });
+    cases.push("exact_independent_map_reused_without_download_or_opfs_copy_and_corruption_remains_explicit");
     return cases;
   } finally { await origin.removeEntry(name, { recursive: true }); }
 }
