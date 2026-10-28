@@ -4,7 +4,8 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { parseRegionalManifest } from "../src/sugarglider/web/static/regional_manifest.js";
-import { createPartitionedRegionData, decodeNatureDirectory } from "../src/sugarglider/web/static/nature_partitions.js";
+import { createPartitionedRegionData, decodeNatureDirectory,
+  NATURE_CACHE_MAX_PARTITIONS } from "../src/sugarglider/web/static/nature_partitions.js";
 import { beginRegionalProfile, finishRegionalProfile } from "../src/sugarglider/web/static/regional_performance.js";
 
 const args = process.argv.slice(2), options = new Map();
@@ -14,8 +15,8 @@ for (let index = 0; index < args.length; index += 2) {
   options.set(args[index], args[index + 1]);
 }
 if (!options.has("--region") || !options.has("--routes")) throw Error("Specify --region and --routes");
-const capacity = Number(options.get("--cache-partitions") ?? 4), repetitions = Number(options.get("--repetitions") ?? 3);
-if (!Number.isInteger(capacity) || capacity < 1 || capacity > 4
+const capacity = Number(options.get("--cache-partitions") ?? NATURE_CACHE_MAX_PARTITIONS), repetitions = Number(options.get("--repetitions") ?? 3);
+if (!Number.isInteger(capacity) || capacity < 1 || capacity > NATURE_CACHE_MAX_PARTITIONS
   || !Number.isInteger(repetitions) || repetitions < 1 || repetitions > 5) throw Error("Invalid benchmark bounds");
 const root = resolve(options.get("--region")), input = resolve(options.get("--routes"));
 if ((await stat(input)).size > 16 * 1024 * 1024) throw Error("Route fixture too large");

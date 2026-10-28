@@ -5,8 +5,8 @@ import { regionalCount, regionalMeasure, regionalMeasureAsync } from "./regional
 
 export const NATURE_PARTITION_MAX_BYTES = 16 * 1024 * 1024;
 export const NATURE_PARTITION_MAX_POSITIONS = 500_000;
-export const NATURE_CACHE_MAX_PARTITIONS = 4;
-export const NATURE_CACHE_MAX_POSITIONS = 1_500_000;
+export const NATURE_CACHE_MAX_PARTITIONS = 5;
+export const NATURE_CACHE_MAX_POSITIONS = 2_000_000;
 export const isPartitionedNature = manifest => manifest.components.nature.files[0].format === "nature-partitions-v1-json";
 
 export async function decodeNatureDirectory(bytes, manifest) {
