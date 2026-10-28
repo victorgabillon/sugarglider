@@ -4,16 +4,18 @@ const stages = new Set(["partition_read", "hash_verification", "decompression", 
 const counters = new Set(["partition_reads", "prepared_partitions", "cache_hits", "resident_partitions", "resident_positions"]);
 const events = new Set(["native_route_complete", "refinement_model_started"]);
 const limit = 128;
-let enabled = false, active = null, dropped = 0;
+let enabled = false, active = null, dropped = 0, generation = 0;
 const records = [];
 export const regionalClock = () => performance.timeOrigin + performance.now();
 const heap = () => performance.memory?.usedJSHeapSize ?? null;
 const number = value => typeof value === "number" && Number.isFinite(value) && value >= 0;
 
 export function enableRegionalProfiling(value = true) {
+  generation++;
   enabled = value === true; records.length = 0; dropped = 0;
 }
 export const regionalProfilingEnabled = () => enabled;
+export const regionalProfilingGeneration = () => enabled ? generation : null;
 function retain(record) {
   if (records.length === limit) { records.shift(); dropped++; }
   records.push(record);
@@ -48,8 +50,9 @@ export async function regionalMeasureAsync(stage, work) {
   const scope = active, start = scope ? performance.now() : 0;
   try { return await work(); } finally { elapsed(scope, stage, start); }
 }
-export function recordWorkerProfile(value, submitted, received = regionalClock()) {
-  if (!enabled || !value || ![submitted, received, value.received_ms, value.started_ms, value.finished_ms].every(number)) return;
+export function recordWorkerProfile(value, submitted, captureGeneration, received = regionalClock()) {
+  if (!enabled || captureGeneration !== generation || !value
+    || ![submitted, received, value.received_ms, value.started_ms, value.finished_ms].every(number)) return;
   const result = { submission_ms: Math.max(0, value.received_ms - submitted),
     queue_wait_ms: Math.max(0, value.started_ms - value.received_ms),
     worker_wall_ms: Math.max(0, value.finished_ms - value.started_ms),

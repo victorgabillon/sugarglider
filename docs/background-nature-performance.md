@@ -62,6 +62,8 @@ tokens, arbitrary exception messages or operation identifiers. At most 128
 records are retained, in memory only. No polling or heartbeat is introduced.
 Worker heap is explicitly unavailable where the runtime provides no heap API.
 Wall time, especially asynchronous I/O wall time, must not be reported as CPU.
+Each capture reset advances a generation. Late worker replies still deliver
+their operation results, but cannot add timing records to a newer capture.
 
 The opt-in Android calculation test runner accepts `-e nature_profile true`.
 It collects the same bounded worker evidence after return, actual renderer
@@ -102,6 +104,15 @@ must disable it through CDP, remove its background-throttling overrides and
 assert genuine document visibility transitions. A completed calculation with a
 still-visible document is invalid hidden-execution evidence. Browser events
 assigned by test code and desktop tab tests are not Android lifecycle proof.
+
+A separate real-OPFS desktop Chrome run with genuine tab visibility measured
+11.0 s foreground / 41.2 s hidden for the one-entry control and 4.4 s foreground /
+19.8 s hidden with four entries. All eight Nature results matched exactly.
+Submission/queue/delivery totaled under 10 ms per run; most of this desktop
+slowdown occurred within synchronous validation/projection. These are Nature-only
+replays, not whole adventures or second-model invocations. Both finished during
+their 180-second hidden interval. This single matched run needs repetition and
+does not identify the Fairphone's much larger observed delay.
 
 ## Repeatable checks
 

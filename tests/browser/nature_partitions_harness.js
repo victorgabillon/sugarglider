@@ -6,7 +6,7 @@ import { parseRegionalManifest, regionalBuildIdentity, sha256Bytes } from "../..
 import { selectCommittedRegion } from "../../src/sugarglider/web/static/regional_planning.js";
 import { NATURE_PERFORMANCE_CASES, naturePerformanceFixture } from "./nature_performance_fixtures.js";
 import { beginRegionalProfile, finishRegionalProfile, enableRegionalProfiling,
-  recordWorkerProfile, regionalPerformanceSnapshot } from "../../src/sugarglider/web/static/regional_performance.js";
+  recordWorkerProfile, regionalPerformanceSnapshot, regionalProfilingGeneration } from "../../src/sugarglider/web/static/regional_performance.js";
 
 const assert = (value, message) => { if (!value) throw Error(message); };
 const metrics = ["available", "method", "woodland", "open_natural", "agriculture", "water_crossing", "urban",
@@ -80,15 +80,33 @@ export async function runNaturePartitionsHarness() {
   }
   scenarios.push("bounded_cache_eviction_and_concurrent_result_equivalence");
   enableRegionalProfiling();
+  const captureGeneration = regionalProfilingGeneration();
   recordWorkerProfile({ ...warm, user_description: "must not escape", token: "secret", stages: {
-    ...warm.stages, coordinates: { calls: 1, wall_ms: 1 } } }, warm.received_ms);
-  for (let index = 0; index < 140; index++) recordWorkerProfile(warm, warm.received_ms);
+    ...warm.stages, coordinates: { calls: 1, wall_ms: 1 } } }, warm.received_ms, captureGeneration);
+  for (let index = 0; index < 140; index++) recordWorkerProfile(warm, warm.received_ms, captureGeneration);
   const snapshot = regionalPerformanceSnapshot();
   assert(snapshot.records.length === 128 && snapshot.dropped === 13
     && !JSON.stringify(snapshot).includes("secret") && !JSON.stringify(snapshot).includes("coordinates")
     && !JSON.stringify(snapshot).includes("must not escape"), "profiling has fixed fields and bounded retention");
   enableRegionalProfiling(false);
   scenarios.push("performance_evidence_is_bounded_and_has_no_private_payloads");
+  let submitted;
+  const delayedWorker = { postMessage: message => { submitted = message; }, terminate() {} };
+  const delayedClient = createLocalRegionClient({ worker: delayedWorker });
+  try {
+    enableRegionalProfiling();
+    const previous = delayedClient.list();
+    enableRegionalProfiling(false);
+    enableRegionalProfiling();
+    delayedWorker.onmessage({ data: { id: submitted.id, result: ["previous result"], profile: warm } });
+    equal(await previous, ["previous result"], "capture changes never suppress actual operation results");
+    assert(regionalPerformanceSnapshot().records.length === 0, "late previous capture cannot contaminate a new session");
+    const current = delayedClient.list();
+    delayedWorker.onmessage({ data: { id: submitted.id, result: ["current result"], profile: warm } });
+    equal(await current, ["current result"], "current result delivery remains intact");
+    assert(regionalPerformanceSnapshot().records.length === 1, "the current profiling generation remains observable");
+  } finally { delayedClient.close(); enableRegionalProfiling(false); }
+  scenarios.push("late_worker_profile_is_scoped_without_dropping_its_result");
   const corrupted = new Uint8Array(artifact.files.get(directory.partitions[0].path)); corrupted[10] ^= 1;
   const data = createPartitionedRegionData(manifest, null, directory, async descriptor => descriptor.path === directory.partitions[0].path ? corrupted : artifact.files.get(descriptor.path));
   const unavailable = await data.analyzeNature(f.route);

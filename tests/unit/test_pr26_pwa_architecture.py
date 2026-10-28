@@ -460,7 +460,7 @@ def test_shared_shell_generation_tracks_v129_cached_assets() -> None:
             "e9a0c8a592553e56d0f4c63487b50897c46a63f12d0681ce7fd1e5809abf570e"
         ),
         "local_region_client.js": (
-            "300807a1c5b0335b6ca04ae09f92d791df1d8a117f98aa4a7988fa918c5c91d1"
+            "c1b06ef6196296cb624627bae012099f2745e3665555daf134dd85fcc64c4a61"
         ),
         "nature_partitions.js": (
             "f5be43f38e79823450c88165ed4373ecb3a8e86330248b0ce032e3c58a604d0a"
@@ -472,7 +472,7 @@ def test_shared_shell_generation_tracks_v129_cached_assets() -> None:
             "5b233cdbb882283b36df2a6dd36e790ba580abe7e70c5c9d62efe5ef58ace0eb"
         ),
         "regional_performance.js": (
-            "23baaddd460f0b24c146eb9cc68605d3c314b1dc97bfe0c046ac43ced7ae7d67"
+            "d56eb65610c76b88e35abc2c18906cf845f8cd4aa288e999cad76e36660a9f27"
         ),
         "local_region_worker.js": (
             "718e2fee4c67d2a8974a52c35b4678ebb08b2d0149c44b6b36b84e298527d9f3"

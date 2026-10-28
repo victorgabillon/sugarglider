@@ -2,7 +2,7 @@
 // Replies correlate to operation IDs; the region coordinator owns installation
 // and the planner owns intent. A discovery query must not mutate either one.
 import { RegionalDataError, freezeData } from "./regional_manifest.js";
-import { regionalClock, regionalProfilingEnabled, recordWorkerProfile } from "./regional_performance.js";
+import { regionalClock, regionalProfilingGeneration, recordWorkerProfile } from "./regional_performance.js";
 
 // An installer has no queries to serve after completion. Keep cancellation alive
 // until the worker acknowledges a definite result, then release its entire heap.
@@ -30,7 +30,7 @@ export function createLocalRegionClient({
     const operation = pending.get(data.id);
     if (!operation) return;
     pending.delete(data.id);
-    recordWorkerProfile(data.profile, operation.submitted);
+    recordWorkerProfile(data.profile, operation.submitted, operation.profileGeneration);
     if (data.error) operation.reject(new RegionalDataError(data.error));
     else operation.resolve(freezeData(data.result));
   };
@@ -41,8 +41,8 @@ export function createLocalRegionClient({
     if (pending.size >= 8) return Promise.reject(new RegionalDataError("regional_worker_busy"));
     const id = ++sequence;
     return new Promise((resolve, reject) => {
-      const profile = regionalProfilingEnabled();
-      pending.set(id, { resolve, reject, submitted: profile ? regionalClock() : null });
+      const profileGeneration = regionalProfilingGeneration(), profile = profileGeneration !== null;
+      pending.set(id, { resolve, reject, submitted: profile ? regionalClock() : null, profileGeneration });
       try { worker.postMessage({ id, type, value, ...(profile ? { profile: true } : {}) }); }
       catch { pending.delete(id); reject(new RegionalDataError("regional_worker_unavailable")); }
     });
