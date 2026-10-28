@@ -284,6 +284,11 @@ export async function runAdventureUiHarness() {
       assert(!byId("generate").disabled, "one explicit Generate action available");
       assert(f.root.querySelector(".adventure-body").clientHeight >= 100, "Header and footer leave a usable scroll area at large text");
       assert(f.root.scrollWidth <= f.root.clientWidth + 1 && f.doc.documentElement.scrollWidth <= width + 1, `no horizontal overflow ${width}/${scale}`);
+      const body = f.root.querySelector(".adventure-body"), pinLabel = byId("include-pins").labels[0];
+      const labelBounds = pinLabel.getBoundingClientRect(), textBounds = pinLabel.querySelector("span").getBoundingClientRect();
+      assert(body.scrollWidth <= body.clientWidth + 1, `dialog content must not scroll sideways ${width}/${scale}`);
+      assert(textBounds.left >= labelBounds.left && textBounds.right <= labelBounds.right + 1,
+        `pin label text stays inside its control ${width}/${scale}`);
       byId("generate").click(); await until(() => !byId("review").hidden, "review text endpoints"); byId("confirm").click(); await until(() => output !== null && !f.root.open, "normal proposal-to-GPX UI");
       assert(r.calls.length === 2 && busy[0] && busy.at(-1) === false, "one bounded AI operation");
       const interesting = output.chosen.result.candidates.find(candidate => candidate.reached_stops.length > 0);

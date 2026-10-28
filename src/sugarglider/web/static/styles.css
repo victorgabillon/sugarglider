@@ -1142,8 +1142,9 @@ body.outing-mode .route-dock { display: none; }
 .adventure-body textarea { resize: vertical; min-height: 7rem; padding: .75rem; font: inherit; border: 1px solid #a7b9ac; border-radius: .5rem; }
 .adventure-body details { margin-top: 1rem; padding-top: .5rem; border-top: 1px solid #d5dfd1; }
 .adventure-body details > label { margin: .75rem 0; }
-.adventure-check { display: flex; align-items: flex-start; gap: .6rem; margin: .75rem 0; line-height: 1.45; }
-.adventure-check input { flex: 0 0 auto; margin-top: .3rem; }
+.adventure-check { display: flex; align-items: flex-start; gap: .6rem; margin: .75rem 0; min-width: 0; line-height: 1.45; overflow-wrap: anywhere; }
+.adventure-check input { flex: 0 0 auto; width: 1.15rem; height: 1.15rem; min-height: 0; padding: 0; margin-top: .3rem; }
+.adventure-check > span { min-width: 0; }
 .adventure-launch { padding: .75rem; margin: .75rem 0; background: #edf4e6; border: 1px solid #cbdcc2; border-radius: .8rem; }
 .adventure-launch p { margin-bottom: 0; }
 .adventure-result { padding: 1rem; margin-bottom: 1rem; border: 1px solid #cbdcc2; border-radius: .8rem; background: #f4f8ef; }
